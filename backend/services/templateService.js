@@ -369,14 +369,26 @@ const replacePlaceholders = async (content, data) => {
   let laaLicenceNumber = 'AA00031'; // Default fallback
   let laaLicenceState = ''; // Default fallback
   let userSignature = null;
+  // ALWAYS use data.LAA for the name (not createdBy)
   let laaName = data.LAA || data.laaName || 'Unknown LAA'; // Default name
   
-  // Handle both clearance (LAA) and assessment (assessorId) user lookups
-  let userIdentifier = data.LAA || data.assessorId;
+  // Look up the user identified by data.LAA to get their licence information
+  // data.LAA is a name string (e.g., "FirstName LastName")
+  let userIdentifier = null;
   
-  // Handle assessorId object structure for assessments
-  if (data.assessorId && typeof data.assessorId === 'object') {
-    userIdentifier = data.assessorId.firstName + ' ' + data.assessorId.lastName;
+  // PRIORITY 1: Use data.LAA for clearance certificates
+  if (data.LAA) {
+    userIdentifier = data.LAA;
+    console.log('[TEMPLATE SERVICE] Using data.LAA for lookup:', userIdentifier);
+  } else if (data.assessorId) {
+    // Fall back to assessorId for assessment reports
+    userIdentifier = data.assessorId;
+    
+    // Handle assessorId object structure for assessments
+    if (typeof data.assessorId === 'object') {
+      userIdentifier = data.assessorId.firstName + ' ' + data.assessorId.lastName;
+    }
+    console.log('[TEMPLATE SERVICE] Using data.assessorId for lookup:', userIdentifier);
   }
   
   if (userIdentifier) {
@@ -384,7 +396,7 @@ const replacePlaceholders = async (content, data) => {
     if (userLookupCache.has(userIdentifier)) {
       const cachedUser = userLookupCache.get(userIdentifier);
       console.log('[TEMPLATE SERVICE] Using cached user data for:', userIdentifier);
-      laaName = cachedUser.name;
+      // Keep laaName as data.LAA (don't override with cached name)
       laaLicenceNumber = cachedUser.licenceNumber;
       laaLicenceState = cachedUser.licenceState || '';
       userSignature = cachedUser.signature;
@@ -408,12 +420,21 @@ const replacePlaceholders = async (content, data) => {
         if (isValidObjectId) {
           queryConditions = [{ _id: userIdentifier }];
         } else {
-          // Fallback to name-based lookup for backward compatibility
-          queryConditions = [
-            { firstName: { $regex: new RegExp(userIdentifier.split(' ')[0], 'i') }, lastName: { $regex: new RegExp(userIdentifier.split(' ')[1] || '', 'i') } },
-            { firstName: { $regex: new RegExp(userIdentifier, 'i') } },
-            { lastName: { $regex: new RegExp(userIdentifier, 'i') } }
-          ];
+          // Name-based lookup - split by space for first/last name
+          const nameParts = userIdentifier.trim().split(/\s+/);
+          if (nameParts.length >= 2) {
+            // Has first and last name
+            queryConditions = [
+              { firstName: { $regex: new RegExp(`^${nameParts[0]}$`, 'i') }, lastName: { $regex: new RegExp(`^${nameParts.slice(1).join(' ')}$`, 'i') } },
+              { firstName: { $regex: new RegExp(nameParts[0], 'i') }, lastName: { $regex: new RegExp(nameParts[1], 'i') } }
+            ];
+          } else {
+            // Single name - try first or last name
+            queryConditions = [
+              { firstName: { $regex: new RegExp(userIdentifier, 'i') } },
+              { lastName: { $regex: new RegExp(userIdentifier, 'i') } }
+            ];
+          }
         }
         
         console.log('[TEMPLATE SERVICE] Query conditions:', queryConditions);
@@ -431,8 +452,11 @@ const replacePlaceholders = async (content, data) => {
           console.log('[TEMPLATE SERVICE] User signature exists:', !!user.signature);
           console.log('[TEMPLATE SERVICE] User licences:', user.licences?.length || 0);
           
-          // Update LAA name with actual user name from database
-          laaName = `${user.firstName} ${user.lastName}`;
+          // Keep laaName as data.LAA (don't override with database name)
+          // Only update if data.LAA was not provided
+          if (!data.LAA && !data.laaName) {
+            laaName = `${user.firstName} ${user.lastName}`;
+          }
           
           // Get user's signature
           if (user.signature) {
@@ -457,13 +481,38 @@ const replacePlaceholders = async (content, data) => {
           }
           
           // Cache the user data for future lookups
+          // Cache by the identifier used (ID or name) for direct lookups
           userLookupCache.set(userIdentifier, {
-            name: laaName,
+            name: laaName, // Store the name from data.LAA, not the database name
             licenceNumber: laaLicenceNumber,
             licenceState: laaLicenceState,
             signature: userSignature
           });
           console.log('[TEMPLATE SERVICE] Cached user data for:', userIdentifier);
+          
+          // Also cache by user ID and database name for backward compatibility
+          if (user._id) {
+            const userIdString = user._id.toString();
+            if (userIdString !== userIdentifier) {
+              userLookupCache.set(userIdString, {
+                name: laaName,
+                licenceNumber: laaLicenceNumber,
+                licenceState: laaLicenceState,
+                signature: userSignature
+              });
+              console.log('[TEMPLATE SERVICE] Also cached user data by ID:', userIdString);
+            }
+          }
+          const dbUserName = `${user.firstName} ${user.lastName}`;
+          if (dbUserName && dbUserName !== userIdentifier && dbUserName !== 'Unknown LAA') {
+            userLookupCache.set(dbUserName, {
+              name: laaName,
+              licenceNumber: laaLicenceNumber,
+              licenceState: laaLicenceState,
+              signature: userSignature
+            });
+            console.log('[TEMPLATE SERVICE] Also cached user data by database name:', dbUserName);
+          }
         } else {
           console.log('[TEMPLATE SERVICE] No user found for identifier:', userIdentifier);
         }

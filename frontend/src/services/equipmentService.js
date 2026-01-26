@@ -54,6 +54,43 @@ export const equipmentService = {
     }
   },
 
+  // Archive equipment (soft delete - moves to archived table)
+  archive: async (id) => {
+    try {
+      const response = await api.put(`${BASE_URL}/${id}`, {
+        archived: true,
+        archivedAt: new Date().toISOString()
+      });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Restore archived equipment (moves back to active equipment list)
+  restore: async (id) => {
+    try {
+      const response = await api.put(`${BASE_URL}/${id}`, {
+        archived: false,
+        archivedAt: null
+      });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Get archived equipment
+  getArchived: async (params = {}) => {
+    try {
+      const requestParams = { limit: 300, archived: true, ...params };
+      const response = await api.get(BASE_URL, { params: requestParams });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
   // Get equipment statistics
   getStats: async () => {
     try {

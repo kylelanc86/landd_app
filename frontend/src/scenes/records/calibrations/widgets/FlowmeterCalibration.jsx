@@ -12,7 +12,6 @@ const FlowmeterCalibration = ({ viewCalibrationsPath }) => {
   const theme = useTheme();
   const [loading, setLoading] = useState(true);
   const [nextCalibrationDue, setNextCalibrationDue] = useState(null);
-  const [itemsDueInNextMonth, setItemsDueInNextMonth] = useState(0);
 
   useEffect(() => {
     fetchFlowmeterData();
@@ -28,7 +27,6 @@ const FlowmeterCalibration = ({ viewCalibrationsPath }) => {
         setNextCalibrationDue(
           cached.nextCalibrationDue ? new Date(cached.nextCalibrationDue) : null
         );
-        setItemsDueInNextMonth(cached.itemsDueInNextMonth || 0);
         setLoading(false);
         // Still fetch fresh data in background to update cache
         fetchFreshData();
@@ -40,7 +38,6 @@ const FlowmeterCalibration = ({ viewCalibrationsPath }) => {
     } catch (error) {
       console.error("Error fetching flowmeter calibration data:", error);
       setNextCalibrationDue(null);
-      setItemsDueInNextMonth(0);
       setLoading(false);
     }
   };
@@ -81,41 +78,15 @@ const FlowmeterCalibration = ({ viewCalibrationsPath }) => {
         nextDue = validNextCalibrations[0];
       }
 
-      // Calculate items due in next month (next 30 days)
-      const now = new Date();
-      const thirtyDaysFromNow = new Date(
-        now.getTime() + 30 * 24 * 60 * 60 * 1000
-      );
-
-      // Count calibrations due in next month
-      let dueInNextMonth = calibrations.filter((cal) => {
-        if (!cal.nextCalibration) return false;
-        const nextCalDate = new Date(cal.nextCalibration);
-        return nextCalDate >= now && nextCalDate <= thirtyDaysFromNow;
-      }).length;
-
-      // Count equipment without calibration data (and not out of service) as due
-      const equipmentWithoutCalibration = equipment.filter((eq) => {
-        const eqId = (eq._id || eq.id).toString();
-        const hasCalibration = equipmentWithCalibrations.has(eqId);
-        const isOutOfService = eq.status === "out-of-service";
-        return !hasCalibration && !isOutOfService;
-      });
-
-      dueInNextMonth += equipmentWithoutCalibration.length;
-
       setNextCalibrationDue(nextDue);
-      setItemsDueInNextMonth(dueInNextMonth);
 
       // Cache the results
       setCachedCalibrationData("flowmeter", {
         nextCalibrationDue: nextDue,
-        itemsDueInNextMonth: dueInNextMonth,
       });
     } catch (error) {
       console.error("Error fetching fresh flowmeter calibration data:", error);
       setNextCalibrationDue(null);
-      setItemsDueInNextMonth(0);
     } finally {
       setLoading(false);
     }
@@ -144,9 +115,9 @@ const FlowmeterCalibration = ({ viewCalibrationsPath }) => {
     <BaseCalibrationWidget
       title="Site Rotameters"
       nextCalibrationDue={nextCalibrationDue}
-      itemsDueInNextMonth={itemsDueInNextMonth}
       viewCalibrationsPath={viewCalibrationsPath}
       icon={process.env.PUBLIC_URL + "/air-mon-icons/fm.png"}
+      color="#2e7d32"
     />
   );
 };

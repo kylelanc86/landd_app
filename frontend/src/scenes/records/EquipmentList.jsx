@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Box,
   Typography,
@@ -19,8 +19,6 @@ import {
   MenuItem,
   Breadcrumbs,
   Link,
-  FormControlLabel,
-  Switch,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import AddIcon from "@mui/icons-material/Add";
@@ -49,11 +47,16 @@ const EquipmentList = () => {
   const view = searchParams.get("view") || "laboratory";
 
   const [equipment, setEquipment] = useState([]);
+  const [cachedEquipment, setCachedEquipment] = useState([]); // Cache full equipment list
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const hasLoadedRef = useRef(false); // Track if initial load has been done
   const [addDialog, setAddDialog] = useState(false);
   const [editDialog, setEditDialog] = useState(false);
   const [historyDialog, setHistoryDialog] = useState(false);
+  const [archiveDialog, setArchiveDialog] = useState(false);
+  const [equipmentToArchive, setEquipmentToArchive] = useState(null);
+  const [archiving, setArchiving] = useState(false);
   const [selectedEquipment, setSelectedEquipment] = useState(null);
   const [calibrationHistory, setCalibrationHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -64,16 +67,12 @@ const EquipmentList = () => {
     equipmentType: "",
     section: "",
     brandModel: "",
-    lastCalibration: "",
-    calibrationDue: "",
-    calibrationFrequency: "",
   });
 
   const [filters, setFilters] = useState({
     search: "",
-    equipmentType: "",
-    status: "",
-    showOutOfService: false,
+    equipmentType: "All Types",
+    status: "Active",
   });
 
   const handleBackToHome = () => {
@@ -111,6 +110,53 @@ const EquipmentList = () => {
       setCalibrationFrequencies([]);
     }
   };
+
+  // Helper function to process pump calibrations (extracted for reuse)
+  const processPumpCalibrations = useCallback((pump, calibrations) => {
+    // Calculate lastCalibration (most recent calibration date)
+    const lastCalibration =
+      calibrations.length > 0
+        ? new Date(
+            Math.max(
+              ...calibrations.map((cal) =>
+                new Date(cal.calibrationDate || cal.date).getTime()
+              )
+            )
+          )
+        : null;
+
+    // Calculate calibrationDue (most recent nextCalibrationDue date)
+    const calibrationDue =
+      calibrations.length > 0
+        ? new Date(
+            Math.max(
+              ...calibrations
+                .filter((cal) => cal.nextCalibrationDue || cal.calibrationDue)
+                .map((cal) =>
+                  new Date(
+                    cal.nextCalibrationDue || cal.calibrationDue
+                  ).getTime()
+                )
+            )
+          )
+        : null;
+
+    // Get the most recent calibration for status checking
+    const mostRecentCalibration = calibrations.length > 0
+      ? calibrations.sort(
+          (a, b) =>
+            new Date(b.calibrationDate || b.date) - new Date(a.calibrationDate || a.date)
+        )[0]
+      : null;
+
+    return {
+      ...pump,
+      lastCalibration,
+      calibrationDue,
+      mostRecentCalibration, // Store for status calculation
+      allCalibrations: calibrations, // Store all calibrations for status calculation
+    };
+  }, []);
 
   // Helper function to fetch calibration data for an equipment item
   const fetchCalibrationDataForEquipment = async (equipmentItem) => {
@@ -227,21 +273,14 @@ const EquipmentList = () => {
           break;
 
         case "Air pump":
-          try {
-            // Use Equipment _id instead of equipmentReference for consistency
-            const pumpData =
-              await airPumpCalibrationService.getPumpCalibrations(
-                equipmentItem._id,
-                1,
-                1000
-              );
-            calibrations = pumpData.data || pumpData || [];
-          } catch (err) {
-            console.error(
-              `Error fetching air pump calibrations for ${equipmentReference}:`,
-              err
-            );
-          }
+          // Air pump calibrations are now fetched in bulk in fetchEquipment
+          // This case should not be reached during initial load
+          // If reached, it means the equipment wasn't processed in bulk fetch
+          // Return empty array to avoid individual fetch (bulk fetch should handle all pumps)
+          calibrations = [];
+          console.warn(
+            `Air pump ${equipmentReference} not found in bulk fetch results. This should not happen during initial load.`
+          );
           break;
 
         default:
@@ -301,38 +340,101 @@ const EquipmentList = () => {
     }
   };
 
-  // Memoize backend filters to prevent unnecessary re-fetches when frontend-only filters change
-  const backendFilters = useMemo(() => {
-    const { status, showOutOfService, ...backend } = filters;
-    return backend;
-  }, [filters.search, filters.equipmentType]);
+  // Fetch full equipment list and cache it (only fetch once or when explicitly needed)
+  const fetchEquipment = useCallback(async (forceRefresh = false) => {
+    // If we have already loaded and not forcing refresh, skip
+    if (hasLoadedRef.current && !forceRefresh) {
+      console.log("EquipmentList: Skipping fetch - already loaded and not forcing refresh");
+      return;
+    }
 
-  const fetchEquipment = useCallback(async () => {
+    console.log("EquipmentList: Starting fetchEquipment, forceRefresh:", forceRefresh);
     try {
       setLoading(true);
       setError(null);
 
+      // Fetch all equipment (no filters) to build cache
+      console.log("EquipmentList: Fetching all equipment...");
       const response = await equipmentService.getAll({
-        limit: 100,
-        ...backendFilters,
+        limit: 1000, // Get a large number to cache everything
       });
       const baseEquipment = response.equipment || [];
+      console.log(`EquipmentList: Fetched ${baseEquipment.length} equipment items`);
 
-      // Fetch calibration data for each equipment item
-      const equipmentWithCalibrations = await Promise.all(
-        baseEquipment.map((equipmentItem) =>
+      // Separate air pumps from other equipment for bulk fetching
+      const airPumps = baseEquipment.filter(
+        (eq) => eq.equipmentType === "Air pump"
+      );
+      const otherEquipment = baseEquipment.filter(
+        (eq) => eq.equipmentType !== "Air pump"
+      );
+
+      // Bulk fetch calibrations for all air pumps at once
+      let pumpCalibrationsMap = {};
+      if (airPumps.length > 0) {
+        try {
+          console.log(`EquipmentList: Bulk fetching calibrations for ${airPumps.length} air pumps`);
+          const pumpIds = airPumps.map((pump) => pump._id?.toString() || pump._id);
+          console.log("EquipmentList: Pump IDs:", pumpIds);
+          const bulkCalibrations =
+            await airPumpCalibrationService.getBulkPumpCalibrations(
+              pumpIds,
+              1000
+            );
+          console.log("EquipmentList: Bulk calibrations response:", bulkCalibrations);
+          // Convert to map keyed by pump _id string
+          if (bulkCalibrations && typeof bulkCalibrations === 'object') {
+            Object.keys(bulkCalibrations).forEach((pumpId) => {
+              pumpCalibrationsMap[pumpId] = bulkCalibrations[pumpId];
+            });
+            console.log(`EquipmentList: Mapped calibrations for ${Object.keys(pumpCalibrationsMap).length} pumps`);
+          }
+        } catch (err) {
+          console.error("EquipmentList: Error bulk fetching pump calibrations:", err);
+          console.error("EquipmentList: Error details:", err.response?.data || err.message);
+          // Continue with empty map - individual fetches will handle errors
+        }
+      } else {
+        console.log("EquipmentList: No air pumps found, skipping bulk fetch");
+      }
+
+      // Process air pumps with bulk-fetched calibrations
+      const airPumpsWithCalibrations = await Promise.all(
+        airPumps.map(async (pump) => {
+          // Convert pump._id to string to match backend response keys
+          const pumpIdString = pump._id?.toString() || pump._id;
+          const calibrations = pumpCalibrationsMap[pumpIdString] || [];
+          if (calibrations.length === 0) {
+            console.log(`EquipmentList: No calibrations found for pump ${pump.equipmentReference} (ID: ${pumpIdString})`);
+          } else {
+            console.log(`EquipmentList: Found ${calibrations.length} calibrations for pump ${pump.equipmentReference}`);
+          }
+          return processPumpCalibrations(pump, calibrations);
+        })
+      );
+
+      // Process other equipment types (individual fetches as before)
+      const otherEquipmentWithCalibrations = await Promise.all(
+        otherEquipment.map((equipmentItem) =>
           fetchCalibrationDataForEquipment(equipmentItem)
         )
       );
 
-      setEquipment(equipmentWithCalibrations);
+      // Combine and cache the full equipment list
+      const equipmentWithCalibrations = [
+        ...airPumpsWithCalibrations,
+        ...otherEquipmentWithCalibrations,
+      ];
+      console.log(`EquipmentList: Caching ${equipmentWithCalibrations.length} equipment items (${airPumpsWithCalibrations.length} air pumps, ${otherEquipmentWithCalibrations.length} other)`);
+      setCachedEquipment(equipmentWithCalibrations);
+      hasLoadedRef.current = true;
     } catch (err) {
       console.error("Error fetching equipment:", err);
       setError(err.message || "Failed to fetch equipment");
     } finally {
       setLoading(false);
     }
-  }, [backendFilters]);
+  }, [processPumpCalibrations]); // Stable callback - uses ref to track load state
 
   const handleFilterChange = (field, value) => {
     setFilters((prev) => ({ ...prev, [field]: value }));
@@ -340,8 +442,8 @@ const EquipmentList = () => {
 
   useEffect(() => {
     fetchCalibrationFrequencies();
-    fetchEquipment();
-  }, [fetchEquipment]);
+    fetchEquipment(true); // Force initial fetch
+  }, []); // Only run once on mount
 
   // Listen for equipment data updates from other components
   useEffect(() => {
@@ -350,7 +452,7 @@ const EquipmentList = () => {
         "Equipment data updated, refreshing Equipment List:",
         event.detail
       );
-      fetchEquipment(); // Refresh equipment data
+      fetchEquipment(true); // Force refresh equipment data cache
       fetchCalibrationFrequencies(); // Also refresh calibration frequencies
     };
 
@@ -362,7 +464,7 @@ const EquipmentList = () => {
         handleEquipmentDataUpdate
       );
     };
-  }, [fetchEquipment]);
+  }, []); // Empty deps - fetchEquipment is stable
 
   const handleAddEquipment = async (e) => {
     e.preventDefault();
@@ -373,34 +475,8 @@ const EquipmentList = () => {
     }
 
     try {
-      // Auto-populate calibration frequency based on equipment type
-      const frequencyOptions = getCalibrationFrequencyOptions(
-        form.equipmentType
-      );
-
-      // Auto-calculate calibration dates if not provided (using obviously wrong defaults)
-      const defaultDate = "1900-01-01";
-
-      // Convert calibration frequency to months if needed
-      let calibrationFrequencyInMonths = null;
-      if (frequencyOptions.length > 0) {
-        const freq = frequencyOptions[0];
-        if (freq.frequencyUnit === "years") {
-          calibrationFrequencyInMonths = freq.frequencyValue * 12;
-        } else {
-          calibrationFrequencyInMonths = freq.frequencyValue;
-        }
-      }
-
       const formData = {
         ...form,
-        calibrationFrequency: calibrationFrequencyInMonths,
-        // Use obviously wrong default dates to indicate they need proper calculation
-        lastCalibration: form.lastCalibration || defaultDate,
-        calibrationDue:
-          frequencyOptions.length > 0
-            ? form.calibrationDue || defaultDate
-            : null,
       };
 
       await equipmentService.create(formData);
@@ -414,13 +490,10 @@ const EquipmentList = () => {
         equipmentType: "",
         section: "",
         brandModel: "",
-        lastCalibration: "",
-        calibrationDue: "",
-        calibrationFrequency: "",
       });
 
-      // Refresh the equipment list
-      fetchEquipment();
+      // Refresh the equipment list cache
+      fetchEquipment(true);
     } catch (err) {
       console.error("Error adding equipment:", err);
       setError(err.message || "Failed to add equipment");
@@ -434,15 +507,6 @@ const EquipmentList = () => {
       equipmentType: equipment.equipmentType,
       section: equipment.section,
       brandModel: equipment.brandModel,
-      // Note: lastCalibration and calibrationDue are now calculated from calibration records
-      // Display them but don't allow editing
-      lastCalibration: equipment.lastCalibration
-        ? new Date(equipment.lastCalibration).toISOString().split("T")[0]
-        : "",
-      calibrationDue: equipment.calibrationDue
-        ? new Date(equipment.calibrationDue).toISOString().split("T")[0]
-        : "",
-      calibrationFrequency: equipment.calibrationFrequency,
     });
     setReferenceError(null);
     setEditDialog(true);
@@ -459,76 +523,12 @@ const EquipmentList = () => {
     }
 
     try {
-      // Auto-populate calibration frequency based on equipment type
-      const frequencyOptions = getCalibrationFrequencyOptions(
-        form.equipmentType
-      );
-
-      // Auto-calculate calibration due if not provided
-
-      // Note: lastCalibration and calibrationDue are now calculated from calibration records
-      // Don't include them in the update
-      // Convert calibration frequency to months if needed
-      // For Graticules: allow null calibration frequency (they're active forever)
-      // For other equipment: preserve existing or use default from frequency options
-      let calibrationFrequencyInMonths = null;
-
-      // Check if user explicitly set calibration frequency (including empty string for null)
-      const hasExplicitFrequency =
-        form.calibrationFrequency !== undefined &&
-        form.calibrationFrequency !== null &&
-        form.calibrationFrequency !== "";
-
-      // If equipment type is Graticule, allow null calibration frequency
-      if (form.equipmentType === "Graticule") {
-        // Allow null - graticules don't need calibration frequency
-        // If user explicitly cleared it (empty string), set to null
-        if (
-          form.calibrationFrequency === "" ||
-          form.calibrationFrequency === undefined ||
-          form.calibrationFrequency === null
-        ) {
-          calibrationFrequencyInMonths = null;
-        } else {
-          calibrationFrequencyInMonths = Number(form.calibrationFrequency);
-        }
-      } else {
-        // For other equipment types
-        if (hasExplicitFrequency) {
-          // User explicitly set a value
-          calibrationFrequencyInMonths = Number(form.calibrationFrequency);
-        } else {
-          // Preserve existing or use default
-          calibrationFrequencyInMonths =
-            selectedEquipment.calibrationFrequency || null;
-
-          // Only auto-populate if no existing value and frequency options are available
-          if (!calibrationFrequencyInMonths && frequencyOptions.length > 0) {
-            const freq = frequencyOptions[0];
-            if (freq.frequencyUnit === "years") {
-              calibrationFrequencyInMonths = freq.frequencyValue * 12;
-            } else {
-              calibrationFrequencyInMonths = freq.frequencyValue;
-            }
-          }
-        }
-      }
-
-      // Ensure we send null (not undefined) to backend
-      if (
-        calibrationFrequencyInMonths === undefined ||
-        calibrationFrequencyInMonths === ""
-      ) {
-        calibrationFrequencyInMonths = null;
-      }
-
       const formData = {
         equipmentReference: form.equipmentReference,
         equipmentType: form.equipmentType,
         section: form.section,
         brandModel: form.brandModel,
         status: form.status || "active",
-        calibrationFrequency: calibrationFrequencyInMonths,
       };
 
       await equipmentService.update(selectedEquipment._id, formData);
@@ -543,29 +543,49 @@ const EquipmentList = () => {
         equipmentType: "",
         section: "",
         brandModel: "",
-        lastCalibration: "",
-        calibrationDue: "",
-        calibrationFrequency: "",
       });
 
-      // Refresh the equipment list
-      fetchEquipment();
+      // Refresh the equipment list cache
+      fetchEquipment(true);
     } catch (err) {
       console.error("Error editing equipment:", err);
       setError(err.message || "Failed to edit equipment");
     }
   };
 
-  const handleDeleteEquipment = async (equipmentId) => {
-    try {
-      await equipmentService.delete(equipmentId);
+  const handleDeleteClick = (equipment) => {
+    setEquipmentToArchive(equipment);
+    setArchiveDialog(true);
+    setError(null);
+  };
 
-      // Refresh the equipment list
-      fetchEquipment();
-    } catch (err) {
-      console.error("Error deleting equipment:", err);
-      setError(err.message || "Failed to delete equipment");
+  const handleDeleteConfirm = async () => {
+    if (!equipmentToArchive || !equipmentToArchive._id) {
+      setError("Equipment information not available");
+      return;
     }
+
+    try {
+      setArchiving(true);
+      setError(null);
+      await equipmentService.archive(equipmentToArchive._id);
+
+      // Close dialog and refresh the equipment list cache
+      setArchiveDialog(false);
+      setEquipmentToArchive(null);
+      fetchEquipment(true);
+    } catch (err) {
+      console.error("Error archiving equipment:", err);
+      setError(err.message || "Failed to archive equipment");
+    } finally {
+      setArchiving(false);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setArchiveDialog(false);
+    setEquipmentToArchive(null);
+    setError(null);
   };
 
   const fetchCalibrationHistory = async (equipment) => {
@@ -818,6 +838,24 @@ const EquipmentList = () => {
       return "Out-of-Service";
     }
 
+    // For Air pumps, check if the most recent calibration has all flowrates failing
+    // If all test results failed, the pump should be Out-of-Service
+    // This check must happen BEFORE checking if calibration is overdue
+    if (equipment.equipmentType === "Air pump" && equipment.mostRecentCalibration) {
+      const mostRecentCal = equipment.mostRecentCalibration;
+      if (
+        mostRecentCal.testResults &&
+        mostRecentCal.testResults.length > 0
+      ) {
+        const allFailed = mostRecentCal.testResults.every(
+          (result) => !result.passed
+        );
+        if (allFailed) {
+          return "Out-of-Service";
+        }
+      }
+    }
+
     // Check if calibration is overdue
     const daysUntil = calculateDaysUntilCalibration(equipment.calibrationDue);
     if (daysUntil !== null && daysUntil < 0) {
@@ -887,20 +925,21 @@ const EquipmentList = () => {
   };
 
   // Filter equipment based on all filters including calculated status
-  const filteredEquipment = useMemo(() => {
-    return equipment.filter((item) => {
-      // Out-of-service filter - hide by default unless toggle is on
-      if (!filters.showOutOfService) {
-        const calculatedStatus = calculateStatus(item);
-        if (
-          item.status === "out-of-service" ||
-          calculatedStatus === "Out-of-Service"
-        ) {
-          return false;
-        }
-      }
+  // Use cached equipment and apply all filters client-side
+  // Memoize calculated statuses to avoid recalculating on every filter change
+  const equipmentWithStatus = useMemo(() => {
+    // Always use cached equipment if available
+    const sourceEquipment = cachedEquipment.length > 0 ? cachedEquipment : [];
+    
+    return sourceEquipment.map((item) => ({
+      ...item,
+      calculatedStatus: calculateStatus(item),
+    }));
+  }, [cachedEquipment, calculateStatus]);
 
-      // Search filter
+  const filteredEquipment = useMemo(() => {
+    return equipmentWithStatus.filter((item) => {
+      // Search filter - client-side
       if (filters.search) {
         const searchLower = filters.search.toLowerCase();
         const matchesSearch =
@@ -909,25 +948,25 @@ const EquipmentList = () => {
         if (!matchesSearch) return false;
       }
 
-      // Equipment type filter
+      // Equipment type filter - client-side
       if (
         filters.equipmentType &&
+        filters.equipmentType !== "All Types" &&
         item.equipmentType !== filters.equipmentType
       ) {
         return false;
       }
 
-      // Status filter (based on calculated status)
+      // Status filter (based on calculated status) - always client-side
       if (filters.status) {
-        const calculatedStatus = calculateStatus(item);
-        if (calculatedStatus !== filters.status) {
+        if (item.calculatedStatus !== filters.status) {
           return false;
         }
       }
 
       return true;
     });
-  }, [equipment, filters, calculateStatus]);
+  }, [equipmentWithStatus, filters]);
 
   if (loading) {
     return (
@@ -975,23 +1014,40 @@ const EquipmentList = () => {
           <Typography color="text.primary">Laboratory Equipment</Typography>
         </Breadcrumbs>
 
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => setAddDialog(true)}
-          sx={{
-            backgroundColor: theme.palette.primary.main,
-            color: theme.palette.common.white,
-            fontSize: "14px",
-            fontWeight: "bold",
-            padding: "10px 20px",
-            "&:hover": {
-              backgroundColor: theme.palette.primary.dark,
-            },
-          }}
-        >
-          Add Equipment
-        </Button>
+        <Box display="flex" gap={2}>
+          <Button
+            variant="outlined"
+            onClick={() => navigate("/records/laboratory/equipment/archived")}
+          >
+            Archived Equipment
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => {
+              setForm({
+                equipmentReference: "",
+                equipmentType: "",
+                section: "",
+                brandModel: "",
+              });
+              setReferenceError(null);
+              setAddDialog(true);
+            }}
+            sx={{
+              backgroundColor: theme.palette.primary.main,
+              color: theme.palette.common.white,
+              fontSize: "14px",
+              fontWeight: "bold",
+              padding: "10px 20px",
+              "&:hover": {
+                backgroundColor: theme.palette.primary.dark,
+              },
+            }}
+          >
+            Add Equipment
+          </Button>
+        </Box>
       </Box>
 
       {error && (
@@ -1019,19 +1075,19 @@ const EquipmentList = () => {
             value={filters.search}
             onChange={(e) => handleFilterChange("search", e.target.value)}
             size="small"
-            sx={{ minWidth: 260 }}
+            sx={{ minWidth: 350 }}
             placeholder="Search by reference or brand/model"
           />
-          <FormControl size="small" sx={{ minWidth: 195 }}>
-            <InputLabel>Equipment Type</InputLabel>
+          <FormControl size="small" sx={{ minWidth: 220 }}>
+            <InputLabel>Equipment Types</InputLabel>
             <Select
               value={filters.equipmentType}
-              label="Equipment Type"
+              label="Equipment Types"
               onChange={(e) =>
                 handleFilterChange("equipmentType", e.target.value)
               }
             >
-              <MenuItem value="">All Types</MenuItem>
+              <MenuItem value="All Types">All Types</MenuItem>
               {equipmentService.getEquipmentTypes().map((type) => (
                 <MenuItem key={type} value={type}>
                   {type}
@@ -1054,26 +1110,13 @@ const EquipmentList = () => {
               <MenuItem value="Out-of-Service">Out-of-Service</MenuItem>
             </Select>
           </FormControl>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={filters.showOutOfService}
-                onChange={(e) =>
-                  handleFilterChange("showOutOfService", e.target.checked)
-                }
-                color="primary"
-              />
-            }
-            label="Show Out-of-Service"
-          />
           <Button
             variant="outlined"
             onClick={() =>
               setFilters({
                 search: "",
-                equipmentType: "",
-                status: "",
-                showOutOfService: false,
+                equipmentType: "All Types",
+                status: "Active",
               })
             }
             size="small"
@@ -1157,6 +1200,9 @@ const EquipmentList = () => {
               valueGetter: (value, row) => {
                 // Return calculated status for filtering and sorting
                 if (!row) return "Out-of-Service";
+                if (row.calculatedStatus) {
+                  return row.calculatedStatus;
+                }
                 return calculateStatus(row);
               },
               renderCell: (params) => {
@@ -1175,7 +1221,12 @@ const EquipmentList = () => {
                     </Box>
                   );
                 }
-                const calculatedStatus = calculateStatus(params.row);
+                let calculatedStatus;
+                if (params.row.calculatedStatus) {
+                  calculatedStatus = params.row.calculatedStatus;
+                } else {
+                  calculatedStatus = calculateStatus(params.row);
+                }
                 const statusColor = getStatusColor(calculatedStatus);
                 const isBold = isStatusBold(calculatedStatus);
                 return (
@@ -1294,9 +1345,9 @@ const EquipmentList = () => {
                     </IconButton>
                     <IconButton
                       size="small"
-                      onClick={() => handleDeleteEquipment(row._id)}
-                      title="Delete Equipment"
-                      sx={{ color: theme.palette.error.main }}
+                      onClick={() => handleDeleteClick(row)}
+                      title="Archive Equipment"
+                      sx={{ color: theme.palette.warning.main }}
                     >
                       <DeleteIcon fontSize="small" />
                     </IconButton>
@@ -1328,6 +1379,12 @@ const EquipmentList = () => {
         onClose={() => {
           setAddDialog(false);
           setReferenceError(null);
+          setForm({
+            equipmentReference: "",
+            equipmentType: "",
+            section: "",
+            brandModel: "",
+          });
         }}
         maxWidth="md"
         fullWidth
@@ -1343,6 +1400,12 @@ const EquipmentList = () => {
               onClick={() => {
                 setAddDialog(false);
                 setReferenceError(null);
+                setForm({
+                  equipmentReference: "",
+                  equipmentType: "",
+                  section: "",
+                  brandModel: "",
+                });
               }}
             >
               <CloseIcon />
@@ -1415,82 +1478,19 @@ const EquipmentList = () => {
                 required
                 fullWidth
               />
-              <TextField
-                label="Last Calibration Date"
-                type="date"
-                value={form.lastCalibration}
-                disabled
-                fullWidth
-                InputLabelProps={{ shrink: true }}
-                helperText="Automatically calculated from calibration records"
-              />
-              <TextField
-                label="Calibration Due Date"
-                type="date"
-                value={form.calibrationDue}
-                disabled
-                fullWidth
-                InputLabelProps={{ shrink: true }}
-                helperText="Automatically calculated from calibration records"
-              />
-              <TextField
-                label="Calibration Frequency (months)"
-                type="number"
-                value={form.calibrationFrequency || ""}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  // Allow empty string or valid number
-                  setForm({
-                    ...form,
-                    calibrationFrequency: value === "" ? "" : Number(value),
-                  });
-                }}
-                fullWidth
-                inputProps={{ min: 0, step: 1 }}
-                helperText={
-                  form.equipmentType === "Graticule"
-                    ? "Optional for graticules - leave empty for 'active forever'"
-                    : "Leave empty to use default from equipment type, or enter custom value in months"
-                }
-              />
             </Stack>
-
-            {/* Calibration Frequency Info Display */}
-            {form.equipmentType &&
-              (form.calibrationFrequency === "" ||
-                form.calibrationFrequency === null ||
-                form.calibrationFrequency === undefined) && (
-                <Box
-                  sx={{
-                    mt: 2,
-                    p: 2,
-                    backgroundColor: theme.palette.grey[100],
-                    borderRadius: 1,
-                  }}
-                >
-                  <Typography
-                    variant="subtitle2"
-                    color="text.secondary"
-                    gutterBottom
-                  >
-                    Default Calibration Frequency for {form.equipmentType}:
-                  </Typography>
-                  <Typography variant="body2">
-                    {getCalibrationFrequencyOptions(form.equipmentType).length >
-                    0
-                      ? getCalibrationFrequencyOptions(form.equipmentType)
-                          .map((freq) => freq.displayText)
-                          .join(", ")
-                      : "No calibration frequency configured for this equipment type"}
-                  </Typography>
-                </Box>
-              )}
           </DialogContent>
           <DialogActions>
             <Button
               onClick={() => {
                 setAddDialog(false);
                 setReferenceError(null);
+                setForm({
+                  equipmentReference: "",
+                  equipmentType: "",
+                  section: "",
+                  brandModel: "",
+                });
               }}
             >
               Cancel
@@ -1518,6 +1518,12 @@ const EquipmentList = () => {
         onClose={() => {
           setEditDialog(false);
           setReferenceError(null);
+          setForm({
+            equipmentReference: "",
+            equipmentType: "",
+            section: "",
+            brandModel: "",
+          });
         }}
         maxWidth="md"
         fullWidth
@@ -1533,6 +1539,12 @@ const EquipmentList = () => {
               onClick={() => {
                 setEditDialog(false);
                 setReferenceError(null);
+                setForm({
+                  equipmentReference: "",
+                  equipmentType: "",
+                  section: "",
+                  brandModel: "",
+                });
               }}
             >
               <CloseIcon />
@@ -1605,78 +1617,19 @@ const EquipmentList = () => {
                 required
                 fullWidth
               />
-              <TextField
-                label="Last Calibration Date"
-                type="date"
-                value={form.lastCalibration}
-                disabled
-                fullWidth
-                InputLabelProps={{ shrink: true }}
-                helperText="Automatically calculated from calibration records"
-              />
-              <TextField
-                label="Calibration Due Date"
-                type="date"
-                value={form.calibrationDue}
-                disabled
-                fullWidth
-                InputLabelProps={{ shrink: true }}
-                helperText="Automatically calculated from calibration records"
-              />
-              <TextField
-                label="Calibration Frequency (months)"
-                type="number"
-                value={form.calibrationFrequency || ""}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  // Allow empty string or valid number
-                  setForm({
-                    ...form,
-                    calibrationFrequency: value === "" ? "" : Number(value),
-                  });
-                }}
-                fullWidth
-                inputProps={{ min: 0, step: 1 }}
-                helperText={
-                  form.equipmentType === "Graticule"
-                    ? "Optional for graticules - leave empty for 'active forever'"
-                    : "Leave empty to use default from equipment type, or enter custom value in months"
-                }
-              />
             </Stack>
-
-            {/* Calibration Frequency Info Display */}
-            {form.equipmentType && form.calibrationFrequency === "" && (
-              <Box
-                sx={{
-                  mt: 2,
-                  p: 2,
-                  backgroundColor: theme.palette.grey[100],
-                  borderRadius: 1,
-                }}
-              >
-                <Typography
-                  variant="subtitle2"
-                  color="text.secondary"
-                  gutterBottom
-                >
-                  Default Calibration Frequency for {form.equipmentType}:
-                </Typography>
-                <Typography variant="body2">
-                  {getCalibrationFrequencyOptions(form.equipmentType).length > 0
-                    ? getCalibrationFrequencyOptions(form.equipmentType)
-                        .map((freq) => freq.displayText)
-                        .join(", ")
-                    : "No calibration frequency configured for this equipment type"}
-                </Typography>
-              </Box>
-            )}
           </DialogContent>
           <DialogActions>
             <Button
               onClick={() => {
                 setEditDialog(false);
                 setReferenceError(null);
+                setForm({
+                  equipmentReference: "",
+                  equipmentType: "",
+                  section: "",
+                  brandModel: "",
+                });
               }}
             >
               Cancel
@@ -1868,6 +1821,94 @@ const EquipmentList = () => {
             }}
           >
             Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Archive Confirmation Dialog */}
+      <Dialog
+        open={archiveDialog}
+        onClose={handleDeleteCancel}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+          >
+            <Typography variant="h6">Archive Equipment</Typography>
+            <IconButton onClick={handleDeleteCancel}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            Are you sure you want to archive the following equipment? It will be
+            moved to the archived equipment table and removed from the active
+            equipment list.
+          </Typography>
+          {equipmentToArchive && (
+            <Box
+              sx={{
+                p: 2,
+                backgroundColor: theme.palette.grey[100],
+                borderRadius: 1,
+                mb: 2,
+              }}
+            >
+              <Typography variant="body2" sx={{ fontWeight: "bold", mb: 1 }}>
+                Equipment Reference:
+              </Typography>
+              <Typography variant="body1" sx={{ mb: 1 }}>
+                {equipmentToArchive.equipmentReference}
+              </Typography>
+              <Typography variant="body2" sx={{ fontWeight: "bold", mb: 1 }}>
+                Equipment Type:
+              </Typography>
+              <Typography variant="body1" sx={{ mb: 1 }}>
+                {equipmentToArchive.equipmentType}
+              </Typography>
+              {equipmentToArchive.brandModel && (
+                <>
+                  <Typography variant="body2" sx={{ fontWeight: "bold", mb: 1 }}>
+                    Brand/Model:
+                  </Typography>
+                  <Typography variant="body1">
+                    {equipmentToArchive.brandModel}
+                  </Typography>
+                </>
+              )}
+            </Box>
+          )}
+          <Alert severity="info" sx={{ mt: 2 }}>
+            <Typography variant="body2">
+              <strong>Note:</strong> Archiving this equipment will move it to
+              the archived equipment table. All calibration records and data
+              will be preserved. You can restore archived equipment later if
+              needed.
+            </Typography>
+          </Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDeleteCancel} disabled={archiving}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDeleteConfirm}
+            variant="contained"
+            color="warning"
+            disabled={archiving}
+            startIcon={archiving ? <CircularProgress size={20} /> : null}
+          >
+            {archiving ? "Archiving..." : "Archive Equipment"}
           </Button>
         </DialogActions>
       </Dialog>

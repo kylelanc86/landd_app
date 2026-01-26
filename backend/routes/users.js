@@ -55,9 +55,10 @@ router.get('/', auth, checkPermission(['users.view']), async (req, res) => {
     // Only select fields needed for the table view
     // Exclude large fields like signature (base64 images), userPreferences, workingHours, etc.
     // Include labApprovals as it's needed for filtering analysts in fibre count analysis
+    // Include labSignatory as it's needed for filtering technicians in calibration pages
     // Use lean() for faster queries (returns plain objects instead of Mongoose documents)
     const users = await User.find(query)
-      .select('firstName lastName email role licences isActive _id createdAt phone labApprovals')
+      .select('firstName lastName email role licences isActive _id createdAt phone labApprovals labSignatory')
       .sort({ lastName: 1, firstName: 1 })
       .lean(); // Use lean() for 2-3x faster queries - returns plain objects
     

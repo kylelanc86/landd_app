@@ -71,6 +71,7 @@ const EFA = ({ viewCalibrationsPath }) => {
       const validNextCalibrations = calibrations
         .filter((cal) => cal.nextCalibration)
         .map((cal) => new Date(cal.nextCalibration))
+        .filter((date) => !isNaN(date.getTime())) // Filter out invalid dates
         .sort((a, b) => a - b);
 
       if (validNextCalibrations.length > 0) {
@@ -87,6 +88,8 @@ const EFA = ({ viewCalibrationsPath }) => {
       let dueInNextMonth = calibrations.filter((cal) => {
         if (!cal.nextCalibration) return false;
         const nextCalDate = new Date(cal.nextCalibration);
+        // Check if date is valid before comparing
+        if (isNaN(nextCalDate.getTime())) return false;
         return nextCalDate >= now && nextCalDate <= thirtyDaysFromNow;
       }).length;
 
@@ -147,11 +150,13 @@ const EFA = ({ viewCalibrationsPath }) => {
     <BaseCalibrationWidget
       title="Effective Filter Area"
       nextCalibrationDue={nextCalibrationDue}
+      hideNextCalibrationDue={true}
       itemsDueInNextMonth={itemsDueInNextMonth}
       viewCalibrationsPath={
         viewCalibrationsPath || "/records/laboratory/calibrations/efa"
       }
       icon={process.env.PUBLIC_URL + "/air-mon-icons/effective filter area.png"}
+      color="#0288d1"
     />
   );
 };

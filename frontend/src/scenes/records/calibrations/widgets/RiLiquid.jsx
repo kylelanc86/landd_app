@@ -65,6 +65,7 @@ const RiLiquid = ({ viewCalibrationsPath }) => {
         viewCalibrationsPath || "/records/laboratory/calibrations/ri-liquid"
       }
       icon={process.env.PUBLIC_URL + "/air-mon-icons/RiLiquid.png"}
+      color="#ed6c02"
     />
   );
 };

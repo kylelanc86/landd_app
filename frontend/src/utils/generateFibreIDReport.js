@@ -237,7 +237,7 @@ pdfMake.fonts = {
                       { text: [ { text: 'L&D Job Reference: ', bold: true }, { text: assessment?.projectId?.projectID || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: [ { text: 'No. of Samples: ', bold: true }, { text: sampleItems.length.toString() } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: [ { text: 'Analysed by: ', bold: true }, { text: analyst || 'Jordan Smith' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Report Completion Date: ', bold: true }, { text: reportIssueDate ? formatDate(reportIssueDate) : formatDate(new Date()) } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Report Issue Date: ', bold: true }, { text: formatDate(new Date()) } ], style: 'tableContent', margin: [0, 0, 0, 2] }, // Always use PDF generation date
                     ]
                   },
                   {

@@ -194,7 +194,7 @@ router.get(
         const clearancesStart = performance.now();
         // Fetch clearances - fields needed for table and edit form, but exclude large fields
         clearances = await AsbestosClearance.find({ projectId })
-          .select("_id projectId clearanceDate clearanceType status inspectionTime asbestosRemovalist jurisdiction secondaryHeader vehicleEquipmentDescription notes useComplexTemplate jobSpecificExclusions")
+          .select("_id projectId clearanceDate clearanceType status inspectionTime asbestosRemovalist LAA jurisdiction secondaryHeader vehicleEquipmentDescription notes useComplexTemplate jobSpecificExclusions")
           .populate({
             path: "projectId",
             select: "projectID name",
@@ -333,7 +333,7 @@ router.get(
       const clearancesStart = performance.now();
       // Fetch clearances - fields needed for table and edit form, but exclude large fields
       const clearances = await AsbestosClearance.find({ projectId })
-        .select("_id projectId clearanceDate clearanceType status inspectionTime asbestosRemovalist jurisdiction secondaryHeader vehicleEquipmentDescription notes useComplexTemplate jobSpecificExclusions reportApprovedBy reportIssueDate")
+        .select("_id projectId clearanceDate clearanceType status inspectionTime asbestosRemovalist LAA jurisdiction secondaryHeader vehicleEquipmentDescription notes useComplexTemplate jobSpecificExclusions reportApprovedBy reportIssueDate")
         .populate({
           path: "projectId",
           select: "projectID name",

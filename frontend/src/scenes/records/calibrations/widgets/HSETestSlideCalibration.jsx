@@ -148,7 +148,8 @@ const HSETestSlideCalibration = ({ viewCalibrationsPath }) => {
         viewCalibrationsPath ||
         "/records/laboratory/calibrations/hse-test-slide"
       }
-      icon={process.env.PUBLIC_URL + "/air-mon-icons/test-slide.png"}
+      icon={process.env.PUBLIC_URL + "/air-mon-icons/microscope-slide.png"}
+      color="#d32f2f"
     />
   );
 };

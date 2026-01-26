@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Box,
   Typography,
@@ -34,6 +34,7 @@ import {
   Delete as DeleteIcon,
   ArrowBack as ArrowBackIcon,
   Close as CloseIcon,
+  Visibility as VisibilityIcon,
 } from "@mui/icons-material";
 import { useTheme } from "@mui/material/styles";
 import { useNavigate, useParams } from "react-router-dom";
@@ -59,6 +60,7 @@ const AirPumpCalibrationPage = () => {
   // Dialog states
   const [openDialog, setOpenDialog] = useState(false);
   const [editingCalibration, setEditingCalibration] = useState(null);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState(false);
   const [calibrationToDelete, setCalibrationToDelete] = useState(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -66,11 +68,8 @@ const AirPumpCalibrationPage = () => {
   const [activeTab, setActiveTab] = useState(0);
   // Track active tab for each date group in the table
   const [activeDateTabs, setActiveDateTabs] = useState({});
-  // Out-of-service dialog state
-  const [outOfServiceDialog, setOutOfServiceDialog] = useState(false);
-  const [outOfServiceDate, setOutOfServiceDate] = useState(
-    formatDateForInput(new Date())
-  );
+  // Store initial form state when loading a calibration (for change detection)
+  const initialFormStateRef = useRef(null);
 
   // Static form data (shared across all calibrations)
   const [staticFormData, setStaticFormData] = useState({
@@ -87,19 +86,28 @@ const AirPumpCalibrationPage = () => {
   // Available flowrates
   const availableFlowrates = ["1", "1.5", "2", "3", "4"];
 
+  // Helper function to format flowrate display with (13mm) for 1.5 L/min
+  const formatFlowrateDisplay = (flowRate) => {
+    if (!flowRate) return "";
+    const display = `${flowRate} L/min`;
+    return flowRate === "1.5" ? `${display} (13mm)` : display;
+  };
+
   // Pagination
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [total, setTotal] = useState(0);
 
-  // Fetch lab signatories
+  // Fetch lab signatories (users with signatory=true OR calibration approval=true)
   const fetchLabSignatories = useCallback(async () => {
     try {
       setLabSignatoriesLoading(true);
       const response = await userService.getAll();
       const users = response.data || response || [];
       const signatories = users.filter(
-        (user) => user.role === "lab-signatory" || user.role === "admin"
+        (user) =>
+          user.isActive &&
+          (user.labSignatory === true || user.labApprovals?.calibrations === true)
       );
       setLabSignatories(signatories);
     } catch (err) {
@@ -248,6 +256,24 @@ const AirPumpCalibrationPage = () => {
 
   // Check if there are unsaved changes
   const checkUnsavedChanges = useCallback(() => {
+    // If we have initial state (viewing/editing existing), compare against it
+    if (initialFormStateRef.current) {
+      const initial = initialFormStateRef.current;
+      
+      // Compare static form data
+      const staticDataChanged =
+        staticFormData.calibrationDate !== initial.staticFormData.calibrationDate ||
+        staticFormData.technicianId !== initial.staticFormData.technicianId ||
+        staticFormData.flowmeterId !== initial.staticFormData.flowmeterId ||
+        staticFormData.notes !== initial.staticFormData.notes;
+
+      // Compare calibration tests
+      const testsChanged = JSON.stringify(calibrationTests) !== JSON.stringify(initial.calibrationTests);
+
+      return staticDataChanged || testsChanged;
+    }
+
+    // Otherwise, check if there's any data (for new calibrations)
     const hasStaticData =
       staticFormData.calibrationDate !== formatDateForInput(new Date()) ||
       staticFormData.technicianId ||
@@ -272,6 +298,7 @@ const AirPumpCalibrationPage = () => {
     setHasUnsavedChanges(false);
     setConfirmCloseDialog(false);
     setEditingCalibration(null);
+    setIsEditMode(false);
     // Reset form
     setStaticFormData({
       calibrationDate: formatDateForInput(new Date()),
@@ -282,6 +309,8 @@ const AirPumpCalibrationPage = () => {
     });
     setCalibrationTests([]);
     setActiveTab(0);
+    // Clear initial form state
+    initialFormStateRef.current = null;
   };
 
   // Add a new calibration tab
@@ -374,9 +403,14 @@ const AirPumpCalibrationPage = () => {
 
   // Track unsaved changes
   useEffect(() => {
+    // Skip change detection when viewing (not editing) an existing calibration
+    if (editingCalibration && !isEditMode) {
+      setHasUnsavedChanges(false);
+      return;
+    }
     const hasChanges = checkUnsavedChanges();
     setHasUnsavedChanges(hasChanges);
-  }, [staticFormData, calibrationTests, checkUnsavedChanges]);
+  }, [staticFormData, calibrationTests, checkUnsavedChanges, editingCalibration, isEditMode]);
 
   // Handle browser navigation and refresh
   useEffect(() => {
@@ -537,7 +571,7 @@ const AirPumpCalibrationPage = () => {
         return {
           flowRate: flowRateLMin,
           actualFlow: actualFlowLMin,
-          errorPercent: testResult.percentError
+          errorPercent: testResult.percentError != null
             ? testResult.percentError.toFixed(2)
             : "",
           status: testResult.passed ? "Pass" : "Fail",
@@ -545,7 +579,7 @@ const AirPumpCalibrationPage = () => {
       }
     );
 
-    setStaticFormData({
+    const staticFormDataToSet = {
       calibrationDate: new Date(calibration.calibrationDate)
         .toISOString()
         .split("T")[0],
@@ -553,10 +587,20 @@ const AirPumpCalibrationPage = () => {
       flowmeterId: flowmeterId,
       technicianId: technicianId,
       technicianName: technicianName,
-    });
+    };
+
+    setStaticFormData(staticFormDataToSet);
     setCalibrationTests(calibrationTestsData);
+    
+    // Store initial state for change detection (deep copy)
+    initialFormStateRef.current = {
+      staticFormData: { ...staticFormDataToSet },
+      calibrationTests: JSON.parse(JSON.stringify(calibrationTestsData)),
+    };
+    
     setActiveTab(0);
     setHasUnsavedChanges(false);
+    setIsEditMode(false);
     setOpenDialog(true);
   };
 
@@ -587,6 +631,8 @@ const AirPumpCalibrationPage = () => {
     setCalibrationTests([]);
     setActiveTab(0);
     setHasUnsavedChanges(false);
+    // Clear initial form state (new calibration, no initial state to compare)
+    initialFormStateRef.current = null;
     setOpenDialog(true);
   };
 
@@ -600,49 +646,6 @@ const AirPumpCalibrationPage = () => {
       loadData();
     } catch (err) {
       setError(err.message || "Failed to delete calibration");
-    }
-  };
-
-  const handleSetOutOfService = async () => {
-    try {
-      setError(null);
-
-      if (!outOfServiceDate) {
-        setError("Date is required");
-        return;
-      }
-
-      if (!pump || !pump._id) {
-        setError("Pump information not available");
-        return;
-      }
-
-      // Update equipment status to out-of-service
-      await equipmentService.update(pump._id, {
-        status: "out-of-service",
-      });
-
-      // Create calibration record with out-of-service marker
-      const calibrationData = {
-        pumpId: pump._id,
-        calibrationDate: new Date(outOfServiceDate),
-        testResults: [], // Empty test results for out-of-service
-        overallResult: "Fail",
-        notes: `Equipment set as Out-of-Service on ${formatDate(
-          new Date(outOfServiceDate)
-        )}`,
-        flowmeterId: null,
-        nextCalibrationDue: null,
-      };
-
-      await airPumpCalibrationService.createCalibration(calibrationData);
-
-      // Close dialog and refresh data
-      setOutOfServiceDialog(false);
-      setOutOfServiceDate(formatDateForInput(new Date()));
-      loadData();
-    } catch (err) {
-      setError(err.message || "Failed to set pump as out-of-service");
     }
   };
 
@@ -699,24 +702,13 @@ const AirPumpCalibrationPage = () => {
         mb={2}
       >
         <Typography variant="h6">Calibration Records</Typography>
-        <Box display="flex" gap={2}>
-          <Button
-            variant="outlined"
-            color="error"
-            backkgroundCO
-            onClick={() => setOutOfServiceDialog(true)}
-            disabled={pump?.status === "out-of-service"}
-          >
-            Set Out-of-Service
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={handleAdd}
-          >
-            Add Calibration
-          </Button>
-        </Box>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={handleAdd}
+        >
+          Add Calibration
+        </Button>
       </Box>
 
       {/* Calibrations Table */}
@@ -728,7 +720,7 @@ const AirPumpCalibrationPage = () => {
                 Date
               </TableCell>
               <TableCell sx={{ color: "white", fontWeight: "bold" }}>
-                Calibrated By
+                Technician
               </TableCell>
               <TableCell sx={{ color: "white", fontWeight: "bold" }}>
                 Flowmeter
@@ -749,43 +741,29 @@ const AirPumpCalibrationPage = () => {
           </TableHead>
           <TableBody>
             {(() => {
-              // Group calibrations by date
-              const groupedByDate = {};
-              calibrations.forEach((calibration) => {
-                const dateKey = calibration.calibrationDate
-                  ? new Date(calibration.calibrationDate)
-                      .toISOString()
-                      .split("T")[0]
-                  : "unknown";
-                if (!groupedByDate[dateKey]) {
-                  groupedByDate[dateKey] = [];
+              // Sort all calibrations by date (most recent first), then by creation time (most recent first)
+              const sortedCalibrations = [...calibrations].sort((a, b) => {
+                // First sort by calibration date
+                const dateA = a.calibrationDate
+                  ? new Date(a.calibrationDate).getTime()
+                  : 0;
+                const dateB = b.calibrationDate
+                  ? new Date(b.calibrationDate).getTime()
+                  : 0;
+                if (dateB !== dateA) {
+                  return dateB - dateA;
                 }
-                groupedByDate[dateKey].push(calibration);
+                // If same date, sort by creation time (most recent first)
+                const createdA = a.createdAt
+                  ? new Date(a.createdAt).getTime()
+                  : 0;
+                const createdB = b.createdAt
+                  ? new Date(b.createdAt).getTime()
+                  : 0;
+                return createdB - createdA;
               });
 
-              // Convert to array and sort by date (most recent first)
-              // Also sort calibrations within each date group by creation time (most recent first)
-              const dateGroups = Object.entries(groupedByDate)
-                .map(([dateKey, calList]) => {
-                  // Sort calibrations within this date group by creation time (most recent first)
-                  const sortedCals = [...calList].sort((a, b) => {
-                    const dateA = a.createdAt
-                      ? new Date(a.createdAt)
-                      : new Date(0);
-                    const dateB = b.createdAt
-                      ? new Date(b.createdAt)
-                      : new Date(0);
-                    return dateB - dateA;
-                  });
-                  return {
-                    dateKey,
-                    date: sortedCals[0].calibrationDate,
-                    calibrations: sortedCals, // Use sorted list so firstCal is the most recent
-                  };
-                })
-                .sort((a, b) => new Date(b.date) - new Date(a.date));
-
-              if (dateGroups.length === 0) {
+              if (sortedCalibrations.length === 0) {
                 return (
                   <TableRow>
                     <TableCell colSpan={7} align="center">
@@ -797,55 +775,40 @@ const AirPumpCalibrationPage = () => {
                 );
               }
 
-              return dateGroups.map((dateGroup) => {
-                // Get common info from first calibration (they should all be the same for same date)
-                const firstCal = dateGroup.calibrations[0];
-
+              return sortedCalibrations.map((calibration) => {
                 // Check if this is an out-of-service calibration
                 const isOutOfService =
-                  !firstCal.testResults ||
-                  firstCal.testResults.length === 0 ||
-                  pump?.status === "out-of-service";
-                const flowmeter = firstCal.flowmeterId
+                  !calibration.testResults ||
+                  calibration.testResults.length === 0;
+                
+                const flowmeter = calibration.flowmeterId
                   ? flowmeters.find(
                       (fm) =>
-                        fm._id === firstCal.flowmeterId ||
-                        (typeof firstCal.flowmeterId === "object" &&
-                          firstCal.flowmeterId._id === fm._id)
+                        fm._id === calibration.flowmeterId ||
+                        (typeof calibration.flowmeterId === "object" &&
+                          calibration.flowmeterId._id === fm._id)
                     )
                   : null;
 
-                // Extract all test results from all calibrations for this date
-                const allTestResults = [];
-                dateGroup.calibrations.forEach((cal) => {
-                  if (cal.testResults && cal.testResults.length > 0) {
-                    cal.testResults.forEach((testResult) => {
-                      allTestResults.push({
-                        ...testResult,
-                        calibrationId: cal._id,
-                        overallResult: cal.overallResult,
-                      });
-                    });
-                  }
-                });
+                // Extract test results from this calibration
+                const testResults = calibration.testResults || [];
 
                 // Calculate overallResult from test results to ensure accuracy
-                // This ensures consistency with what's shown in edit modal
                 // Pass if at least one test passed (not all tests need to pass)
                 let calculatedOverallResult = "Fail";
-                if (firstCal.testResults && firstCal.testResults.length > 0) {
-                  const atLeastOnePassed = firstCal.testResults.some(
+                if (testResults.length > 0) {
+                  const atLeastOnePassed = testResults.some(
                     (result) => result.passed === true
                   );
                   calculatedOverallResult = atLeastOnePassed ? "Pass" : "Fail";
-                } else if (firstCal.overallResult) {
+                } else if (calibration.overallResult) {
                   // If no test results but overallResult exists, use it (e.g., out-of-service)
-                  calculatedOverallResult = firstCal.overallResult;
+                  calculatedOverallResult = calibration.overallResult;
                 }
 
                 // Group test results by flowrate
                 const flowrateGroups = {};
-                allTestResults.forEach((testResult) => {
+                testResults.forEach((testResult) => {
                   const flowrateLMin = (
                     testResult.setFlowrate / 1000
                   ).toString();
@@ -859,31 +822,31 @@ const AirPumpCalibrationPage = () => {
                   (a, b) => parseFloat(a) - parseFloat(b)
                 );
 
-                // Get active tab for this date group
-                const dateKey = dateGroup.dateKey;
-                const activeTabIndex = activeDateTabs[dateKey] || 0;
+                // Use calibration ID as unique key for tabs
+                const uniqueKey = calibration._id.toString();
+                const activeTabIndex = activeDateTabs[uniqueKey] || 0;
 
                 return (
-                  <TableRow key={dateKey} hover>
+                  <TableRow key={calibration._id} hover>
                     <TableCell>
-                      {firstCal.calibrationDate
-                        ? formatDate(firstCal.calibrationDate)
+                      {calibration.calibrationDate
+                        ? formatDate(calibration.calibrationDate)
                         : "N/A"}
                     </TableCell>
                     <TableCell>
-                      {firstCal.calibratedBy
-                        ? `${firstCal.calibratedBy.firstName || ""} ${
-                            firstCal.calibratedBy.lastName || ""
+                      {calibration.calibratedBy
+                        ? `${calibration.calibratedBy.firstName || ""} ${
+                            calibration.calibratedBy.lastName || ""
                           }`.trim() || "N/A"
                         : "N/A"}
                     </TableCell>
                     <TableCell>
                       {flowmeter
                         ? flowmeter.equipmentReference
-                        : firstCal.flowmeterId
-                        ? typeof firstCal.flowmeterId === "object" &&
-                          firstCal.flowmeterId.equipmentReference
-                          ? firstCal.flowmeterId.equipmentReference
+                        : calibration.flowmeterId
+                        ? typeof calibration.flowmeterId === "object" &&
+                          calibration.flowmeterId.equipmentReference
+                          ? calibration.flowmeterId.equipmentReference
                           : "N/A"
                         : "-"}
                     </TableCell>
@@ -895,7 +858,7 @@ const AirPumpCalibrationPage = () => {
                             onChange={(e, newValue) => {
                               setActiveDateTabs((prev) => ({
                                 ...prev,
-                                [dateKey]: newValue,
+                                [uniqueKey]: newValue,
                               }));
                             }}
                             variant="scrollable"
@@ -940,68 +903,18 @@ const AirPumpCalibrationPage = () => {
                               );
                             })}
                           </Tabs>
-                          {flowrateKeys.map((flowrate, index) => {
-                            if (index !== activeTabIndex) return null;
-                            const tests = flowrateGroups[flowrate];
-                            return (
-                              <Box key={flowrate} sx={{ mt: 1, p: 1 }}>
-                                <Box sx={{ mt: 0.5 }}>
-                                  {tests.map((test, testIndex) => (
-                                    <Box
-                                      key={testIndex}
-                                      sx={{
-                                        display: "flex",
-                                        gap: 1,
-                                        alignItems: "center",
-                                        mb: 0.5,
-                                      }}
-                                    >
-                                      <Typography variant="caption">
-                                        Actual:{" "}
-                                        {(test.actualFlowrate / 1000).toFixed(
-                                          2
-                                        )}{" "}
-                                        L/min
-                                      </Typography>
-                                      <Typography
-                                        variant="caption"
-                                        color="text.secondary"
-                                      >
-                                        Error:{" "}
-                                        {test.percentError?.toFixed(2) ||
-                                          "0.00"}
-                                        %
-                                      </Typography>
-                                      <Chip
-                                        label={test.passed ? "Pass" : "Fail"}
-                                        size="small"
-                                        sx={{
-                                          backgroundColor: test.passed
-                                            ? theme.palette.success.main
-                                            : theme.palette.error.main,
-                                          color: "white",
-                                          height: "16px",
-                                          fontSize: "0.6rem",
-                                        }}
-                                      />
-                                    </Box>
-                                  ))}
-                                </Box>
-                              </Box>
-                            );
-                          })}
                         </Box>
                       ) : (
                         <Typography variant="body2" color="text.secondary">
-                          No test results
+                          {isOutOfService ? "-" : "No test results"}
                         </Typography>
                       )}
                     </TableCell>
                     <TableCell>
                       {isOutOfService
                         ? "N/A"
-                        : firstCal.nextCalibrationDue
-                        ? formatDate(firstCal.nextCalibrationDue)
+                        : calibration.nextCalibrationDue
+                        ? formatDate(calibration.nextCalibrationDue)
                         : "N/A"}
                     </TableCell>
                     <TableCell>
@@ -1033,16 +946,16 @@ const AirPumpCalibrationPage = () => {
                     <TableCell>
                       <IconButton
                         size="small"
-                        onClick={() => handleEdit(firstCal)}
+                        onClick={() => handleEdit(calibration)}
                         color="primary"
-                        title="Edit Calibration"
+                        title="View Calibration"
                       >
-                        <EditIcon />
+                        <VisibilityIcon />
                       </IconButton>
                       <IconButton
                         size="small"
                         onClick={() => {
-                          setCalibrationToDelete(firstCal);
+                          setCalibrationToDelete(calibration);
                           setDeleteDialog(true);
                         }}
                         color="error"
@@ -1083,9 +996,35 @@ const AirPumpCalibrationPage = () => {
             justifyContent="space-between"
             alignItems="center"
           >
-            <Typography variant="h6">
-              {editingCalibration ? "Edit Calibration" : "Add New Calibration"}
-            </Typography>
+            <Box display="flex" alignItems="center" gap={2}>
+              <Typography variant="h6">
+                {editingCalibration ? "View Calibration" : "Add New Calibration"}
+              </Typography>
+              {editingCalibration && !isEditMode && (
+                <Button
+                  variant="outlined"
+                  startIcon={<EditIcon />}
+                  onClick={() => setIsEditMode(true)}
+                  size="small"
+                >
+                  Edit Record
+                </Button>
+              )}
+              {editingCalibration && isEditMode && (
+                <Button
+                  variant="outlined"
+                  onClick={() => {
+                    setIsEditMode(false);
+                    setHasUnsavedChanges(false);
+                    // Reload the calibration data to reset any changes
+                    handleEdit(editingCalibration);
+                  }}
+                  size="small"
+                >
+                  Cancel Edit
+                </Button>
+              )}
+            </Box>
             <IconButton onClick={() => handleDialogClose()}>
               <CloseIcon />
             </IconButton>
@@ -1113,9 +1052,9 @@ const AirPumpCalibrationPage = () => {
                 >
                   Calibration Details
                 </Typography>
-                <Box display="flex" gap={2} flexWrap="wrap">
+                <Box display="flex" gap={2}>
                   <TextField
-                    fullWidth
+                    sx={{ flex: 1 }}
                     label="Calibration Date"
                     type="date"
                     value={staticFormData.calibrationDate}
@@ -1128,14 +1067,15 @@ const AirPumpCalibrationPage = () => {
                     }}
                     InputLabelProps={{ shrink: true }}
                     required
+                    disabled={editingCalibration && !isEditMode}
                   />
-                  <FormControl fullWidth required>
+                  <FormControl sx={{ flex: 1 }} required>
                     <InputLabel>Technician</InputLabel>
                     <Select
                       value={staticFormData.technicianId}
                       onChange={(e) => handleTechnicianChange(e.target.value)}
                       label="Technician"
-                      disabled={labSignatoriesLoading}
+                      disabled={labSignatoriesLoading || (editingCalibration && !isEditMode)}
                     >
                       <MenuItem value="">
                         <em>Select a technician</em>
@@ -1155,7 +1095,7 @@ const AirPumpCalibrationPage = () => {
                       )}
                     </Select>
                   </FormControl>
-                  <FormControl fullWidth>
+                  <FormControl sx={{ flex: 1 }}>
                     <InputLabel>Flowmeter</InputLabel>
                     <Select
                       value={staticFormData.flowmeterId}
@@ -1167,7 +1107,7 @@ const AirPumpCalibrationPage = () => {
                         setHasUnsavedChanges(true);
                       }}
                       label="Flowmeter"
-                      disabled={flowmeters.length === 0}
+                      disabled={flowmeters.length === 0 || (editingCalibration && !isEditMode)}
                     >
                       <MenuItem value="">
                         <em>Select a flowmeter (optional)</em>
@@ -1197,40 +1137,7 @@ const AirPumpCalibrationPage = () => {
               </Box>
 
               {/* Flowrate Indicators */}
-              {calibrationTests.length > 0 && (
-                <Box>
-                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                    Calibrated Flowrates:
-                  </Typography>
-                  <Box display="flex" gap={1} flexWrap="wrap">
-                    {calibrationTests.map((cal, index) => {
-                      if (!cal.flowRate) return null;
-                      // Only show status if calibration is complete (has actualFlow and errorPercent)
-                      const isComplete = cal.actualFlow && cal.errorPercent;
-                      const statusColor = isComplete
-                        ? cal.status === "Pass"
-                          ? theme.palette.success.main
-                          : theme.palette.error.main
-                        : theme.palette.grey[400];
-                      return (
-                        <Chip
-                          key={index}
-                          label={
-                            isComplete
-                              ? `${cal.flowRate} L/min: ${cal.status}`
-                              : `${cal.flowRate} L/min`
-                          }
-                          sx={{
-                            backgroundColor: statusColor,
-                            color: "white",
-                            fontWeight: "bold",
-                          }}
-                        />
-                      );
-                    })}
-                  </Box>
-                </Box>
-              )}
+              
 
               {/* Calibration Tabs */}
               <Box>
@@ -1243,17 +1150,19 @@ const AirPumpCalibrationPage = () => {
                   <Typography variant="subtitle1" sx={{ fontWeight: "bold" }}>
                     Test Results
                   </Typography>
-                  <Button
-                    variant="outlined"
-                    startIcon={<AddIcon />}
-                    onClick={handleAddCalibration}
-                    disabled={
-                      calibrationTests.length >= availableFlowrates.length
-                    }
-                    size="small"
-                  >
-                    Add Flowrate
-                  </Button>
+                  {(!editingCalibration || isEditMode) && (
+                    <Button
+                      variant="outlined"
+                      startIcon={<AddIcon />}
+                      onClick={handleAddCalibration}
+                      disabled={
+                        calibrationTests.length >= availableFlowrates.length
+                      }
+                      size="small"
+                    >
+                      Add Flowrate
+                    </Button>
+                  )}
                 </Box>
 
                 {calibrationTests.length === 0 ? (
@@ -1277,7 +1186,11 @@ const AirPumpCalibrationPage = () => {
                             key={index}
                             label={
                               <Box display="flex" alignItems="center" gap={1}>
-                                <span>{cal.flowRate || "New"} L/min</span>
+                                <span>
+                                  {cal.flowRate
+                                    ? formatFlowrateDisplay(cal.flowRate)
+                                    : "New L/min"}
+                                </span>
                                 {isComplete && cal.status && (
                                   <Chip
                                     label={cal.status}
@@ -1315,9 +1228,12 @@ const AirPumpCalibrationPage = () => {
                               alignItems="center"
                             >
                               <Typography variant="h6">
-                                Flowrate: {cal.flowRate || "Not selected"} L/min
+                                Flowrate:{" "}
+                                {cal.flowRate
+                                  ? formatFlowrateDisplay(cal.flowRate)
+                                  : "Not selected L/min"}
                               </Typography>
-                              {calibrationTests.length > 1 && (
+                              {(!editingCalibration || isEditMode) && calibrationTests.length > 1 && (
                                 <IconButton
                                   color="error"
                                   onClick={() => handleRemoveCalibration(index)}
@@ -1340,6 +1256,7 @@ const AirPumpCalibrationPage = () => {
                                     )
                                   }
                                   label="Flowrate (L/min)"
+                                  disabled={editingCalibration && !isEditMode}
                                 >
                                   <MenuItem value="">
                                     <em>Select flowrate</em>
@@ -1355,7 +1272,7 @@ const AirPumpCalibrationPage = () => {
                                         value={rate}
                                         disabled={isUsed}
                                       >
-                                        {rate} L/min{" "}
+                                        {formatFlowrateDisplay(rate)}{" "}
                                         {isUsed && "(Already used)"}
                                       </MenuItem>
                                     );
@@ -1376,6 +1293,7 @@ const AirPumpCalibrationPage = () => {
                                 }
                                 inputProps={{ step: "0.01", min: "0" }}
                                 required
+                                disabled={editingCalibration && !isEditMode}
                                 sx={{
                                   "& input[type=number]": {
                                     "-moz-appearance": "textfield",
@@ -1454,30 +1372,35 @@ const AirPumpCalibrationPage = () => {
                 }}
                 multiline
                 rows={3}
+                disabled={editingCalibration && !isEditMode}
               />
             </Stack>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => handleDialogClose()}>Cancel</Button>
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={
-                loading ||
-                !staticFormData.calibrationDate ||
-                !staticFormData.technicianId ||
-                calibrationTests.length === 0 ||
-                calibrationTests.some((cal) => !cal.flowRate || !cal.actualFlow)
-              }
-            >
-              {loading ? (
-                <CircularProgress size={24} />
-              ) : editingCalibration ? (
-                "Update Calibration"
-              ) : (
-                "Save All Calibrations"
-              )}
+            <Button onClick={() => handleDialogClose()}>
+              {editingCalibration && !isEditMode ? "Close" : "Cancel"}
             </Button>
+            {(!editingCalibration || isEditMode) && (
+              <Button
+                type="submit"
+                variant="contained"
+                disabled={
+                  loading ||
+                  !staticFormData.calibrationDate ||
+                  !staticFormData.technicianId ||
+                  calibrationTests.length === 0 ||
+                  calibrationTests.some((cal) => !cal.flowRate || !cal.actualFlow)
+                }
+              >
+                {loading ? (
+                  <CircularProgress size={24} />
+                ) : editingCalibration ? (
+                  "Update Calibration"
+                ) : (
+                  "Save All Calibrations"
+                )}
+              </Button>
+            )}
           </DialogActions>
         </Box>
       </Dialog>
@@ -1521,83 +1444,6 @@ const AirPumpCalibrationPage = () => {
           <Button onClick={() => setDeleteDialog(false)}>Cancel</Button>
           <Button onClick={handleDelete} color="error" variant="contained">
             Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Out-of-Service Dialog */}
-      <Dialog
-        open={outOfServiceDialog}
-        onClose={() => {
-          setOutOfServiceDialog(false);
-          setError(null);
-        }}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>
-          <Box
-            display="flex"
-            justifyContent="space-between"
-            alignItems="center"
-          >
-            <Typography variant="h6">Set Pump as Out-of-Service</Typography>
-            <IconButton
-              onClick={() => {
-                setOutOfServiceDialog(false);
-                setError(null);
-              }}
-            >
-              <CloseIcon />
-            </IconButton>
-          </Box>
-        </DialogTitle>
-        <DialogContent>
-          {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
-            </Alert>
-          )}
-          <Typography variant="body1" sx={{ mb: 2 }}>
-            Are you sure you want to set{" "}
-            <strong>{pump?.equipmentReference || "this pump"}</strong> as
-            Out-of-Service?
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            This will:
-            <ul>
-              <li>Update the equipment status to "Out-of-Service"</li>
-              <li>
-                Create a calibration record showing the date and who set it as
-                out-of-service
-              </li>
-            </ul>
-          </Typography>
-          <TextField
-            fullWidth
-            label="Out-of-Service Date"
-            type="date"
-            value={outOfServiceDate}
-            onChange={(e) => setOutOfServiceDate(e.target.value)}
-            InputLabelProps={{ shrink: true }}
-            sx={{ mt: 2 }}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button
-            onClick={() => {
-              setOutOfServiceDialog(false);
-              setError(null);
-            }}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSetOutOfService}
-            variant="contained"
-            color="error"
-          >
-            Confirm
           </Button>
         </DialogActions>
       </Dialog>

@@ -49,7 +49,8 @@ const StereomicroscopeCalibration = ({ viewCalibrationsPath }) => {
     try {
       // Fetch all stereomicroscope calibrations
       const response = await stereomicroscopeService.getAll({ limit: 1000 });
-      const calibrations = response.data || [];
+      // Service returns the array directly, not wrapped in a data property
+      const calibrations = Array.isArray(response) ? response : (response.data || []);
 
       // Fetch equipment to check for items without calibration
       const equipmentResponse = await equipmentService.getAll({
@@ -71,6 +72,7 @@ const StereomicroscopeCalibration = ({ viewCalibrationsPath }) => {
       const validNextCalibrations = calibrations
         .filter((cal) => cal.nextCalibration)
         .map((cal) => new Date(cal.nextCalibration))
+        .filter((date) => !isNaN(date.getTime())) // Filter out invalid dates
         .sort((a, b) => a - b);
 
       if (validNextCalibrations.length > 0) {
@@ -87,6 +89,8 @@ const StereomicroscopeCalibration = ({ viewCalibrationsPath }) => {
       let dueInNextMonth = calibrations.filter((cal) => {
         if (!cal.nextCalibration) return false;
         const nextCalDate = new Date(cal.nextCalibration);
+        // Check if date is valid before comparing
+        if (isNaN(nextCalDate.getTime())) return false;
         return nextCalDate >= now && nextCalDate <= thirtyDaysFromNow;
       }).length;
 
@@ -149,6 +153,7 @@ const StereomicroscopeCalibration = ({ viewCalibrationsPath }) => {
         "/records/laboratory/calibrations/stereomicroscope"
       }
       icon={process.env.PUBLIC_URL + "/air-mon-icons/microscope.png"}
+      color="#6a1b9a"
     />
   );
 };

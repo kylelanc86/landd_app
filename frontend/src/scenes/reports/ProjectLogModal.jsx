@@ -30,7 +30,6 @@ import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { format } from "date-fns";
 import { timesheetService } from "../../services/api";
-import asbestosClearanceReportService from "../../services/asbestosClearanceReportService";
 import reportService from "../../services/reportService";
 
 // Helper function to calculate hours between two time strings (HH:mm format)
@@ -146,94 +145,162 @@ const ProjectLogModal = ({ open, onClose, project }) => {
         console.error("Error fetching timesheets:", error);
       }
 
-      // Load reports for this project
+      // Load reports for this project - fetch all report types in parallel for better performance
+      const apiBaseUrl =
+        process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+      const authToken = localStorage.getItem("token");
+
+      // Fetch all report types in parallel using Promise.all
+      const [
+        assessmentReportsResult,
+        clearanceReportsResult,
+        fibreIdReportsResult,
+        fibreCountReportsResult,
+        airMonitoringReportsResult,
+        invoicesResult,
+      ] = await Promise.allSettled([
+        // Get asbestos assessment reports
+        fetch(`${apiBaseUrl}/reports/asbestos-assessment/${project._id}`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        })
+          .then((res) => (res.ok ? res.json() : []))
+          .catch(() => []),
+
+        // Get clearance reports using optimized endpoint
+        fetch(`${apiBaseUrl}/reports/clearance/${project._id}`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        })
+          .then((res) => (res.ok ? res.json() : []))
+          .catch(() => []),
+
+        // Get fibre ID reports
+        reportService.getFibreIdReports(project._id).catch(() => []),
+
+        // Get fibre count reports (was missing!)
+        reportService.getFibreCountReports(project._id).catch(() => []),
+
+        // Get air monitoring reports - fetch all jobs and their shifts
+        // This ensures we get ALL shifts regardless of status (unlike the filtered endpoint)
+        (async () => {
+          try {
+            // Import services - shiftService and jobService are named exports
+            const { shiftService, jobService } = await import(
+              "../../services/api"
+            );
+            const { default: asbestosRemovalJobService } = await import(
+              "../../services/asbestosRemovalJobService"
+            );
+
+            // Get all jobs for this project (both regular and asbestos removal jobs)
+            const [regularJobsRes, asbestosJobsRes] = await Promise.all([
+              // Regular air monitoring jobs
+              jobService
+                .getAll({ projectId: project._id })
+                .then((res) => res.data || [])
+                .catch(() => []),
+              // Asbestos removal jobs (all statuses, not just completed)
+              asbestosRemovalJobService
+                .getAll({ projectId: project._id })
+                .then((res) => {
+                  // Handle different response structures
+                  return res.jobs || res.data || [];
+                })
+                .catch(() => []),
+            ]);
+
+            const allJobs = [...regularJobsRes, ...asbestosJobsRes];
+
+            console.log(
+              `Found ${allJobs.length} jobs for project ${project._id}`
+            );
+
+            // Get all shifts for all jobs in parallel
+            const shiftPromises = allJobs.map((job) =>
+              shiftService
+                .getByJob(job._id)
+                .then((res) => ({ job, shifts: res.data || [] }))
+                .catch(() => ({ job, shifts: [] }))
+            );
+
+            const jobShifts = await Promise.all(shiftPromises);
+
+            // Flatten and format all shifts
+            const allShifts = [];
+            jobShifts.forEach(({ job, shifts }) => {
+              shifts.forEach((shift) => {
+                allShifts.push({
+                  _id: shift._id,
+                  name: shift.name,
+                  date: shift.date,
+                  status: shift.status,
+                  reportApprovedBy: shift.reportApprovedBy,
+                  reportIssueDate: shift.reportIssueDate,
+                  revision: shift.revision || 0,
+                  jobName: job.name || job.jobID,
+                  jobId: job._id,
+                  projectId: project._id,
+                  projectName: project.name,
+                  asbestosRemovalist: job.asbestosRemovalist || null,
+                });
+              });
+            });
+
+            console.log(
+              `Found ${allShifts.length} total shifts for project ${project._id}`
+            );
+            return allShifts;
+          } catch (error) {
+            console.error("Error fetching air monitoring reports:", error);
+            return [];
+          }
+        })(),
+
+        // Get invoices
+        fetch(`${apiBaseUrl}/reports/invoices/${project._id}`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        })
+          .then((res) => (res.ok ? res.json() : []))
+          .catch(() => []),
+      ]);
+
       const allReports = [];
 
-      // Get asbestos assessment reports
-      try {
-        console.log(
-          "Loading asbestos assessment reports for project:",
-          project._id
+      // Process asbestos assessment reports
+      if (assessmentReportsResult.status === "fulfilled") {
+        const assessmentReports = assessmentReportsResult.value || [];
+        allReports.push(
+          ...assessmentReports.map((report) => ({
+            ...report,
+            type: "Asbestos Assessment",
+            category: "assessment",
+          }))
         );
-        const assessmentResponse = await fetch(
-          `${
-            process.env.REACT_APP_API_URL || "http://localhost:5000/api"
-          }/reports/asbestos-assessment/${project._id}`,
-          {
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem("token")}`,
-            },
-          }
-        );
-        console.log("Assessment response status:", assessmentResponse.status);
-        if (assessmentResponse.ok) {
-          const assessmentReports = await assessmentResponse.json();
-          allReports.push(
-            ...assessmentReports.map((report) => ({
-              ...report,
-              type: "Asbestos Assessment",
-              category: "assessment",
-            }))
-          );
-        }
-      } catch (error) {
-        console.error("Error loading assessment reports:", error);
       }
 
-      // Get clearance reports
-      try {
-        console.log("Loading clearance reports for project:", project._id);
-        // Import asbestosClearanceService dynamically to match ProjectReports
-        const { default: asbestosClearanceService } = await import(
-          "../../services/asbestosClearanceService"
+      // Process clearance reports
+      if (clearanceReportsResult.status === "fulfilled") {
+        const clearanceReports = clearanceReportsResult.value || [];
+        allReports.push(
+          ...clearanceReports.map((report) => ({
+            id: report.id || report._id,
+            date: report.date || report.clearanceDate,
+            reference: report.reference || report.projectId?.projectID || "N/A",
+            description:
+              report.description ||
+              `${report.clearanceType || "Asbestos"} Clearance`,
+            additionalInfo:
+              report.additionalInfo || report.asbestosRemovalist || "N/A",
+            status: report.status || "Unknown",
+            type: "Asbestos Clearance",
+            category: "clearance",
+            data: report,
+          }))
         );
-
-        const allClearances = await asbestosClearanceService.getAll();
-
-        // Filter clearances by projectId
-        let projectClearances = [];
-        if (allClearances && Array.isArray(allClearances)) {
-          projectClearances = allClearances.filter(
-            (clearance) =>
-              clearance.projectId === project._id ||
-              clearance.projectId?._id === project._id
-          );
-        } else if (
-          allClearances.clearances &&
-          Array.isArray(allClearances.clearances)
-        ) {
-          projectClearances = allClearances.clearances.filter(
-            (clearance) =>
-              clearance.projectId === project._id ||
-              clearance.projectId?._id === project._id
-          );
-        }
-
-        console.log("Project clearances found:", projectClearances);
-
-        // Map to report format
-        const clearanceReports = projectClearances.map((clearance) => ({
-          id: clearance._id,
-          date: clearance.clearanceDate || clearance.createdAt,
-          reference: clearance.projectId?.projectID || "N/A",
-          description: `${clearance.clearanceType} Asbestos Clearance`,
-          additionalInfo: `${clearance.asbestosRemovalist || "N/A"}`,
-          status: clearance.status || "Unknown",
-          type: "Asbestos Clearance",
-          category: "clearance",
-          data: clearance,
-        }));
-
-        allReports.push(...clearanceReports);
-      } catch (error) {
-        console.error("Error loading clearance reports:", error);
       }
 
-      // Get fibre ID reports
-      try {
-        const fibreIdReports = await reportService.getFibreIdReports(
-          project._id
-        );
+      // Process fibre ID reports
+      if (fibreIdReportsResult.status === "fulfilled") {
+        const fibreIdReports = fibreIdReportsResult.value || [];
         allReports.push(
           ...fibreIdReports.map((report) => ({
             ...report,
@@ -241,81 +308,86 @@ const ProjectLogModal = ({ open, onClose, project }) => {
             category: "fibre_id",
           }))
         );
-      } catch (error) {
-        console.error("Error loading fibre ID reports:", error);
       }
 
-      // Get air monitoring shift reports
-      try {
-        console.log("Loading air monitoring reports for project:", project._id);
-        // Import services dynamically
-        const { default: jobService } = await import("../../services/api");
-        const { default: shiftService } = await import("../../services/api");
+      // Process fibre count reports (was missing!)
+      if (fibreCountReportsResult.status === "fulfilled") {
+        const fibreCountReports = fibreCountReportsResult.value || [];
+        allReports.push(
+          ...fibreCountReports.map((report) => ({
+            ...report,
+            type: "Fibre Count Analysis",
+            category: "fibre_count",
+          }))
+        );
+      }
 
-        // Get all jobs for this project
-        const jobsResponse = await jobService.getAll();
-        const projectJobs =
-          jobsResponse.data?.filter(
-            (job) =>
-              job.projectId === project._id ||
-              job.projectId?._id === project._id
-          ) || [];
+      // Process air monitoring reports - use same mapping as ProjectReports.jsx
+      if (airMonitoringReportsResult.status === "fulfilled") {
+        const airMonitoringReports = airMonitoringReportsResult.value || [];
+        console.log(
+          "Air monitoring reports received:",
+          airMonitoringReports.length
+        );
 
-        console.log("Project jobs found:", projectJobs);
-
-        // Get shifts for each job
-        for (const job of projectJobs) {
-          const shiftsResponse = await shiftService.getByJob(job._id);
-          const shifts = shiftsResponse.data || [];
-
-          // Map shifts to report format
-          const shiftReports = shifts.map((shift) => ({
-            id: shift._id,
-            date: shift.date,
-            reference: `${job.jobID}-${shift.name}`,
+        if (airMonitoringReports.length > 0) {
+          // Use the same mapping pattern as ProjectReports.jsx (which works)
+          const shiftReports = airMonitoringReports.map((report) => ({
+            id: report._id,
+            date: report.date,
+            reference: `${report.jobName}-${report.name}`,
             description: "Air Monitoring Report",
-            additionalInfo: `${shift.name}`,
-            status: shift.status,
+            additionalInfo: `${report.name} (${report.jobName})`,
+            status: report.status || "Unknown",
             type: "Air Monitoring Shift",
             category: "air_monitoring",
-            data: { shift, job },
+            revision: report.revision || 0,
+            data: {
+              shift: {
+                _id: report._id,
+                name: report.name,
+                date: report.date,
+                status: report.status,
+                reportApprovedBy: report.reportApprovedBy,
+                reportIssueDate: report.reportIssueDate,
+                revision: report.revision || 0,
+              },
+              job: {
+                _id: report.jobId,
+                name: report.jobName,
+                projectId: {
+                  _id: report.projectId,
+                  name: report.projectName,
+                },
+              },
+            },
           }));
 
           allReports.push(...shiftReports);
-        }
-
-        console.log(
-          "Air monitoring reports added:",
-          allReports.filter((r) => r.category === "air_monitoring").length
-        );
-      } catch (error) {
-        console.error("Error loading air monitoring reports:", error);
-      }
-
-      // Get invoices
-      try {
-        const invoicesResponse = await fetch(
-          `${
-            process.env.REACT_APP_API_URL || "http://localhost:5000/api"
-          }/reports/invoices/${project._id}`,
-          {
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem("token")}`,
-            },
-          }
-        );
-        if (invoicesResponse.ok) {
-          const invoicesData = await invoicesResponse.json();
-          allReports.push(
-            ...invoicesData.map((invoice) => ({
-              ...invoice,
-              type: "Invoice",
-              category: "invoice",
-            }))
+          console.log("Air monitoring reports added:", shiftReports.length);
+        } else {
+          console.log(
+            "No air monitoring reports found for project:",
+            project._id
           );
         }
-      } catch (error) {
-        console.error("Error loading invoices:", error);
+      } else {
+        console.error(
+          "Air monitoring reports fetch failed:",
+          airMonitoringReportsResult.reason
+        );
+      }
+
+      // Process invoices
+      if (invoicesResult.status === "fulfilled") {
+        const invoicesData = invoicesResult.value || [];
+        allReports.push(
+          ...invoicesData.map((invoice) => ({
+            ...invoice,
+            type: "Invoice",
+            category: "invoice",
+          }))
+        );
       }
 
       // Final safety check before setting state
@@ -340,7 +412,7 @@ const ProjectLogModal = ({ open, onClose, project }) => {
     } finally {
       setLoading(false);
     }
-  }, [project?._id, startDate, endDate]);
+  }, [project, startDate, endDate]);
 
   useEffect(() => {
     if (open) {
@@ -469,7 +541,7 @@ const ProjectLogModal = ({ open, onClose, project }) => {
           <>
             <Tabs value={activeTab} onChange={handleTabChange} sx={{ mb: 2 }}>
               <Tab label={`Timesheets (${timesheets.length})`} />
-              <Tab label={`Reports (${reports.length})`} />
+              <Tab label={`Completed Reports (${reports.length})`} />
             </Tabs>
 
             {activeTab === 0 && (

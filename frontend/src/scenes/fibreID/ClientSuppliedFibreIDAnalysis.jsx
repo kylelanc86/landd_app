@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSnackbar } from "../../context/SnackbarContext";
 import {
   Box,
@@ -88,6 +88,10 @@ const ClientSuppliedFibreIDAnalysis = () => {
   const [refreshDialogOpen, setRefreshDialogOpen] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState(null);
   const [originalState, setOriginalState] = useState(null);
+  const isInitializedRef = useRef(false);
+  const initializationTimeoutRef = useRef(null);
+  const finalResultCalculatedRef = useRef(false);
+  const userHasInteractedRef = useRef(false);
 
   useEffect(() => {
     if (jobId && sampleIndex !== undefined && sampleIndex !== null) {
@@ -204,40 +208,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
           }
         }
 
-        // Set original state for change tracking after data is loaded
-        setTimeout(() => {
-          setOriginalState({
-            microscope: savedData?.microscope || "LD-PLM-1",
-            sampleDescription: savedData?.sampleDescription || "",
-            sampleType: savedData?.sampleType || "mass",
-            sampleMass: savedData?.sampleMass || "",
-            sampleDimensions: savedData?.sampleDimensions || {
-              x: "",
-              y: "",
-              z: "",
-            },
-            ashing: savedData?.ashing || "no",
-            crucibleNo: savedData?.crucibleNo || "",
-            fibres: savedData?.fibres || [],
-            finalResult: savedData?.finalResult || "",
-            traceAsbestos: savedData?.traceAsbestos || "no",
-            traceAsbestosContent: savedData?.traceAsbestosContent || "",
-            traceCount: savedData?.traceCount || "",
-            comments: savedData?.comments || "",
-            noFibreDetected: wasNoFibreDetected,
-            analysisDate: savedData?.analysedAt
-              ? new Date(savedData.analysedAt)
-              : new Date(),
-            analyst: sampleData.analysedBy
-              ? typeof sampleData.analysedBy === "object" &&
-                sampleData.analysedBy._id
-                ? sampleData.analysedBy._id
-                : typeof sampleData.analysedBy === "string"
-                ? sampleData.analysedBy
-                : ""
-              : "",
-          });
-        }, 100);
+        // Mark that we're starting initialization
+        isInitializedRef.current = false;
       } else {
         // Reset all form fields for new analysis
         setNoFibreDetected(false);
@@ -261,27 +233,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
           setAnalyst(analysts[0]._id);
         }
 
-        // For new analysis, set original state as empty
-        setTimeout(() => {
-          setOriginalState({
-            microscope: "LD-PLM-1",
-            sampleDescription: "",
-            sampleType: "mass",
-            sampleMass: "",
-            sampleDimensions: { x: "", y: "", z: "" },
-            ashing: "no",
-            crucibleNo: "",
-            fibres: [],
-            finalResult: "",
-            traceAsbestos: "no",
-            traceAsbestosContent: "",
-            traceCount: "",
-            comments: "",
-            noFibreDetected: false,
-            analysisDate: new Date(),
-            analyst: analysts.length > 0 ? analysts[0]._id : "",
-          });
-        }, 100);
+        // Mark that we're starting initialization
+        isInitializedRef.current = false;
       }
       setLoading(false);
     } catch (error) {
@@ -692,6 +645,36 @@ const ClientSuppliedFibreIDAnalysis = () => {
     }
   };
 
+  // Reset initialization when jobId or sampleIndex changes
+  useEffect(() => {
+    isInitializedRef.current = false;
+    finalResultCalculatedRef.current = false;
+    userHasInteractedRef.current = false;
+    setOriginalState(null);
+    setHasUnsavedChanges(false);
+    if (initializationTimeoutRef.current) {
+      clearTimeout(initializationTimeoutRef.current);
+    }
+  }, [jobId, sampleIndex]);
+
+  // Enable change tracking after a grace period following initialization
+  useEffect(() => {
+    if (!originalState) {
+      userHasInteractedRef.current = false;
+      return;
+    }
+    
+    // Wait a bit after originalState is set before enabling change tracking
+    // This prevents false positives from any lingering effects
+    const timeoutId = setTimeout(() => {
+      if (isInitializedRef.current) {
+        userHasInteractedRef.current = true;
+      }
+    }, 500); // 500ms grace period after initialization
+    
+    return () => clearTimeout(timeoutId);
+  }, [originalState]);
+
   const handleSaveAnalysis = async () => {
     try {
       console.log("Starting to save analysis...");
@@ -735,8 +718,9 @@ const ClientSuppliedFibreIDAnalysis = () => {
           traceAsbestos === "yes" ? traceAsbestosContent : null,
         traceCount: traceAsbestos === "yes" ? traceCount : null,
         comments: comments || null,
+        // Automatically mark as analysed when analysis is complete
         isAnalysed: analysisComplete,
-        analysedAt: analysisDate,
+        analysedAt: analysisComplete ? analysisDate : (sample?.analysedAt || null),
       };
 
       // Get analyst user object if analyst is selected
@@ -808,7 +792,10 @@ const ClientSuppliedFibreIDAnalysis = () => {
       });
 
       // Show success message
-      showSnackbar("Analysis saved successfully!", "success");
+      const message = analysisComplete
+        ? "Analysis saved and marked as complete!"
+        : "Analysis saved successfully!";
+      showSnackbar(message, "success");
     } catch (error) {
       console.error("Error saving analysis:", error);
       console.error("Error details:", error.response?.data);
@@ -816,140 +803,6 @@ const ClientSuppliedFibreIDAnalysis = () => {
     }
   };
 
-  const handleMarkAsAnalysed = async () => {
-    try {
-      console.log("Marking sample as analysed...");
-
-      // Validate sample description first
-      if (!sampleDescription || !sampleDescription.trim()) {
-        showSnackbar(
-          "Sample Description is required. Please enter a value before marking as analysed.",
-          "warning"
-        );
-        return;
-      }
-
-      // Validate mass/dimensions first
-      if (!isMassDimensionsValid()) {
-        const fieldName =
-          sampleType === "mass" ? "Sample Mass" : "Sample Dimensions";
-        showSnackbar(
-          `${fieldName} is required. Please enter a value before marking as analysed.`,
-          "warning"
-        );
-        return;
-      }
-
-      // Check if analysis is complete (all fibres have results or no fibres detected)
-      const analysisComplete = isAnalysisComplete();
-
-      if (!analysisComplete) {
-        showSnackbar(
-          "Cannot mark as analysed: All fibres must have results first.",
-          "warning"
-        );
-        return;
-      }
-
-      // Create analysis data with current form values
-      const analysisData = {
-        microscope: noFibreDetected ? "N/A" : microscope,
-        sampleDescription,
-        sampleType,
-        sampleMass: sampleType === "mass" ? sampleMass : null,
-        sampleDimensions:
-          sampleType === "dimensions" ? { ...sampleDimensions } : null,
-        ashing,
-        crucibleNo: ashing === "yes" ? crucibleNo : null,
-        fibres: noFibreDetected ? [] : fibres.map((fibre) => ({ ...fibre })), // Deep copy fibres array
-        finalResult: finalResult,
-        traceAsbestos,
-        traceAsbestosContent:
-          traceAsbestos === "yes" ? traceAsbestosContent : null,
-        traceCount: traceAsbestos === "yes" ? traceCount : null,
-        comments: comments || null,
-        isAnalysed: true,
-        analysedAt: analysisDate,
-      };
-
-      // Get analyst user object if analyst is selected
-      let analystUser = null;
-      if (analyst) {
-        analystUser = analysts.find((a) => a._id === analyst);
-      }
-
-      // Update the sample in the job's samples array - create deep copy to avoid reference sharing
-      const updatedSamples = (job.samples || []).map((s, idx) => {
-        if (idx === sample._index) {
-          // Update the specific sample with new analysis data
-          return {
-            ...s,
-            analysisData, // This is already a new object with deep copied nested data
-            analysedBy: analystUser || s.analysedBy,
-            analysedAt: analysisDate,
-          };
-        }
-        // Return a copy of other samples to avoid reference sharing
-        return { ...s };
-      });
-
-      // If job was finalized, revert status back to "In Progress" when changes are made
-      const wasFinalized = jobStatus === "Analysis Complete";
-      const wasApproved = job.reportApprovedBy;
-      const newStatus = wasFinalized ? "In Progress" : job.status;
-
-      // Update the job with the updated samples array
-      // If report was approved, clear approval fields since analysis has been edited
-      const updateData = {
-        samples: updatedSamples,
-        status: newStatus,
-      };
-
-      if (wasApproved) {
-        updateData.reportApprovedBy = null;
-        updateData.reportIssueDate = null;
-      }
-
-      const response = await clientSuppliedJobsService.update(
-        jobId,
-        updateData
-      );
-
-      console.log("Sample marked as analysed successfully:", response);
-
-      // Refresh job data to ensure we have the latest state
-      await fetchJobAndSampleDetails();
-
-      // Clear unsaved changes flag
-      setHasUnsavedChanges(false);
-      setOriginalState({
-        microscope,
-        sampleDescription,
-        sampleType,
-        sampleMass,
-        sampleDimensions,
-        ashing,
-        crucibleNo,
-        fibres: fibres.map((f) => ({ ...f })),
-        finalResult,
-        traceAsbestos,
-        traceAsbestosContent,
-        traceCount,
-        noFibreDetected,
-        analysisDate,
-        analyst,
-      });
-
-      showSnackbar("Sample marked as analysed successfully!", "success");
-    } catch (error) {
-      console.error("Error marking sample as analysed:", error);
-      console.error("Error details:", error.response?.data);
-      showSnackbar(
-        `Error marking sample as analysed: ${error.message}`,
-        "error"
-      );
-    }
-  };
 
   const handleEditAnalysis = async () => {
     try {
@@ -1037,6 +890,10 @@ const ClientSuppliedFibreIDAnalysis = () => {
 
   useEffect(() => {
     setFinalResult(calculateFinalResult());
+    // Mark that finalResult has been calculated at least once
+    if (!isInitializedRef.current) {
+      finalResultCalculatedRef.current = true;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     fibres,
@@ -1046,9 +903,99 @@ const ClientSuppliedFibreIDAnalysis = () => {
     noFibreDetected,
   ]);
 
+  // Helper function to normalize Date objects and ensure consistent object structure for comparison
+  const normalizeStateForComparison = useCallback((state) => {
+    return {
+      ...state,
+      analysisDate: state.analysisDate instanceof Date 
+        ? state.analysisDate.toISOString() 
+        : (state.analysisDate ? new Date(state.analysisDate).toISOString() : null),
+      sampleDimensions: state.sampleDimensions ? {
+        x: String(state.sampleDimensions.x || ""),
+        y: String(state.sampleDimensions.y || ""),
+        z: String(state.sampleDimensions.z || ""),
+      } : { x: "", y: "", z: "" },
+      fibres: state.fibres ? state.fibres.map((f) => ({ ...f })).sort((a, b) => (a.id || 0) - (b.id || 0)) : [],
+      sampleMass: String(state.sampleMass || ""),
+      sampleDescription: String(state.sampleDescription || ""),
+      crucibleNo: String(state.crucibleNo || ""),
+      comments: String(state.comments || ""),
+      traceAsbestosContent: String(state.traceAsbestosContent || ""),
+      traceCount: String(state.traceCount || ""),
+      finalResult: String(state.finalResult || ""),
+      analyst: String(state.analyst || ""),
+    };
+  }, []);
+
+  // Helper function to compare states properly
+  const statesAreEqual = useCallback((state1, state2) => {
+    if (!state1 || !state2) return false;
+    const normalized1 = normalizeStateForComparison(state1);
+    const normalized2 = normalizeStateForComparison(state2);
+    return JSON.stringify(normalized1) === JSON.stringify(normalized2);
+  }, [normalizeStateForComparison]);
+
+  // Capture original state after all initialization effects have stabilized
+  useEffect(() => {
+    // Only capture original state if we're not yet initialized and not loading
+    if (isInitializedRef.current || loading || !sample) return;
+
+    // Wait for finalResult to be calculated at least once
+    if (!finalResultCalculatedRef.current) return;
+
+    // Clear any existing timeout
+    if (initializationTimeoutRef.current) {
+      clearTimeout(initializationTimeoutRef.current);
+    }
+
+    // Wait for all effects to stabilize before capturing original state
+    // Use a longer timeout to ensure all effects have run
+    initializationTimeoutRef.current = setTimeout(() => {
+      // Double-check we're still not initialized (in case something changed)
+      if (isInitializedRef.current) return;
+
+      const stateToCapture = {
+        microscope,
+        sampleDescription,
+        sampleType,
+        sampleMass,
+        sampleDimensions: { ...sampleDimensions },
+        ashing,
+        crucibleNo,
+        fibres: fibres.map((f) => ({ ...f })),
+        finalResult,
+        traceAsbestos,
+        traceAsbestosContent,
+        traceCount,
+        comments,
+        noFibreDetected,
+        analysisDate,
+        analyst,
+      };
+
+      setOriginalState(stateToCapture);
+      
+      // Add a small delay before marking as initialized to ensure state is truly stable
+      setTimeout(() => {
+        isInitializedRef.current = true;
+      }, 50);
+    }, 300); // Give enough time for all effects to run and stabilize
+
+    return () => {
+      if (initializationTimeoutRef.current) {
+        clearTimeout(initializationTimeoutRef.current);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, sample, finalResult]);
+
   // Track form changes and compare with original values
   useEffect(() => {
-    if (!originalState) return;
+    // Don't track changes until initialization is complete AND user has interacted
+    if (!isInitializedRef.current || !originalState || !userHasInteractedRef.current) {
+      setHasUnsavedChanges(false);
+      return;
+    }
 
     const currentState = {
       microscope,
@@ -1069,8 +1016,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
       analyst,
     };
 
-    const hasChanges =
-      JSON.stringify(currentState) !== JSON.stringify(originalState);
+    const hasChanges = !statesAreEqual(currentState, originalState);
 
     setHasUnsavedChanges(hasChanges);
 
@@ -1108,6 +1054,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
     analysisDate,
     analyst,
     originalState,
+    statesAreEqual,
   ]);
 
   // Handle page refresh and browser navigation
@@ -1171,6 +1118,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
       if (!target) return;
 
       const href = target.getAttribute("href");
+      // eslint-disable-next-line no-script-url
       if (!href || href.startsWith("#") || href.startsWith("javascript:"))
         return;
 
@@ -1327,36 +1275,48 @@ const ClientSuppliedFibreIDAnalysis = () => {
           >
             Sample Items
           </Link>
-          <Typography color="text.primary">{sample.labReference}</Typography>
+          {/* <Typography color="text.primary">{sample.labReference}</Typography> */}
         </Breadcrumbs>
 
         {/* Header */}
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="h4" component="h1" gutterBottom>
-            Fibre Analysis
-          </Typography>
-          {job &&
-            job.samples &&
-            (() => {
-              const analysedCount = job.samples.filter(
-                (s) => s.analysisData && s.analysisData.isAnalysed === true
-              ).length;
-              const totalCount = job.samples.length;
-              const color =
-                analysedCount === totalCount ? "success.main" : "error.main";
-              return (
-                <Typography
-                  variant="body2"
-                  sx={{
-                    mt: 1,
-                    fontWeight: "bold",
-                    color: color,
-                  }}
-                >
-                  {analysedCount} of {totalCount} samples analysed
-                </Typography>
-              );
-            })()}
+        <Box sx={{ mb: 2, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <Box>
+            <Typography variant="h4" component="h1" gutterBottom>
+              Fibre Analysis
+            </Typography>
+            {job &&
+              job.samples &&
+              (() => {
+                const analysedCount = job.samples.filter(
+                  (s) => s.analysisData && s.analysisData.isAnalysed === true
+                ).length;
+                const totalCount = job.samples.length;
+                const color =
+                  analysedCount === totalCount ? "success.main" : "error.main";
+                return (
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      mt: 1,
+                      fontWeight: "bold",
+                      color: color,
+                    }}
+                  >
+                    {analysedCount} of {totalCount} samples analysed
+                  </Typography>
+                );
+              })()}
+          </Box>
+          {isSampleAnalysed() && (
+            <Button
+              variant="outlined"
+              color="error"
+              onClick={handleEditAnalysis}
+              size="large"
+            >
+              Edit Analysis
+            </Button>
+          )}
         </Box>
 
         {/* Analyst and Analysis Date - Same Row */}
@@ -2409,53 +2369,41 @@ const ClientSuppliedFibreIDAnalysis = () => {
       <Box
         sx={{
           display: "flex",
-          justifyContent: "space-between",
+          justifyContent: "flex-end",
           alignItems: "center",
+          gap: 2,
         }}
       >
-        {isSampleAnalysed() ? (
-          <Button
-            variant="outlined"
-            color="error"
-            onClick={handleEditAnalysis}
-            size="large"
-          >
-            Edit Analysis
-          </Button>
-        ) : (
-          <Button
-            variant="outlined"
-            color="success"
-            onClick={handleMarkAsAnalysed}
-            size="large"
-            disabled={!sample?.analysisData || !isAnalysisComplete()}
-          >
-            Mark as Analysed
-          </Button>
-        )}
-
-        <Box sx={{ display: "flex", gap: 2 }}>
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={handleSaveAnalysis}
-            size="large"
-            disabled={isSampleAnalysed()}
-          >
-            Save Analysis
-          </Button>
-          <Button
-            variant="contained"
-            color="success"
-            onClick={handleFinaliseAnalysis}
-            size="large"
-            disabled={
-              jobStatus === "Analysis Complete" || !areAllSamplesAnalysed()
-            }
-          >
-            Finalise Analysis
-          </Button>
-        </Box>
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={handleSaveAnalysis}
+          size="large"
+          disabled={isSampleAnalysed()}
+        >
+          Save Analysis
+        </Button>
+        <Button
+          variant="contained"
+          onClick={handleFinaliseAnalysis}
+          size="large"
+          disabled={
+            jobStatus === "Analysis Complete" || !areAllSamplesAnalysed()
+          }
+          sx={{
+            backgroundColor: "#1976d2",
+            color: "#fff",
+            "&:hover": {
+              backgroundColor: "#1565c0",
+            },
+            "&.Mui-disabled": {
+              backgroundColor: "rgba(0, 0, 0, 0.12)",
+              color: "rgba(0, 0, 0, 0.26)",
+            },
+          }}
+        >
+          Finalise Analysis
+        </Button>
       </Box>
 
       {/* Asbestos Preset Menu */}

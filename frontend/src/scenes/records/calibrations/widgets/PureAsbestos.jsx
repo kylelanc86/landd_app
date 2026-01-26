@@ -57,7 +57,8 @@ const PureAsbestos = ({ viewCalibrationsPath }) => {
       viewCalibrationsPath={
         viewCalibrationsPath || "/records/laboratory/calibrations/pure-asbestos"
       }
-      icon={process.env.PUBLIC_URL + "/air-mon-icons/PureAsbestos.png"}
+      icon={process.env.PUBLIC_URL + "/air-mon-icons/asbestos.png"}
+      color="#c62828"
     />
   );
 };

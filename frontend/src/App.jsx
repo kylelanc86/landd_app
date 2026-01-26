@@ -37,10 +37,14 @@ import PLMMicroscopePage from "./scenes/records/calibrations/PLMMicroscopePage.j
 import StereomicroscopePage from "./scenes/records/calibrations/StereomicroscopePage.jsx";
 import HSETestSlidePage from "./scenes/records/calibrations/HSETestSlidePage.jsx";
 import AcetoneVaporiserPage from "./scenes/records/calibrations/AcetoneVaporiserPage.jsx";
+import AcetoneVaporiserHistoryPage from "./scenes/records/calibrations/AcetoneVaporiserHistoryPage.jsx";
+import RiLiquidPage from "./scenes/records/calibrations/RiLiquidPage.jsx";
+import RiLiquidHistoryPage from "./scenes/records/calibrations/RiLiquidHistoryPage.jsx";
 import GraticulePage from "./scenes/records/calibrations/GraticulePage.jsx";
 import GraticuleHistoryPage from "./scenes/records/calibrations/GraticuleHistoryPage.jsx";
 import PrimaryFlowmeterPage from "./scenes/records/calibrations/PrimaryFlowmeterPage.jsx";
 import EquipmentList from "./scenes/records/EquipmentList.jsx";
+import ArchivedEquipmentList from "./scenes/records/ArchivedEquipmentList.jsx";
 import FibreIdIndex from "./scenes/fibreID/index.jsx";
 import ClientSuppliedJobs from "./scenes/fibreID/ClientSuppliedJobs.jsx";
 import LDsuppliedJobs from "./scenes/fibreID/LDsuppliedJobs.jsx";
@@ -150,7 +154,20 @@ const QualityControl = lazy(() => import("./scenes/records/quality-control"));
 const IndoorAirQuality = lazy(() =>
   import("./scenes/records/indoor-air-quality")
 );
+const IAQSampleList = lazy(() =>
+  import("./scenes/records/indoor-air-quality/IAQSampleList")
+);
+const IAQNewSample = lazy(() =>
+  import("./scenes/records/indoor-air-quality/IAQNewSample")
+);
+const IAQEditSample = lazy(() =>
+  import("./scenes/records/indoor-air-quality/IAQEditSample")
+);
+const IAQAnalysis = lazy(() =>
+  import("./scenes/records/indoor-air-quality/IAQAnalysis")
+);
 const Blanks = lazy(() => import("./scenes/records/blanks"));
+const BlankAnalysis = lazy(() => import("./scenes/records/blanks/BlankAnalysis"));
 const Audits = lazy(() => import("./scenes/records/audits"));
 
 const ProjectReports = lazy(() =>
@@ -690,6 +707,36 @@ function App() {
                                 }
                               />
                               <Route
+                                path="/records/laboratory/calibrations/acetone-vaporiser/:equipmentId"
+                                element={
+                                  <ProtectedRoute
+                                    requiredPermissions={["calibrations.view"]}
+                                  >
+                                    <AcetoneVaporiserHistoryPage />
+                                  </ProtectedRoute>
+                                }
+                              />
+                              <Route
+                                path="/records/laboratory/calibrations/ri-liquid"
+                                element={
+                                  <ProtectedRoute
+                                    requiredPermissions={["calibrations.view"]}
+                                  >
+                                    <RiLiquidPage />
+                                  </ProtectedRoute>
+                                }
+                              />
+                              <Route
+                                path="/records/laboratory/calibrations/ri-liquid/history"
+                                element={
+                                  <ProtectedRoute
+                                    requiredPermissions={["calibrations.view"]}
+                                  >
+                                    <RiLiquidHistoryPage />
+                                  </ProtectedRoute>
+                                }
+                              />
+                              <Route
                                 path="/records/laboratory/calibrations/graticule"
                                 element={
                                   <ProtectedRoute
@@ -1065,18 +1112,32 @@ function App() {
                                 />
                               )}
                               {isFeatureEnabled("ADVANCED.RECORDS") && (
-                                <Route
-                                  path="/records/laboratory/equipment"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={[
-                                        "calibrations.view",
-                                      ]}
-                                    >
-                                      <EquipmentList />
-                                    </PermissionRoute>
-                                  }
-                                />
+                                <>
+                                  <Route
+                                    path="/records/laboratory/equipment"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={[
+                                          "calibrations.view",
+                                        ]}
+                                      >
+                                        <EquipmentList />
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                  <Route
+                                    path="/records/laboratory/equipment/archived"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={[
+                                          "calibrations.view",
+                                        ]}
+                                      >
+                                        <ArchivedEquipmentList />
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                </>
                               )}
                               {isFeatureEnabled("ADVANCED.RECORDS") && (
                                 <>
@@ -1245,32 +1306,96 @@ function App() {
                                 />
                               )}
                               {isFeatureEnabled("ADVANCED.RECORDS") && (
-                                <Route
-                                  path="/records/indoor-air-quality"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["projects.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <IndoorAirQuality />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
+                                <>
+                                  <Route
+                                    path="/records/indoor-air-quality"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["projects.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <IndoorAirQuality />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                  <Route
+                                    path="/records/indoor-air-quality/:iaqRecordId/samples"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["projects.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <IAQSampleList />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                  <Route
+                                    path="/records/indoor-air-quality/:iaqRecordId/samples/new"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["jobs.create"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <IAQNewSample />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                  <Route
+                                    path="/records/indoor-air-quality/:iaqRecordId/samples/edit/:sampleId"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["jobs.edit"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <IAQEditSample />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                  <Route
+                                    path="/records/indoor-air-quality/:iaqRecordId/analysis"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["jobs.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <IAQAnalysis />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                </>
                               )}
                               {isFeatureEnabled("ADVANCED.RECORDS") && (
-                                <Route
-                                  path="/records/blanks"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["projects.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <Blanks />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
+                                <>
+                                  <Route
+                                    path="/records/blanks"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["projects.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <Blanks />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                  <Route
+                                    path="/records/blanks/:blankId/analysis"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["jobs.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <BlankAnalysis />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                </>
                               )}
                               {isFeatureEnabled("ADVANCED.RECORDS") && (
                                 <Route

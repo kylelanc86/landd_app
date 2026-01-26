@@ -38,6 +38,7 @@ import AddIcon from "@mui/icons-material/Add";
 import HistoryIcon from "@mui/icons-material/History";
 import CloseIcon from "@mui/icons-material/Close";
 import DeleteIcon from "@mui/icons-material/Delete";
+import CancelIcon from "@mui/icons-material/Cancel";
 import { airPumpCalibrationService } from "../../../services/airPumpCalibrationService";
 import { equipmentService } from "../../../services/equipmentService";
 import { flowmeterCalibrationService } from "../../../services/flowmeterCalibrationService";
@@ -62,6 +63,9 @@ const AirPumpPage = () => {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [confirmCloseDialog, setConfirmCloseDialog] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
+  const [outOfServiceDialog, setOutOfServiceDialog] = useState(false);
+  const [selectedPumpForOutOfService, setSelectedPumpForOutOfService] = useState(null);
+  const [outOfServiceReason, setOutOfServiceReason] = useState("");
 
   // Static form data (shared across all calibrations)
   const [staticFormData, setStaticFormData] = useState({
@@ -103,16 +107,19 @@ const AirPumpPage = () => {
         return "Out-of-Service";
       }
 
+      // If explicitly marked as out-of-service, return that
       if (equipment.status === "out-of-service") {
         return "Out-of-Service";
       }
 
+      // For other statuses or when status is not explicitly set, run full validation
       if (!equipment.lastCalibration || !equipment.calibrationDue) {
         return "Out-of-Service";
       }
 
       // Check if the most recent calibration has all flowrates failing
       // If all test results failed, the pump should be Out-of-Service
+      // This check must happen BEFORE trusting backend status
       if (equipment.mostRecentCalibration) {
         const mostRecentCal = equipment.mostRecentCalibration;
         if (
@@ -183,132 +190,134 @@ const AirPumpPage = () => {
           a.equipmentReference.localeCompare(b.equipmentReference)
         );
 
-      // Fetch calibration data for each pump
-      const pumpsWithCalibrations = await Promise.all(
-        airPumps.map(async (pump) => {
-          try {
-            // Fetch all calibrations for this pump using Equipment ID
-            const calibrationResponse =
-              await airPumpCalibrationService.getPumpCalibrations(
-                pump._id,
-                1,
-                1000
-              );
-            const calibrations =
-              calibrationResponse.data || calibrationResponse || [];
+      // Bulk fetch calibrations for all pumps at once
+      let pumpCalibrationsMap = {};
+      if (airPumps.length > 0) {
+        try {
+          const pumpIds = airPumps.map((pump) => pump._id?.toString() || pump._id);
+          const bulkCalibrations =
+            await airPumpCalibrationService.getBulkPumpCalibrations(
+              pumpIds,
+              1000
+            );
+          // Convert to map keyed by pump _id string
+          // The backend returns keys as strings, so we ensure all keys are strings
+          if (bulkCalibrations && typeof bulkCalibrations === 'object') {
+            Object.keys(bulkCalibrations).forEach((pumpId) => {
+              pumpCalibrationsMap[pumpId] = bulkCalibrations[pumpId];
+            });
+          }
+        } catch (err) {
+          console.error("Error bulk fetching pump calibrations:", err);
+          console.error("Error details:", err.response?.data || err.message);
+          // Continue with empty map - individual processing will handle empty arrays
+        }
+      }
 
-            // Calculate lastCalibration (most recent calibration date)
-            const lastCalibration =
-              calibrations.length > 0
-                ? new Date(
-                    Math.max(
-                      ...calibrations.map((cal) =>
-                        new Date(cal.calibrationDate).getTime()
-                      )
-                    )
+      // Process each pump with its calibrations
+      const pumpsWithCalibrations = airPumps.map((pump) => {
+        // Convert pump._id to string to match backend response keys
+        const pumpIdString = pump._id?.toString() || pump._id;
+        const calibrations = pumpCalibrationsMap[pumpIdString] || [];
+
+        // Calculate lastCalibration (most recent calibration date)
+        const lastCalibration =
+          calibrations.length > 0
+            ? new Date(
+                Math.max(
+                  ...calibrations.map((cal) =>
+                    new Date(cal.calibrationDate).getTime()
                   )
-                : null;
+                )
+              )
+            : null;
 
-            // Calculate calibrationDue (most recent nextCalibrationDue date)
-            const calibrationDue =
-              calibrations.length > 0
-                ? new Date(
-                    Math.max(
-                      ...calibrations
-                        .filter((cal) => cal.nextCalibrationDue)
-                        .map((cal) =>
-                          new Date(cal.nextCalibrationDue).getTime()
-                        )
+        // Calculate calibrationDue (most recent nextCalibrationDue date)
+        const calibrationDue =
+          calibrations.length > 0
+            ? new Date(
+                Math.max(
+                  ...calibrations
+                    .filter((cal) => cal.nextCalibrationDue)
+                    .map((cal) =>
+                      new Date(cal.nextCalibrationDue).getTime()
                     )
+                )
+              )
+            : null;
+
+        // Calculate flowrateCalibrations (group by flowrate, get most recent for each)
+        // Convert setFlowrate from mL/min to L/min and get the most recent status
+        const flowrateCalibrations = {};
+        calibrations.forEach((cal) => {
+          if (cal.testResults && cal.testResults.length > 0) {
+            // Iterate through all test results (each can have a different flowrate)
+            cal.testResults.forEach((testResult) => {
+              const setFlowrateMlMin = testResult.setFlowrate;
+              const flowrateLMin = (setFlowrateMlMin / 1000).toString();
+
+              // Use the test result's passed status, or overallResult as fallback
+              const testStatus = testResult.passed ? "Pass" : "Fail";
+
+              // Use overallResult as the status for this flowrate
+              if (
+                !flowrateCalibrations[flowrateLMin] ||
+                new Date(cal.calibrationDate) >
+                  new Date(
+                    flowrateCalibrations[flowrateLMin].lastCalibrationDate
                   )
-                : null;
-
-            // Calculate flowrateCalibrations (group by flowrate, get most recent for each)
-            // Convert setFlowrate from mL/min to L/min and get the most recent status
-            const flowrateCalibrations = {};
-            calibrations.forEach((cal) => {
-              if (cal.testResults && cal.testResults.length > 0) {
-                // Iterate through all test results (each can have a different flowrate)
-                cal.testResults.forEach((testResult) => {
-                  const setFlowrateMlMin = testResult.setFlowrate;
-                  const flowrateLMin = (setFlowrateMlMin / 1000).toString();
-
-                  // Use the test result's passed status, or overallResult as fallback
-                  const testStatus = testResult.passed ? "Pass" : "Fail";
-
-                  // Use overallResult as the status for this flowrate
-                  if (
-                    !flowrateCalibrations[flowrateLMin] ||
-                    new Date(cal.calibrationDate) >
-                      new Date(
-                        flowrateCalibrations[flowrateLMin].lastCalibrationDate
-                      )
-                  ) {
-                    flowrateCalibrations[flowrateLMin] = {
-                      status: testStatus,
-                      lastCalibrationDate: cal.calibrationDate,
-                    };
-                  }
-                });
+              ) {
+                flowrateCalibrations[flowrateLMin] = {
+                  status: testStatus,
+                  lastCalibrationDate: cal.calibrationDate,
+                };
               }
             });
-
-            // Get the most recent flowmeter used (from most recent calibration with a flowmeter)
-            let mostRecentFlowmeter = null;
-            const calibrationsWithFlowmeter = calibrations
-              .filter((cal) => cal.flowmeterId)
-              .sort(
-                (a, b) =>
-                  new Date(b.calibrationDate) - new Date(a.calibrationDate)
-              );
-
-            if (calibrationsWithFlowmeter.length > 0) {
-              const mostRecentCal = calibrationsWithFlowmeter[0];
-              // Handle both populated object and ID
-              if (
-                typeof mostRecentCal.flowmeterId === "object" &&
-                mostRecentCal.flowmeterId.equipmentReference
-              ) {
-                mostRecentFlowmeter =
-                  mostRecentCal.flowmeterId.equipmentReference;
-              } else if (mostRecentCal.flowmeterId) {
-                // If it's just an ID, we'll need to look it up later or store the ID
-                mostRecentFlowmeter = mostRecentCal.flowmeterId;
-              }
-            }
-
-            // Get the most recent calibration for status checking
-            const mostRecentCalibration = calibrations.length > 0
-              ? calibrations.sort(
-                  (a, b) =>
-                    new Date(b.calibrationDate) - new Date(a.calibrationDate)
-                )[0]
-              : null;
-
-            return {
-              ...pump,
-              lastCalibration,
-              calibrationDue,
-              flowrateCalibrations,
-              mostRecentFlowmeter,
-              mostRecentCalibration, // Store for status calculation
-              allCalibrations: calibrations, // Store all calibrations for status calculation
-            };
-          } catch (err) {
-            console.error(
-              `Error fetching calibrations for ${pump.equipmentReference}:`,
-              err
-            );
-            // Return pump without calibration data if fetch fails
-            return {
-              ...pump,
-              lastCalibration: null,
-              calibrationDue: null,
-              flowrateCalibrations: {},
-            };
           }
-        })
-      );
+        });
+
+        // Get the most recent flowmeter used (from most recent calibration with a flowmeter)
+        let mostRecentFlowmeter = null;
+        const calibrationsWithFlowmeter = calibrations
+          .filter((cal) => cal.flowmeterId)
+          .sort(
+            (a, b) =>
+              new Date(b.calibrationDate) - new Date(a.calibrationDate)
+          );
+
+        if (calibrationsWithFlowmeter.length > 0) {
+          const mostRecentCal = calibrationsWithFlowmeter[0];
+          // Handle both populated object and ID
+          if (
+            typeof mostRecentCal.flowmeterId === "object" &&
+            mostRecentCal.flowmeterId.equipmentReference
+          ) {
+            mostRecentFlowmeter =
+              mostRecentCal.flowmeterId.equipmentReference;
+          } else if (mostRecentCal.flowmeterId) {
+            // If it's just an ID, we'll need to look it up later or store the ID
+            mostRecentFlowmeter = mostRecentCal.flowmeterId;
+          }
+        }
+
+        // Get the most recent calibration for status checking
+        const mostRecentCalibration = calibrations.length > 0
+          ? calibrations.sort(
+              (a, b) =>
+                new Date(b.calibrationDate) - new Date(a.calibrationDate)
+            )[0]
+          : null;
+
+        return {
+          ...pump,
+          lastCalibration,
+          calibrationDue,
+          flowrateCalibrations,
+          mostRecentFlowmeter,
+          mostRecentCalibration, // Store for status calculation
+          allCalibrations: calibrations, // Store all calibrations for status calculation
+        };
+      });
 
       setPumps(pumpsWithCalibrations);
       setError(null);
@@ -320,14 +329,16 @@ const AirPumpPage = () => {
     }
   }, []);
 
-  // Fetch lab signatories
+  // Fetch lab signatories (users with signatory=true OR calibration approval=true)
   const fetchLabSignatories = useCallback(async () => {
     try {
       setLabSignatoriesLoading(true);
       const response = await userService.getAll();
       const users = response.data || response || [];
       const signatories = users.filter(
-        (user) => user.role === "lab-signatory" || user.role === "admin"
+        (user) =>
+          user.isActive &&
+          (user.labSignatory === true || user.labApprovals?.calibrations === true)
       );
       setLabSignatories(signatories);
     } catch (err) {
@@ -404,7 +415,20 @@ const AirPumpPage = () => {
 
       // Filter for active/calibrated flowmeters
       const activeFlowmeters = flowmetersWithCalibrations
-        .filter((equipment) => calculateStatus(equipment) === "Active")
+        .filter((equipment) => {
+          if (!equipment) return false;
+          if (equipment.status === "out-of-service") return false;
+          if (!equipment.lastCalibration || !equipment.calibrationDue)
+            return false;
+          const today = new Date();
+          const dueDate = new Date(equipment.calibrationDue);
+          today.setHours(0, 0, 0, 0);
+          dueDate.setHours(0, 0, 0, 0);
+          const daysUntil = Math.ceil(
+            (dueDate.getTime() - today.getTime()) / (1000 * 3600 * 24)
+          );
+          return daysUntil >= 0;
+        })
         .sort((a, b) =>
           a.equipmentReference.localeCompare(b.equipmentReference)
         );
@@ -416,7 +440,7 @@ const AirPumpPage = () => {
     } finally {
       setFlowmetersLoading(false);
     }
-  }, [calculateStatus]);
+  }, []);
 
   useEffect(() => {
     fetchPumps();
@@ -747,6 +771,66 @@ const AirPumpPage = () => {
     navigate(`/records/laboratory/calibrations/pump/${pump._id}`);
   };
 
+  const handleOpenOutOfServiceDialog = (pump) => {
+    setSelectedPumpForOutOfService(pump);
+    setOutOfServiceReason("");
+    setOutOfServiceDialog(true);
+    setError(null);
+  };
+
+  const handleSetOutOfService = async () => {
+    try {
+      setError(null);
+
+      if (!outOfServiceReason || outOfServiceReason.trim() === "") {
+        setError("Please provide a reason for setting the equipment as out of service");
+        return;
+      }
+
+      if (!selectedPumpForOutOfService || !selectedPumpForOutOfService._id) {
+        setError("Pump information not available");
+        return;
+      }
+
+      setLoading(true);
+
+      // Update equipment status to out-of-service
+      await equipmentService.update(selectedPumpForOutOfService._id, {
+        status: "out-of-service",
+      });
+
+      // Create calibration record with out-of-service marker
+      const today = new Date();
+      const calibrationData = {
+        pumpId: selectedPumpForOutOfService._id,
+        calibrationDate: today,
+        testResults: [], // Empty test results for out-of-service
+        overallResult: "Fail",
+        notes: `Equipment set as Out-of-Service on ${formatDate(today)}. Reason: ${outOfServiceReason.trim()}`,
+        flowmeterId: null,
+        nextCalibrationDue: null,
+      };
+
+      await airPumpCalibrationService.createCalibration(calibrationData);
+
+      // Close dialog and refresh data
+      setOutOfServiceDialog(false);
+      setSelectedPumpForOutOfService(null);
+      setOutOfServiceReason("");
+      fetchPumps();
+
+      window.dispatchEvent(
+        new CustomEvent("equipmentDataUpdated", {
+          detail: { equipmentId: selectedPumpForOutOfService._id },
+        })
+      );
+    } catch (err) {
+      setError(err.message || "Failed to set pump as out-of-service");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleBackToHome = () => {
     navigate("/records");
   };
@@ -758,7 +842,7 @@ const AirPumpPage = () => {
   // Filter pumps based on showOutOfService toggle
   const filteredPumps = showOutOfService
     ? pumps
-    : pumps.filter((pump) => pump.status !== "out-of-service");
+    : pumps.filter((pump) => calculateStatus(pump) !== "Out-of-Service");
 
   if (pumpsLoading) {
     return (
@@ -909,7 +993,9 @@ const AirPumpPage = () => {
                           : "-"}
                       </TableCell>
                       <TableCell>
-                        {pump.calibrationDue
+                        {status === "Out-of-Service"
+                          ? "-"
+                          : pump.calibrationDue
                           ? (() => {
                               const daysUntil = calculateDaysUntilCalibration(
                                 pump.calibrationDue
@@ -954,72 +1040,90 @@ const AirPumpPage = () => {
                             })()
                           : "-"}
                       </TableCell>
-                      <TableCell>{pump.mostRecentFlowmeter || "-"}</TableCell>
                       <TableCell>
-                        {(() => {
-                          // Handle both Map and object formats (MongoDB Maps are converted to objects in JSON)
-                          const flowrateCalibrations =
-                            pump.flowrateCalibrations;
-                          const entries =
-                            flowrateCalibrations instanceof Map
-                              ? Array.from(flowrateCalibrations.entries())
-                              : flowrateCalibrations
-                              ? Object.entries(flowrateCalibrations)
-                              : [];
-
-                          if (entries.length > 0) {
-                            return (
-                              <Box display="flex" gap={0.5} flexWrap="wrap">
-                                {entries.map(([flowrate, calData]) => {
-                                  const calStatus =
-                                    typeof calData === "object" &&
-                                    calData !== null
-                                      ? calData.status
-                                      : calData;
-                                  const statusColor =
-                                    calStatus === "Pass"
-                                      ? theme.palette.success.main
-                                      : theme.palette.error.main;
-                                  return (
-                                    <Box
-                                      key={flowrate}
-                                      sx={{
-                                        backgroundColor: statusColor,
-                                        color: "white",
-                                        padding: "2px 6px",
-                                        borderRadius: "4px",
-                                        fontSize: "0.75rem",
-                                        display: "inline-block",
-                                      }}
-                                      title={`${flowrate} L/min: ${calStatus}`}
-                                    >
-                                      {flowrate}
-                                    </Box>
-                                  );
-                                })}
-                              </Box>
-                            );
-                          } else {
-                            return (
-                              <Typography
-                                variant="body2"
-                                color="text.secondary"
-                              >
-                                No calibrations
-                              </Typography>
-                            );
-                          }
-                        })()}
+                        {status === "Out-of-Service"
+                          ? "-"
+                          : pump.mostRecentFlowmeter || "-"}
                       </TableCell>
                       <TableCell>
-                        <IconButton
-                          onClick={() => handleViewHistory(pump)}
-                          size="small"
-                          title="View Calibration History"
-                          sx={{ color: theme.palette.info.main }}
-                        >
-                          <HistoryIcon />
-                        </IconButton>
+                        {status === "Out-of-Service" ? (
+                          "-"
+                        ) : (
+                          (() => {
+                            // Handle both Map and object formats (MongoDB Maps are converted to objects in JSON)
+                            const flowrateCalibrations =
+                              pump.flowrateCalibrations;
+                            const entries =
+                              flowrateCalibrations instanceof Map
+                                ? Array.from(flowrateCalibrations.entries())
+                                : flowrateCalibrations
+                                ? Object.entries(flowrateCalibrations)
+                                : [];
+
+                            if (entries.length > 0) {
+                              return (
+                                <Box display="flex" gap={0.5} flexWrap="wrap">
+                                  {entries.map(([flowrate, calData]) => {
+                                    const calStatus =
+                                      typeof calData === "object" &&
+                                      calData !== null
+                                        ? calData.status
+                                        : calData;
+                                    const statusColor =
+                                      calStatus === "Pass"
+                                        ? theme.palette.success.main
+                                        : theme.palette.error.main;
+                                    return (
+                                      <Box
+                                        key={flowrate}
+                                        sx={{
+                                          backgroundColor: statusColor,
+                                          color: "white",
+                                          padding: "2px 6px",
+                                          borderRadius: "4px",
+                                          fontSize: "0.75rem",
+                                          display: "inline-block",
+                                        }}
+                                        title={`${flowrate} L/min: ${calStatus}`}
+                                      >
+                                        {flowrate}
+                                      </Box>
+                                    );
+                                  })}
+                                </Box>
+                              );
+                            } else {
+                              return (
+                                <Typography
+                                  variant="body2"
+                                  color="text.secondary"
+                                >
+                                  -
+                                </Typography>
+                              );
+                            }
+                          })()
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Box display="flex" gap={1} alignItems="center">
+                          <IconButton
+                            onClick={() => handleViewHistory(pump)}
+                            size="small"
+                            title="View Calibration History"
+                            sx={{ color: theme.palette.info.main }}
+                          >
+                            <HistoryIcon />
+                          </IconButton>
+                          <IconButton
+                            onClick={() => handleOpenOutOfServiceDialog(pump)}
+                            size="small"
+                            title="Set as Out of Service"
+                            sx={{ color: theme.palette.error.main }}
+                          >
+                            <CancelIcon />
+                          </IconButton>
+                        </Box>
                       </TableCell>
                     </TableRow>
                   );
@@ -1150,7 +1254,10 @@ const AirPumpPage = () => {
                       </MenuItem>
                       {flowmeters.length > 0 ? (
                         flowmeters.map((flowmeter) => (
-                          <MenuItem key={flowmeter._id} value={flowmeter._id}>
+                          <MenuItem
+                            key={flowmeter._id}
+                            value={String(flowmeter._id)}
+                          >
                             {flowmeter.equipmentReference}
                             {flowmeter.brandModel
                               ? ` - ${flowmeter.brandModel}`
@@ -1474,6 +1581,84 @@ const AirPumpPage = () => {
             color="error"
           >
             Discard Changes
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Out-of-Service Dialog */}
+      <Dialog
+        open={outOfServiceDialog}
+        onClose={() => {
+          setOutOfServiceDialog(false);
+          setSelectedPumpForOutOfService(null);
+          setOutOfServiceReason("");
+          setError(null);
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+          >
+            <Typography variant="h6">Set Equipment as Out-of-Service</Typography>
+            <IconButton
+              onClick={() => {
+                setOutOfServiceDialog(false);
+                setSelectedPumpForOutOfService(null);
+                setOutOfServiceReason("");
+                setError(null);
+              }}
+            >
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            Are you sure you want to set{" "}
+            <strong>{selectedPumpForOutOfService?.equipmentReference || "this equipment"}</strong> as
+            Out-of-Service?
+          </Typography>
+          <TextField
+            fullWidth
+            label="Reason for Out-of-Service"
+            value={outOfServiceReason}
+            onChange={(e) => setOutOfServiceReason(e.target.value)}
+            multiline
+            rows={4}
+            required
+            sx={{ mt: 2 }}
+            placeholder="Enter the reason for setting this equipment as out of service..."
+            error={error && (!outOfServiceReason || outOfServiceReason.trim() === "")}
+            helperText={error && (!outOfServiceReason || outOfServiceReason.trim() === "") ? "Reason is required" : ""}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setOutOfServiceDialog(false);
+              setSelectedPumpForOutOfService(null);
+              setOutOfServiceReason("");
+              setError(null);
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSetOutOfService}
+            variant="contained"
+            color="error"
+            disabled={loading || !outOfServiceReason || outOfServiceReason.trim() === ""}
+          >
+            {loading ? <CircularProgress size={24} /> : "Confirm Out-of-Service"}
           </Button>
         </DialogActions>
       </Dialog>

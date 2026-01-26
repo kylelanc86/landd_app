@@ -82,7 +82,7 @@ const sampleSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'in_progress', 'at_lab', 'analysed', 'completed'],
+    enum: ['pending', 'in_progress', 'at_lab', 'analysed', 'completed', 'failed'],
     default: 'pending'
   },
   notes: String,

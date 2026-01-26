@@ -2,14 +2,12 @@ import React from "react";
 import {
   Drawer,
   Box,
-  Typography,
   Divider,
   List,
   ListItem,
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  useTheme,
 } from "@mui/material";
 import { useLocation, useNavigate } from "react-router-dom";
 import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
@@ -17,7 +15,6 @@ import PeopleOutlinedIcon from "@mui/icons-material/PeopleOutlined";
 import ContactsOutlinedIcon from "@mui/icons-material/ContactsOutlined";
 import SettingsIcon from "@mui/icons-material/Settings";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
 import StorageIcon from "@mui/icons-material/Storage";
 import DescriptionIcon from "@mui/icons-material/Description";
 import ConstructionIcon from "@mui/icons-material/Construction";
@@ -25,18 +22,31 @@ import SearchIcon from "@mui/icons-material/Search";
 import FolderCopyIcon from "@mui/icons-material/FolderCopy";
 import ScienceIcon from "@mui/icons-material/Science";
 import { tokens } from "../theme/tokens";
+import { useAuth } from "../context/AuthContext";
 import { usePermissions } from "../hooks/usePermissions";
 import PermissionGate from "./PermissionGate";
 import { isFeatureEnabled } from "../config/featureFlags";
 
 const MobileDrawer = ({ open, onClose }) => {
-  const theme = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const { isAdmin } = usePermissions();
 
   const handleNavigation = (to) => {
     // Check for unsaved changes
+    console.log("🔍 Sidebar navigation check:", {
+      hasUnsavedChanges: window.hasUnsavedChanges,
+      currentProjectPath: window.currentProjectPath,
+      currentLocation: location.pathname,
+      targetPath: to,
+      isProjectPage: location.pathname.startsWith("/projects/"),
+      isClientPage: location.pathname.startsWith("/clients/"),
+      isTargetProjectPage: to.startsWith("/projects/"),
+      isTargetClientPage: to.startsWith("/clients/"),
+    });
+
+    // Check for unsaved changes on project/client/user pages
     if (
       window.hasUnsavedChanges &&
       window.currentProjectPath &&
@@ -47,6 +57,32 @@ const MobileDrawer = ({ open, onClose }) => {
       !to.startsWith("/clients/") &&
       !to.startsWith("/users/")
     ) {
+      console.log("🔍 Sidebar showing unsaved changes dialog");
+      window.pendingNavigation = to;
+      if (window.showUnsavedChangesDialog) {
+        window.showUnsavedChangesDialog();
+      }
+      return;
+    }
+
+    // Check for unsaved changes on analysis pages
+    if (
+      window.hasUnsavedChanges &&
+      window.currentAnalysisPath &&
+      (location.pathname.includes("/analysis") ||
+        location.pathname.includes("/sample/") ||
+        location.pathname.startsWith("/air-monitoring/") ||
+        location.pathname.startsWith("/client-supplied/") ||
+        location.pathname.startsWith("/fibre-id/client-supplied/")) &&
+      !to.includes("/analysis") &&
+      !to.includes("/sample/") &&
+      !to.startsWith("/air-monitoring/") &&
+      !to.startsWith("/client-supplied/") &&
+      !to.startsWith("/fibre-id/client-supplied/")
+    ) {
+      console.log(
+        "🔍 Sidebar showing unsaved changes dialog for analysis page"
+      );
       window.pendingNavigation = to;
       if (window.showUnsavedChangesDialog) {
         window.showUnsavedChangesDialog();
@@ -187,43 +223,47 @@ const MobileDrawer = ({ open, onClose }) => {
                 to="/timesheets/monthly"
                 icon={<AccessTimeIcon />}
               />
-
+            
               <MenuItem
-                title="Active Projects"
-                to="/projects"
-                icon={<StorageIcon />}
+                title="Clients"
+                to="/clients"
+                icon={<PeopleOutlinedIcon />}
               />
             </PermissionGate>
 
             <Divider sx={{ my: 1 }} />
 
             <MenuItem
-              title="Clients"
-              to="/clients"
-              icon={<PeopleOutlinedIcon />}
+              title="Projects"
+              to="/projects"
+              icon={<StorageIcon />}
             />
 
-            <MenuItem
+            {/* Invoices link hidden for all users */}
+            {/* <MenuItem
               title="Invoices"
               to="/invoices"
               icon={<AttachMoneyIcon />}
-            />
+            /> */}
 
             {isFeatureEnabled("ADVANCED.REPORTS") && (
               <MenuItem
-                title="Project Reports"
+                title="Reports"
                 to="/reports"
                 icon={<DescriptionIcon />}
               />
             )}
 
-            {isAdmin && isFeatureEnabled("ADVANCED.RECORDS") && (
-              <MenuItem
-                title="Records"
-                to="/records"
-                icon={<FolderCopyIcon />}
-              />
-            )}
+            {(isAdmin ||
+              currentUser?.labApprovals?.calibrations === true ||
+              currentUser?.role === "manager") &&
+              isFeatureEnabled("ADVANCED.RECORDS") && (
+                <MenuItem
+                  title="Records"
+                  to="/records"
+                  icon={<FolderCopyIcon />}
+                />
+              )}
 
             <Divider sx={{ my: 1 }} />
 
@@ -248,7 +288,6 @@ const MobileDrawer = ({ open, onClose }) => {
             )}
 
             <Divider sx={{ my: 1 }} />
-
 
             {isFeatureEnabled("ADVANCED.ASBESTOS_REMOVAL") && (
               <MenuItem

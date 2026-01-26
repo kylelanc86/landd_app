@@ -12,7 +12,6 @@ const AirPumpCalibration = ({ viewCalibrationsPath }) => {
   const theme = useTheme();
   const [loading, setLoading] = useState(true);
   const [nextCalibrationDue, setNextCalibrationDue] = useState(null);
-  const [itemsDueInNextMonth, setItemsDueInNextMonth] = useState(0);
 
   useEffect(() => {
     fetchAirPumpData();
@@ -28,7 +27,6 @@ const AirPumpCalibration = ({ viewCalibrationsPath }) => {
         setNextCalibrationDue(
           cached.nextCalibrationDue ? new Date(cached.nextCalibrationDue) : null
         );
-        setItemsDueInNextMonth(cached.itemsDueInNextMonth || 0);
         setLoading(false);
         // Still fetch fresh data in background to update cache
         fetchFreshData();
@@ -40,7 +38,6 @@ const AirPumpCalibration = ({ viewCalibrationsPath }) => {
     } catch (error) {
       console.error("Error fetching air pump calibration data:", error);
       setNextCalibrationDue(null);
-      setItemsDueInNextMonth(0);
       setLoading(false);
     }
   };
@@ -56,35 +53,42 @@ const AirPumpCalibration = ({ viewCalibrationsPath }) => {
 
       if (airPumps.length === 0) {
         setNextCalibrationDue(null);
-        setItemsDueInNextMonth(0);
         setCachedCalibrationData("air-pump", {
           nextCalibrationDue: null,
-          itemsDueInNextMonth: 0,
         });
         setLoading(false);
         return;
       }
 
-      // Fetch calibrations for all air pumps
-      const allCalibrations = [];
+      // Fetch calibrations for all air pumps in one request
+      const pumpIds = airPumps
+        .map((pump) => pump._id || pump.id)
+        .filter(Boolean)
+        .map((id) => id.toString());
+
+      let allCalibrations = [];
       const pumpsWithCalibrations = new Set();
 
-      for (const pump of airPumps) {
+      if (pumpIds.length > 0) {
         try {
-          const pumpId = pump._id || pump.id;
-          const response = await airPumpCalibrationService.getPumpCalibrations(
-            pumpId,
-            1,
-            1000
-          );
-          if (response.data && response.data.length > 0) {
-            allCalibrations.push(...response.data);
-            pumpsWithCalibrations.add(pumpId.toString());
+          const bulkResponse =
+            await airPumpCalibrationService.getBulkPumpCalibrations(
+              pumpIds,
+              1000
+            );
+
+          if (bulkResponse && typeof bulkResponse === "object") {
+            Object.entries(bulkResponse).forEach(([pumpId, calibrations]) => {
+              if (Array.isArray(calibrations) && calibrations.length > 0) {
+                allCalibrations = allCalibrations.concat(calibrations);
+                pumpsWithCalibrations.add(pumpId);
+              }
+            });
           }
         } catch (error) {
           console.error(
-            `Error fetching calibrations for pump ${pump.equipmentReference}:`,
-            error
+            "Error bulk fetching air pump calibrations:",
+            error.response?.data || error.message || error
           );
         }
       }
@@ -100,41 +104,15 @@ const AirPumpCalibration = ({ viewCalibrationsPath }) => {
         nextDue = validNextCalibrations[0];
       }
 
-      // Calculate items due in next month (next 30 days)
-      const now = new Date();
-      const thirtyDaysFromNow = new Date(
-        now.getTime() + 30 * 24 * 60 * 60 * 1000
-      );
-
-      // Count calibrations due in next month
-      let dueInNextMonth = allCalibrations.filter((cal) => {
-        if (!cal.nextCalibrationDue) return false;
-        const nextCalDate = new Date(cal.nextCalibrationDue);
-        return nextCalDate >= now && nextCalDate <= thirtyDaysFromNow;
-      }).length;
-
-      // Count equipment without calibration data (and not out of service) as due
-      const equipmentWithoutCalibration = airPumps.filter((pump) => {
-        const pumpId = (pump._id || pump.id).toString();
-        const hasCalibration = pumpsWithCalibrations.has(pumpId);
-        const isOutOfService = pump.status === "out-of-service";
-        return !hasCalibration && !isOutOfService;
-      });
-
-      dueInNextMonth += equipmentWithoutCalibration.length;
-
       setNextCalibrationDue(nextDue);
-      setItemsDueInNextMonth(dueInNextMonth);
 
       // Cache the results
       setCachedCalibrationData("air-pump", {
         nextCalibrationDue: nextDue,
-        itemsDueInNextMonth: dueInNextMonth,
       });
     } catch (error) {
       console.error("Error fetching fresh air pump calibration data:", error);
       setNextCalibrationDue(null);
-      setItemsDueInNextMonth(0);
     } finally {
       setLoading(false);
     }
@@ -163,11 +141,11 @@ const AirPumpCalibration = ({ viewCalibrationsPath }) => {
     <BaseCalibrationWidget
       title="Air Monitors"
       nextCalibrationDue={nextCalibrationDue}
-      itemsDueInNextMonth={itemsDueInNextMonth}
       viewCalibrationsPath={
         viewCalibrationsPath || "/records/laboratory/calibrations/air-pump"
       }
       icon={process.env.PUBLIC_URL + "/air-mon-icons/airpump.png"}
+      color="#1976d2"
     />
   );
 };

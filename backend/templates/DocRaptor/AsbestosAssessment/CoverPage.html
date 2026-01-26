@@ -165,14 +165,15 @@
       .cover-page .cover-company-details {
         font-size: 0.75rem;
         color: #222;
-        margin-top: 250px;
         line-height: 1.5;
-        position: relative;
-        z-index: 5;
-        width: 100%;
+        position: absolute;
+        bottom: 150px;
+        left: 24px;
+        z-index: 6;
+        width: calc(50% - 48px);
         text-align: left !important;
-        margin-left: 0;
-        padding-left: 0;
+        margin: 0;
+        padding: 0;
       }
 
       .cover-page .cover-logo {
@@ -287,12 +288,12 @@
         <p><b>Job Reference</b><br />[JOB_REFERENCE]</p>
         <p><b>Assessment Date</b><br />[ASSESSMENT_DATE]</p>
         <p><b>Client</b><br />[CLIENT_NAME]</p>
-        <div class="cover-company-details">
-          Lancaster & Dickenson Consulting Pty Ltd<br />
-          4/6 Dacre Street, Mitchell ACT 2911<br />
-          enquiries@landd.com.au<br />
-          (02) 6241 2779
-        </div>
+      </div>
+      <div class="cover-company-details">
+        Lancaster & Dickenson Consulting Pty Ltd<br />
+        4/6 Dacre Street, Mitchell ACT 2911<br />
+        enquiries@landd.com.au<br />
+        (02) 6241 2779
       </div>
       <img class="cover-logo" src="[LOGO_PATH]" alt="Company Logo" />
       <div class="footer">

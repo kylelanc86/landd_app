@@ -49,11 +49,23 @@ export const getCachedCalibrationData = (widgetKey) => {
 export const setCachedCalibrationData = (widgetKey, data) => {
   try {
     const cacheKey = `${CACHE_PREFIX}${widgetKey}`;
+    
+    // Check if nextCalibrationDue is a valid Date object
+    let nextCalibrationDueISO = null;
+    if (data.nextCalibrationDue) {
+      const date = data.nextCalibrationDue instanceof Date 
+        ? data.nextCalibrationDue 
+        : new Date(data.nextCalibrationDue);
+      
+      // Check if the date is valid before calling toISOString
+      if (!isNaN(date.getTime())) {
+        nextCalibrationDueISO = date.toISOString();
+      }
+    }
+    
     const cacheData = {
       data: {
-        nextCalibrationDue: data.nextCalibrationDue
-          ? data.nextCalibrationDue.toISOString()
-          : null,
+        nextCalibrationDue: nextCalibrationDueISO,
         itemsDueInNextMonth: data.itemsDueInNextMonth,
       },
       timestamp: Date.now(),

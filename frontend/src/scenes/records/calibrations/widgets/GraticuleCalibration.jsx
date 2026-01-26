@@ -143,11 +143,13 @@ const GraticuleCalibration = ({ viewCalibrationsPath }) => {
     <BaseCalibrationWidget
       title="PCM Graticules"
       nextCalibrationDue={nextCalibrationDue}
+      hideNextCalibrationDue={true}
       itemsDueInNextMonth={itemsDueInNextMonth}
       viewCalibrationsPath={
         viewCalibrationsPath || "/records/laboratory/calibrations/graticule"
       }
       icon={process.env.PUBLIC_URL + "/air-mon-icons/graticule.png"}
+      color="#9c27b0"
     />
   );
 };
