@@ -1,10 +1,15 @@
 <table class="sample-table">
+  <colgroup>
+    <col style="width:71%" />
+    <col style="width:13%" />
+    <col style="width:16%" />
+  </colgroup>
   <tr>
-    <td class="sample-photo-cell" rowspan="9">
-      <img class="sample-photo" src="[PHOTO_URL]" alt="Sample Photo" />
+    <td class="sample-photo-cell" rowspan="10" style="width:71%">
+      [PHOTO_CELL]
     </td>
-    <td class="sample-label">Sample reference</td>
-    <td class="sample-value">[SAMPLE_REFERENCE]</td>
+    <td class="sample-label sample-ref-label" style="width:13%">Sample ref.</td>
+    <td class="sample-value sample-ref-value" style="width:16%">[SAMPLE_REFERENCE]</td>
   </tr>
   <tr>
     <td class="sample-label" colspan="2">Location and description</td>
@@ -13,17 +18,19 @@
     <td class="sample-location-content" colspan="2">[LOCATION_DESCRIPTION]</td>
   </tr>
   <tr>
-    <td class="sample-label">Material type</td>
-    <td class="sample-value">[MATERIAL_TYPE]</td>
+    <td class="sample-label" colspan="2">Material type</td>
+  </tr>
+  <tr>
+    <td class="sample-value" colspan="2">[MATERIAL_TYPE]</td>
   </tr>
   <tr>
     <td class="sample-label" colspan="2">Asbestos Content</td>
   </tr>
   <tr>
-    <td class="sample-value" colspan="2">[ASBESTOS_CONTENT]</td>
+    <td class="sample-value sample-asbestos-content-cell" colspan="2">[ASBESTOS_CONTENT]</td>
   </tr>
   <tr>
-    <td class="sample-label">Asbestos type</td>
+    <td class="sample-label">ACM type</td>
     <td class="sample-value">[ASBESTOS_TYPE]</td>
   </tr>
   <tr>
@@ -32,11 +39,13 @@
   </tr>
   <tr>
     <td class="sample-label">Risk</td>
-    <td class="sample-value">[RISK]</td>
+    <td class="sample-value sample-risk-cell">[RISK]</td>
   </tr>
   <tr class="comments-row">
     <td colspan="3" style="width: 100%">
-      Recommendation Actions/Comments:<br />[COMMENTS]
+      <div class="comments-cell-inner">
+        <strong>Recommendation Actions/Comments:</strong><br />[COMMENTS]
+      </div>
     </td>
   </tr>
 </table>

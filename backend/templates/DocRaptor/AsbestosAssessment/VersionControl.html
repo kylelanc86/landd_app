@@ -43,6 +43,15 @@
         margin: 0;
       }
 
+      /* Prevent word hyphenation globally */
+      * {
+        hyphens: none !important;
+        -webkit-hyphens: none !important;
+        -ms-hyphens: none !important;
+        word-break: keep-all !important;
+        overflow-wrap: normal !important;
+      }
+
       body {
         margin: 0;
         padding: 0;
@@ -50,10 +59,12 @@
         background: #fff;
         width: 100%;
         height: 100%;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
       }
 
-      /* Make version control page styles more specific */
-      .version-page {
+      .page {
         width: 100%;
         height: 100vh;
         position: relative;
@@ -62,7 +73,7 @@
         padding: 0;
       }
 
-      .version-page .header {
+      .header {
         display: flex;
         justify-content: space-between;
         align-items: flex-start;
@@ -70,7 +81,7 @@
         margin: 0;
       }
 
-      .version-page .logo {
+      .logo {
         width: 243px;
         height: auto;
         display: block;
@@ -78,7 +89,7 @@
         margin: 0;
       }
 
-      .version-page .company-details {
+      .company-details {
         text-align: right;
         font-size: 0.75rem;
         color: #222;
@@ -87,17 +98,17 @@
         margin: 0;
       }
 
-      .version-page .company-details .website {
+      .company-details .website {
         color: #16b12b;
         font-weight: 500;
       }
 
-      .version-page .green-line {
+      .green-line {
         width: calc(100% - 96px);
-        height: 4px;
+        height: 1.5px;
         background: #16b12b;
         margin: 8px auto 0 auto;
-        border-radius: 2px;
+        border-radius: 0;
       }
 
       .watermark {
@@ -117,7 +128,7 @@
         height: auto;
       }
 
-      .version-page .content {
+      .content {
         padding: 10px 48px 24px 48px;
         flex: 1;
         display: flex;
@@ -125,97 +136,122 @@
         justify-content: flex-start;
         align-items: flex-start;
         margin: 0;
-        height: calc(100vh - 200px);
       }
 
-      .version-page .title {
+      .title {
         font-size: 1.35rem;
         font-weight: 700;
         text-transform: uppercase;
         margin: 20px 0 0 0;
         letter-spacing: 0.01em;
         padding-top: 40px;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
       }
 
-      .version-page .address {
+      .address {
         font-size: 1.46rem;
         margin: 8px 0 32px 0;
         color: #222;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
       }
 
-      .version-page .section-label {
+      .section-label {
         font-weight: 700;
         text-transform: uppercase;
         margin-top: 24px;
         margin-bottom: 4px;
         font-size: 1.1rem;
         letter-spacing: 0.01em;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
       }
 
-      .version-page .section-content {
+      .section-content {
         margin-bottom: 12px;
         font-size: 0.9rem;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
       }
 
-      .version-page .details-list {
+      .details-list {
         margin: 0 0 12px 0;
         padding: 0;
         list-style: none;
         font-size: 0.795rem;
       }
 
-      .version-page .details-list li {
+      .details-list li {
         margin-bottom: 4px;
       }
 
-      .version-page .revision-table {
+      .revision-table {
         width: 100%;
         border-collapse: collapse;
         margin-top: 24px;
         margin-bottom: 32px;
       }
 
-      .version-page .revision-table th,
-      .version-page .revision-table td {
+      .revision-table th {
         border: 1px solid #888;
         padding: 8px 12px;
         font-size: 0.8rem;
         text-align: left;
-      }
-
-      .version-page .document-details-table th,
-      .version-page .document-details-table td {
-        border: 1px solid #888;
-        padding: 4px 8px;
-        font-size: 0.795rem;
-        text-align: left;
-      }
-
-      .version-page .revision-table th {
         background: #f5f5f5;
         font-weight: 700;
         text-transform: none;
       }
 
-      .version-page .document-details-table {
+      .revision-table td {
+        border: 1px solid #888;
+        padding: 8px 12px;
+        font-size: 0.65rem;
+        text-align: left;
+      }
+
+      .document-details-table th,
+      .document-details-table td {
+        border: 1px solid #888;
+        padding: 4px 8px;
+        font-size: 0.65rem;
+        text-align: left;
+      }
+
+      .document-details-table {
         width: 100%;
         border-collapse: collapse;
         margin: 12px 0;
-        font-size: 0.795rem;
+        font-size: 0.65rem;
       }
 
-      .version-page .document-details-table td {
+      .document-details-table td {
         padding: 4px 8px;
         border: none;
         vertical-align: top;
       }
 
-      .version-page .document-details-table td:first-child {
-        width: 30%;
-        font-weight: 600;
+      .document-details-table td:first-child {
+        width: 20%;
+        font-weight: 700;
+        background: #f5f5f5;
+        padding: 8px 12px;
+        border: 1px solid #888;
+        border-right: none;
+        font-size: 0.8rem;
       }
 
-      .version-page .footer {
+      .document-details-table td:last-child {
+        border: 1px solid #888;
+        border-left: none;
+        padding: 8px 12px;
+      }
+
+      .footer {
         position: absolute;
         left: 0;
         right: 0;
@@ -227,21 +263,35 @@
         color: #222;
       }
 
-      .version-page .footer-content {
+      .footer-content {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+      }
+
+      .footer-text {
         flex: 1;
       }
 
-      .version-page .footer-line {
+      .footer-border-line {
         width: 100%;
-        height: 4px;
+        height: 1.5px;
         background: #16b12b;
         margin-bottom: 6px;
-        border-radius: 2px;
+        border-radius: 0;
+      }
+
+      .page-number {
+        font-size: 0.75rem;
+        color: #222;
+        font-weight: 500;
+        margin-left: 20px;
       }
     </style>
   </head>
   <body>
-    <div class="page version-page">
+    <div class="page">
       <div class="watermark">
         <img src="[WATERMARK_PATH]" alt="Watermark" />
       </div>
@@ -251,7 +301,7 @@
           Lancaster & Dickenson Consulting Pty Ltd<br />
           4/6 Dacre Street<br />
           Mitchell ACT 2911<br />
-          W: <span class="website">www.landd.com.au</span>
+          <span class="website">www.landd.com.au</span>
         </div>
       </div>
       <div class="green-line"></div>
@@ -259,9 +309,7 @@
         class="content"
         style="justify-content: flex-start; align-items: flex-start"
       >
-        <div class="title" style="margin-top: 8px">
-          ASBESTOS ASSESSMENT REPORT
-        </div>
+        <div class="title" style="margin-top: 8px">[REPORT_TITLE]</div>
         <div class="address">[SITE_ADDRESS]</div>
 
         <div class="section-label">Prepared For:</div>
@@ -274,9 +322,9 @@
         </div>
 
         <div class="section-label">Document Details</div>
-        <table class="revision-table">
+        <table class="document-details-table">
           <tr>
-            <td>File Name</td>
+            <td>Report Reference</td>
             <td>[FILENAME]</td>
           </tr>
           <tr>
@@ -287,32 +335,28 @@
             <td>Report Author</td>
             <td>[ASSESSOR_NAME]</td>
           </tr>
-          <tr>
-            <td>Report Authoriser</td>
-            <td>Jordan Smith</td>
-          </tr>
         </table>
 
         <div class="section-label">Revision History</div>
         <table class="revision-table">
           <tr>
             <th>Reason for Revision</th>
-            <th>Rev Number</th>
+            <th>Revision</th>
             <th>Approved By</th>
             <th>Date</th>
           </tr>
           <tr>
-            <td style="height: 32px"></td>
-            <td></td>
-            <td></td>
-            <td></td>
+            <td>Original issue</td>
+            <td>0</td>
+            <td>[REPORT_APPROVED_BY]</td>
+            <td>[REPORT_ISSUE_DATE]</td>
           </tr>
         </table>
       </div>
       <div class="footer">
+        <div class="footer-border-line"></div>
         <div class="footer-content">
-          <div class="footer-line"></div>
-          Asbestos Assessment Report: [SITE_ADDRESS]
+          <div class="footer-text">[FOOTER_TEXT]</div>
         </div>
       </div>
     </div>

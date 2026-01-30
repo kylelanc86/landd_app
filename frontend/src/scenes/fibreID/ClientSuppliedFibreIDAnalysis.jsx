@@ -9,6 +9,7 @@ import {
   Link,
   Grid,
   TextField,
+  Autocomplete,
   Select,
   MenuItem,
   FormControl,
@@ -38,6 +39,7 @@ import {
 } from "@mui/icons-material";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { clientSuppliedJobsService, userService } from "../../services/api";
+import customDataFieldGroupService from "../../services/customDataFieldGroupService";
 
 const ClientSuppliedFibreIDAnalysis = () => {
   const navigate = useNavigate();
@@ -80,6 +82,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
   const { showSnackbar } = useSnackbar();
   const [asbestosMenuAnchor, setAsbestosMenuAnchor] = useState(null);
   const [selectedFibreId, setSelectedFibreId] = useState(null);
+  const [fibreIdSampleDescriptions, setFibreIdSampleDescriptions] = useState([]);
 
   // Unsaved changes detection
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -100,6 +103,19 @@ const ClientSuppliedFibreIDAnalysis = () => {
     fetchAnalysts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId, sampleIndex]);
+
+  useEffect(() => {
+    const loadFibreIdSampleDescriptions = async () => {
+      try {
+        const data = await customDataFieldGroupService.getFieldsByType("fibre_id_samples_description");
+        setFibreIdSampleDescriptions(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.warn("Could not load fibre ID sample descriptions:", err);
+        setFibreIdSampleDescriptions([]);
+      }
+    };
+    loadFibreIdSampleDescriptions();
+  }, []);
 
   useEffect(() => {
     // Ensure there's always at least one fibre when the component loads
@@ -548,6 +564,15 @@ const ClientSuppliedFibreIDAnalysis = () => {
         return;
       }
 
+      // Validate analyst is required
+      if (!analyst || !String(analyst).trim()) {
+        showSnackbar(
+          "Analyst is required. Please select an analyst before finalising.",
+          "warning"
+        );
+        return;
+      }
+
       // Validate mass/dimensions first
       if (!isMassDimensionsValid()) {
         const fieldName =
@@ -683,6 +708,15 @@ const ClientSuppliedFibreIDAnalysis = () => {
       if (!sampleDescription || !sampleDescription.trim()) {
         showSnackbar(
           "Sample Description is required. Please enter a value before saving.",
+          "warning"
+        );
+        return;
+      }
+
+      // Validate analyst is required
+      if (!analyst || !String(analyst).trim()) {
+        showSnackbar(
+          "Analyst is required. Please select an analyst before saving.",
           "warning"
         );
         return;
@@ -1326,20 +1360,28 @@ const ClientSuppliedFibreIDAnalysis = () => {
           alignItems="flex-start"
           sx={{ mb: 2 }}
         >
-          <FormControl sx={{ minWidth: 200 }}>
+          <FormControl sx={{ minWidth: 200 }} required error={!analyst?.trim()}>
             <InputLabel>Analyst</InputLabel>
             <Select
               value={analyst}
               onChange={(e) => setAnalyst(e.target.value)}
-              label="Analyst"
+              label="Analyst *"
               disabled={isSampleAnalysed()}
             >
+              <MenuItem value="">
+                <em>Select Analyst</em>
+              </MenuItem>
               {analysts.map((analystOption) => (
                 <MenuItem key={analystOption._id} value={analystOption._id}>
                   {analystOption.firstName} {analystOption.lastName}
                 </MenuItem>
               ))}
             </Select>
+            {!analyst?.trim() && (
+              <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 1.5 }}>
+                Required
+              </Typography>
+            )}
           </FormControl>
           <TextField
             type="date"
@@ -1437,27 +1479,38 @@ const ClientSuppliedFibreIDAnalysis = () => {
       {/* Sample Details */}
       <Paper sx={{ mb: 2, p: 3 }}>
         <Grid container spacing={3}>
-          {/* Sample Description - Full Row */}
+          {/* Sample Description - Full Row (required, linked to Fibre ID Sample Descriptions custom data) */}
           <Grid item xs={12}>
-            <TextField
-              fullWidth
-              required
-              label="Sample Description"
+            <Autocomplete
               value={sampleDescription}
-              onChange={(e) => setSampleDescription(e.target.value)}
-              disabled={isSampleAnalysed()}
-              error={!isSampleAnalysed() && !sampleDescription.trim()}
-              helperText={
-                !isSampleAnalysed() && !sampleDescription.trim()
-                  ? "Required"
-                  : ""
+              onChange={(event, newValue) =>
+                setSampleDescription(newValue ?? "")
               }
-              sx={{
-                "& .MuiInputBase-input.Mui-disabled": {
-                  backgroundColor: "#f5f5f5",
-                  color: "#666",
-                },
-              }}
+              onInputChange={(event, newInputValue) =>
+                setSampleDescription(newInputValue ?? "")
+              }
+              options={fibreIdSampleDescriptions.map((item) => item.text)}
+              freeSolo
+              disabled={isSampleAnalysed()}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Sample Description"
+                  required
+                  error={!isSampleAnalysed() && !sampleDescription.trim()}
+                  helperText={
+                    !isSampleAnalysed() && !sampleDescription.trim()
+                      ? "Required"
+                      : ""
+                  }
+                  sx={{
+                    "& .MuiInputBase-input.Mui-disabled": {
+                      backgroundColor: "#f5f5f5",
+                      color: "#666",
+                    },
+                  }}
+                />
+              )}
             />
           </Grid>
 

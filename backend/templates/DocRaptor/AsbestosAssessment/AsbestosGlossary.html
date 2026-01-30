@@ -3,9 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Asbestos Assessment Report - Additional Sections</title>
+    <title>Asbestos Assessment Report - Glossary of Terms</title>
     <style>
-      /* DocRaptor-optimized CSS with Gothic fonts */
+      /* DocRaptor-optimized CSS with Gothic fonts (match Discussion Conclusions) */
       @font-face {
         font-family: "Gothic";
         src: url("[FRONTEND_URL]/fonts/static/Gothic-Regular.ttf")
@@ -43,7 +43,6 @@
         margin: 0;
       }
 
-      /* Prevent word hyphenation globally (match InspectionDetails / VersionControl) */
       * {
         hyphens: none !important;
         -webkit-hyphens: none !important;
@@ -64,8 +63,7 @@
         -ms-hyphens: none;
       }
 
-      /* Make additional sections page styles more specific */
-      .additional-sections-page {
+      .glossary-page {
         width: 100%;
         height: 100vh;
         position: relative;
@@ -74,7 +72,7 @@
         padding: 0;
       }
 
-      .additional-sections-page .header {
+      .glossary-page .header {
         display: flex;
         justify-content: space-between;
         align-items: flex-start;
@@ -82,7 +80,7 @@
         margin: 0;
       }
 
-      .additional-sections-page .logo {
+      .glossary-page .logo {
         width: 243px;
         height: auto;
         display: block;
@@ -90,7 +88,7 @@
         margin: 0;
       }
 
-      .additional-sections-page .company-details {
+      .glossary-page .company-details {
         text-align: right;
         font-size: 0.75rem;
         color: #222;
@@ -99,12 +97,12 @@
         margin: 0;
       }
 
-      .additional-sections-page .company-details .website {
+      .glossary-page .company-details .website {
         color: #16b12b;
         font-weight: 500;
       }
 
-      .additional-sections-page .green-line {
+      .glossary-page .green-line {
         width: calc(100% - 96px);
         height: 1.5px;
         background: #16b12b;
@@ -112,7 +110,7 @@
         border-radius: 0;
       }
 
-      .additional-sections-page .content {
+      .glossary-page .content {
         padding: 10px 48px 24px 48px;
         flex: 1;
         display: flex;
@@ -120,14 +118,13 @@
         justify-content: flex-start;
         margin: 0;
         height: calc(100vh - 200px);
-        overflow: hidden;
       }
 
-      .additional-sections-page .section-header {
+      .glossary-page .section-header {
         font-size: 0.9rem;
         font-weight: 700;
         text-transform: uppercase;
-        margin: 10px 0 10px 0;
+        margin: 10px 0 14px 0;
         letter-spacing: 0.01em;
         color: #222;
         text-align: left !important;
@@ -135,61 +132,44 @@
         hyphens: none;
         -webkit-hyphens: none;
         -ms-hyphens: none;
-        page-break-after: avoid;
       }
 
-      .additional-sections-page .section-header.first-section {
+      .glossary-page .section-header.first-section {
         margin-top: 18px;
       }
 
-      .additional-sections-page .section-header:first-child {
-        margin-top: 18px;
-      }
-
-      .additional-sections-page .paragraph {
-        font-size: 0.8rem;
-        margin-bottom: 8px;
-        color: #222;
-        line-height: 1.5;
-        text-align: justify;
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-        hyphens: none;
-        -webkit-hyphens: none;
-        -ms-hyphens: none;
+      .glossary-page .glossary-table {
         width: 100%;
-        max-width: 100%;
-        page-break-inside: avoid;
-      }
-
-      .additional-sections-page .bullet-list {
-        margin: 0 0 8px 0;
-        padding: 0 0 0 24px;
+        border-collapse: collapse;
         font-size: 0.8rem;
         color: #222;
-        list-style: none;
-        page-break-inside: avoid;
+        margin: 0;
       }
 
-      .additional-sections-page .bullet-list li {
-        position: relative;
-        padding-left: 20px;
-        margin-bottom: 8px;
-        line-height: 1.5;
+      .glossary-page .glossary-table th,
+      .glossary-page .glossary-table td {
+        border: 1.5px solid #888;
+        padding: 8px 12px;
         text-align: left;
+        vertical-align: top;
+        line-height: 1.5;
       }
 
-      .additional-sections-page .bullet-list li::before {
-        content: "•";
-        position: absolute;
-        left: 0;
-        top: 0.25em;
-        font-size: 1em;
-        color: #222;
-        line-height: 1;
+      .glossary-page .glossary-table th {
+        background: #f5f5f5;
+        font-weight: 700;
       }
 
-      .additional-sections-page .footer {
+      .glossary-page .glossary-table .glossary-term {
+        width: 28%;
+        font-weight: 600;
+      }
+
+      .glossary-page .glossary-table .glossary-definition {
+        width: 72%;
+      }
+
+      .glossary-page .footer {
         position: absolute;
         left: 0;
         right: 0;
@@ -201,14 +181,14 @@
         color: #222;
       }
 
-      .additional-sections-page .footer-content {
+      .glossary-page .footer-content {
         width: 100%;
         display: flex;
         justify-content: space-between;
         align-items: flex-end;
       }
 
-      .additional-sections-page .footer-border-line {
+      .glossary-page .footer-border-line {
         width: 100%;
         height: 1.5px;
         background: #16b12b;
@@ -216,30 +196,25 @@
         border-radius: 0;
       }
 
-      .additional-sections-page .footer-text {
+      .glossary-page .footer-text {
         flex: 1;
       }
 
-      .additional-sections-page .page-number {
+      .glossary-page .page-number {
         font-size: 0.75rem;
         color: #222;
         font-weight: 500;
         margin-left: 20px;
       }
 
-      .additional-sections-page .website {
+      .glossary-page .website {
         color: #16b12b;
         font-weight: 500;
-      }
-
-      /* Page break control */
-      .page-break-section {
-        page-break-before: always;
       }
     </style>
   </head>
   <body>
-    <div class="page additional-sections-page">
+    <div class="page glossary-page">
       <div class="header">
         <img class="logo" src="[LOGO_PATH]" alt="Company Logo" />
         <div class="company-details">
@@ -250,7 +225,20 @@
         </div>
       </div>
       <div class="green-line"></div>
-      <div class="content">[ADDITIONAL_SECTIONS_CONTENT]</div>
+      <div class="content">
+        <div class="section-header first-section">Glossary Of Terms Associated with Asbestos</div>
+        <table class="glossary-table">
+          <thead>
+            <tr>
+              <th class="glossary-term">Term</th>
+              <th class="glossary-definition">Definition</th>
+            </tr>
+          </thead>
+          <tbody>
+            [GLOSSARY_TABLE_ROWS]
+          </tbody>
+        </table>
+      </div>
       <div class="footer">
         <div class="footer-border-line"></div>
         <div class="footer-content">

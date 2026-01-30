@@ -25,7 +25,7 @@ const asbestosAssessmentDefaultContent = {
   
   // Risk Assessment Content
   riskAssessmentTitle: "RISK ASSESSMENT",
-  riskAssessmentContent: "Identified ACM was risk assessed based on the following criteria:\n• the condition of the material at the time of the assessment;\n• the accessibility of the material;\n• the likelihood of the material being disturbed resulting in a release of asbestos fibre.\nEach ACM is categorised into one of four (4) risk categories:",
+  riskAssessmentContent: "Identified ACM was risk assessed based on the following criteria:\n• the condition of the material at the time of the assessment;\n• the accessibility of the material;\n• the likelihood of the material being disturbed resulting in a release of asbestos fibre.\nEach ACM is categorised into one of four (4) risk categories:\n\n{RISK_ASSESSMENT_TABLE}",
   
   // Determining Suitable Control Measures Content
   controlMeasuresTitle: "DETERMINING SUITABLE CONTROL MEASURES",

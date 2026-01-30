@@ -43,6 +43,15 @@
         margin: 0;
       }
 
+      /* Prevent word hyphenation globally (match InspectionDetails / VersionControl) */
+      * {
+        hyphens: none !important;
+        -webkit-hyphens: none !important;
+        -ms-hyphens: none !important;
+        word-break: keep-all !important;
+        overflow-wrap: normal !important;
+      }
+
       body {
         margin: 0;
         padding: 0;
@@ -50,6 +59,9 @@
         background: #fff;
         width: 100%;
         height: 100%;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
       }
 
       /* Make discussion conclusions page styles more specific */
@@ -94,10 +106,10 @@
 
       .discussion-conclusions-page .green-line {
         width: calc(100% - 96px);
-        height: 4px;
+        height: 1.5px;
         background: #16b12b;
         margin: 8px auto 0 auto;
-        border-radius: 2px;
+        border-radius: 0;
       }
 
       .discussion-conclusions-page .content {
@@ -105,38 +117,127 @@
         flex: 1;
         display: flex;
         flex-direction: column;
+        justify-content: flex-start;
         margin: 0;
         height: calc(100vh - 200px);
       }
+
       .discussion-conclusions-page .section-header {
-        font-size: 1.1rem;
+        font-size: 0.9rem;
         font-weight: 700;
         text-transform: uppercase;
-        margin: 24px 0 8px 0;
+        margin: 10px 0 10px 0;
         letter-spacing: 0.01em;
         color: #222;
+        text-align: left !important;
+        width: 100%;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
+      }
+
+      .discussion-conclusions-page .section-header.first-section {
+        margin-top: 18px;
       }
 
       .discussion-conclusions-page .paragraph {
-        font-size: 0.95rem;
+        font-size: 0.8rem;
         margin-bottom: 8px;
         color: #222;
         line-height: 1.5;
         text-align: justify;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
+        width: 100%;
+        max-width: 100%;
+      }
+
+      .discussion-conclusions-page .bullet-list {
+        margin: 0 0 8px 0;
+        padding: 0 0 0 24px;
+        font-size: 0.8rem;
+        color: #222;
+        list-style: none;
+      }
+
+      .discussion-conclusions-page .bullet-list li {
+        position: relative;
+        padding-left: 20px;
+        margin-bottom: 8px;
+        line-height: 1.5;
+        text-align: left;
+      }
+
+      .discussion-conclusions-page .bullet-list li::before {
+        content: "•";
+        position: absolute;
+        left: 0;
+        top: 0.25em;
+        font-size: 1em;
+        color: #222;
+        line-height: 1;
       }
 
       .discussion-conclusions-page .asbestos-list {
         margin: 0 0 8px 0;
         padding: 0 0 0 24px;
-        font-size: 0.95rem;
+        font-size: 0.8rem;
         color: #222;
+        list-style: none;
+      }
+
+      .discussion-conclusions-page .asbestos-list li {
+        position: relative;
+        padding-left: 20px;
+        margin-bottom: 8px;
+        line-height: 1.5;
+        text-align: left;
+      }
+
+      .discussion-conclusions-page .asbestos-list li::before {
+        content: "•";
+        position: absolute;
+        left: 0;
+        top: 0.25em;
+        font-size: 1em;
+        color: #222;
+        line-height: 1;
+      }
+      .discussion-conclusions-page .non-asbestos-list {
+        margin: 0 0 8px 0;
+        padding: 0 0 0 24px;
+        font-size: 0.8rem;
+        color: #222;
+        list-style: none;
+      }
+      .discussion-conclusions-page .non-asbestos-list li {
+        position: relative;
+        padding-left: 20px;
+        margin-bottom: 8px;
+        line-height: 1.5;
+        text-align: left;
+      }
+      .discussion-conclusions-page .non-asbestos-list li::before {
+        content: "•";
+        position: absolute;
+        left: 0;
+        top: 0.25em;
+        font-size: 1em;
+        color: #222;
+        line-height: 1;
+      }
+      .discussion-conclusions-page .discussion-conclusions-content {
+        white-space: pre-wrap;
       }
 
       .discussion-conclusions-page .signoff {
         margin-top: 40px;
-        font-size: 1rem;
+        font-size: 0.8rem;
         color: #222;
-        line-height: 1.7;
+        line-height: 1.5;
       }
 
       .discussion-conclusions-page .signature {
@@ -156,12 +257,35 @@
         color: #222;
       }
 
-      .discussion-conclusions-page .footer-line {
+      .discussion-conclusions-page .footer-content {
         width: 100%;
-        height: 4px;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+      }
+
+      .discussion-conclusions-page .footer-border-line {
+        width: 100%;
+        height: 1.5px;
         background: #16b12b;
         margin-bottom: 6px;
-        border-radius: 2px;
+        border-radius: 0;
+      }
+
+      .discussion-conclusions-page .footer-text {
+        flex: 1;
+      }
+
+      .discussion-conclusions-page .page-number {
+        font-size: 0.75rem;
+        color: #222;
+        font-weight: 500;
+        margin-left: 20px;
+      }
+
+      .discussion-conclusions-page .website {
+        color: #16b12b;
+        font-weight: 500;
       }
     </style>
   </head>
@@ -173,12 +297,12 @@
           Lancaster & Dickenson Consulting Pty Ltd<br />
           4/6 Dacre Street<br />
           Mitchell ACT 2911<br />
-          W: <span class="website">www.landd.com.au</span>
+          <span class="website">www.landd.com.au</span>
         </div>
       </div>
       <div class="green-line"></div>
       <div class="content">
-        <div class="section-header">Discussion and Conclusions</div>
+        <div class="section-header first-section">Discussion and Conclusions</div>
         <div class="paragraph">
           The following asbestos-containing materials were identified during the
           assessment:
@@ -186,17 +310,27 @@
         <ul class="asbestos-list">
           [IDENTIFIED_ASBESTOS_ITEMS]
         </ul>
-        <div class="signoff">
-          For and on behalf of Lancaster and Dickenson Consulting.<br />
-          <div class="signature">[SIGNATURE_IMAGE]</div>
-          [LAA_NAME] - Licensed Asbestos Assessor<br />
-          [LAA_LICENCE]<br />
-          Lancaster & Dickenson Consulting Pty Ltd
+        <div class="paragraph">
+          The following non-asbestos materials were identified during the
+          assessment:
         </div>
+        <ul class="non-asbestos-list">
+          [IDENTIFIED_NON_ASBESTOS_ITEMS]
+        </ul>
+        <div class="paragraph discussion-conclusions-content">
+          [DISCUSSION_CONCLUSIONS_CONTENT]
+        </div>
+        <div class="section-header">INSPECTION EXCLUSIONS</div>
+        <div class="paragraph">[JOB_SPECIFIC_EXCLUSIONS]</div>
+        <div class="signoff">[SIGN_OFF_CONTENT]</div>
+        <div class="signature">[SIGNATURE_IMAGE]</div>
       </div>
       <div class="footer">
-        <div class="footer-line"></div>
-        Asbestos Assessment Report - [SITE_NAME]
+        <div class="footer-border-line"></div>
+        <div class="footer-content">
+          <div class="footer-text">[FOOTER_TEXT]</div>
+          <div class="page-number">[PAGE_NUMBER]</div>
+        </div>
       </div>
     </div>
   </body>

@@ -95,7 +95,17 @@ const asbestosAssessmentService = {
       { description }
     );
     return response.data;
-  }
+  },
+
+  // Generate asbestos assessment PDF using DocRaptor templates (pdf-docraptor-v2)
+  generateAsbestosAssessmentPdf: async (assessmentData) => {
+    const response = await api.post(
+      '/pdf-docraptor-v2/generate-asbestos-assessment-v3',
+      { assessmentData },
+      { responseType: 'blob' }
+    );
+    return response.data;
+  },
 };
 
 export default asbestosAssessmentService; 

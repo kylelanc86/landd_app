@@ -62,6 +62,8 @@ const CustomDataFields = () => {
   const [legislation, setLegislation] = useState([]);
   const [projectStatuses, setProjectStatuses] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
+  const [glossary, setGlossary] = useState([]);
+  const [fibreIdSamplesDescriptions, setFibreIdSamplesDescriptions] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [newItemText, setNewItemText] = useState("");
@@ -71,6 +73,8 @@ const CustomDataFields = () => {
   const [newStatusColor, setNewStatusColor] = useState("#1976d2");
   const [newAsbestosType, setNewAsbestosType] = useState("");
   const [newRecommendationName, setNewRecommendationName] = useState("");
+  const [newGlossaryName, setNewGlossaryName] = useState("");
+  const [newGlossaryDescription, setNewGlossaryDescription] = useState("");
   const [currentTab, setCurrentTab] = useState("");
   const [loading, setLoading] = useState(false);
   const { showSnackbar } = useSnackbar();
@@ -91,6 +95,8 @@ const CustomDataFields = () => {
         legislationData,
         projectStatusesData,
         recommendationsData,
+        glossaryData,
+        fibreIdSamplesDescriptionsData,
       ] = await Promise.all([
         customDataFieldGroupService.getFieldsByType("asbestos_removalist"),
         customDataFieldGroupService.getFieldsByType("location_description"),
@@ -100,6 +106,8 @@ const CustomDataFields = () => {
         customDataFieldGroupService.getFieldsByType("legislation"),
         customDataFieldGroupService.getProjectStatuses(),
         customDataFieldGroupService.getFieldsByType("recommendation"),
+        customDataFieldGroupService.getFieldsByType("glossary"),
+        customDataFieldGroupService.getFieldsByType("fibre_id_samples_description"),
       ]);
 
       setAsbestosRemovalists(asbestosData || []);
@@ -109,6 +117,8 @@ const CustomDataFields = () => {
       setRoomAreas(roomAreaData || []);
       setLegislation(legislationData || []);
       setRecommendations(recommendationsData || []);
+      setGlossary(glossaryData || []);
+      setFibreIdSamplesDescriptions(fibreIdSamplesDescriptionsData || []);
       // Handle project statuses data which might be an object with activeStatuses and inactiveStatuses
       if (
         projectStatusesData &&
@@ -219,6 +229,18 @@ const CustomDataFields = () => {
             setter: setRecommendations,
             title: "Recommendations",
           };
+        case 5:
+          return {
+            data: glossary,
+            setter: setGlossary,
+            title: "Glossary",
+          };
+        case 6:
+          return {
+            data: fibreIdSamplesDescriptions,
+            setter: setFibreIdSamplesDescriptions,
+            title: "Fibre ID Samples Descriptions",
+          };
         default:
           return { data: [], setter: () => {}, title: "" };
       }
@@ -237,6 +259,8 @@ const CustomDataFields = () => {
     setNewIsActiveStatus(true); // Reset isActiveStatus on add
     setNewAsbestosType(""); // Reset asbestos type on add
     setNewRecommendationName(""); // Reset recommendation name on add
+    setNewGlossaryName(""); // Reset glossary name on add
+    setNewGlossaryDescription(""); // Reset glossary description on add
     setDialogOpen(true);
   };
 
@@ -246,6 +270,8 @@ const CustomDataFields = () => {
     setEditingItem(item);
     setNewItemText(
       currentTab === "Recommendations"
+        ? item.text || ""
+        : currentTab === "Glossary"
         ? item.text || ""
         : item.text || item.name || ""
     );
@@ -257,6 +283,8 @@ const CustomDataFields = () => {
     setNewStatusColor(item.statusColor || "#1976d2"); // Set status color on edit
     setNewAsbestosType(item.asbestosType || ""); // Set asbestos type on edit
     setNewRecommendationName(item.name || ""); // Set recommendation name on edit
+    setNewGlossaryName(currentTab === "Glossary" ? (item.name || "") : "");
+    setNewGlossaryDescription(currentTab === "Glossary" ? (item.text || "") : "");
     setDialogOpen(true);
   };
 
@@ -273,6 +301,8 @@ const CustomDataFields = () => {
             "Location Descriptions",
             "Materials Descriptions",
             "Materials Descriptions (non-ACM)",
+            "Glossary",
+            "Fibre ID Samples Descriptions",
           ].includes(title)
         ) {
         // Get the current group
@@ -344,6 +374,10 @@ const CustomDataFields = () => {
         return "project_status";
       case "Recommendations":
         return "recommendation";
+      case "Glossary":
+        return "glossary";
+      case "Fibre ID Samples Descriptions":
+        return "fibre_id_samples_description";
       default:
         return "asbestos_removalist";
     }
@@ -358,6 +392,15 @@ const CustomDataFields = () => {
       }
       if (!newItemText.trim()) {
         showSnackbar("Recommendation content is required", "error");
+        return;
+      }
+    } else if (currentTab === "Glossary") {
+      if (!newGlossaryName.trim()) {
+        showSnackbar("Glossary term (name) is required", "error");
+        return;
+      }
+      if (!newGlossaryDescription.trim()) {
+        showSnackbar("Glossary description is required", "error");
         return;
       }
     } else {
@@ -407,6 +450,12 @@ const CustomDataFields = () => {
           updateData.name = newRecommendationName.trim();
         }
 
+        // For glossary, include name (term) and text (description)
+        if (title === "Glossary") {
+          updateData.name = newGlossaryName.trim();
+          updateData.text = newGlossaryDescription.trim();
+        }
+
         // For all custom data field types, update the backend group
         if (
           [
@@ -418,6 +467,8 @@ const CustomDataFields = () => {
             "Materials Descriptions",
             "Materials Descriptions (non-ACM)",
             "Recommendations",
+            "Glossary",
+            "Fibre ID Samples Descriptions",
           ].includes(title)
         ) {
           // Get the current group
@@ -569,6 +620,12 @@ const CustomDataFields = () => {
           newItemData.name = newRecommendationName.trim();
         }
 
+        // For glossary, use name (term) and text (description)
+        if (title === "Glossary") {
+          newItemData.name = newGlossaryName.trim();
+          newItemData.text = newGlossaryDescription.trim();
+        }
+
         // For all custom data field types, add to the backend group
         if (
           [
@@ -580,6 +637,8 @@ const CustomDataFields = () => {
             "Materials Descriptions",
             "Materials Descriptions (non-ACM)",
             "Recommendations",
+            "Glossary",
+            "Fibre ID Samples Descriptions",
           ].includes(title)
         ) {
           try {
@@ -747,6 +806,8 @@ const CustomDataFields = () => {
     setNewJurisdiction("ACT"); // Reset jurisdiction on save
     setNewAsbestosType(""); // Reset asbestos type on save
     setNewRecommendationName(""); // Reset recommendation name on save
+    setNewGlossaryName("");
+    setNewGlossaryDescription("");
   };
 
   const handleDialogClose = () => {
@@ -759,6 +820,8 @@ const CustomDataFields = () => {
     setNewStatusColor("#1976d2"); // Reset status color on close
     setNewAsbestosType(""); // Reset asbestos type on close
     setNewRecommendationName(""); // Reset recommendation name on close
+    setNewGlossaryName("");
+    setNewGlossaryDescription("");
   };
 
   const renderTabContent = (data, title) => {
@@ -817,7 +880,7 @@ const CustomDataFields = () => {
               >
                 <ListItemText
                   primary={
-                    title === "Recommendations" && item.name ? (
+                    (title === "Recommendations" || title === "Glossary") && item.name ? (
                       <Typography
                         variant="subtitle1"
                         sx={{ fontWeight: "bold" }}
@@ -832,6 +895,8 @@ const CustomDataFields = () => {
                     title === "Materials Descriptions" && item.asbestosType
                       ? `Asbestos Type: ${item.asbestosType}`
                       : title === "Recommendations" && item.text
+                      ? item.text
+                      : title === "Glossary" && item.text
                       ? item.text
                       : null
                   }
@@ -1274,6 +1339,8 @@ const CustomDataFields = () => {
             <Tab label="Legislation" />
             <Tab label="Projects Status" />
             <Tab label="Recommendations" />
+            <Tab label="Glossary" />
+            <Tab label="Fibre ID Samples Descriptions" />
           </Tabs>
 
           <TabPanel value={tabValue} index={0}>
@@ -1332,6 +1399,14 @@ const CustomDataFields = () => {
           <TabPanel value={tabValue} index={4}>
             {renderTabContent(recommendations, "Recommendations")}
           </TabPanel>
+
+          <TabPanel value={tabValue} index={5}>
+            {renderTabContent(glossary, "Glossary")}
+          </TabPanel>
+
+          <TabPanel value={tabValue} index={6}>
+            {renderTabContent(fibreIdSamplesDescriptions, "Fibre ID Samples Descriptions")}
+          </TabPanel>
         </Paper>
 
         {/* Add/Edit Dialog */}
@@ -1368,7 +1443,7 @@ const CustomDataFields = () => {
                 </TextField>
               </Box>
             )}
-            {currentTab !== "Recommendations" && (
+            {currentTab !== "Recommendations" && currentTab !== "Glossary" && (
               <TextField
                 autoFocus
                 margin="dense"
@@ -1390,6 +1465,39 @@ const CustomDataFields = () => {
                       : 0,
                 }}
               />
+            )}
+            {currentTab === "Glossary" && (
+              <>
+                <TextField
+                  autoFocus
+                  margin="dense"
+                  label="Name (Term)"
+                  fullWidth
+                  variant="outlined"
+                  value={newGlossaryName}
+                  onChange={(e) => setNewGlossaryName(e.target.value)}
+                  onKeyPress={(e) => e.key === "Enter" && handleSaveItem()}
+                  required
+                  error={!newGlossaryName.trim()}
+                  helperText={!newGlossaryName.trim() ? "Name is required" : ""}
+                  sx={{ mb: 2 }}
+                />
+                <TextField
+                  margin="dense"
+                  label="Description"
+                  fullWidth
+                  variant="outlined"
+                  value={newGlossaryDescription}
+                  onChange={(e) => setNewGlossaryDescription(e.target.value)}
+                  multiline
+                  rows={3}
+                  required
+                  error={!newGlossaryDescription.trim()}
+                  helperText={
+                    !newGlossaryDescription.trim() ? "Description is required" : ""
+                  }
+                />
+              </>
             )}
             {currentTab === "Recommendations" && (
               <>

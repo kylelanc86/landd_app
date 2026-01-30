@@ -462,6 +462,7 @@ export const asbestosAssessmentService = {
   getAsbestosAssessmentById: (id) => api.get(`/assessments/${id}`),
   createAsbestosAssessment: (data) => api.post('/assessments', data),
   updateAsbestosAssessment: (id, data) => api.put(`/assessments/${id}`, data),
+  archiveAsbestosAssessment: (id) => api.patch(`/assessments/${id}/archive`),
   deleteAsbestosAssessment: (id) => api.delete(`/assessments/${id}`),
   markSampleReadyForAnalysis: (assessmentId, itemId, readyForAnalysis) => 
     api.patch(`/assessments/${assessmentId}/items/${itemId}/ready-for-analysis`, { readyForAnalysis }),
@@ -476,7 +477,11 @@ export const asbestosAssessmentService = {
   
   // Upload fibre analysis report
   uploadFibreAnalysisReport: (id, reportData) => 
-    api.post(`/assessments/${id}/upload-fibre-analysis-report`, reportData).then(res => res.data)
+    api.post(`/assessments/${id}/upload-fibre-analysis-report`, reportData).then(res => res.data),
+
+  // Generate asbestos assessment PDF using DocRaptor templates (pdf-docraptor-v2)
+  generateAsbestosAssessmentPdf: (assessmentData) =>
+    api.post('/pdf-docraptor-v2/generate-asbestos-assessment-v3', { assessmentData }, { responseType: 'blob' })
 };
 
 // Client Supplied Jobs service

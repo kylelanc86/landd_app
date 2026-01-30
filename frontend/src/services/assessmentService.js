@@ -61,7 +61,7 @@ const assessmentService = {
 
   generatePDF: (assessmentData) => {
     console.log("assessmentService.generatePDF called with:", assessmentData);
-    return axios.post('/api/pdf-docraptor-v2/generate-asbestos-assessment', { assessmentData }, { 
+    return axios.post('/api/pdf-docraptor-v2/generate-asbestos-assessment-v3', { assessmentData }, { 
       responseType: 'blob',
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`,

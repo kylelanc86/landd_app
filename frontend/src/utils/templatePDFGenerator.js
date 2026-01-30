@@ -18,7 +18,7 @@ export const generateAssessmentPDF = async (assessmentData) => {
     // Use the same API configuration as the rest of the app
     const apiBaseUrl = process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? "http://localhost:5000/api" : "https://landd-app-backend-docker.onrender.com/api");
     
-    const requestUrl = `${apiBaseUrl}/pdf-docraptor-v2/generate-asbestos-assessment?t=${Date.now()}`;
+    const requestUrl = `${apiBaseUrl}/pdf-docraptor-v2/generate-asbestos-assessment-v3?t=${Date.now()}`;
     console.log('Calling backend URL:', requestUrl);
 
     // Create an AbortController for timeout handling
@@ -110,11 +110,11 @@ export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
       if (type === 'asbestos-clearance') {
         endpoint = '/pdf-docraptor-v2/generate-asbestos-clearance-v2';  // Use V2 endpoint
       } else if (type === 'asbestos-assessment') {
-        endpoint = '/pdf-docraptor-v2/generate-asbestos-assessment';  // Updated to use V2 endpoint
+        endpoint = '/pdf-docraptor-v2/generate-asbestos-assessment-v3';  // Use experimental flow-based endpoint
       } else if (type === 'client-supplied-fibre-id') {
         endpoint = '/pdf-docraptor-v2/generate-client-supplied-fibre-id';
       } else {
-        endpoint = '/pdf-docraptor-v2/generate-asbestos-assessment'; // Default fallback
+        endpoint = '/pdf-docraptor-v2/generate-asbestos-assessment-v3'; // Default fallback
       }
     } else {
       if (type === 'asbestos-clearance') {

@@ -43,6 +43,15 @@
         margin: 0;
       }
 
+      /* Prevent word hyphenation globally (match InspectionDetails / VersionControl) */
+      * {
+        hyphens: none !important;
+        -webkit-hyphens: none !important;
+        -ms-hyphens: none !important;
+        word-break: keep-all !important;
+        overflow-wrap: normal !important;
+      }
+
       body {
         margin: 0;
         padding: 0;
@@ -50,6 +59,9 @@
         background: #fff;
         width: 100%;
         height: 100%;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
       }
 
       /* Make assessment content page styles more specific */
@@ -94,10 +106,10 @@
 
       .assessment-page .green-line {
         width: calc(100% - 96px);
-        height: 4px;
+        height: 1.5px;
         background: #16b12b;
         margin: 8px auto 0 auto;
-        border-radius: 2px;
+        border-radius: 0;
       }
 
       .assessment-page .content {
@@ -110,24 +122,39 @@
         height: calc(100vh - 200px);
       }
       .assessment-page .section-header {
-        font-size: 1.1rem;
+        font-size: 0.9rem;
         font-weight: 700;
         text-transform: uppercase;
-        margin: 24px 0 8px 0;
+        margin: 10px 0 10px 0;
         letter-spacing: 0.01em;
         color: #222;
+        text-align: left !important;
+        width: 100%;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
+      }
+      .assessment-page .section-header.first-section {
+        margin-top: 18px;
       }
       .assessment-page .paragraph {
-        font-size: 0.95rem;
+        font-size: 0.8rem;
         margin-bottom: 8px;
         color: #222;
         line-height: 1.5;
         text-align: justify;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        hyphens: none;
+        -webkit-hyphens: none;
+        -ms-hyphens: none;
+        width: 100%;
+        max-width: 100%;
       }
       .assessment-page .bullet-list {
         margin: 0 0 8px 0;
         padding: 0 0 0 24px;
-        font-size: 0.95rem;
+        font-size: 0.8rem;
         color: #222;
         list-style: none;
       }
@@ -142,28 +169,29 @@
         content: "•";
         position: absolute;
         left: 0;
-        top: 0;
-        font-size: 1.5em;
+        top: 0.25em;
+        font-size: 1em;
         color: #222;
-        line-height: 1.5;
+        line-height: 1;
       }
       .assessment-page .sample-register-header {
-        font-size: 1rem;
+        font-size: 0.8rem;
         font-weight: 700;
         margin: 8px 0 12px 0;
         color: #222;
       }
-      /* Table styling for sample register */
+      /* Table styling for sample register - let AsbestosSampleItem.html colgroup + inline styles control widths */
       .assessment-page .sample-table {
         width: 100%;
         border-collapse: collapse;
         margin-bottom: 18px;
+        table-layout: fixed; /* Respect colgroup widths from AsbestosSampleItem.html */
       }
       .assessment-page .sample-table th,
       .assessment-page .sample-table td {
         border: 1.5px solid #888;
         padding: 6px 8px;
-        font-size: 0.8rem;
+        font-size: 0.64rem;
         vertical-align: top;
       }
       .assessment-page .sample-table th {
@@ -172,14 +200,43 @@
         text-align: left;
       }
       .assessment-page .sample-photo-cell {
-        width: 400px;
-        height: 300px;
+        /* ABSOLUTELY FIXED dimensions - cell NEVER expands */
+        width: 71% !important;
+        height: 300px !important;
+        overflow: hidden !important;
+        box-sizing: border-box !important;
         text-align: center;
         vertical-align: middle;
         background: #fafafa;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      .assessment-page .sample-photo-cell-inner {
+        display: block;
+        width: 100%;
+        height: 100%;
+        max-width: 100%;
+        max-height: 100%;
+        overflow: hidden;
+        box-sizing: border-box;
+        padding: 0;
+        margin: 0;
+      }
+      .assessment-page .sample-photo-cell-inner .sample-photo {
+        /* Image constrained to fit within 300px high cell - use explicit pixel limits */
+        max-width: 100% !important;
+        max-height: 280px !important;
+        width: auto !important;
+        height: auto !important;
+        object-fit: contain !important;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        display: block;
+        margin: 0 auto !important;
+        padding: 0 !important;
       }
       .assessment-page .sample-photo {
-        max-width: 400px;
+        max-width: 100%;
         max-height: 300px;
         object-fit: contain;
         border: 1px solid #ccc;
@@ -187,11 +244,15 @@
       }
       .assessment-page .sample-label {
         font-weight: 700;
-        width: 25%;
         background: #f5f5f5;
       }
-      .assessment-page .sample-value {
-        width: 25%;
+      /* Widths controlled by colgroup + inline styles from AsbestosSampleItem.html - no CSS overrides */
+      .assessment-page .sample-asbestos-content-cell { font-weight: bold; }
+      .assessment-page .sample-risk-cell { 
+        line-height: 1; 
+        height: 1.2em;
+        padding: 4px 8px;
+        vertical-align: middle;
       }
       .assessment-page .sample-location-content {
         height: 60px; /* 3 lines tall */
@@ -199,15 +260,32 @@
         padding: 8px;
         background: #fafafa;
         border: 1.5px solid #888;
-        font-size: 0.8rem;
+        font-size: 0.64rem;
         line-height: 1.4;
       }
       .assessment-page .comments-row td {
         background: #eaeaea;
-        font-size: 0.8rem;
+        font-size: 0.64rem;
         font-style: italic;
         width: 100%;
+        line-height: 1.4;
       }
+      .assessment-page .comments-cell-inner {
+        min-height: 2.7rem;
+        display: block;
+      }
+      .assessment-page .sample-no-photo {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 280px;
+        height: 100%;
+        color: #666;
+        font-style: italic;
+        font-size: 0.64rem;
+      }
+      .assessment-page .asbestos-content-asbestos { color: #c62828; }
+      .assessment-page .asbestos-content-non-asbestos { color: #2e7d32; }
 
       .assessment-page .footer {
         position: absolute;
@@ -220,21 +298,27 @@
         font-size: 0.75rem;
         color: #222;
       }
-      .assessment-page .footer-line {
+      .assessment-page .footer-content {
         width: 100%;
-        height: 4px;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+      }
+      .assessment-page .footer-border-line {
+        width: 100%;
+        height: 1.5px;
         background: #16b12b;
         margin-bottom: 6px;
-        border-radius: 2px;
+        border-radius: 0;
       }
-
-      /* Additional styles for sample register pages */
-      .assessment-page .green-line {
-        width: calc(100% - 96px);
-        height: 4px;
-        background: #16b12b;
-        margin: 8px auto 0 auto;
-        border-radius: 2px;
+      .assessment-page .footer-text {
+        flex: 1;
+      }
+      .assessment-page .page-number {
+        font-size: 0.75rem;
+        color: #222;
+        font-weight: 500;
+        margin-left: 20px;
       }
 
       .assessment-page .website {
@@ -251,23 +335,24 @@
           Lancaster & Dickenson Consulting Pty Ltd<br />
           4/6 Dacre Street<br />
           Mitchell ACT 2911<br />
-          W: <span class="website">www.landd.com.au</span>
+          <span class="website">www.landd.com.au</span>
         </div>
       </div>
       <div class="green-line"></div>
       <div class="content">
-        <div class="section-header">[INTRODUCTION_TITLE]</div>
+        <div class="section-header first-section">[INTRODUCTION_TITLE]</div>
         <div class="paragraph">[INTRODUCTION_CONTENT]</div>
         <div class="section-header">[SURVEY_FINDINGS_TITLE]</div>
         <div class="paragraph">[SURVEY_FINDINGS_CONTENT]</div>
-        <div class="sample-register-header">Table 1: Sample Register</div>
+        <div class="sample-register-header">Sample Register - Item 1</div>
         <!-- Sample register items -->
         [SAMPLE_REGISTER_ITEMS]
       </div>
       <div class="footer">
+        <div class="footer-border-line"></div>
         <div class="footer-content">
-          <div class="footer-line"></div>
-          Asbestos Assessment Report: [SITE_ADDRESS]
+          <div class="footer-text">[FOOTER_TEXT]</div>
+          <div class="page-number">[PAGE_NUMBER]</div>
         </div>
       </div>
     </div>

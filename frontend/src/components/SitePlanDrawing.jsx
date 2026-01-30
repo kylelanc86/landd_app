@@ -27,13 +27,13 @@ import {
   Redo as RedoIcon,
   Save as SaveIcon,
   Upload as UploadIcon,
-  Mouse as SelectIcon,
+  Forward as ForwardIcon,
   Delete as DeleteIcon,
   ZoomIn as ZoomInIcon,
   ZoomOut as ZoomOutIcon,
   Refresh as RefreshIcon,
-  PanTool as HandIcon,
   Add as AddIcon,
+  CallMade as ArrowIcon,
 } from "@mui/icons-material";
 import loadGoogleMapsApi from "../utils/loadGoogleMapsApi";
 import GoogleMapsDialog from "./GoogleMapsDialog";
@@ -63,7 +63,7 @@ const applyOpacitySettings = (item, transparent) => {
     return next;
   }
 
-  if (item.type === "line" || item.type === "pen") {
+  if (item.type === "line" || item.type === "pen" || item.type === "arrow") {
     return { ...item, strokeOpacity };
   }
 
@@ -150,7 +150,6 @@ const SitePlanDrawing = ({
   const [canvasSize, setCanvasSize] = useState({ width: 1000, height: 720 });
   const [zoom, setZoom] = useState(1); // Default zoom at 100%
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
-  const [isPanning, setIsPanning] = useState(false);
   const prevItemsLengthRef = useRef(0);
   const [legendEntries, setLegendEntries] = useState([]);
   const [legendTitle, setLegendTitle] = useState("Key");
@@ -457,6 +456,38 @@ const SitePlanDrawing = ({
     };
   };
 
+  // Helper function to draw an arrow
+  const drawArrow = (ctx, x1, y1, x2, y2, color, lineWidth) => {
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = lineWidth || 2;
+    
+    // Draw the line
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+
+    // Calculate arrowhead
+    const angle = Math.atan2(y2 - y1, x2 - x1);
+    const arrowLength = Math.max(10, lineWidth * 3); // Arrowhead size based on line width
+    const arrowWidth = Math.max(5, lineWidth * 1.5);
+
+    // Draw arrowhead
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(
+      x2 - arrowLength * Math.cos(angle - Math.PI / 6),
+      y2 - arrowLength * Math.sin(angle - Math.PI / 6)
+    );
+    ctx.lineTo(
+      x2 - arrowLength * Math.cos(angle + Math.PI / 6),
+      y2 - arrowLength * Math.sin(angle + Math.PI / 6)
+    );
+    ctx.closePath();
+    ctx.fill();
+  };
+
   const startDrawing = (e) => {
     setIsDrawing(true);
     const canvas = canvasRef.current;
@@ -486,11 +517,6 @@ const SitePlanDrawing = ({
       setShowInlineTextInput(true);
       setInlineTextInput("");
       setIsDrawing(false); // Don't continue drawing for text
-    } else if (currentTool === "hand") {
-      // For hand tool, start panning
-      setIsPanning(true);
-      setDragStart({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y });
-      setIsDrawing(false); // Don't continue drawing for hand tool
     } else if (currentTool === "select") {
       // For select tool, check if clicking on a resize handle first
       if (selectedItem) {
@@ -520,7 +546,7 @@ const SitePlanDrawing = ({
   };
 
   const draw = (e) => {
-    if (!isDrawing && !isMovingItem && !isResizingItem && !isPanning) return;
+    if (!isDrawing && !isMovingItem && !isResizingItem) return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
@@ -534,25 +560,6 @@ const SitePlanDrawing = ({
 
     // Constrain to canvas boundaries
     const { x, y } = constrainToCanvas(rawX, rawY);
-
-    if (isPanning) {
-      // Handle panning - constrain to keep canvas in view
-      const canvas = canvasRef.current;
-      const rect = canvas.getBoundingClientRect();
-      const container = canvasContainerRef.current;
-      if (!container) return;
-
-      const containerRect = container.getBoundingClientRect();
-      const maxPanX = (rect.width * zoom - containerRect.width) / 2;
-      const maxPanY = (rect.height * zoom - containerRect.height) / 2;
-
-      const newPanOffset = {
-        x: Math.max(-maxPanX, Math.min(maxPanX, e.clientX - dragStart.x)),
-        y: Math.max(-maxPanY, Math.min(maxPanY, e.clientY - dragStart.y)),
-      };
-      setPanOffset(newPanOffset);
-      return;
-    }
 
     if (isMovingItem && selectedItem) {
       // Handle moving selected item
@@ -704,17 +711,37 @@ const SitePlanDrawing = ({
       ctx.strokeStyle = color;
       ctx.stroke();
       ctx.restore();
+    } else if (currentTool === "arrow") {
+      // Clear and redraw background + existing items for preview
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw background image if it exists
+      if (canvas.backgroundImage) {
+        ctx.drawImage(
+          canvas.backgroundImage,
+          0,
+          0,
+          canvas.width,
+          canvas.height
+        );
+      }
+
+      // Redraw all existing items
+      drawnItems.forEach((item) => {
+        drawItem(ctx, item);
+      });
+
+      // Draw preview arrow
+      ctx.save();
+      ctx.globalAlpha = previewOpacity;
+      drawArrow(ctx, canvas.startX, canvas.startY, x, y, color, brushSize);
+      ctx.restore();
     }
   };
 
   const stopDrawing = (e) => {
     if (isDrawing) {
       setIsDrawing(false);
-    }
-
-    if (isPanning) {
-      setIsPanning(false);
-      return;
     }
 
     if (isDrawing) {
@@ -788,6 +815,18 @@ const SitePlanDrawing = ({
           const newItem = {
             id: Date.now().toString(),
             type: "line",
+            x1: canvas.startX,
+            y1: canvas.startY,
+            x2: x,
+            y2: y,
+            color: color,
+            lineWidth: brushSize,
+          };
+          addDrawnItem(newItem);
+        } else if (currentTool === "arrow") {
+          const newItem = {
+            id: Date.now().toString(),
+            type: "arrow",
             x1: canvas.startX,
             y1: canvas.startY,
             x2: x,
@@ -895,6 +934,7 @@ const SitePlanDrawing = ({
 
     switch (item.type) {
       case "line":
+      case "arrow":
         updatedItem.x1 += deltaX;
         updatedItem.y1 += deltaY;
         updatedItem.x2 += deltaX;
@@ -935,6 +975,7 @@ const SitePlanDrawing = ({
 
     switch (item.type) {
       case "line":
+      case "arrow":
         if (handle.type === "start") {
           updatedItem.x1 += deltaX;
           updatedItem.y1 += deltaY;
@@ -1242,6 +1283,18 @@ const SitePlanDrawing = ({
         ctx.lineTo(item.x2, item.y2);
         ctx.stroke();
         break;
+      case "arrow":
+        ctx.globalAlpha = strokeOpacity;
+        drawArrow(
+          ctx,
+          item.x1,
+          item.y1,
+          item.x2,
+          item.y2,
+          item.color,
+          item.lineWidth || 2
+        );
+        break;
       case "pen":
         if (item.path && item.path.length > 0) {
           ctx.globalAlpha = strokeOpacity;
@@ -1376,6 +1429,7 @@ const SitePlanDrawing = ({
 
     switch (item.type) {
       case "line":
+      case "arrow":
         handles.push(
           { x: item.x1, y: item.y1, type: "start" },
           { x: item.x2, y: item.y2, type: "end" }
@@ -1462,6 +1516,7 @@ const SitePlanDrawing = ({
   const isPointInItem = (x, y, item) => {
     switch (item.type) {
       case "line":
+      case "arrow":
         // Simple line hit test (distance to line)
         const lineDist = distanceToLine(
           x,
@@ -1992,12 +2047,12 @@ const SitePlanDrawing = ({
   };
 
   const tools = [
-    { id: "select", icon: <SelectIcon />, label: "Select" },
+    { id: "select", icon: <ForwardIcon sx={{ transform: 'rotate(315deg)' }} />, label: "Select" },
     { id: "pen", icon: <EditIcon />, label: "Pen" },
-    { id: "hand", icon: <HandIcon />, label: "Hand" },
     { id: "circle", icon: <CircleIcon />, label: "Circle" },
     { id: "rectangle", icon: <SquareIcon />, label: "Rectangle" },
     { id: "line", icon: <LineIcon />, label: "Line" },
+    { id: "arrow", icon: <ArrowIcon />, label: "Arrow" },
     { id: "text", icon: <TextIcon />, label: "Text" },
   ];
 
@@ -2395,11 +2450,7 @@ const SitePlanDrawing = ({
                   position: "relative",
                   zIndex: 2,
                   cursor:
-                    currentTool === "hand"
-                      ? isPanning
-                        ? "grabbing"
-                        : "grab"
-                      : currentTool === "select" && selectedItem
+                    currentTool === "select" && selectedItem
                       ? "pointer"
                       : "crosshair",
                   width: `${canvasSize.width}px`,

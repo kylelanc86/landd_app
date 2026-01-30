@@ -39,6 +39,8 @@ async function loadImageAsBase64(imagePath) {
 export async function generateFibreIDReport({ assessment, sampleItems, analyst, openInNewTab, returnPdfData = false, reportApprovedBy = null, reportIssueDate = null }) {
   // Detect if this is a client-supplied job (has jobType but no assessorId)
   const isClientSupplied = assessment?.jobType === "Fibre ID" && !assessment?.assessorId;
+  // Detect if this is an L&D supplied report (has assessorId, not client supplied)
+  const isLDSupplied = !isClientSupplied && assessment?.assessorId;
 
   // Determine base URL for fonts - use window.location.origin to avoid CORS issues
   // Use window.location.origin to load fonts from the same origin as the app
@@ -116,6 +118,7 @@ pdfMake.fonts = {
       notes: {
         fontSize: 8,
         margin: [0, 5, 0, 2],
+        alignment: 'justify',
       },
     },
     
@@ -186,7 +189,7 @@ pdfMake.fonts = {
                         }
                         return assessment?.projectId?.client?.contact1Email || 'Unknown Email';
                       })() } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: isClientSupplied ? 'Client reference: ' : 'Address: ', bold: true }, { text: isClientSupplied ? (assessment?.projectId?.name || '-') : (assessment?.projectId?.client?.address || 'Unknown Address') } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: isClientSupplied ? 'Client reference: ' : 'Site Name: ', bold: true }, { text: assessment?.projectId?.name || (isClientSupplied ? '-' : 'Unknown Site Name') } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                     ]
                   },
                   {
@@ -242,7 +245,7 @@ pdfMake.fonts = {
                   },
                   {
                     stack: [
-                      { text: [ { text: 'Sampled by: ', bold: true }, { text: isClientSupplied ? 'Client' : (assessment?.assessorId?.firstName && assessment?.assessorId?.lastName ? `${assessment.assessorId.firstName} ${assessment.assessorId.lastName}` : 'LAA') } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Sampled by: ', bold: true }, { text: isClientSupplied ? 'Client' : (assessment?.LAA || (assessment?.assessorId?.firstName && assessment?.assessorId?.lastName ? `${assessment.assessorId.firstName} ${assessment.assessorId.lastName}` : 'LAA')) } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: [ { text: 'Samples Received: ', bold: true }, { text: (() => {
                         // For client supplied jobs, use sampleReceiptDate first
                         if (isClientSupplied && assessment?.sampleReceiptDate) {
@@ -332,17 +335,31 @@ pdfMake.fonts = {
                 return false;
               });
                          
-              const notes = [
+              // Notes for L&D supplied reports
+              const ldSuppliedNotes = [
+                { text: '1. Asbestos in bulk materials requiring disintegration such as vinyl, resins, mastic and caulking can be difficult to detect using PLM and dispersion staining due to the low grade or small diameter of asbestos fibres present in the material. Where no asbestos is detected in such a sample, another, independent analytical technique should be considered.', style: 'notes' },
+                { text: '2. This report must not be reproduced except in full.', style: 'notes' },
+                { text: '3. The practical detection limit for identification of asbestos fibre using PLM and dispersion staining techniques is 0.01-0.1%, equivalent to 0.1-1g/kg.', style: 'notes' },
+                { text: '4. Reported sample weights include the weight of the sample bag.', style: 'notes' },
+                { text: '5. Fibres that cannot be unequivocally identified as one of the three asbestos forms, will be reported as Unknown Mineral Fibres (UMF). The fibres detected may or may not be asbestos fibres. To confirm the identities of these fibres, another independent analytical technique may be required.', style: 'notes' },
+                { text: '6. This report relates to samples provided by a third party and the results within apply to the samples as received.', style: 'notes' },
+                { text: '7. Accredited for compliance with ISO/IEC 17025-Testing. Accreditation no: 19512.', style: 'notes' },
+              ];
+
+              // Notes for client-supplied reports
+              const clientSuppliedNotes = [
                 { text: '1. Asbestos in bulk materials requiring disintegration such as vinyl, resins, mastic and caulking can be difficult to detect using PLM and dispersion staining due to the low grade or small diameter of asbestos fibres present in the material. Where no asbestos is detected in such a sample, another, independent analytical technique should be considered.', style: 'notes' },
                 { text: '2. This report must not be reproduced except in full.', style: 'notes' },
                 { text: '3. The practical detection limit for identification of asbestos fibre using PLM and dispersion staining techniques is 0.01-0.1%, equivalent to 0.1-1g/kg.', style: 'notes' },
                 { text: '4. Reported sample weights include the weight of the sample bag.', style: 'notes' },
                 { text: '5. Fibres that cannot be unequivocally identified as one of the three asbestos forms, will be reported as Unknown Mineral Fibres (UMF). The fibres detected may or may not be asbestos fibres. To confirm the identities of these fibres, another independent analytical technique may be required.', style: 'notes' },
                 { text: '6. The samples analysed covered by this report along with the site and sample descriptions were supplied by a third party. L&D makes no claim to the validity of these details', style: 'notes' },
-                { text: '7. This report relates to samples provided by a third party and the results within apply to the samples as received.', style: 'notes' },
+                { text: '7. The results of the testing relate only to the samples as supplied to the laboratory.', style: 'notes' },
                 { text: '8. Accredited for compliance with ISO/IEC 17025-Testing. Accreditation no: 19512.', style: 'notes' },
-
               ];
+
+              // Select notes based on report type
+              const notes = isLDSupplied ? ldSuppliedNotes : clientSuppliedNotes;
 
               return notes;
             })(),
@@ -389,10 +406,10 @@ pdfMake.fonts = {
           // Sample Analysis Table with fixed row heights
           // Build all rows first to calculate max lines per row
           (function() {
-            // Table column widths in percentage: ['11%', '16.8%', '11%', '17.2%', '10.8%', '12.75%', '20.45%']
+            // Table column widths in percentage: ['16%', '16.8%', '11%', '17.2%', '10.8%', '12.75%', '15.45%']
             // A4 page width: 595pt, margins: 40pt each side = 515pt usable width
             const usablePageWidth = 515; // A4 width (595pt) - left margin (40pt) - right margin (40pt)
-            const columnWidths = [0.11, 0.168, 0.11, 0.172, 0.108, 0.1275, 0.2045];
+            const columnWidths = [0.16, 0.168, 0.11, 0.172, 0.108, 0.1275, 0.1545];
             
             // Helper function to estimate how many lines text will wrap to
             // Based on column width, font size, and text length
@@ -610,10 +627,8 @@ pdfMake.fonts = {
                     }
                   });
                   
-                  // Use labReference for L&D ID Reference, or fall back to projectID-index
-                  const safeLabRef = (item.labReference && item.labReference !== 'undefined' && item.labReference !== 'null') 
-                    ? item.labReference 
-                    : `${safeProjectID}-${index + 1}`;
+                  // L&D ID Reference format: {projectID}-Lab{x} where x starts at 1 and increments for each sample
+                  const safeLabRef = `${safeProjectID}-Lab${index + 1}`;
                   
                   // Return row data with text values for line counting
                   // Note: valign is not supported by pdfMake, we'll use margins instead
@@ -694,7 +709,7 @@ pdfMake.fonts = {
           const tableDefinition = {
             table: {
               headerRows: 1,
-              widths: ['11%', '16.8%', '11%', '17.2%', '10.8%', '12.75%', '20.45%'],
+              widths: ['16%', '11%', '11%', '19%', '11%', '13%', '19%'],
               body: tableBody
             },
             layout: {

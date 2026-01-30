@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useSnackbar } from "../../context/SnackbarContext";
 import {
   Box,
@@ -12,6 +12,7 @@ import {
   CardContent,
   Divider,
   TextField,
+  Autocomplete,
   Select,
   MenuItem,
   FormControl,
@@ -30,13 +31,17 @@ import {
   Chip,
   Checkbox,
   Alert,
+  IconButton,
+  Menu,
+  Stack,
 } from "@mui/material";
 import {
   ArrowBack as ArrowBackIcon,
   Add as AddIcon,
 } from "@mui/icons-material";
 import { useNavigate, useParams } from "react-router-dom";
-import { asbestosAssessmentService } from "../../services/api";
+import { asbestosAssessmentService, userService } from "../../services/api";
+import customDataFieldGroupService from "../../services/customDataFieldGroupService";
 
 const LDsuppliedAnalysisPage = () => {
   const navigate = useNavigate();
@@ -61,14 +66,49 @@ const LDsuppliedAnalysisPage = () => {
   const [fibres, setFibres] = useState([]);
   const [finalResult, setFinalResult] = useState("");
   const [noFibreDetected, setNoFibreDetected] = useState(false);
+  const [traceAsbestos, setTraceAsbestos] = useState("no");
+  const [traceAsbestosContent, setTraceAsbestosContent] = useState("");
+  const [traceCount, setTraceCount] = useState("");
   const [analysisDate, setAnalysisDate] = useState(new Date());
+  const [analysts, setAnalysts] = useState([]);
+  const [analyst, setAnalyst] = useState("");
+  const [comments, setComments] = useState("");
   const { showSnackbar } = useSnackbar();
+  const [asbestosMenuAnchor, setAsbestosMenuAnchor] = useState(null);
+  const [selectedFibreId, setSelectedFibreId] = useState(null);
+  const [fibreIdSampleDescriptions, setFibreIdSampleDescriptions] = useState([]);
 
   useEffect(() => {
     if (assessmentId && itemNumber) {
       fetchAssessmentDetails();
     }
+    fetchAnalysts();
   }, [assessmentId, itemNumber]);
+
+  useEffect(() => {
+    const loadFibreIdSampleDescriptions = async () => {
+      try {
+        const data = await customDataFieldGroupService.getFieldsByType("fibre_id_samples_description");
+        setFibreIdSampleDescriptions(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.warn("Could not load fibre ID sample descriptions:", err);
+        setFibreIdSampleDescriptions([]);
+      }
+    };
+    loadFibreIdSampleDescriptions();
+  }, []);
+
+  const fetchAnalysts = async () => {
+    try {
+      const response = await userService.getAll(true); // Get all users including inactive
+      const fibreIdentificationAnalysts = response.data.filter(
+        (user) => user.labApprovals?.fibreIdentification === true
+      );
+      setAnalysts(fibreIdentificationAnalysts);
+    } catch (error) {
+      console.error("Error fetching analysts:", error);
+    }
+  };
 
   useEffect(() => {
     // Ensure there's always at least one fibre when the component loads
@@ -90,29 +130,83 @@ const LDsuppliedAnalysisPage = () => {
 
       const response = await asbestosAssessmentService.getJob(assessmentId);
       console.log("Assessment response:", response);
-
+      
       if (!response) {
         throw new Error("Invalid response format from server");
       }
 
-      setAssessment(response);
+      // getJob already returns res.data, so response is the assessment data directly
+      const assessmentData = response;
+      setAssessment(assessmentData);
+      
+      // Debug: Check if items have analysedBy populated
+      if (assessmentData?.items) {
+        assessmentData.items.forEach((item, idx) => {
+          if (item.analysedBy) {
+            console.log(`Item ${idx} (${item.itemNumber || idx + 1}) has analysedBy:`, {
+              type: typeof item.analysedBy,
+              value: item.analysedBy,
+              isObject: typeof item.analysedBy === 'object',
+              hasFirstName: item.analysedBy?.firstName,
+              firstName: item.analysedBy?.firstName,
+              lastName: item.analysedBy?.lastName
+            });
+          }
+        });
+      }
+      
+      // Debug: Check if assessment has analyst
+      if (assessmentData?.analyst) {
+        console.log("Assessment has analyst:", {
+          type: typeof assessmentData.analyst,
+          value: assessmentData.analyst,
+          isObject: typeof assessmentData.analyst === 'object',
+          hasFirstName: assessmentData.analyst?.firstName,
+          firstName: assessmentData.analyst?.firstName,
+          lastName: assessmentData.analyst?.lastName
+        });
+      }
 
       // Find the specific assessment item
       // Try to find by itemNumber first, then fall back to array index
-      let item = response.items.find(
+      let item = assessmentData.items?.find(
         (item) => item.itemNumber === parseInt(itemNumber)
       );
 
       // If not found by itemNumber, try by array index (itemNumber - 1 for 1-based indexing)
-      if (!item && response.items && response.items.length > 0) {
+      if (!item && assessmentData.items && assessmentData.items.length > 0) {
         const index = parseInt(itemNumber) - 1;
-        if (index >= 0 && index < response.items.length) {
-          item = response.items[index];
+        if (index >= 0 && index < assessmentData.items.length) {
+          item = assessmentData.items[index];
         }
       }
 
       if (!item) {
         throw new Error(`Assessment item ${itemNumber} not found`);
+      }
+
+      // Referred items (same sampleReference as another item, not first occurrence) are not samples for analysis - redirect to first sampled item if current item is referred
+      const itemsList = assessmentData.items || [];
+      const isVisuallyAssessed = (i) =>
+        i.asbestosContent === "Visually Assessed as Asbestos" ||
+        i.asbestosContent === "Visually Assessed as Non-Asbestos" ||
+        i.asbestosContent === "Visually Assessed as Non-asbestos";
+      const isFirstOccurrenceOfRef = (i, index) => {
+        if (!i.sampleReference?.trim()) return false;
+        if (isVisuallyAssessed(i)) return false;
+        const ref = i.sampleReference.trim();
+        const firstIndex = itemsList.findIndex((x) => (x.sampleReference || "").trim() === ref);
+        return index === firstIndex;
+      };
+      const currentIndex = itemsList.findIndex((i) => i === item);
+      const isReferredOrNotSampled = currentIndex < 0 || !isFirstOccurrenceOfRef(item, currentIndex);
+      if (isReferredOrNotSampled) {
+        const firstSampledIndex = itemsList.findIndex((i, idx) => isFirstOccurrenceOfRef(i, idx));
+        if (firstSampledIndex >= 0) {
+          setLoading(false);
+          navigate(`/fibre-id/assessment/${assessmentId}/item/${firstSampledIndex + 1}/analysis`, { replace: true });
+          return;
+        }
       }
 
       setAssessmentItem(item);
@@ -122,10 +216,10 @@ const LDsuppliedAnalysisPage = () => {
         const savedData = item.analysisData;
         console.log("Loading saved analysis data:", savedData);
 
-        // Check if this was saved as "no fibres detected"
+        // Only check "no fibres detected" when explicitly saved as such (unchecked by default)
         const wasNoFibreDetected =
           savedData.finalResult === "No fibres detected" ||
-          (savedData.fibres && savedData.fibres.length === 0);
+          savedData.noFibreDetected === true;
 
         setNoFibreDetected(wasNoFibreDetected);
 
@@ -141,9 +235,42 @@ const LDsuppliedAnalysisPage = () => {
         setCrucibleNo(savedData.crucibleNo || "");
         setFibres(savedData.fibres || []);
         setFinalResult(savedData.finalResult || "");
+        setTraceAsbestos(savedData.traceAsbestos || "no");
+        setTraceAsbestosContent(savedData.traceAsbestosContent || "");
+        setTraceCount(savedData.traceCount || "");
+        setComments(savedData.comments || "");
         setAnalysisDate(
           savedData.analysedAt ? new Date(savedData.analysedAt) : new Date()
         );
+
+        // Load analyst from assessment level (analyst is set for all samples in the job)
+        // Fall back to item level if assessment analyst is not set
+        if (assessmentData.analyst) {
+          if (
+            typeof assessmentData.analyst === "object" &&
+            assessmentData.analyst._id
+          ) {
+            setAnalyst(assessmentData.analyst._id);
+            console.log("Loaded analyst from assessment.analyst (object):", assessmentData.analyst);
+          } else if (typeof assessmentData.analyst === "string") {
+            setAnalyst(assessmentData.analyst);
+            console.log("Loaded analyst from assessment.analyst (string):", assessmentData.analyst);
+          }
+        } else if (item.analysedBy) {
+          // Fallback to item-level analyst
+          if (
+            typeof item.analysedBy === "object" &&
+            item.analysedBy._id
+          ) {
+            setAnalyst(item.analysedBy._id);
+            console.log("Loaded analyst from item.analysedBy (object):", item.analysedBy);
+          } else if (typeof item.analysedBy === "string") {
+            setAnalyst(item.analysedBy);
+            console.log("Loaded analyst from item.analysedBy (string):", item.analysedBy);
+          }
+        } else {
+          console.log("No analyst found on assessment or item");
+        }
       } else {
         // Pre-populate sample description if available
         if (item.sampleReference) {
@@ -153,6 +280,8 @@ const LDsuppliedAnalysisPage = () => {
         }
         // Set analysis date to today for new analysis
         setAnalysisDate(new Date());
+
+        // Don't auto-select analyst - user must choose from dropdown
       }
     } catch (error) {
       console.error("Error fetching assessment details:", error);
@@ -177,11 +306,11 @@ const LDsuppliedAnalysisPage = () => {
   };
 
   const handleBackToJobs = () => {
-    navigate("/laboratory-services/ld-supplied");
+    navigate("/surveys/asbestos-assessment");
   };
 
   const handleBackToHome = () => {
-    navigate("/laboratory-services");
+    navigate("/surveys/asbestos-assessment");
   };
 
   const addFibre = () => {
@@ -262,7 +391,103 @@ const LDsuppliedAnalysisPage = () => {
     setFibres(fibres.filter((fibre) => fibre.id !== fibreId));
   };
 
+  const handleAsbestosMenuOpen = (event, fibreId) => {
+    setAsbestosMenuAnchor(event.currentTarget);
+    setSelectedFibreId(fibreId);
+  };
+
+  const handleAsbestosMenuClose = () => {
+    setAsbestosMenuAnchor(null);
+    setSelectedFibreId(null);
+  };
+
+  const applyAsbestosPreset = (AsbestosContent) => {
+    if (!selectedFibreId) return;
+
+    // Define preset values for each asbestos type
+    const presets = {
+      Chrysotile: {
+        morphology: "curly",
+        disintegrates: "no",
+        riLiquid: "1.55",
+        colour: "White",
+        pleochrism: "None",
+        birefringence: "low",
+        extinction: "complete",
+        signOfElongation: "Length-slow",
+        fibreParallel: "Blue",
+        fibrePerpendicular: "Magenta",
+        result: "Chrysotile Asbestos",
+      },
+      Amosite: {
+        morphology: "straight",
+        disintegrates: "no",
+        riLiquid: "1.67",
+        colour: "Brown",
+        pleochrism: "Low",
+        birefringence: "moderate",
+        extinction: "complete",
+        signOfElongation: "Length-slow",
+        fibreParallel: "Magenta",
+        fibrePerpendicular: "Yellow",
+        result: "Amosite Asbestos",
+      },
+      Crocidolite: {
+        morphology: "straight",
+        disintegrates: "no",
+        riLiquid: "1.70",
+        colour: "Blue",
+        pleochrism: "Low",
+        birefringence: "low",
+        extinction: "complete",
+        signOfElongation: "Length-fast",
+        fibreParallel: "Blue",
+        fibrePerpendicular: "Blue",
+        result: "Crocidolite Asbestos",
+      },
+    };
+
+    const preset = presets[AsbestosContent];
+    if (!preset) return;
+
+    // Update the fibre with the preset values
+    setFibres(
+      fibres.map((fibre) => {
+        if (fibre.id === selectedFibreId) {
+          return {
+            ...fibre,
+            ...preset,
+          };
+        }
+        return fibre;
+      })
+    );
+
+    handleAsbestosMenuClose();
+    showSnackbar(`${AsbestosContent} preset applied successfully!`, "success");
+  };
+
   const calculateFinalResult = () => {
+    // Check if trace analysis has been completed
+    if (traceAsbestos === "yes" && traceCount && traceAsbestosContent) {
+      // Determine result based on trace count
+      if (traceCount === "< 5 unequivocal") {
+        return "No asbestos detected";
+      } else if (traceCount === "5-19 unequivocal") {
+        return `Trace ${traceAsbestosContent} detected`;
+      } else if (traceCount === "20+ unequivocal <100 visible") {
+        return `Trace ${traceAsbestosContent} detected`;
+      } else if (traceCount === "100+ visible") {
+        return `${traceAsbestosContent} detected`;
+      }
+    }
+
+    // If no fibres detected checkbox is checked
+    if (noFibreDetected) {
+      return "No asbestos detected";
+    }
+
+    // If no fibres in the array
     if (fibres.length === 0) {
       return "No fibres Detected";
     }
@@ -281,21 +506,127 @@ const LDsuppliedAnalysisPage = () => {
     return uniqueResults.join(", ");
   };
 
+  const isMassDimensionsValid = () => {
+    if (sampleType === "mass") {
+      return sampleMass && sampleMass.trim() !== "";
+    } else if (sampleType === "dimensions") {
+      // At least one dimension must be filled
+      return (
+        (sampleDimensions.x && sampleDimensions.x.trim() !== "") ||
+        (sampleDimensions.y && sampleDimensions.y.trim() !== "") ||
+        (sampleDimensions.z && sampleDimensions.z.trim() !== "")
+      );
+    }
+    return false;
+  };
+
   const isAnalysisComplete = () => {
+    // Check sample description validation
+    if (!sampleDescription || !sampleDescription.trim()) {
+      return false;
+    }
+
+    // Check mass/dimensions validation
+    if (!isMassDimensionsValid()) {
+      return false;
+    }
+
+    if (noFibreDetected) {
+      return true; // No fibres detected means analysis is complete
+    }
     return (
       fibres.length > 0 &&
       fibres.every((fibre) => fibre.result && fibre.result.trim() !== "")
     );
   };
 
+  // Sampled items = first occurrence of each unique sampleReference (actual samples for analysis). Referred items (later items with same sampleReference) are excluded.
+  const { sampledItems, isSampledItem } = useMemo(() => {
+    if (!assessment?.items?.length) return { sampledItems: [], isSampledItem: () => false };
+    const items = assessment.items;
+    const isVA = (item) =>
+      item.asbestosContent === "Visually Assessed as Asbestos" ||
+      item.asbestosContent === "Visually Assessed as Non-Asbestos" ||
+      item.asbestosContent === "Visually Assessed as Non-asbestos";
+    // Include only the first item per unique sampleReference (the actual sample); referred items (same ref, later in list) are excluded
+    const sampled = items.filter((item, index) => {
+      if (!item.sampleReference?.trim()) return false;
+      if (isVA(item)) return false;
+      const ref = item.sampleReference.trim();
+      const firstIndexWithRef = items.findIndex((i) => (i.sampleReference || "").trim() === ref);
+      return index === firstIndexWithRef;
+    });
+    const sampledSet = new Set(sampled);
+    const isSampled = (item) => item && sampledSet.has(item);
+    return { sampledItems: sampled, isSampledItem: isSampled };
+  }, [assessment?.items]);
+
+  const areAllItemsAnalysed = () => {
+    if (!assessment || !assessment.items || assessment.items.length === 0) {
+      console.log("areAllItemsAnalysed: No assessment or items");
+      return false;
+    }
+
+    const items = assessment.items;
+
+    if (sampledItems.length === 0) {
+      console.log("areAllItemsAnalysed: No sampled items found");
+      return false;
+    }
+
+    // Check if all sampled items have been analysed
+    const itemsStatus = sampledItems.map((item) => ({
+      sampleRef: item.sampleReference,
+      hasAnalysisData: !!item.analysisData,
+      isAnalysed: item.analysisData?.isAnalysed,
+    }));
+    console.log("areAllItemsAnalysed check:", {
+      totalItems: items.length,
+      sampledItemsCount: sampledItems.length,
+      itemsStatus,
+    });
+    const allAnalysed = sampledItems.every(
+      (item) => item.analysisData && item.analysisData.isAnalysed === true
+    );
+    console.log("areAllItemsAnalysed result:", allAnalysed);
+    return allAnalysed;
+  };
+
   const handleSaveAnalysis = async () => {
     try {
       console.log("Starting to save analysis...");
 
-      // Check if analysis is complete (all fibres have results)
-      const isAnalysisComplete =
-        fibres.length > 0 &&
-        fibres.every((fibre) => fibre.result && fibre.result.trim() !== "");
+      // Validate sample description first
+      if (!sampleDescription || !sampleDescription.trim()) {
+        showSnackbar(
+          "Sample Description is required. Please enter a value before saving.",
+          "warning"
+        );
+        return;
+      }
+
+      // Validate analyst is required
+      if (!analyst || !String(analyst).trim()) {
+        showSnackbar(
+          "Analyst is required. Please select an analyst before saving.",
+          "warning"
+        );
+        return;
+      }
+
+      // Validate mass/dimensions
+      if (!isMassDimensionsValid()) {
+        const fieldName =
+          sampleType === "mass" ? "Sample Mass" : "Sample Dimensions";
+        showSnackbar(
+          `${fieldName} is required. Please enter a value before saving.`,
+          "warning"
+        );
+        return;
+      }
+
+      // Check if analysis is complete (all fibres have results or no fibres detected)
+      const analysisComplete = isAnalysisComplete();
 
       const analysisData = {
         microscope: noFibreDetected ? "N/A" : microscope,
@@ -306,19 +637,43 @@ const LDsuppliedAnalysisPage = () => {
         ashing,
         crucibleNo: ashing === "yes" ? crucibleNo : null,
         fibres: noFibreDetected ? [] : fibres, // Clear fibres array when no fibres detected
-        finalResult: noFibreDetected ? "No fibres detected" : finalResult,
-        isAnalysed: isAnalysisComplete,
-        analysedAt: analysisDate,
+        finalResult: finalResult,
+        traceAsbestos,
+        traceAsbestosContent:
+          traceAsbestos === "yes" ? traceAsbestosContent : null,
+        traceCount: traceAsbestos === "yes" ? traceCount : null,
+        comments: comments || null,
+        // Automatically mark as analysed when analysis is complete
+        isAnalysed: analysisComplete,
+        analysedAt: analysisComplete ? analysisDate : (assessmentItem?.analysisData?.analysedAt || null),
       };
 
+      // Get analyst user object if analyst is selected
+      let analystUser = null;
+      if (analyst) {
+        analystUser = analysts.find((a) => a._id === analyst);
+      }
+
+      console.log("Saving analysis - Analyst ID:", analyst);
+      console.log("Saving analysis - Analyst User:", analystUser);
+      console.log("Saving analysis - Analysis Complete:", analysisComplete);
+
       // Update the assessment item with analysis data
+      // Include analysedBy in the request body for the backend to use
+      const requestData = {
+        ...analysisData,
+        analysedBy: analyst || undefined,
+      };
+      console.log("Saving analysis - Request data:", { ...requestData, analysedBy: analyst });
+
       const response = await asbestosAssessmentService.updateItemAnalysis(
         assessmentId,
         itemNumber,
-        analysisData
+        requestData
       );
 
       console.log("Analysis saved successfully:", response);
+      console.log("Analysis saved - Response item analysedBy:", response.item?.analysedBy);
 
       // Update local state
       setAssessmentItem((prev) => ({
@@ -327,11 +682,46 @@ const LDsuppliedAnalysisPage = () => {
           ...prev.analysisData,
           ...analysisData,
         },
+        analysedBy: analystUser || prev.analysedBy,
+        analysedAt: analysisDate,
       }));
 
-      // Show success message and navigate back to jobs list
-      showSnackbar("Analysis saved successfully!", "success");
-      navigate("/laboratory-services/ld-supplied");
+      // Update the assessment state to reflect the item being analysed
+      setAssessment((prev) => {
+        if (!prev || !prev.items) return prev;
+        const itemIndex = parseInt(itemNumber) - 1;
+        return {
+          ...prev,
+          items: prev.items.map((item, index) => {
+            // Find the item by itemNumber or array index
+            const isTargetItem =
+              item.itemNumber === parseInt(itemNumber) ||
+              (itemIndex >= 0 && index === itemIndex);
+            
+            if (isTargetItem) {
+              return {
+                ...item,
+                analysisData: {
+                  ...item.analysisData,
+                  ...analysisData,
+                },
+                analysedBy: analystUser || item.analysedBy,
+                analysedAt: analysisDate,
+              };
+            }
+            return item;
+          }),
+        };
+      });
+
+      // Refresh assessment data to update the assessment state
+      await fetchAssessmentDetails();
+
+      // Show success message
+      const message = analysisComplete
+        ? "Analysis saved and marked as complete!"
+        : "Analysis saved successfully!";
+      showSnackbar(message, "success");
     } catch (error) {
       console.error("Error saving analysis:", error);
       console.error("Error details:", error.response?.data);
@@ -340,65 +730,6 @@ const LDsuppliedAnalysisPage = () => {
     }
   };
 
-  const handleMarkAsAnalysed = async () => {
-    try {
-      console.log("Marking item as analysed...");
-
-      // Check if analysis is complete (all fibres have results)
-      const isAnalysisComplete =
-        fibres.length > 0 &&
-        fibres.every((fibre) => fibre.result && fibre.result.trim() !== "");
-
-      if (!isAnalysisComplete) {
-        showSnackbar(
-          "Cannot mark as analysed: All fibres must have results first.",
-          "warning"
-        );
-        return;
-      }
-
-      // Create analysis data with current form values
-      const analysisData = {
-        microscope: noFibreDetected ? "N/A" : microscope,
-        sampleDescription,
-        sampleType,
-        sampleMass: sampleType === "mass" ? sampleMass : null,
-        sampleDimensions: sampleType === "dimensions" ? sampleDimensions : null,
-        ashing,
-        crucibleNo: ashing === "yes" ? crucibleNo : null,
-        fibres: noFibreDetected ? [] : fibres, // Clear fibres array when no fibres detected
-        finalResult: noFibreDetected ? "No fibres detected" : finalResult,
-        isAnalysed: true,
-        analysedAt: analysisDate,
-      };
-
-      // Update the assessment item with analysis data
-      const response = await asbestosAssessmentService.updateItemAnalysis(
-        assessmentId,
-        itemNumber,
-        analysisData
-      );
-
-      console.log("Item marked as analysed successfully:", response);
-
-      // Update local state
-      setAssessmentItem((prev) => ({
-        ...prev,
-        analysisData: {
-          ...prev.analysisData,
-          ...analysisData,
-        },
-      }));
-
-      // You could add a success notification here
-      showSnackbar("Item marked as analysed successfully!", "success");
-    } catch (error) {
-      console.error("Error marking item as analysed:", error);
-      console.error("Error details:", error.response?.data);
-      // You could add an error notification here
-      showSnackbar(`Error marking item as analysed: ${error.message}`, "error");
-    }
-  };
 
   const handleEditAnalysis = async () => {
     try {
@@ -414,7 +745,12 @@ const LDsuppliedAnalysisPage = () => {
         ashing,
         crucibleNo: ashing === "yes" ? crucibleNo : null,
         fibres: noFibreDetected ? [] : fibres, // Clear fibres array when no fibres detected
-        finalResult: noFibreDetected ? "No fibres detected" : finalResult,
+        finalResult: finalResult,
+        traceAsbestos,
+        traceAsbestosContent:
+          traceAsbestos === "yes" ? traceAsbestosContent : null,
+        traceCount: traceAsbestos === "yes" ? traceCount : null,
+        comments: comments || null,
         isAnalysed: false,
         analysedAt: null,
       };
@@ -437,6 +773,9 @@ const LDsuppliedAnalysisPage = () => {
         },
       }));
 
+      // Refresh assessment data to update the assessment state
+      await fetchAssessmentDetails();
+
       showSnackbar("Analysis is now editable!", "success");
     } catch (error) {
       console.error("Error setting item to editable mode:", error);
@@ -448,9 +787,43 @@ const LDsuppliedAnalysisPage = () => {
     }
   };
 
+  const handleFinaliseAnalysis = async () => {
+    try {
+      console.log("Finalising analysis and updating job status...");
+
+      // Check if all sampled items are analysed (using the same logic as areAllItemsAnalysed)
+      if (!areAllItemsAnalysed()) {
+        showSnackbar(
+          "Cannot finalise analysis: All sampled items must be analysed first.",
+          "warning"
+        );
+        return;
+      }
+
+      // Update the assessment status to "sample-analysis-complete"
+      await asbestosAssessmentService.updateAsbestosAssessment(assessmentId, {
+        ...assessment,
+        status: "sample-analysis-complete",
+      });
+
+      console.log("Analysis finalised successfully");
+
+      // Navigate back to L&D Supplied Jobs page
+      showSnackbar("Analysis finalised successfully! Job status updated.", "success");
+      navigate("/surveys/asbestos-assessment");
+    } catch (error) {
+      console.error("Error finalising analysis:", error);
+      console.error("Error details:", error.response?.data);
+      showSnackbar(
+        `Error finalising analysis: ${error.message}`,
+        "error"
+      );
+    }
+  };
+
   useEffect(() => {
     setFinalResult(calculateFinalResult());
-  }, [fibres]);
+  }, [fibres, traceAsbestos, traceAsbestosContent, traceCount, noFibreDetected]);
 
   useEffect(() => {
     if (noFibreDetected) {
@@ -483,10 +856,10 @@ const LDsuppliedAnalysisPage = () => {
           </Typography>
           <Button
             variant="outlined"
-            onClick={() => navigate("/laboratory-services")}
+            onClick={() => navigate("/surveys/asbestos-assessment")}
             sx={{ mt: 2, display: "block", mx: "auto" }}
           >
-            Return to Laboratory Services
+            Return to Asbestos Assessment
           </Button>
         </Box>
       </Container>
@@ -505,15 +878,7 @@ const LDsuppliedAnalysisPage = () => {
             sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
           >
             <ArrowBackIcon sx={{ mr: 1 }} />
-            Laboratory Services
-          </Link>
-          <Link
-            component="button"
-            variant="body1"
-            onClick={handleBackToJobs}
-            sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
-          >
-            L&D Supplied Jobs
+            Asbestos Assessment
           </Link>
           <Typography color="text.primary">
             {assessmentItem.sampleReference || `Item ${itemNumber}`}
@@ -526,6 +891,101 @@ const LDsuppliedAnalysisPage = () => {
             Fibre Analysis
           </Typography>
         </Box>
+
+        {/* Analyst and Analysis Date - Same Row */}
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          spacing={2}
+          alignItems="flex-start"
+          sx={{ mb: 2 }}
+        >
+          <FormControl sx={{ minWidth: 200 }} required error={!analyst?.trim()}>
+            <InputLabel>Analyst</InputLabel>
+            <Select
+              value={analyst || ""}
+              onChange={(e) => setAnalyst(e.target.value)}
+              label="Analyst *"
+              disabled={assessmentItem?.analysisData?.isAnalysed}
+            >
+              <MenuItem value="">
+                <em>Select Analyst</em>
+              </MenuItem>
+              {analysts.map((analystOption) => (
+                <MenuItem key={analystOption._id} value={analystOption._id}>
+                  {analystOption.firstName} {analystOption.lastName}
+                </MenuItem>
+              ))}
+            </Select>
+            {!analyst?.trim() && (
+              <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 1.5 }}>
+                Required
+              </Typography>
+            )}
+          </FormControl>
+          <TextField
+            type="date"
+            label="Analysis Date"
+            value={analysisDate.toISOString().split("T")[0]}
+            onChange={(e) => setAnalysisDate(new Date(e.target.value))}
+            disabled={assessmentItem?.analysisData?.isAnalysed}
+            InputLabelProps={{
+              shrink: true,
+            }}
+            sx={{ minWidth: 200 }}
+          />
+        </Stack>
+        {analysts.length === 0 && (
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            No analysts found - check lab approvals
+          </Typography>
+        )}
+
+        {/* Item Selection Dropdown - only show sampled items (exclude referred and visually assessed) */}
+        {assessment && assessment.items && assessment.items.length > 0 && (
+          <Box sx={{ mb: 3 }}>
+            <FormControl fullWidth sx={{ maxWidth: 400 }}>
+              <InputLabel>Select Item</InputLabel>
+              <Select
+                value={parseInt(itemNumber) || 1}
+                onChange={(e) => {
+                  const newItemNumber = e.target.value;
+                  navigate(`/fibre-id/assessment/${assessmentId}/item/${newItemNumber}/analysis`);
+                }}
+                label="Select Item"
+              >
+                {assessment.items.map((item, index) => {
+                  if (!isSampledItem(item)) return null;
+                  return (
+                    <MenuItem key={index} value={index + 1}>
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          width: "100%",
+                        }}
+                      >
+                        <Typography variant="body2">
+                          {item.sampleReference || `Item ${index + 1}`}
+                          {item.locationDescription &&
+                            ` - ${item.locationDescription}`}
+                        </Typography>
+                        {item.analysisData?.isAnalysed && (
+                          <Typography
+                            variant="body2"
+                            color="success.main"
+                            sx={{ ml: 1 }}
+                          >
+                            (Analysed)
+                          </Typography>
+                        )}
+                      </Box>
+                    </MenuItem>
+                  );
+                })}
+              </Select>
+            </FormControl>
+          </Box>
+        )}
       </Box>
 
       {/* Assessment Item Information Card */}
@@ -578,20 +1038,36 @@ const LDsuppliedAnalysisPage = () => {
       {/* Sample Details */}
       <Paper sx={{ mb: 2, p: 3 }}>
         <Grid container spacing={3}>
-          {/* Sample Description - Full Row */}
+          {/* Sample Description - Full Row (required, linked to Fibre ID Sample Descriptions custom data) */}
           <Grid item xs={12}>
-            <TextField
-              fullWidth
-              label="Sample Description"
+            <Autocomplete
               value={sampleDescription}
-              onChange={(e) => setSampleDescription(e.target.value)}
+              onChange={(event, newValue) =>
+                setSampleDescription(newValue ?? "")
+              }
+              onInputChange={(event, newInputValue) =>
+                setSampleDescription(newInputValue ?? "")
+              }
+              options={fibreIdSampleDescriptions.map((item) => item.text)}
+              freeSolo
               disabled={assessmentItem?.analysisData?.isAnalysed}
-              sx={{
-                "& .MuiInputBase-input.Mui-disabled": {
-                  backgroundColor: "#f5f5f5",
-                  color: "#666",
-                },
-              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Sample Description"
+                  required
+                  error={!sampleDescription.trim()}
+                  helperText={
+                    !sampleDescription.trim() ? "Required" : ""
+                  }
+                  sx={{
+                    "& .MuiInputBase-input.Mui-disabled": {
+                      backgroundColor: "#f5f5f5",
+                      color: "#666",
+                    },
+                  }}
+                />
+              )}
             />
           </Grid>
 
@@ -830,7 +1306,7 @@ const LDsuppliedAnalysisPage = () => {
                     {fibres.map((fibre, index) => (
                       <TableCell
                         key={fibre.id}
-                        align="center"
+                        align="left"
                         sx={{ width: "230px" }}
                       >
                         <Box
@@ -838,13 +1314,37 @@ const LDsuppliedAnalysisPage = () => {
                           alignItems="center"
                           justifyContent="space-between"
                         >
-                          <Typography
-                            variant="subtitle2"
-                            color="black"
-                            fontWeight="bold"
-                          >
-                            {fibre.name}
-                          </Typography>
+                          <Box display="flex" alignItems="center" gap={0.5}>
+                            <Typography
+                              variant="subtitle2"
+                              color="black"
+                              fontWeight="bold"
+                            >
+                              {fibre.name}
+                            </Typography>
+                            <IconButton
+                              size="small"
+                              onClick={(e) =>
+                                handleAsbestosMenuOpen(e, fibre.id)
+                              }
+                              disabled={assessmentItem?.analysisData?.isAnalysed}
+                              sx={{
+                                backgroundColor: "success.main",
+                                color: "white",
+                                width: 20,
+                                height: 20,
+                                "&:hover": {
+                                  backgroundColor: "success.main",
+                                },
+                                "&.Mui-disabled": {
+                                  backgroundColor: "rgba(0, 0, 0, 0.12)",
+                                  color: "rgba(0, 0, 0, 0.26)",
+                                },
+                              }}
+                            >
+                              <AddIcon sx={{ fontSize: 14 }} />
+                            </IconButton>
+                          </Box>
                           <Button
                             variant="outlined"
                             color="error"
@@ -874,7 +1374,7 @@ const LDsuppliedAnalysisPage = () => {
                     {fibres.map((fibre) => (
                       <TableCell
                         key={fibre.id}
-                        align="center"
+                        align="left"
                         sx={{ width: "230px" }}
                       >
                         <FormControl fullWidth size="small">
@@ -889,6 +1389,7 @@ const LDsuppliedAnalysisPage = () => {
                             }
                             size="small"
                             disabled={assessmentItem?.analysisData?.isAnalysed}
+                            sx={{ "& .MuiSelect-select": { textAlign: "left" } }}
                           >
                             <MenuItem value="curly">Curly</MenuItem>
                             <MenuItem value="straight">Straight</MenuItem>
@@ -911,7 +1412,7 @@ const LDsuppliedAnalysisPage = () => {
                     {fibres.map((fibre) => (
                       <TableCell
                         key={fibre.id}
-                        align="center"
+                        align="left"
                         sx={{ width: "230px" }}
                       >
                         <FormControl fullWidth size="small">
@@ -926,6 +1427,7 @@ const LDsuppliedAnalysisPage = () => {
                             }
                             size="small"
                             disabled={assessmentItem?.analysisData?.isAnalysed}
+                            sx={{ "& .MuiSelect-select": { textAlign: "left" } }}
                           >
                             <MenuItem value="yes">Yes</MenuItem>
                             <MenuItem value="no">No</MenuItem>
@@ -948,7 +1450,7 @@ const LDsuppliedAnalysisPage = () => {
                     {fibres.map((fibre) => (
                       <TableCell
                         key={fibre.id}
-                        align="center"
+                        align="left"
                         sx={{ width: "230px" }}
                       >
                         <FormControl fullWidth size="small">
@@ -963,6 +1465,7 @@ const LDsuppliedAnalysisPage = () => {
                               assessmentItem?.analysisData?.isAnalysed
                             }
                             sx={{
+                              "& .MuiSelect-select": { textAlign: "left" },
                               "& .MuiInputBase-input.Mui-disabled": {
                                 backgroundColor: "#f5f5f5",
                                 color: "#666",
@@ -992,7 +1495,7 @@ const LDsuppliedAnalysisPage = () => {
                     {fibres.map((fibre) => (
                       <TableCell
                         key={fibre.id}
-                        align="center"
+                        align="left"
                         sx={{ width: "230px" }}
                       >
                         <TextField
@@ -1007,6 +1510,7 @@ const LDsuppliedAnalysisPage = () => {
                             assessmentItem?.analysisData?.isAnalysed
                           }
                           sx={{
+                            "& .MuiInputBase-input": { textAlign: "left" },
                             "& .MuiInputBase-input.Mui-disabled": {
                               backgroundColor: "#f5f5f5",
                               color: "#666",
@@ -1030,7 +1534,7 @@ const LDsuppliedAnalysisPage = () => {
                     {fibres.map((fibre) => (
                       <TableCell
                         key={fibre.id}
-                        align="center"
+                        align="left"
                         sx={{ width: "230px" }}
                       >
                         <TextField
@@ -1046,6 +1550,7 @@ const LDsuppliedAnalysisPage = () => {
                           }
                           placeholder="None"
                           sx={{
+                            "& .MuiInputBase-input": { textAlign: "left" },
                             "& .MuiInputBase-input.Mui-disabled": {
                               backgroundColor: "#f5f5f5",
                               color: "#666",
@@ -1069,7 +1574,7 @@ const LDsuppliedAnalysisPage = () => {
                     {fibres.map((fibre) => (
                       <TableCell
                         key={fibre.id}
-                        align="center"
+                        align="left"
                         sx={{ width: "230px" }}
                       >
                         <FormControl fullWidth size="small">
@@ -1088,6 +1593,7 @@ const LDsuppliedAnalysisPage = () => {
                               assessmentItem?.analysisData?.isAnalysed
                             }
                             sx={{
+                              "& .MuiSelect-select": { textAlign: "left" },
                               "& .MuiInputBase-input.Mui-disabled": {
                                 backgroundColor: "#f5f5f5",
                                 color: "#666",
@@ -1117,7 +1623,7 @@ const LDsuppliedAnalysisPage = () => {
                     {fibres.map((fibre) => (
                       <TableCell
                         key={fibre.id}
-                        align="center"
+                        align="left"
                         sx={{ width: "230px" }}
                       >
                         <FormControl fullWidth size="small">
@@ -1136,6 +1642,7 @@ const LDsuppliedAnalysisPage = () => {
                               assessmentItem?.analysisData?.isAnalysed
                             }
                             sx={{
+                              "& .MuiSelect-select": { textAlign: "left" },
                               "& .MuiInputBase-input.Mui-disabled": {
                                 backgroundColor: "#f5f5f5",
                                 color: "#666",
@@ -1164,7 +1671,7 @@ const LDsuppliedAnalysisPage = () => {
                     {fibres.map((fibre) => (
                       <TableCell
                         key={fibre.id}
-                        align="center"
+                        align="left"
                         sx={{ width: "230px" }}
                       >
                         <FormControl fullWidth size="small">
@@ -1183,6 +1690,7 @@ const LDsuppliedAnalysisPage = () => {
                               assessmentItem?.analysisData?.isAnalysed
                             }
                             sx={{
+                              "& .MuiSelect-select": { textAlign: "left" },
                               "& .MuiInputBase-input.Mui-disabled": {
                                 backgroundColor: "#f5f5f5",
                                 color: "#666",
@@ -1213,7 +1721,7 @@ const LDsuppliedAnalysisPage = () => {
                     {fibres.map((fibre) => (
                       <TableCell
                         key={fibre.id}
-                        align="center"
+                        align="left"
                         sx={{ width: "230px" }}
                       >
                         <TextField
@@ -1232,6 +1740,7 @@ const LDsuppliedAnalysisPage = () => {
                             assessmentItem?.analysisData?.isAnalysed
                           }
                           sx={{
+                            "& .MuiInputBase-input": { textAlign: "left" },
                             "& .MuiInputBase-input.Mui-disabled": {
                               backgroundColor: "#f5f5f5",
                               color: "#666",
@@ -1255,7 +1764,7 @@ const LDsuppliedAnalysisPage = () => {
                     {fibres.map((fibre) => (
                       <TableCell
                         key={fibre.id}
-                        align="center"
+                        align="left"
                         sx={{ width: "230px" }}
                       >
                         <TextField
@@ -1274,6 +1783,7 @@ const LDsuppliedAnalysisPage = () => {
                             assessmentItem?.analysisData?.isAnalysed
                           }
                           sx={{
+                            "& .MuiInputBase-input": { textAlign: "left" },
                             "& .MuiInputBase-input.Mui-disabled": {
                               backgroundColor: "#f5f5f5",
                               color: "#666",
@@ -1297,7 +1807,7 @@ const LDsuppliedAnalysisPage = () => {
                     {fibres.map((fibre) => (
                       <TableCell
                         key={fibre.id}
-                        align="center"
+                        align="left"
                         sx={{ width: "230px" }}
                       >
                         <FormControl fullWidth size="small">
@@ -1309,6 +1819,7 @@ const LDsuppliedAnalysisPage = () => {
                             size="small"
                             placeholder="Select Result"
                             disabled={assessmentItem?.analysisData?.isAnalysed}
+                            sx={{ "& .MuiSelect-select": { textAlign: "left" } }}
                           >
                             <MenuItem value="">Select Result</MenuItem>
                             <MenuItem value="Chrysotile Asbestos">
@@ -1336,6 +1847,144 @@ const LDsuppliedAnalysisPage = () => {
         </Paper>
       )}
 
+      {/* Trace Analysis Box */}
+      <Paper sx={{ mb: 2, p: 3 }}>
+        <Typography variant="h6" gutterBottom sx={{ mb: 3 }}>
+          Trace Analysis (2 slides)
+        </Typography>
+        <Grid container spacing={3}>
+          <Grid item xs={12}>
+            <FormControl component="fieldset">
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Trace asbestos identified?
+              </Typography>
+              <RadioGroup
+                value={traceAsbestos}
+                onChange={(e) => {
+                  setTraceAsbestos(e.target.value);
+                  if (e.target.value === "no") {
+                    setTraceAsbestosContent("");
+                    setTraceCount("");
+                  }
+                }}
+                row
+                disabled={assessmentItem?.analysisData?.isAnalysed}
+              >
+                <FormControlLabel value="yes" control={<Radio />} label="Yes" />
+                <FormControlLabel value="no" control={<Radio />} label="No" />
+              </RadioGroup>
+            </FormControl>
+          </Grid>
+          {traceAsbestos === "yes" && (
+            <Grid item xs={12}>
+              <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>
+                Trace Fibre 1
+              </Typography>
+              <Grid container spacing={2} alignItems="center">
+                <Grid item xs={12} md={4}>
+                  <FormControl fullWidth>
+                    <InputLabel>Asbestos Content</InputLabel>
+                    <Select
+                      value={traceAsbestosContent}
+                      onChange={(e) => setTraceAsbestosContent(e.target.value)}
+                      label="Asbestos Content"
+                      disabled={assessmentItem?.analysisData?.isAnalysed}
+                    >
+                      <MenuItem value="Chrysotile Asbestos">
+                        Chrysotile Asbestos
+                      </MenuItem>
+                      <MenuItem value="Amosite Asbestos">
+                        Amosite Asbestos
+                      </MenuItem>
+                      <MenuItem value="Crocidolite Asbestos">
+                        Crocidolite Asbestos
+                      </MenuItem>
+                      <MenuItem value="Unidentified Mineral Fibre">
+                        Unidentified Mineral Fibre
+                      </MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} md={8}>
+                  <FormControl component="fieldset">
+                    <RadioGroup
+                      value={traceCount}
+                      onChange={(e) => setTraceCount(e.target.value)}
+                      row
+                      disabled={assessmentItem?.analysisData?.isAnalysed}
+                    >
+                      <FormControlLabel
+                        value="< 5 unequivocal"
+                        control={<Radio />}
+                        label="< 5 unequivocal"
+                        sx={{
+                          "& .MuiFormControlLabel-label": {
+                            fontSize: "0.875rem",
+                          },
+                        }}
+                      />
+                      <FormControlLabel
+                        value="5-19 unequivocal"
+                        control={<Radio />}
+                        label="5-19 unequivocal"
+                        sx={{
+                          "& .MuiFormControlLabel-label": {
+                            fontSize: "0.875rem",
+                          },
+                        }}
+                      />
+                      <FormControlLabel
+                        value="20+ unequivocal <100 visible"
+                        control={<Radio />}
+                        label="20+ unequivocal <100 visible"
+                        sx={{
+                          "& .MuiFormControlLabel-label": {
+                            fontSize: "0.875rem",
+                          },
+                        }}
+                      />
+                      <FormControlLabel
+                        value="100+ visible"
+                        control={<Radio />}
+                        label="100+ visible"
+                        sx={{
+                          "& .MuiFormControlLabel-label": {
+                            fontSize: "0.875rem",
+                          },
+                        }}
+                      />
+                    </RadioGroup>
+                  </FormControl>
+                </Grid>
+              </Grid>
+            </Grid>
+          )}
+        </Grid>
+      </Paper>
+
+      {/* Comments Box */}
+      <Paper sx={{ mb: 2, p: 3 }}>
+        <Typography variant="h6" gutterBottom sx={{ mb: 3 }}>
+          Comments
+        </Typography>
+        <TextField
+          fullWidth
+          label="Sample Comments"
+          value={comments}
+          onChange={(e) => setComments(e.target.value)}
+          multiline
+          rows={4}
+          placeholder="Enter any additional comments or notes about this sample..."
+          disabled={assessmentItem?.analysisData?.isAnalysed}
+          sx={{
+            "& .MuiInputBase-input.Mui-disabled": {
+              backgroundColor: "#f5f5f5",
+              color: "#666",
+            },
+          }}
+        />
+      </Paper>
+
       {/* Final Result Box */}
       <Paper sx={{ mb: 2, p: 3 }}>
         <Typography variant="h6" gutterBottom sx={{ mb: 3 }}>
@@ -1350,10 +1999,16 @@ const LDsuppliedAnalysisPage = () => {
           rows={3}
           placeholder={
             noFibreDetected
-              ? "No fibres detected"
+              ? "No asbestos detected"
+              : traceAsbestos === "yes" && traceCount && traceAsbestosContent
+              ? "Automatically calculated from trace analysis"
               : "Summary of all fibre analysis results"
           }
-          disabled={noFibreDetected || assessmentItem?.analysisData?.isAnalysed}
+          disabled={
+            noFibreDetected ||
+            assessmentItem?.analysisData?.isAnalysed ||
+            (traceAsbestos === "yes" && traceCount && traceAsbestosContent)
+          }
           sx={{
             "& .MuiInputBase-input.Mui-disabled": {
               backgroundColor: "#f5f5f5",
@@ -1371,7 +2026,7 @@ const LDsuppliedAnalysisPage = () => {
           alignItems: "center",
         }}
       >
-        {assessmentItem?.analysisData?.isAnalysed ? (
+        {assessmentItem?.analysisData?.isAnalysed && (
           <Button
             variant="outlined"
             color="error"
@@ -1380,28 +2035,59 @@ const LDsuppliedAnalysisPage = () => {
           >
             Edit Analysis
           </Button>
-        ) : (
-          <Button
-            variant="outlined"
-            color="success"
-            onClick={handleMarkAsAnalysed}
-            size="large"
-            disabled={!assessmentItem?.analysisData || !isAnalysisComplete()}
-          >
-            Mark as Analysed
-          </Button>
         )}
 
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={handleSaveAnalysis}
-          size="large"
-          disabled={assessmentItem?.analysisData?.isAnalysed}
-        >
-          Save Analysis
-        </Button>
+        <Box sx={{ display: "flex", gap: 2 }}>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={handleSaveAnalysis}
+            size="large"
+          >
+            Save Analysis
+          </Button>
+
+          <Button
+            variant="contained"
+            onClick={handleFinaliseAnalysis}
+            size="large"
+            disabled={
+              assessment?.status === "sample-analysis-complete" ||
+              !areAllItemsAnalysed()
+            }
+            sx={{
+              backgroundColor: "#3C4EC3",
+              color: "#fff",
+              "&:hover": {
+                backgroundColor: "#2d3a9e",
+              },
+              "&.Mui-disabled": {
+                backgroundColor: "rgba(0, 0, 0, 0.12)",
+                color: "rgba(0, 0, 0, 0.26)",
+              },
+            }}
+          >
+            Finalise Analysis
+          </Button>
+        </Box>
       </Box>
+
+      {/* Asbestos Preset Menu */}
+      <Menu
+        anchorEl={asbestosMenuAnchor}
+        open={Boolean(asbestosMenuAnchor)}
+        onClose={handleAsbestosMenuClose}
+      >
+        <MenuItem onClick={() => applyAsbestosPreset("Chrysotile")}>
+          Chrysotile Asbestos
+        </MenuItem>
+        <MenuItem onClick={() => applyAsbestosPreset("Amosite")}>
+          Amosite Asbestos
+        </MenuItem>
+        <MenuItem onClick={() => applyAsbestosPreset("Crocidolite")}>
+          Crocidolite Asbestos
+        </MenuItem>
+      </Menu>
     </Container>
   );
 };

@@ -1,5 +1,6 @@
 const ReportTemplate = require('../models/ReportTemplate');
 const mongoose = require('mongoose');
+const { generateRiskAssessmentTable } = require('../models/assessmentTemplates/RiskAssessmentTable');
 
 // Simple in-memory cache for user lookups during PDF generation
 const userLookupCache = new Map();
@@ -537,8 +538,8 @@ const replacePlaceholders = async (content, data) => {
     '[LAA_LICENCE]': laaLicenceNumber,
     '{LAA_LICENCE_STATE}': laaLicenceState,
     '[LAA_LICENCE_STATE]': laaLicenceState,
-    '{ASSESSMENT_DATE}': data.assessmentDate 
-      ? new Date(data.assessmentDate).toLocaleDateString('en-GB')
+    '{ASSESSMENT_DATE}': data.assessmentDate
+      ? new Date(data.assessmentDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
       : 'Unknown Date',
     '{ASSESSMENT_SCOPE_BULLETS}': data.assessmentScopeBullets || '<li>No areas specified</li>',
     '{ASSESSMENT_SCOPE}': (() => {
@@ -565,6 +566,42 @@ const replacePlaceholders = async (content, data) => {
     })(),
     '{IDENTIFIED_ASBESTOS_ITEMS}': data.identifiedAsbestosItems || '<li>No asbestos-containing materials identified</li>',
     '[IDENTIFIED_ASBESTOS_ITEMS]': data.identifiedAsbestosItems || '<li>No asbestos-containing materials identified</li>',
+    '{RISK_ASSESSMENT_TABLE}': generateRiskAssessmentTable(),
+    '[RISK_ASSESSMENT_TABLE]': generateRiskAssessmentTable(),
+    '{STATE}': data.state || '',
+    '[STATE]': data.state || '',
+    '{REGULATOR}': (() => {
+      const state = data.state;
+      if (state === 'ACT') return 'Worksafe ACT';
+      if (state === 'NSW') return 'Safework NSW';
+      return '';
+    })(),
+    '[REGULATOR]': (() => {
+      const state = data.state;
+      if (state === 'ACT') return 'Worksafe ACT';
+      if (state === 'NSW') return 'Safework NSW';
+      return '';
+    })(),
+    '{STATE_SPECIFIC_REMOVAL_RECS}': (() => {
+      const state = data.state;
+      if (state === 'ACT' || state === 'Commonwealth') {
+        return 'All asbestos removal must be undertaken as per the Work Health and Safety: How to Safely Remove Asbestos Code of Practice (2022) and in accordance with EPA (2011) Contaminated Sites Information Sheet No. 5 \'Requirements for the Transport and Disposal of Asbestos Contaminated Wastes\' and Information Sheet No.6 \'Management of Small Scale, Low Risk Soil Asbestos Contamination\'.';
+      }
+      if (state === 'NSW') {
+        return 'All asbestos removal must be undertaken as per the Work Health and Safety: How to Safely Remove Asbestos Code of Practice (2022).';
+      }
+      return '';
+    })(),
+    '[STATE_SPECIFIC_REMOVAL_RECS]': (() => {
+      const state = data.state;
+      if (state === 'ACT' || state === 'Commonwealth') {
+        return 'All asbestos removal must be undertaken as per the Work Health and Safety: How to Safely Remove Asbestos Code of Practice (2022) and in accordance with EPA (2011) Contaminated Sites Information Sheet No. 5 \'Requirements for the Transport and Disposal of Asbestos Contaminated Wastes\' and Information Sheet No.6 \'Management of Small Scale, Low Risk Soil Asbestos Contamination\'.';
+      }
+      if (state === 'NSW') {
+        return 'All asbestos removal must be undertaken as per the Work Health and Safety: How to Safely Remove Asbestos Code of Practice (2022).';
+      }
+      return '';
+    })(),
     '{INSPECTION_TIME}': (() => {
       if (data.inspectionTime) {
         const trimmedTime = data.inspectionTime.trim();
@@ -756,7 +793,7 @@ const replacePlaceholders = async (content, data) => {
       // If we have accumulated bullets, create the ul element first
       if (currentBulletList.length > 0) {
         const bulletItems = currentBulletList.map(content => `<li>${content}</li>`).join('');
-        processedLines.push(`<ul class="bullets">${bulletItems}</ul>`);
+        processedLines.push(`<ul class="bullet-list">${bulletItems}</ul>`);
         currentBulletList = [];
         inBulletBlock = false;
       }
@@ -768,7 +805,7 @@ const replacePlaceholders = async (content, data) => {
   // Handle any remaining bullets at the end
   if (currentBulletList.length > 0) {
     const bulletItems = currentBulletList.map(content => `<li>${content}</li>`).join('');
-    processedLines.push(`<ul class="bullets">${bulletItems}</ul>`);
+    processedLines.push(`<ul class="bullet-list">${bulletItems}</ul>`);
   }
   
   result = processedLines.join('');

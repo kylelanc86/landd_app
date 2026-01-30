@@ -1004,18 +1004,7 @@ const ClientSuppliedJobs = () => {
               Add New Job
             </Button>
           </Box>
-          <Breadcrumbs>
-            <Link
-              component="button"
-              variant="body1"
-              onClick={() => navigate("/laboratory-services")}
-              sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
-            >
-              <ArrowBackIcon sx={{ mr: 1 }} />
-              Laboratory Services
-            </Link>
-            <Typography color="text.primary">Client Supplied Jobs</Typography>
-          </Breadcrumbs>
+
         </Box>
 
         {/* Jobs Table */}

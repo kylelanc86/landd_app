@@ -606,11 +606,13 @@ const Sidebar = () => {
 
           <SectionDivider />
 
-          <Item
-            title="Laboratory Services"
-            to="/laboratory-services"
-            icon={<ScienceIcon />}
-          />
+          {isFeatureEnabled("ADVANCED.ASBESTOS_REMOVAL") && (
+            <Item
+              title="Client Supplied"
+              to="/client-supplied"
+              icon={<ContactsOutlinedIcon />}
+            />
+          )}
         </Box>
 
         <Box

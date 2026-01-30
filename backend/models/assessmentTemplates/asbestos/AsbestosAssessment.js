@@ -68,6 +68,10 @@ const AssessmentItemSchema = new mongoose.Schema({
       result: { type: String }
     }],
     finalResult: { type: String },
+    traceAsbestos: { type: String, enum: ["yes", "no"], default: "no" },
+    traceAsbestosContent: { type: String },
+    traceCount: { type: String },
+    comments: { type: String },
     analysedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     analysedAt: { type: Date },
     isAnalysed: { type: Boolean, default: false }
@@ -77,13 +81,17 @@ const AssessmentItemSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now },
 });
 
-// Pre-save hook to handle conditional validation for non-ACM items
+// Pre-save hook to handle conditional validation for visually assessed items
 AssessmentItemSchema.pre('validate', function(next) {
-  const isNonACM = this.asbestosContent === "Visually Assessed as Non-ACM";
+  const isVisuallyAssessedNonAsbestos = 
+    this.asbestosContent === "Visually Assessed as Non-asbestos" ||
+    this.asbestosContent === "Visually Assessed as Non-Asbestos";
+  const isVisuallyAssessedAsbestos = this.asbestosContent === "Visually Assessed as Asbestos";
+  const isVisuallyAssessed = isVisuallyAssessedNonAsbestos || isVisuallyAssessedAsbestos;
   
-  // For non-ACM items, these fields are not required
-  if (isNonACM) {
-    // Allow these fields to be null/empty for non-ACM items
+  // For visually assessed non-asbestos items, these fields are not required
+  if (isVisuallyAssessedNonAsbestos) {
+    // Allow these fields to be null/empty for visually assessed non-asbestos items
     if (this.sampleReference === "" || this.sampleReference === null || this.sampleReference === undefined) {
       this.sampleReference = null;
     }
@@ -96,8 +104,22 @@ AssessmentItemSchema.pre('validate', function(next) {
     if (this.risk === "" || this.risk === null || this.risk === undefined) {
       this.risk = null;
     }
+  } else if (isVisuallyAssessedAsbestos) {
+    // For visually assessed asbestos items, sampleReference is not required, but other fields are
+    if (this.sampleReference === "" || this.sampleReference === null || this.sampleReference === undefined) {
+      this.sampleReference = null;
+    }
+    if (!this.asbestosType || this.asbestosType.trim() === "") {
+      return next(new Error('Asbestos Type is required for visually assessed asbestos items'));
+    }
+    if (!this.condition || this.condition.trim() === "") {
+      return next(new Error('Condition is required for visually assessed asbestos items'));
+    }
+    if (!this.risk || this.risk.trim() === "") {
+      return next(new Error('Risk is required for visually assessed asbestos items'));
+    }
   } else {
-    // For ACM items, these fields are required
+    // For regular ACM items (with sample reference), all fields are required
     if (!this.sampleReference || this.sampleReference.trim() === "") {
       return next(new Error('Sample Reference is required for ACM items'));
     }
@@ -118,6 +140,8 @@ AssessmentItemSchema.pre('validate', function(next) {
 const AsbestosAssessmentSchema = new mongoose.Schema({
   projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true },
   assessorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  LAA: { type: String }, // Licensed Asbestos Assessor name
+  state: { type: String, enum: ['ACT', 'NSW', 'Commonwealth'] }, // State (ACT, NSW or Commonwealth)
   assessmentDate: { type: Date, required: true },
   status: { 
     type: String, 
@@ -128,9 +152,11 @@ const AsbestosAssessmentSchema = new mongoose.Schema({
   submittedBy: { type: String }, // Name of person who submitted samples to lab
   turnaroundTime: { type: String }, // Turnaround time for analysis (e.g., "3 day", "24 hours", or custom value)
   analysisDueDate: { type: Date }, // Date and time when analysis is due
+  analyst: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Analyst for all samples in this assessment
   items: [AssessmentItemSchema],
   assessmentScope: [{ type: String }], // Array of scope items for the assessment
   jobSpecificExclusions: { type: String }, // Job-specific exclusions/caveats for the assessment report
+  discussionConclusions: { type: String }, // Discussion and conclusions text for the assessment report
   analysisCertificate: { type: Boolean, default: false },
   analysisCertificateFile: { type: String },
   sitePlan: { type: Boolean, default: false },
@@ -156,6 +182,12 @@ const AsbestosAssessmentSchema = new mongoose.Schema({
     type: String,
   },
   fibreAnalysisReport: { type: String }, // Base64 PDF data for fibre analysis report
+  reportApprovedBy: { type: String }, // Name of person who approved the report
+  reportIssueDate: { type: Date }, // Date when report was issued/approved
+  reportAuthorisedBy: { type: String }, // Name of person who authorised the report
+  reportAuthorisedAt: { type: Date }, // Date when report was authorised
+  archived: { type: Boolean, default: false }, // When true, job is removed from the assessment table (completed)
+  revision: { type: Number, default: 0 }, // Report revision number
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });

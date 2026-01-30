@@ -2,10 +2,10 @@ const express = require('express');
 const router = express.Router();
 const AsbestosAssessment = require('../models/assessmentTemplates/asbestos/AsbestosAssessment');
 
-// GET /api/assessments - list all assessment jobs (populate project and assessor)
+// GET /api/assessments - list all assessment jobs (populate project and assessor); excludes archived
 router.get('/', async (req, res) => {
   try {
-    const jobs = await AsbestosAssessment.find()
+    const jobs = await AsbestosAssessment.find({ archived: { $ne: true } })
       .sort({ createdAt: -1 })
       .populate({
         path: "projectId",
@@ -29,7 +29,7 @@ router.post('/', async (req, res) => {
     if (!req.user || !req.user._id) {
       return res.status(401).json({ message: 'Not authenticated' });
     }
-    const { projectId, assessmentDate } = req.body;
+    const { projectId, assessmentDate, LAA, state } = req.body;
     if (!projectId || !assessmentDate) {
       return res.status(400).json({ message: 'projectId and assessmentDate are required' });
     }
@@ -37,6 +37,8 @@ router.post('/', async (req, res) => {
       projectId,
       assessorId: req.user._id,
       assessmentDate,
+      LAA: LAA || null,
+      state: state && ['ACT', 'NSW', 'Commonwealth'].includes(state) ? state : null,
     });
     await job.save();
     const populatedJob = await AsbestosAssessment.findById(job._id)
@@ -67,8 +69,64 @@ router.get('/:id', async (req, res) => {
           select: "name contact1Name contact1Email address"
         }
       })
-      .populate('assessorId');
+      .populate('assessorId')
+      .populate('analyst', 'firstName lastName email');
     if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+    
+    // Manually populate analysedBy for items (Mongoose doesn't support nested array population directly)
+    if (job.items && job.items.length > 0) {
+      const User = require('../models/User');
+      const userIds = [];
+      const itemMap = new Map();
+      
+      // Collect all user IDs that need to be populated
+      job.items.forEach((item, index) => {
+        if (item.analysedBy) {
+          let userId;
+          // Handle different types: ObjectId, string, or already populated object
+          if (typeof item.analysedBy === 'object' && item.analysedBy._id) {
+            // Already populated or has _id property
+            if (item.analysedBy.firstName) {
+              // Already populated, skip
+              return;
+            }
+            userId = item.analysedBy._id.toString();
+          } else if (item.analysedBy.toString) {
+            // It's an ObjectId
+            userId = item.analysedBy.toString();
+          } else if (typeof item.analysedBy === 'string') {
+            // It's already a string
+            userId = item.analysedBy;
+          } else {
+            // Unknown type, skip
+            return;
+          }
+          
+          if (userId && !userIds.includes(userId)) {
+            userIds.push(userId);
+          }
+          itemMap.set(index, userId);
+        }
+      });
+      
+      // Fetch all users at once
+      if (userIds.length > 0) {
+        try {
+          const users = await User.find({ _id: { $in: userIds } }).select('firstName lastName email');
+          const userMap = new Map(users.map(u => [u._id.toString(), u]));
+          
+          // Assign populated users back to items
+          itemMap.forEach((userId, itemIndex) => {
+            const user = userMap.get(userId);
+            if (user) {
+              job.items[itemIndex].analysedBy = user;
+            }
+          });
+        } catch (userError) {
+          console.error('Error populating analysedBy users:', userError);
+        }
+      }
+    }
     
     // Debug logging for fibre analysis report
     // console.log('=== ASSESSMENT FETCH DEBUG ===');
@@ -168,7 +226,20 @@ router.put('/:id', async (req, res) => {
       submittedBy,
       turnaroundTime,
       analysisDueDate,
-      jobSpecificExclusions
+      jobSpecificExclusions,
+      discussionConclusions,
+      sitePlan,
+      sitePlanFile,
+      sitePlanLegend,
+      sitePlanLegendTitle,
+      sitePlanFigureTitle,
+      sitePlanSource,
+      LAA,
+      state,
+      reportApprovedBy,
+      reportAuthorisedBy,
+      reportAuthorisedAt,
+      archived
     } = req.body;
     if (!projectId || !assessmentDate) {
       return res.status(400).json({ message: 'projectId and assessmentDate are required' });
@@ -177,9 +248,12 @@ router.put('/:id', async (req, res) => {
     const updateData = {
       projectId,
       assessmentDate,
-      status: status || 'in-progress',
       updatedAt: new Date()
     };
+    // Only update status when explicitly provided; otherwise preserve current value
+    if (status !== undefined) {
+      updateData.status = status;
+    }
     
     // Include assessmentScope if provided
     if (assessmentScope !== undefined) {
@@ -202,6 +276,33 @@ router.put('/:id', async (req, res) => {
     if (jobSpecificExclusions !== undefined) {
       updateData.jobSpecificExclusions = jobSpecificExclusions;
     }
+    if (discussionConclusions !== undefined) {
+      updateData.discussionConclusions = discussionConclusions;
+    }
+    if (sitePlan !== undefined) updateData.sitePlan = sitePlan;
+    if (sitePlanFile !== undefined) updateData.sitePlanFile = sitePlanFile;
+    if (sitePlanLegend !== undefined) updateData.sitePlanLegend = sitePlanLegend;
+    if (sitePlanLegendTitle !== undefined) updateData.sitePlanLegendTitle = sitePlanLegendTitle;
+    if (sitePlanFigureTitle !== undefined) updateData.sitePlanFigureTitle = sitePlanFigureTitle;
+    if (sitePlanSource !== undefined) updateData.sitePlanSource = sitePlanSource;
+    if (LAA !== undefined) {
+      updateData.LAA = LAA;
+    }
+    if (state !== undefined) {
+      updateData.state = state && ['ACT', 'NSW', 'Commonwealth'].includes(state) ? state : null;
+    }
+    if (reportApprovedBy !== undefined) {
+      updateData.reportApprovedBy = reportApprovedBy;
+    }
+    if (reportAuthorisedBy !== undefined) {
+      updateData.reportAuthorisedBy = reportAuthorisedBy;
+    }
+    if (reportAuthorisedAt !== undefined) {
+      updateData.reportAuthorisedAt = reportAuthorisedAt;
+    }
+    if (archived !== undefined) {
+      updateData.archived = archived;
+    }
     
     const job = await AsbestosAssessment.findByIdAndUpdate(
       req.params.id,
@@ -220,6 +321,27 @@ router.put('/:id', async (req, res) => {
     res.json(job);
   } catch (err) {
     res.status(400).json({ message: 'Failed to update assessment job', error: err.message });
+  }
+});
+
+// PATCH /api/assessments/:id/archive - mark assessment as complete (removes from table)
+router.patch('/:id/archive', async (req, res) => {
+  try {
+    const job = await AsbestosAssessment.findByIdAndUpdate(
+      req.params.id,
+      { archived: true, updatedAt: new Date() },
+      { new: true }
+    )
+      .populate({
+        path: "projectId",
+        select: "projectID name client",
+        populate: { path: "client", select: "name contact1Name contact1Email address" },
+      })
+      .populate('assessorId');
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+    res.json(job);
+  } catch (err) {
+    res.status(400).json({ message: 'Failed to archive assessment', error: err.message });
   }
 });
 
@@ -248,6 +370,10 @@ router.post('/:id/items', async (req, res) => {
   try {
     const job = await AsbestosAssessment.findById(req.params.id);
     if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+    const resetStatuses = ['site-works-complete', 'samples-with-lab', 'sample-analysis-complete'];
+    if (resetStatuses.includes(job.status)) {
+      job.status = 'in-progress';
+    }
     job.items.push(req.body);
     await job.save();
     res.status(201).json(job.items[job.items.length - 1]);
@@ -349,10 +475,12 @@ router.delete('/:id/items/:itemId', async (req, res) => {
     if (!job) return res.status(404).json({ message: 'Assessment job not found' });
     const item = job.items.id(req.params.itemId);
     if (!item) return res.status(404).json({ message: 'Item not found' });
-    item.remove();
+    // Use pull() to remove subdocument from array (recommended for Mongoose)
+    job.items.pull(req.params.itemId);
     await job.save();
     res.json({ message: 'Item deleted' });
   } catch (err) {
+    console.error('Error deleting item:', err);
     res.status(400).json({ message: 'Failed to delete item', error: err.message });
   }
 });
@@ -645,27 +773,71 @@ router.delete('/:id/site-plan', async (req, res) => {
 router.put('/:id/items/:itemNumber/analysis', async (req, res) => {
   try {
     const { id, itemNumber } = req.params;
-    const analysisData = req.body;
+    const requestData = req.body;
+    
+    // Extract analysedBy from request body if provided (it's not part of analysisData)
+    const requestedAnalystId = requestData.analysedBy;
+    
+    // Extract analysisData (everything except analysedBy)
+    const { analysedBy, ...analysisData } = requestData;
     
     const assessment = await AsbestosAssessment.findById(id);
     if (!assessment) {
       return res.status(404).json({ message: 'Assessment job not found' });
     }
     
-    // Find the specific item by itemNumber
-    const itemIndex = assessment.items.findIndex(item => item.itemNumber === parseInt(itemNumber));
+    // Find the specific item by itemNumber first, then fall back to array index
+    let itemIndex = assessment.items.findIndex(item => item.itemNumber === parseInt(itemNumber));
+    
+    // If not found by itemNumber, try by array index (itemNumber - 1 for 1-based indexing)
+    if (itemIndex === -1 && assessment.items && assessment.items.length > 0) {
+      const index = parseInt(itemNumber) - 1;
+      if (index >= 0 && index < assessment.items.length) {
+        itemIndex = index;
+      }
+    }
+    
     if (itemIndex === -1) {
       return res.status(404).json({ message: 'Assessment item not found' });
     }
     
     // Update the analysis data for the item
-    assessment.items[itemIndex].analysisData = {
+    // Respect the isAnalysed value from the request, or default to true if not provided
+    const isAnalysed = analysisData.isAnalysed !== undefined ? analysisData.isAnalysed : true;
+    
+    // Only set analysedBy and analysedAt if the analysis is marked as complete
+    const updateData = {
       ...assessment.items[itemIndex].analysisData,
       ...analysisData,
-      analysedBy: req.user._id,
-      analysedAt: new Date(),
-      isAnalysed: true
+      isAnalysed: isAnalysed
     };
+    
+    assessment.items[itemIndex].analysisData = updateData;
+    
+    // Set analysedBy and analysedAt on the item itself if analysis is complete
+    // Also set analyst at assessment level (for all samples)
+    // Use the analyst from the request body if provided, otherwise use the current user
+    const analystId = requestedAnalystId || req.user._id;
+    
+    if (isAnalysed) {
+      assessment.items[itemIndex].analysedBy = analystId;
+      assessment.items[itemIndex].analysedAt = analysisData.analysedAt ? new Date(analysisData.analysedAt) : new Date();
+      
+      // Set analyst at assessment level (for all samples in this job)
+      if (analystId) {
+        assessment.analyst = analystId;
+      }
+      
+      console.log('Backend - Setting analysedBy:', {
+        requestedAnalystId,
+        currentUserId: req.user._id,
+        finalAnalystId: assessment.items[itemIndex].analysedBy,
+        assessmentAnalyst: assessment.analyst,
+        isAnalysed
+      });
+    } else {
+      console.log('Backend - Not setting analysedBy because isAnalysed is false:', isAnalysed);
+    }
     
     // Update the item's updatedAt timestamp
     assessment.items[itemIndex].updatedAt = new Date();
@@ -679,9 +851,23 @@ router.put('/:id/items/:itemNumber/analysis', async (req, res) => {
     assessment.updatedAt = new Date();
     await assessment.save();
     
+    // Populate analysedBy before sending response
+    const responseItem = assessment.items[itemIndex].toObject();
+    if (responseItem.analysedBy) {
+      try {
+        const User = require('../models/User');
+        const user = await User.findById(responseItem.analysedBy).select('firstName lastName email');
+        if (user) {
+          responseItem.analysedBy = user;
+        }
+      } catch (populateError) {
+        console.error('Error populating analysedBy in response:', populateError);
+      }
+    }
+    
     res.json({ 
       message: 'Analysis data updated successfully', 
-      item: assessment.items[itemIndex],
+      item: responseItem,
       assessmentStatus: assessment.status
     });
     

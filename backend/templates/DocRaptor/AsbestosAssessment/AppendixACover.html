@@ -94,10 +94,10 @@
 
       .appendix-a-page .green-line {
         width: calc(100% - 96px);
-        height: 4px;
+        height: 1.5px;
         background: #16b12b;
         margin: 8px auto 0 auto;
-        border-radius: 2px;
+        border-radius: 0;
       }
 
       .watermark {
@@ -158,15 +158,22 @@
       }
 
       .appendix-a-page .footer-content {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+      }
+
+      .appendix-a-page .footer-text {
         flex: 1;
       }
 
-      .appendix-a-page .footer-line {
+      .appendix-a-page .footer-border-line {
         width: 100%;
-        height: 4px;
+        height: 1.5px;
         background: #16b12b;
         margin-bottom: 6px;
-        border-radius: 2px;
+        border-radius: 0;
       }
     </style>
   </head>
@@ -181,7 +188,7 @@
           Lancaster & Dickenson Consulting Pty Ltd<br />
           4/6 Dacre Street<br />
           Mitchell ACT 2911<br />
-          W: <span class="website">www.landd.com.au</span>
+          <span class="website">www.landd.com.au</span>
         </div>
       </div>
       <div class="green-line"></div>
@@ -192,9 +199,9 @@
         </div>
       </div>
       <div class="footer">
+        <div class="footer-border-line"></div>
         <div class="footer-content">
-          <div class="footer-line"></div>
-          Asbestos Assessment Report: [SITE_ADDRESS]
+          <div class="footer-text">Asbestos Assessment Report: [SITE_ADDRESS]</div>
         </div>
       </div>
     </div>
