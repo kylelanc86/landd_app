@@ -226,7 +226,7 @@ const ClientSuppliedJobs = () => {
       // Validate job type
       if (selectedJobType !== "Fibre ID" && selectedJobType !== "Fibre Count") {
         throw new Error(
-          "Invalid job type. Please select either 'Fibre ID' or 'Fibre Count'."
+          "Invalid job type. Please select either 'Fibre ID' or 'Fibre Count'.",
         );
       }
 
@@ -302,7 +302,9 @@ const ClientSuppliedJobs = () => {
       job.projectId?.client?.name
         ?.toLowerCase()
         .includes(searchTerm.toLowerCase()) ||
-      job.projectId?.projectID?.toLowerCase().includes(searchTerm.toLowerCase())
+      job.projectId?.projectID
+        ?.toLowerCase()
+        .includes(searchTerm.toLowerCase()),
   );
 
   const handleViewJob = (jobId) => {
@@ -348,8 +350,8 @@ const ClientSuppliedJobs = () => {
       // Update the local jobs state
       setJobs((prevJobs) =>
         prevJobs.map((job) =>
-          job._id === jobId ? { ...job, status: "Completed" } : job
-        )
+          job._id === jobId ? { ...job, status: "Completed" } : job,
+        ),
       );
 
       showSnackbar("Job completed successfully!", "success");
@@ -376,7 +378,7 @@ const ClientSuppliedJobs = () => {
 
       // Remove the job from the local state
       setJobs((prevJobs) =>
-        prevJobs.filter((job) => job._id !== jobToArchive._id)
+        prevJobs.filter((job) => job._id !== jobToArchive._id),
       );
 
       showSnackbar("Job archived successfully!", "success");
@@ -388,7 +390,7 @@ const ClientSuppliedJobs = () => {
         `Error archiving job: ${
           error.response?.data?.message || error.message
         }`,
-        "error"
+        "error",
       );
     }
   };
@@ -413,7 +415,7 @@ const ClientSuppliedJobs = () => {
       console.error("Error closing job:", error);
       showSnackbar(
         `Error closing job: ${error.response?.data?.message || error.message}`,
-        "error"
+        "error",
       );
     } finally {
       setClosingJobs((prev) => ({ ...prev, [jobId]: false }));
@@ -460,7 +462,7 @@ const ClientSuppliedJobs = () => {
   const generateCOCFilename = (file, job) => {
     // Get project ID
     const projectID = job?.projectId?.projectID || "UNKNOWN";
-    
+
     // Get sample receipt date and format it (dd-mm-yyyy for filename)
     let dateStr = "";
     if (job?.sampleReceiptDate) {
@@ -472,7 +474,7 @@ const ClientSuppliedJobs = () => {
     } else {
       dateStr = "NO-DATE";
     }
-    
+
     // Get file extension from original file name, or derive from MIME type
     let fileExtension = "";
     if (file.name && file.name.includes(".")) {
@@ -488,7 +490,7 @@ const ClientSuppliedJobs = () => {
       };
       fileExtension = mimeToExt[file.type] || "file";
     }
-    
+
     // Generate filename: {ProjectID}-Chain of Custody-{SampleReceiptDate}.{ext}
     return `${projectID}-Chain of Custody-${dateStr}.${fileExtension}`;
   };
@@ -508,7 +510,7 @@ const ClientSuppliedJobs = () => {
     if (!validTypes.includes(file.type)) {
       showSnackbar(
         "Please upload a PDF or image file (JPEG, PNG, WEBP)",
-        "error"
+        "error",
       );
       return;
     }
@@ -518,7 +520,7 @@ const ClientSuppliedJobs = () => {
     if (file.size > maxSizeMB * 1024 * 1024) {
       showSnackbar(
         `File size exceeds ${maxSizeMB}MB. Please choose a smaller file.`,
-        "error"
+        "error",
       );
       return;
     }
@@ -529,7 +531,7 @@ const ClientSuppliedJobs = () => {
 
       // Get the job to access project ID and sample receipt date
       const job = selectedJobForCOC || jobs.find((j) => j._id === jobId);
-      
+
       // Generate filename using naming convention
       const fileName = generateCOCFilename(file, job);
 
@@ -641,7 +643,7 @@ const ClientSuppliedJobs = () => {
           sample.analysedAt
         );
       });
-      
+
       // Also require that the job status is "Analysis Complete" (finalized)
       return allSamplesAnalysed && job.status === "Analysis Complete";
     }
@@ -693,7 +695,8 @@ const ClientSuppliedJobs = () => {
         // Transform samples to match the format expected by generateFibreIDReport
         const sampleItemsForReport = sampleItems
           .filter(
-            (item) => item.analysisData && item.analysisData.isAnalysed === true
+            (item) =>
+              item.analysisData && item.analysisData.isAnalysed === true,
           )
           .map((item, index) => ({
             itemNumber: index + 1,
@@ -817,7 +820,7 @@ const ClientSuppliedJobs = () => {
         console.error("Error generating approved report:", reportError);
         showSnackbar(
           "Report approved but failed to generate download.",
-          "warning"
+          "warning",
         );
       }
     } catch (error) {
@@ -837,14 +840,14 @@ const ClientSuppliedJobs = () => {
           `Approval request emails sent successfully to ${
             response.data?.recipients?.length || 0
           } signatory user(s)`,
-        "success"
+        "success",
       );
     } catch (error) {
       console.error("Error sending approval request emails:", error);
       showSnackbar(
         error.response?.data?.message ||
           "Failed to send approval request emails. Please try again.",
-        "error"
+        "error",
       );
     } finally {
       setSendingApprovalEmails((prev) => ({ ...prev, [job._id]: false }));
@@ -865,13 +868,13 @@ const ClientSuppliedJobs = () => {
         await handleGeneratePDF(job);
         showSnackbar(
           "Report authorised and downloaded successfully.",
-          "success"
+          "success",
         );
       } catch (reportError) {
         console.error("Error generating authorised report:", reportError);
         showSnackbar(
           "Report authorised but failed to generate download.",
-          "warning"
+          "warning",
         );
       }
     } catch (error) {
@@ -887,22 +890,22 @@ const ClientSuppliedJobs = () => {
       setSendingAuthorisationRequests((prev) => ({ ...prev, [job._id]: true }));
 
       const response = await clientSuppliedJobsService.sendForAuthorisation(
-        job._id
+        job._id,
       );
 
       showSnackbar(
         response.data?.message ||
           `Authorisation request emails sent successfully to ${
             response.data?.recipients?.length || 0
-          } report proofer user(s)`,
-        "success"
+          } lab signatory user(s)`,
+        "success",
       );
     } catch (error) {
       console.error("Error sending authorisation request emails:", error);
       showSnackbar(
         error.response?.data?.message ||
           "Failed to send authorisation request emails. Please try again.",
-        "error"
+        "error",
       );
     } finally {
       setSendingAuthorisationRequests((prev) => ({
@@ -1071,8 +1074,8 @@ const ClientSuppliedJobs = () => {
                             job.jobType === "Fibre ID"
                               ? "primary"
                               : job.jobType === "Fibre Count"
-                              ? "secondary"
-                              : "default"
+                                ? "secondary"
+                                : "default"
                           }
                           size="small"
                           variant="outlined"
@@ -1088,7 +1091,7 @@ const ClientSuppliedJobs = () => {
                           <Typography variant="body2">
                             {job.sampleReceiptDate
                               ? new Date(
-                                  job.sampleReceiptDate
+                                  job.sampleReceiptDate,
                                 ).toLocaleDateString("en-GB")
                               : "N/A"}
                           </Typography>
@@ -1164,14 +1167,14 @@ const ClientSuppliedJobs = () => {
                               reportViewed: reportViewedJobIds.has(job._id),
                               hasAdminPermission: hasPermission(
                                 currentUser,
-                                "admin.view"
+                                "admin.view",
                               ),
                               hasEditPermission: hasPermission(
                                 currentUser,
-                                "clientSup.edit"
+                                "clientSup.edit",
                               ),
-                              isReportProofer: Boolean(
-                                currentUser?.reportProofer
+                              isLabSignatory: Boolean(
+                                currentUser?.labSignatory,
                               ),
                             };
                             const baseVisible =
@@ -1179,11 +1182,11 @@ const ClientSuppliedJobs = () => {
                             const visibility = {
                               showAuthorise:
                                 baseVisible &&
-                                conditions.hasAdminPermission &&
-                                conditions.isReportProofer,
+                                conditions.isLabSignatory &&
+                                conditions.hasEditPermission,
                               showSend:
                                 baseVisible &&
-                                !conditions.isReportProofer &&
+                                !conditions.isLabSignatory &&
                                 conditions.hasEditPermission,
                             };
                             return (
@@ -1447,7 +1450,7 @@ const ClientSuppliedJobs = () => {
                           option.name?.toLowerCase().includes(filterValue) ||
                           option.client?.name
                             ?.toLowerCase()
-                            .includes(filterValue)
+                            .includes(filterValue),
                       );
 
                       return filtered;
@@ -1754,7 +1757,7 @@ const ClientSuppliedJobs = () => {
               <br />
               {selectedJobForCOC?.chainOfCustody?.uploadedAt &&
                 `Uploaded: ${new Date(
-                  selectedJobForCOC.chainOfCustody.uploadedAt
+                  selectedJobForCOC.chainOfCustody.uploadedAt,
                 ).toLocaleString("en-GB")}`}
             </Typography>
 
@@ -1801,8 +1804,8 @@ const ClientSuppliedJobs = () => {
                   {uploadingCOC[selectedJobForCOC?._id]
                     ? "Uploading..."
                     : selectedJobForCOC?.chainOfCustody
-                    ? "Replace"
-                    : "Upload File"}
+                      ? "Replace"
+                      : "Upload File"}
                 </Button>
                 <Button
                   variant="outlined"
@@ -1821,7 +1824,7 @@ const ClientSuppliedJobs = () => {
                 <Box sx={{ flex: 1, minWidth: "220px" }}>
                   {/* Preview COC if it's an image */}
                   {selectedJobForCOC.chainOfCustody.fileType?.startsWith(
-                    "image/"
+                    "image/",
                   ) && (
                     <Box
                       sx={{
@@ -1950,7 +1953,7 @@ const ClientSuppliedJobs = () => {
             }}
           >
             {selectedJobForCOC?.chainOfCustody?.fileType?.startsWith(
-              "image/"
+              "image/",
             ) && (
               <img
                 src={selectedJobForCOC.chainOfCustody.data}

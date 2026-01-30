@@ -211,15 +211,15 @@ router.post('/:id/send-for-authorisation', auth, checkPermission(['projects.edit
       });
     }
 
-    // Get all users with report proofer approval
-    const reportProoferUsers = await User.find({
-      reportProofer: true,
+    // Get all users with lab signatory approval (IAQ authorisation is done by lab signatories)
+    const labSignatoryUsers = await User.find({
+      labSignatory: true,
       isActive: true
     }).select('firstName lastName email');
 
-    if (reportProoferUsers.length === 0) {
+    if (labSignatoryUsers.length === 0) {
       return res.status(400).json({
-        message: 'No report proofer users found'
+        message: 'No lab signatory users found'
       });
     }
 
@@ -237,8 +237,8 @@ router.post('/:id/send-for-authorisation', auth, checkPermission(['projects.edit
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
     const recordUrl = `${frontendUrl}/records/indoor-air-quality`;
 
-    // Send email to all report proofer users
-    const emailPromises = reportProoferUsers.map(async (user) => {
+    // Send email to all lab signatory users
+    const emailPromises = labSignatoryUsers.map(async (user) => {
       try {
         await sendMail({
           to: user.email,
@@ -287,7 +287,7 @@ Please review and authorise the report at: ${recordUrl}
     const failed = emailResults.filter(r => !r.success);
 
     res.json({
-      message: `Authorisation request emails sent to ${successful.length} of ${reportProoferUsers.length} report proofer user(s)`,
+      message: `Authorisation request emails sent to ${successful.length} of ${labSignatoryUsers.length} lab signatory user(s)`,
       recipients: successful.map(r => r.email),
       failed: failed.map(r => ({ email: r.email, error: r.error }))
     });
