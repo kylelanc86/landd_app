@@ -35,6 +35,13 @@ const clientSuppliedJobSchema = new mongoose.Schema({
     type: Date,
     required: true
   },
+  turnaroundTime: {
+    type: String,
+    trim: true
+  },
+  analysisDueDate: {
+    type: Date
+  },
   archived: {
     type: Boolean,
     default: false

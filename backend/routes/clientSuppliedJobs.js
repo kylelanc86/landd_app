@@ -90,9 +90,9 @@ router.get('/:id', auth, checkPermission('clientSup.view'), async (req, res) => 
 // POST /api/client-supplied-jobs - create new job
 router.post('/', auth, checkPermission('clientSup.create'), async (req, res) => {
   try {
-    const { projectId, jobType, sampleReceiptDate, sampleCount } = req.body;
+    const { projectId, jobType, sampleReceiptDate, sampleCount, turnaroundTime, analysisDueDate } = req.body;
     
-    console.log('Creating client supplied job with data:', { projectId, jobType, sampleReceiptDate, sampleCount });
+    console.log('Creating client supplied job with data:', { projectId, jobType, sampleReceiptDate, sampleCount, turnaroundTime, analysisDueDate });
     
     if (!projectId) {
       return res.status(400).json({ 
@@ -154,6 +154,19 @@ router.post('/', auth, checkPermission('clientSup.create'), async (req, res) => 
       jobData.sampleCount = count;
     }
     // If not provided, the model default (0) will be used
+
+    // Add turnaround time if provided
+    if (turnaroundTime !== undefined && turnaroundTime !== null && String(turnaroundTime).trim() !== '') {
+      jobData.turnaroundTime = String(turnaroundTime).trim();
+    }
+
+    // Add analysis due date if provided
+    if (analysisDueDate) {
+      const dueDate = new Date(analysisDueDate);
+      if (!isNaN(dueDate.getTime())) {
+        jobData.analysisDueDate = dueDate;
+      }
+    }
     
     console.log('Creating job with data:', jobData);
     

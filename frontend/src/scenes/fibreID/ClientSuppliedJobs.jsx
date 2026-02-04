@@ -51,6 +51,26 @@ import { useAuth } from "../../context/AuthContext";
 import { hasPermission } from "../../config/permissions";
 import { compressImage } from "../../utils/imageCompression";
 import { getTodayInSydney } from "../../utils/dateUtils";
+import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
+import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
+import { format } from "date-fns";
+
+/**
+ * Add business days to a date, skipping weekends (Saturday and Sunday).
+ */
+const addBusinessDays = (date, businessDays) => {
+  const result = new Date(date);
+  let added = 0;
+  while (added < businessDays) {
+    result.setDate(result.getDate() + 1);
+    const dayOfWeek = result.getDay();
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      added++;
+    }
+  }
+  return result;
+};
 
 const ClientSuppliedJobs = () => {
   const navigate = useNavigate();
@@ -90,6 +110,9 @@ const ClientSuppliedJobs = () => {
   const [editSampleReceiptDateError, setEditSampleReceiptDateError] =
     useState(false);
   const [updatingDate, setUpdatingDate] = useState(false);
+  const [turnaroundTime, setTurnaroundTime] = useState("");
+  const [analysisDueDate, setAnalysisDueDate] = useState(new Date());
+  const [showCustomTurnaround, setShowCustomTurnaround] = useState(false);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
 
@@ -214,6 +237,15 @@ const ClientSuppliedJobs = () => {
       return;
     }
 
+    if (!turnaroundTime && !showCustomTurnaround) {
+      showSnackbar("Please select a turnaround time", "error");
+      return;
+    }
+    if (showCustomTurnaround && !analysisDueDate) {
+      showSnackbar("Please select an analysis due date", "error");
+      return;
+    }
+
     try {
       setSampleReceiptDateError(false);
       setCreatingJob(true);
@@ -226,7 +258,7 @@ const ClientSuppliedJobs = () => {
       // Validate job type
       if (selectedJobType !== "Fibre ID" && selectedJobType !== "Fibre Count") {
         throw new Error(
-          "Invalid job type. Please select either 'Fibre ID' or 'Fibre Count'."
+          "Invalid job type. Please select either 'Fibre ID' or 'Fibre Count'.",
         );
       }
 
@@ -238,6 +270,18 @@ const ClientSuppliedJobs = () => {
       // Add sample receipt date if provided (and not empty)
       if (sampleReceiptDate && sampleReceiptDate.trim() !== "") {
         jobData.sampleReceiptDate = sampleReceiptDate;
+      }
+
+      const finalTurnaroundTime = showCustomTurnaround
+        ? "custom"
+        : turnaroundTime;
+      if (finalTurnaroundTime) {
+        jobData.turnaroundTime = finalTurnaroundTime;
+      }
+      if (analysisDueDate) {
+        jobData.analysisDueDate = analysisDueDate.toISOString
+          ? analysisDueDate.toISOString()
+          : new Date(analysisDueDate).toISOString();
       }
 
       // Explicitly do NOT include sampleCount - it's calculated from samples array
@@ -257,6 +301,9 @@ const ClientSuppliedJobs = () => {
       setSelectedJobType("");
       setSampleReceiptDate("");
       setSampleReceiptDateError(false);
+      setTurnaroundTime("");
+      setAnalysisDueDate(new Date());
+      setShowCustomTurnaround(false);
     } catch (error) {
       console.error("Error creating client supplied job:", error);
       const errorMessage =
@@ -302,7 +349,9 @@ const ClientSuppliedJobs = () => {
       job.projectId?.client?.name
         ?.toLowerCase()
         .includes(searchTerm.toLowerCase()) ||
-      job.projectId?.projectID?.toLowerCase().includes(searchTerm.toLowerCase())
+      job.projectId?.projectID
+        ?.toLowerCase()
+        .includes(searchTerm.toLowerCase()),
   );
 
   const handleViewJob = (jobId) => {
@@ -337,6 +386,23 @@ const ClientSuppliedJobs = () => {
     }
   };
 
+  /** Returns "Xd Yh", "Overdue Xd Yh", or "—" when no due date. */
+  const getAnalysisDueText = (analysisDueDate) => {
+    if (!analysisDueDate) return "—";
+    const due = new Date(analysisDueDate);
+    if (isNaN(due.getTime())) return "—";
+    const now = new Date();
+    const diffMs = due.getTime() - now.getTime();
+    const totalHours = Math.floor(Math.abs(diffMs) / (1000 * 60 * 60));
+    const days = Math.floor(totalHours / 24);
+    const hours = totalHours % 24;
+    const parts = [];
+    if (days > 0) parts.push(`${days}d`);
+    parts.push(`${hours}h`);
+    const timeStr = parts.join(" ");
+    return diffMs < 0 ? `Overdue ${timeStr}` : timeStr;
+  };
+
   const handleCompleteJob = async (jobId) => {
     try {
       setCompletingJobs((prev) => ({ ...prev, [jobId]: true }));
@@ -348,8 +414,8 @@ const ClientSuppliedJobs = () => {
       // Update the local jobs state
       setJobs((prevJobs) =>
         prevJobs.map((job) =>
-          job._id === jobId ? { ...job, status: "Completed" } : job
-        )
+          job._id === jobId ? { ...job, status: "Completed" } : job,
+        ),
       );
 
       showSnackbar("Job completed successfully!", "success");
@@ -376,7 +442,7 @@ const ClientSuppliedJobs = () => {
 
       // Remove the job from the local state
       setJobs((prevJobs) =>
-        prevJobs.filter((job) => job._id !== jobToArchive._id)
+        prevJobs.filter((job) => job._id !== jobToArchive._id),
       );
 
       showSnackbar("Job archived successfully!", "success");
@@ -388,7 +454,7 @@ const ClientSuppliedJobs = () => {
         `Error archiving job: ${
           error.response?.data?.message || error.message
         }`,
-        "error"
+        "error",
       );
     }
   };
@@ -413,7 +479,7 @@ const ClientSuppliedJobs = () => {
       console.error("Error closing job:", error);
       showSnackbar(
         `Error closing job: ${error.response?.data?.message || error.message}`,
-        "error"
+        "error",
       );
     } finally {
       setClosingJobs((prev) => ({ ...prev, [jobId]: false }));
@@ -460,7 +526,7 @@ const ClientSuppliedJobs = () => {
   const generateCOCFilename = (file, job) => {
     // Get project ID
     const projectID = job?.projectId?.projectID || "UNKNOWN";
-    
+
     // Get sample receipt date and format it (dd-mm-yyyy for filename)
     let dateStr = "";
     if (job?.sampleReceiptDate) {
@@ -472,7 +538,7 @@ const ClientSuppliedJobs = () => {
     } else {
       dateStr = "NO-DATE";
     }
-    
+
     // Get file extension from original file name, or derive from MIME type
     let fileExtension = "";
     if (file.name && file.name.includes(".")) {
@@ -488,7 +554,7 @@ const ClientSuppliedJobs = () => {
       };
       fileExtension = mimeToExt[file.type] || "file";
     }
-    
+
     // Generate filename: {ProjectID}-Chain of Custody-{SampleReceiptDate}.{ext}
     return `${projectID}-Chain of Custody-${dateStr}.${fileExtension}`;
   };
@@ -508,7 +574,7 @@ const ClientSuppliedJobs = () => {
     if (!validTypes.includes(file.type)) {
       showSnackbar(
         "Please upload a PDF or image file (JPEG, PNG, WEBP)",
-        "error"
+        "error",
       );
       return;
     }
@@ -518,7 +584,7 @@ const ClientSuppliedJobs = () => {
     if (file.size > maxSizeMB * 1024 * 1024) {
       showSnackbar(
         `File size exceeds ${maxSizeMB}MB. Please choose a smaller file.`,
-        "error"
+        "error",
       );
       return;
     }
@@ -529,7 +595,7 @@ const ClientSuppliedJobs = () => {
 
       // Get the job to access project ID and sample receipt date
       const job = selectedJobForCOC || jobs.find((j) => j._id === jobId);
-      
+
       // Generate filename using naming convention
       const fileName = generateCOCFilename(file, job);
 
@@ -641,7 +707,7 @@ const ClientSuppliedJobs = () => {
           sample.analysedAt
         );
       });
-      
+
       // Also require that the job status is "Analysis Complete" (finalized)
       return allSamplesAnalysed && job.status === "Analysis Complete";
     }
@@ -693,7 +759,8 @@ const ClientSuppliedJobs = () => {
         // Transform samples to match the format expected by generateFibreIDReport
         const sampleItemsForReport = sampleItems
           .filter(
-            (item) => item.analysisData && item.analysisData.isAnalysed === true
+            (item) =>
+              item.analysisData && item.analysisData.isAnalysed === true,
           )
           .map((item, index) => ({
             itemNumber: index + 1,
@@ -817,7 +884,7 @@ const ClientSuppliedJobs = () => {
         console.error("Error generating approved report:", reportError);
         showSnackbar(
           "Report approved but failed to generate download.",
-          "warning"
+          "warning",
         );
       }
     } catch (error) {
@@ -837,14 +904,14 @@ const ClientSuppliedJobs = () => {
           `Approval request emails sent successfully to ${
             response.data?.recipients?.length || 0
           } signatory user(s)`,
-        "success"
+        "success",
       );
     } catch (error) {
       console.error("Error sending approval request emails:", error);
       showSnackbar(
         error.response?.data?.message ||
           "Failed to send approval request emails. Please try again.",
-        "error"
+        "error",
       );
     } finally {
       setSendingApprovalEmails((prev) => ({ ...prev, [job._id]: false }));
@@ -865,13 +932,13 @@ const ClientSuppliedJobs = () => {
         await handleGeneratePDF(job);
         showSnackbar(
           "Report authorised and downloaded successfully.",
-          "success"
+          "success",
         );
       } catch (reportError) {
         console.error("Error generating authorised report:", reportError);
         showSnackbar(
           "Report authorised but failed to generate download.",
-          "warning"
+          "warning",
         );
       }
     } catch (error) {
@@ -887,7 +954,7 @@ const ClientSuppliedJobs = () => {
       setSendingAuthorisationRequests((prev) => ({ ...prev, [job._id]: true }));
 
       const response = await clientSuppliedJobsService.sendForAuthorisation(
-        job._id
+        job._id,
       );
 
       showSnackbar(
@@ -895,14 +962,14 @@ const ClientSuppliedJobs = () => {
           `Authorisation request emails sent successfully to ${
             response.data?.recipients?.length || 0
           } report proofer user(s)`,
-        "success"
+        "success",
       );
     } catch (error) {
       console.error("Error sending authorisation request emails:", error);
       showSnackbar(
         error.response?.data?.message ||
           "Failed to send authorisation request emails. Please try again.",
-        "error"
+        "error",
       );
     } finally {
       setSendingAuthorisationRequests((prev) => ({
@@ -1004,7 +1071,6 @@ const ClientSuppliedJobs = () => {
               Add New Job
             </Button>
           </Box>
-
         </Box>
 
         {/* Jobs Table */}
@@ -1026,6 +1092,9 @@ const ClientSuppliedJobs = () => {
                     Sample Receipt Date
                   </TableCell>
                   <TableCell sx={{ fontWeight: "bold" }}>Status</TableCell>
+                  <TableCell sx={{ fontWeight: "bold", minWidth: "100px" }}>
+                    Analysis Due
+                  </TableCell>
                   <TableCell sx={{ fontWeight: "bold", minWidth: "290px" }}>
                     Actions
                   </TableCell>
@@ -1034,13 +1103,13 @@ const ClientSuppliedJobs = () => {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={6} align="center">
+                    <TableCell colSpan={7} align="center">
                       Loading jobs...
                     </TableCell>
                   </TableRow>
                 ) : filteredJobs.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} align="center">
+                    <TableCell colSpan={7} align="center">
                       No ACTIVE client supplied jobs found
                     </TableCell>
                   </TableRow>
@@ -1072,8 +1141,8 @@ const ClientSuppliedJobs = () => {
                             job.jobType === "Fibre ID"
                               ? "primary"
                               : job.jobType === "Fibre Count"
-                              ? "secondary"
-                              : "default"
+                                ? "secondary"
+                                : "default"
                           }
                           size="small"
                           variant="outlined"
@@ -1089,7 +1158,7 @@ const ClientSuppliedJobs = () => {
                           <Typography variant="body2">
                             {job.sampleReceiptDate
                               ? new Date(
-                                  job.sampleReceiptDate
+                                  job.sampleReceiptDate,
                                 ).toLocaleDateString("en-GB")
                               : "N/A"}
                           </Typography>
@@ -1115,6 +1184,21 @@ const ClientSuppliedJobs = () => {
                           color={getStatusColor(job.status)}
                           size="small"
                         />
+                      </TableCell>
+                      <TableCell sx={{ minWidth: "100px" }}>
+                        <Typography
+                          variant="body2"
+                          fontWeight="bold"
+                          color={
+                            !job.analysisDueDate
+                              ? "text.secondary"
+                              : new Date(job.analysisDueDate) < new Date()
+                                ? "error.main"
+                                : "success.main"
+                          }
+                        >
+                          {getAnalysisDueText(job.analysisDueDate)}
+                        </Typography>
                       </TableCell>
                       <TableCell
                         onClick={(e) => e.stopPropagation()}
@@ -1165,14 +1249,14 @@ const ClientSuppliedJobs = () => {
                               reportViewed: reportViewedJobIds.has(job._id),
                               hasAdminPermission: hasPermission(
                                 currentUser,
-                                "admin.view"
+                                "admin.view",
                               ),
                               hasEditPermission: hasPermission(
                                 currentUser,
-                                "clientSup.edit"
+                                "clientSup.edit",
                               ),
                               isReportProofer: Boolean(
-                                currentUser?.reportProofer
+                                currentUser?.reportProofer,
                               ),
                             };
                             const baseVisible =
@@ -1340,6 +1424,9 @@ const ClientSuppliedJobs = () => {
             setSelectedProject(null);
             setSelectedJobType("");
             setSampleReceiptDate("");
+            setTurnaroundTime("");
+            setAnalysisDueDate(new Date());
+            setShowCustomTurnaround(false);
           }}
           maxWidth="sm"
           fullWidth
@@ -1448,7 +1535,7 @@ const ClientSuppliedJobs = () => {
                           option.name?.toLowerCase().includes(filterValue) ||
                           option.client?.name
                             ?.toLowerCase()
-                            .includes(filterValue)
+                            .includes(filterValue),
                       );
 
                       return filtered;
@@ -1501,6 +1588,161 @@ const ClientSuppliedJobs = () => {
                       Enter the sample receipt date to create the new job.
                     </Typography>
                   )}
+
+                  <Box sx={{ mt: 1 }}>
+                    <Typography variant="h6" sx={{ mb: 2 }}>
+                      Turnaround
+                    </Typography>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        gap: 2,
+                        mb: 2,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <Button
+                        variant={
+                          turnaroundTime === "3 day" ? "contained" : "outlined"
+                        }
+                        onClick={() => {
+                          const now = new Date();
+                          const dueDate = addBusinessDays(now, 3);
+                          setTurnaroundTime("3 day");
+                          setAnalysisDueDate(dueDate);
+                          setShowCustomTurnaround(false);
+                        }}
+                        sx={{
+                          minWidth: 100,
+                          borderRadius: 2,
+                          textTransform: "none",
+                          fontWeight: 500,
+                          backgroundColor:
+                            turnaroundTime === "3 day"
+                              ? "#1976d2"
+                              : "transparent",
+                          color:
+                            turnaroundTime === "3 day" ? "white" : "#1976d2",
+                          borderColor: "#1976d2",
+                          "&:hover": {
+                            backgroundColor:
+                              turnaroundTime === "3 day"
+                                ? "#1565c0"
+                                : "rgba(25, 118, 210, 0.04)",
+                          },
+                        }}
+                      >
+                        3 day
+                      </Button>
+                      <Button
+                        variant={
+                          turnaroundTime === "24 hours"
+                            ? "contained"
+                            : "outlined"
+                        }
+                        onClick={() => {
+                          const now = new Date();
+                          const dueDate = addBusinessDays(now, 1);
+                          setTurnaroundTime("24 hours");
+                          setAnalysisDueDate(dueDate);
+                          setShowCustomTurnaround(false);
+                        }}
+                        sx={{
+                          minWidth: 100,
+                          borderRadius: 2,
+                          textTransform: "none",
+                          fontWeight: 500,
+                          backgroundColor:
+                            turnaroundTime === "24 hours"
+                              ? "#1976d2"
+                              : "transparent",
+                          color:
+                            turnaroundTime === "24 hours" ? "white" : "#1976d2",
+                          borderColor: "#1976d2",
+                          "&:hover": {
+                            backgroundColor:
+                              turnaroundTime === "24 hours"
+                                ? "#1565c0"
+                                : "rgba(25, 118, 210, 0.04)",
+                          },
+                        }}
+                      >
+                        24 hours
+                      </Button>
+                      <Button
+                        variant={
+                          showCustomTurnaround ? "contained" : "outlined"
+                        }
+                        onClick={() => {
+                          setShowCustomTurnaround(true);
+                          setTurnaroundTime("");
+                          setAnalysisDueDate(new Date());
+                        }}
+                        sx={{
+                          minWidth: 100,
+                          borderRadius: 2,
+                          textTransform: "none",
+                          fontWeight: 500,
+                          backgroundColor: showCustomTurnaround
+                            ? "#1976d2"
+                            : "transparent",
+                          color: showCustomTurnaround ? "white" : "#1976d2",
+                          borderColor: "#1976d2",
+                          "&:hover": {
+                            backgroundColor: showCustomTurnaround
+                              ? "#1565c0"
+                              : "rgba(25, 118, 210, 0.04)",
+                          },
+                        }}
+                      >
+                        Custom
+                      </Button>
+                    </Box>
+                    {(turnaroundTime === "3 day" ||
+                      turnaroundTime === "24 hours") &&
+                      analysisDueDate && (
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{ mt: 1, fontStyle: "italic" }}
+                        >
+                          Analysis due date:{" "}
+                          {format(
+                            analysisDueDate instanceof Date
+                              ? analysisDueDate
+                              : new Date(analysisDueDate),
+                            "dd/MM/yyyy HH:mm",
+                          )}
+                        </Typography>
+                      )}
+                    {showCustomTurnaround && (
+                      <Box sx={{ mt: 2 }}>
+                        <LocalizationProvider dateAdapter={AdapterDateFns}>
+                          <DateTimePicker
+                            label="Analysis Due Date & Time"
+                            value={
+                              analysisDueDate instanceof Date
+                                ? analysisDueDate
+                                : new Date(analysisDueDate)
+                            }
+                            onChange={(newValue) =>
+                              setAnalysisDueDate(newValue)
+                            }
+                            slots={{ textField: TextField }}
+                            slotProps={{
+                              textField: {
+                                fullWidth: true,
+                                inputProps: {
+                                  format: "dd/MM/yyyy HH:mm",
+                                },
+                              },
+                            }}
+                            format="dd/MM/yyyy HH:mm"
+                          />
+                        </LocalizationProvider>
+                      </Box>
+                    )}
+                  </Box>
                 </>
               ) : (
                 <Box sx={{ textAlign: "center", py: 2 }}>
@@ -1520,6 +1762,9 @@ const ClientSuppliedJobs = () => {
                 setSelectedProject(null);
                 setSelectedJobType("");
                 setSampleReceiptDate("");
+                setTurnaroundTime("");
+                setAnalysisDueDate(new Date());
+                setShowCustomTurnaround(false);
               }}
               variant="outlined"
               sx={{
@@ -1755,7 +2000,7 @@ const ClientSuppliedJobs = () => {
               <br />
               {selectedJobForCOC?.chainOfCustody?.uploadedAt &&
                 `Uploaded: ${new Date(
-                  selectedJobForCOC.chainOfCustody.uploadedAt
+                  selectedJobForCOC.chainOfCustody.uploadedAt,
                 ).toLocaleString("en-GB")}`}
             </Typography>
 
@@ -1802,8 +2047,8 @@ const ClientSuppliedJobs = () => {
                   {uploadingCOC[selectedJobForCOC?._id]
                     ? "Uploading..."
                     : selectedJobForCOC?.chainOfCustody
-                    ? "Replace"
-                    : "Upload File"}
+                      ? "Replace"
+                      : "Upload File"}
                 </Button>
                 <Button
                   variant="outlined"
@@ -1822,7 +2067,7 @@ const ClientSuppliedJobs = () => {
                 <Box sx={{ flex: 1, minWidth: "220px" }}>
                   {/* Preview COC if it's an image */}
                   {selectedJobForCOC.chainOfCustody.fileType?.startsWith(
-                    "image/"
+                    "image/",
                   ) && (
                     <Box
                       sx={{
@@ -1951,7 +2196,7 @@ const ClientSuppliedJobs = () => {
             }}
           >
             {selectedJobForCOC?.chainOfCustody?.fileType?.startsWith(
-              "image/"
+              "image/",
             ) && (
               <img
                 src={selectedJobForCOC.chainOfCustody.data}

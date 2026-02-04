@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon",
-    "install:prod": "npm ci --only=production --no-optional --no-audit --no-fund",
+    "install:prod": "npm ci --only=production --no-audit --no-fund",
     "cleanup-tokens": "node scripts/cleanupTokenBlacklist.js",
     "migrate": "node scripts/runMigration.js"
   },
