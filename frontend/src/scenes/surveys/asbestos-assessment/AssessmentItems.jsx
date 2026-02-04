@@ -51,6 +51,7 @@ import {
   Map as MapIcon,
 } from "@mui/icons-material";
 import MicIcon from "@mui/icons-material/Mic";
+import WarningIcon from "@mui/icons-material/Warning";
 
 import { useNavigate, useParams } from "react-router-dom";
 import PermissionGate from "../../../components/PermissionGate";
@@ -157,6 +158,10 @@ const AssessmentItems = () => {
   // Assessment Complete state
   const [assessmentCompleted, setAssessmentCompleted] = useState(false);
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
+  const [noItemsDialogOpen, setNoItemsDialogOpen] = useState(false);
+  const [noScopeDialogOpen, setNoScopeDialogOpen] = useState(false);
+  const [noItemsAndScopeDialogOpen, setNoItemsAndScopeDialogOpen] =
+    useState(false);
 
   // Samples Submitted to Lab state
   const [showSamplesSubmittedDialog, setShowSamplesSubmittedDialog] =
@@ -960,11 +965,17 @@ const AssessmentItems = () => {
 
   // Complete assessment handler
   const handleCompleteAssessment = () => {
+    const noItems = !items || items.length === 0;
+    if (noItems && !hasValidScope) {
+      setNoItemsAndScopeDialogOpen(true);
+      return;
+    }
+    if (noItems) {
+      setNoItemsDialogOpen(true);
+      return;
+    }
     if (!hasValidScope) {
-      showSnackbar(
-        "At least one Scope of Assessment item is required before marking site works complete. Please add scope via the Scope of Assessment button.",
-        "error",
-      );
+      setNoScopeDialogOpen(true);
       return;
     }
     setCompleteDialogOpen(true);
@@ -2257,7 +2268,6 @@ const AssessmentItems = () => {
               variant="contained"
               color="primary"
               onClick={handleCompleteAssessment}
-              disabled={!items || items.length === 0 || !hasValidScope}
               sx={{
                 backgroundColor: "#1976d2",
                 "&:hover": {
@@ -2362,7 +2372,14 @@ const AssessmentItems = () => {
                 variant="contained"
                 color="primary"
                 fullWidth
+                disabled={getAvailableSampleReferences().length === 0}
+                title={
+                  getAvailableSampleReferences().length === 0
+                    ? "Add a sampled item first to reference"
+                    : ""
+                }
                 onClick={() => {
+                  if (getAvailableSampleReferences().length === 0) return;
                   setEditingItem(null);
                   resetForm();
                   setIsNonACM(false);
@@ -4391,6 +4408,203 @@ const AssessmentItems = () => {
               ) : (
                 "Save Discussion"
               )}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* No assessment items and no scope – cannot complete dialog */}
+        <Dialog
+          open={noItemsAndScopeDialogOpen}
+          onClose={() => setNoItemsAndScopeDialogOpen(false)}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "warning.main",
+                color: "white",
+              }}
+            >
+              <WarningIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Assessment items and scope required
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+            <Typography variant="body1" sx={{ color: "text.primary" }}>
+              At least one assessment item and at least one Scope of Assessment
+              item are required before marking site works as completed.
+              <br></br>
+              <br></br>
+              Please add assessment items and add scope via the Scope of
+              Assessment button.
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, border: "none" }}>
+            <Button
+              onClick={() => setNoItemsAndScopeDialogOpen(false)}
+              variant="contained"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              OK
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* No assessment items – cannot complete dialog */}
+        <Dialog
+          open={noItemsDialogOpen}
+          onClose={() => setNoItemsDialogOpen(false)}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "warning.main",
+                color: "white",
+              }}
+            >
+              <WarningIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Assessment items required
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+            <Typography variant="body1" sx={{ color: "text.primary" }}>
+              At least one assessment item is required before marking site works
+              as completed. Please add assessment items first.
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, border: "none" }}>
+            <Button
+              onClick={() => setNoItemsDialogOpen(false)}
+              variant="contained"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              OK
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* No scope of assessment – cannot complete dialog */}
+        <Dialog
+          open={noScopeDialogOpen}
+          onClose={() => setNoScopeDialogOpen(false)}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "warning.main",
+                color: "white",
+              }}
+            >
+              <WarningIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Scope of assessment required
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+            <Typography variant="body1" sx={{ color: "text.primary" }}>
+              At least one Scope of Assessment item is required before marking
+              site works as completed. Please add scope via the Scope of
+              Assessment button.
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, border: "none" }}>
+            <Button
+              onClick={() => setNoScopeDialogOpen(false)}
+              variant="contained"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              OK
             </Button>
           </DialogActions>
         </Dialog>
