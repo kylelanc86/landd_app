@@ -12,13 +12,10 @@ import {
   TableRow,
   Button,
   Chip,
-  TextField,
-  InputAdornment,
   Breadcrumbs,
   Link,
 } from "@mui/material";
 import {
-  Search as SearchIcon,
   ArrowBack as ArrowBackIcon,
   PictureAsPdf as PdfIcon,
   Mail as MailIcon,
@@ -37,17 +34,22 @@ const LDsuppliedJobs = () => {
   const { currentUser } = useAuth();
   const [assessments, setAssessments] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [updatingAssessment, setUpdatingAssessment] = useState(null);
   const [generatingPDF, setGeneratingPDF] = useState({});
-  const [reportViewedAssessmentIds, setReportViewedAssessmentIds] = useState(new Set());
+  const [reportViewedAssessmentIds, setReportViewedAssessmentIds] = useState(
+    new Set(),
+  );
   const [sendingApprovalEmails, setSendingApprovalEmails] = useState({});
   const [authorisingReports, setAuthorisingReports] = useState({});
-  const [sendingAuthorisationRequests, setSendingAuthorisationRequests] = useState({});
+  const [sendingAuthorisationRequests, setSendingAuthorisationRequests] =
+    useState({});
 
   useEffect(() => {
     fetchAsbestosAssessments();
   }, []);
+
+  // Only show assessments where samples have been confirmed submitted to the lab (samplesReceivedDate set by Submit Samples to Lab modal on AssessmentItems)
+  const hasSamplesSubmittedToLab = (assessment) =>
+    !!assessment.samplesReceivedDate;
 
   const fetchAsbestosAssessments = async () => {
     try {
@@ -55,9 +57,12 @@ const LDsuppliedJobs = () => {
       // Fetch all asbestos assessments
       const response = await asbestosAssessmentService.getAsbestosAssessments();
 
-      // Show all L&D supplied assessments (including complete/authorised - do not remove from table)
+      // Show only L&D supplied assessments where sample submission was confirmed (samplesReceivedDate set)
       const allAssessments = response.data || [];
-      setAssessments(Array.isArray(allAssessments) ? allAssessments : []);
+      const submittedOnly = Array.isArray(allAssessments)
+        ? allAssessments.filter(hasSamplesSubmittedToLab)
+        : [];
+      setAssessments(submittedOnly);
     } catch (error) {
       console.error("Error fetching asbestos assessments:", error);
     } finally {
@@ -65,121 +70,62 @@ const LDsuppliedJobs = () => {
     }
   };
 
-  const filteredAssessments = assessments.filter(
-    (assessment) =>
-      assessment.projectId?.name
-        ?.toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      assessment.projectId?.client?.name
-        ?.toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      assessment.projectId?.projectID
-        ?.toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      assessment.assessorId?.firstName
-        ?.toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      assessment.assessorId?.lastName
-        ?.toLowerCase()
-        .includes(searchTerm.toLowerCase())
-  );
-
   const handleViewAssessment = (assessment) => {
     // Navigate directly to analysis page for the first item
     // The analysis page will fetch the full assessment and handle item selection
     navigate(`/fibre-id/assessment/${assessment._id}/item/1/analysis`);
   };
 
-  const handleCompleteAssessment = async (assessment) => {
-    if (updatingAssessment) return;
-
-    setUpdatingAssessment(assessment._id);
-    try {
-      // Update the assessment status to "complete"
-      await asbestosAssessmentService.updateAsbestosAssessment(assessment._id, {
-        ...assessment,
-        status: "complete",
-      });
-
-      // Also update the corresponding asbestos assessment job status to "sample-analysis-complete"
-      // This will trigger the "Report Ready for Review" button to appear on the asbestos assessments page
-      // You may need to implement this API call based on your backend structure
-
-      await fetchAsbestosAssessments();
-    } catch (error) {
-      console.error("Error completing assessment:", error);
-    } finally {
-      setUpdatingAssessment(null);
-    }
-  };
-
-  const getReadySamplesCount = (assessment) => {
+  // Number of sampled items: unique sample numbers (distinct sampleReference, excluding visually assessed)
+  const getUniqueSampleCount = (assessment) => {
     if (!assessment.items || assessment.items.length === 0) {
       return 0;
     }
-
-    // Count only sampled items (items with a unique sampleReference that aren't referred or visually assessed)
     const items = assessment.items;
-    
-    // Get all sample references and count occurrences
-    const sampleRefCounts = {};
+    const uniqueRefs = new Set();
     items.forEach((item) => {
-      if (item.sampleReference && item.sampleReference.trim() !== "") {
-        const ref = item.sampleReference.trim();
-        sampleRefCounts[ref] = (sampleRefCounts[ref] || 0) + 1;
-      }
-    });
-
-    // Count items that:
-    // 1. Have a sampleReference (not null/empty)
-    // 2. Are NOT referred items (sampleReference is unique - count === 1)
-    // 3. Are NOT visually assessed items
-    return items.filter((item) => {
-      // Must have a sampleReference
-      if (!item.sampleReference || item.sampleReference.trim() === "") {
-        return false;
-      }
-
-      // Must not be visually assessed
+      if (!item.sampleReference || item.sampleReference.trim() === "") return;
       const isVisuallyAssessed =
         item.asbestosContent === "Visually Assessed as Asbestos" ||
         item.asbestosContent === "Visually Assessed as Non-Asbestos" ||
         item.asbestosContent === "Visually Assessed as Non-asbestos";
-      if (isVisuallyAssessed) {
-        return false;
-      }
-
-      // Must not be a referred item (sampleReference must be unique)
-      const ref = item.sampleReference.trim();
-      return sampleRefCounts[ref] === 1;
-    }).length;
+      if (isVisuallyAssessed) return;
+      uniqueRefs.add(item.sampleReference.trim());
+    });
+    return uniqueRefs.size;
   };
 
-  const getStatusColor = (status) => {
+  // L&D supplied jobs table status only (samples-in-lab | analysis-complete); not the linked assessment workflow status
+  const getLabSamplesStatus = (assessment) => {
+    if (assessment.labSamplesStatus) return assessment.labSamplesStatus;
+    // Backwards compatibility: derive from assessment status
+    if (
+      assessment.status === "sample-analysis-complete" ||
+      assessment.status === "report-ready-for-review" ||
+      assessment.status === "complete"
+    ) {
+      return "analysis-complete";
+    }
+    return "samples-in-lab";
+  };
+
+  const getLabStatusColor = (status) => {
     switch (status) {
-      case "samples-with-lab":
+      case "samples-in-lab":
         return "primary";
-      case "sample-analysis-complete":
-        return "warning";
-      case "report-ready-for-review":
-        return "info";
-      case "complete":
+      case "analysis-complete":
         return "success";
       default:
         return "default";
     }
   };
 
-  const getStatusLabel = (status) => {
+  const getLabStatusLabel = (status) => {
     switch (status) {
-      case "samples-with-lab":
-        return "Samples with Lab";
-      case "sample-analysis-complete":
-        return "Analysis Complete";
-      case "report-ready-for-review":
-        return "Report Ready for Review";
-      case "complete":
-        return "Complete";
+      case "samples-in-lab":
+        return "Samples in lab";
+      case "analysis-complete":
+        return "Analysis complete";
       default:
         return status || "Unknown";
     }
@@ -222,7 +168,7 @@ const LDsuppliedJobs = () => {
     }
 
     return sampledItems.every(
-      (item) => item.analysisData && item.analysisData.isAnalysed === true
+      (item) => item.analysisData && item.analysisData.isAnalysed === true,
     );
   };
 
@@ -232,22 +178,17 @@ const LDsuppliedJobs = () => {
       setGeneratingPDF((prev) => ({ ...prev, [assessment._id]: true }));
 
       // Fetch the full assessment with populated data
-      const assessmentResponse = await asbestosAssessmentService.getAsbestosAssessmentById(assessment._id);
+      const assessmentResponse =
+        await asbestosAssessmentService.getAsbestosAssessmentById(
+          assessment._id,
+        );
       const fullAssessment = assessmentResponse.data;
 
       // Get sampled items that have been analysed
       const items = fullAssessment.items || [];
-      
-      // Get all sample references and count occurrences
-      const sampleRefCounts = {};
-      items.forEach((item) => {
-        if (item.sampleReference && item.sampleReference.trim() !== "") {
-          const ref = item.sampleReference.trim();
-          sampleRefCounts[ref] = (sampleRefCounts[ref] || 0) + 1;
-        }
-      });
 
-      // Filter to only sampled items that are analysed
+      // Include one item per unique sample reference that is analysed (so referred samples appear once in PDF)
+      const seenRefs = new Set();
       const sampledItems = items.filter((item) => {
         if (!item.sampleReference || item.sampleReference.trim() === "") {
           return false;
@@ -259,9 +200,22 @@ const LDsuppliedJobs = () => {
         if (isVisuallyAssessed) {
           return false;
         }
+        if (item.analysisData?.isAnalysed !== true) {
+          return false;
+        }
         const ref = item.sampleReference.trim();
-        return sampleRefCounts[ref] === 1 && item.analysisData?.isAnalysed === true;
+        if (seenRefs.has(ref)) return false;
+        seenRefs.add(ref);
+        return true;
       });
+
+      if (sampledItems.length === 0) {
+        showSnackbar(
+          "No analysed samples found. Ensure all samples are analysed before generating the PDF.",
+          "warning",
+        );
+        return;
+      }
 
       // Transform items to match the format expected by generateFibreIDReport
       const sampleItemsForReport = sampledItems.map((item, index) => ({
@@ -275,7 +229,7 @@ const LDsuppliedJobs = () => {
       // Get analyst from assessment level (analyst is set for all samples in the job)
       // Fall back to item level if assessment analyst is not set
       let analyst = "Unknown Analyst";
-      
+
       // First, try to get analyst from assessment level
       if (fullAssessment.analyst) {
         if (
@@ -283,19 +237,24 @@ const LDsuppliedJobs = () => {
           fullAssessment.analyst.firstName
         ) {
           analyst = `${fullAssessment.analyst.firstName} ${fullAssessment.analyst.lastName}`;
-          console.log("PDF Generation - Analyst from assessment level:", analyst);
+          console.log(
+            "PDF Generation - Analyst from assessment level:",
+            analyst,
+          );
         } else if (typeof fullAssessment.analyst === "string") {
           // If it's just an ID, we can't use it directly
-          console.log("PDF Generation - Assessment analyst is string ID, trying fallback");
+          console.log(
+            "PDF Generation - Assessment analyst is string ID, trying fallback",
+          );
         }
       }
-      
+
       // Fallback: try to get from first analysed item
       if (analyst === "Unknown Analyst") {
         const itemWithAnalyst = fullAssessment.items?.find((item) => {
           return item.analysedBy && item.analysisData?.isAnalysed === true;
         });
-        
+
         if (itemWithAnalyst?.analysedBy) {
           if (
             typeof itemWithAnalyst.analysedBy === "object" &&
@@ -306,7 +265,7 @@ const LDsuppliedJobs = () => {
           }
         }
       }
-      
+
       console.log("PDF Generation - Final analyst:", analyst);
 
       // Create an assessment-like object for the report generator
@@ -321,14 +280,12 @@ const LDsuppliedJobs = () => {
         assessorId: fullAssessment.assessorId, // Include assessorId as fallback
       };
 
-      const openInNewTab = !fullAssessment.reportApprovedBy;
-
-      // Generate the Fibre ID report and get PDF data
+      // Always request PDF data and download (avoids blank page when opening data URL in new tab)
       const pdfDataUrl = await generateFibreIDReport({
         assessment: assessmentForReport,
         sampleItems: sampleItemsForReport,
         analyst: analyst,
-        openInNewTab: false, // We handle open/download below
+        openInNewTab: false,
         returnPdfData: true,
         reportApprovedBy: fullAssessment.reportApprovedBy || null,
         reportIssueDate: fullAssessment.reportIssueDate || null,
@@ -336,26 +293,42 @@ const LDsuppliedJobs = () => {
 
       // Save to assessment only when authorising, so only authorised reports attach to the asbestos assessment PDF
       if (uploadToAssessment) {
-        const base64Data = pdfDataUrl && pdfDataUrl.includes(",") ? pdfDataUrl.split(",")[1] : null;
+        const base64Data =
+          pdfDataUrl && pdfDataUrl.includes(",")
+            ? pdfDataUrl.split(",")[1]
+            : null;
         if (base64Data) {
-          await asbestosAssessmentService.uploadFibreAnalysisReport(assessment._id, {
-            reportData: base64Data,
-          });
+          await asbestosAssessmentService.uploadFibreAnalysisReport(
+            assessment._id,
+            {
+              reportData: base64Data,
+            },
+          );
         }
       }
 
-      // Open in new tab or download
+      // Open PDF in new tab (use blob URL so the new tab opens reliably; data URLs can be too long or fail in window.open)
       if (pdfDataUrl) {
-        if (openInNewTab) {
-          window.open(pdfDataUrl, "_blank");
+        const base64 = pdfDataUrl.includes(",")
+          ? pdfDataUrl.split(",")[1]
+          : pdfDataUrl;
+        if (base64) {
+          const binary = atob(base64);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++)
+            bytes[i] = binary.charCodeAt(i);
+          const blob = new Blob([bytes], { type: "application/pdf" });
+          const blobUrl = URL.createObjectURL(blob);
+          window.open(blobUrl, "_blank");
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
         } else {
-          const link = document.createElement("a");
-          link.href = pdfDataUrl;
-          link.download = `${assessmentForReport.projectId?.projectID || "FibreID"}: Fibre ID Report - ${assessmentForReport.projectId?.name || "Report"} (${fullAssessment.assessmentDate ? new Date(fullAssessment.assessmentDate).toLocaleDateString("en-GB") : ""}).pdf`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
+          window.open(pdfDataUrl, "_blank");
         }
+      } else {
+        showSnackbar(
+          "PDF could not be generated (e.g. logo failed to load).",
+          "error",
+        );
       }
       setReportViewedAssessmentIds((prev) => new Set(prev).add(assessment._id));
     } catch (error) {
@@ -374,28 +347,33 @@ const LDsuppliedJobs = () => {
           ? `${currentUser.firstName} ${currentUser.lastName}`
           : currentUser?.name || currentUser?.email || "Unknown";
 
-      // Update the assessment with report approval and set status to "report-ready-for-review"
-      const response = await asbestosAssessmentService.updateAsbestosAssessment(assessment._id, {
-        ...assessment,
-        reportApprovedBy: approver,
-        reportIssueDate: now,
-        status: "report-ready-for-review",
-      });
+      // Fibre ID approval only - update reportApprovedBy. Do NOT touch reportAuthorisedBy (assessment authorisation).
+      const projectId = assessment.projectId?._id || assessment.projectId;
+      const response = await asbestosAssessmentService.updateAsbestosAssessment(
+        assessment._id,
+        {
+          projectId,
+          assessmentDate: assessment.assessmentDate,
+          reportApprovedBy: approver,
+          reportIssueDate: now,
+          status: "report-ready-for-review",
+        },
+      );
 
       console.log("Report approved successfully:", response);
 
       // Refresh the assessments list
       await fetchAsbestosAssessments();
 
-      // Generate and download the approved report
+      // Generate and download the approved report, and attach to assessment
       try {
-        await handleGeneratePDF(assessment);
+        await handleGeneratePDF(assessment, { uploadToAssessment: true });
         showSnackbar("Report approved and downloaded successfully.", "success");
       } catch (reportError) {
         console.error("Error generating approved report:", reportError);
         showSnackbar(
           "Report approved but failed to generate download.",
-          "warning"
+          "warning",
         );
       }
     } catch (error) {
@@ -411,16 +389,19 @@ const LDsuppliedJobs = () => {
       // For now, just show a message - you may need to implement the backend endpoint
       showSnackbar(
         "Approval request functionality will be implemented soon.",
-        "info"
+        "info",
       );
     } catch (error) {
       console.error("Error sending approval request emails:", error);
       showSnackbar(
         "Failed to send approval request emails. Please try again.",
-        "error"
+        "error",
       );
     } finally {
-      setSendingApprovalEmails((prev) => ({ ...prev, [assessment._id]: false }));
+      setSendingApprovalEmails((prev) => ({
+        ...prev,
+        [assessment._id]: false,
+      }));
     }
   };
 
@@ -451,13 +432,13 @@ const LDsuppliedJobs = () => {
         await handleGeneratePDF(assessment, { uploadToAssessment: true });
         showSnackbar(
           "Report authorised and downloaded successfully.",
-          "success"
+          "success",
         );
       } catch (reportError) {
         console.error("Error generating authorised report:", reportError);
         showSnackbar(
           "Report authorised but failed to generate download.",
-          "warning"
+          "warning",
         );
       }
     } catch (error) {
@@ -470,18 +451,29 @@ const LDsuppliedJobs = () => {
 
   const handleSendForAuthorisation = async (assessment) => {
     try {
-      setSendingAuthorisationRequests((prev) => ({ ...prev, [assessment._id]: true }));
+      setSendingAuthorisationRequests((prev) => ({
+        ...prev,
+        [assessment._id]: true,
+      }));
 
-      // For now, just show a message - you may need to implement the backend endpoint
-      showSnackbar(
-        "Authorisation request functionality will be implemented soon.",
-        "info"
+      const response = await asbestosAssessmentService.sendForAuthorisation(
+        assessment._id,
       );
+
+      showSnackbar(
+        response.data?.message ||
+          `Authorisation request emails sent successfully to ${
+            response.data?.recipients?.length || 0
+          } report proofer user(s)`,
+        "success",
+      );
+      await fetchAsbestosAssessments();
     } catch (error) {
       console.error("Error sending authorisation request emails:", error);
       showSnackbar(
-        "Failed to send authorisation request emails. Please try again.",
-        "error"
+        error.response?.data?.message ||
+          "Failed to send authorisation request emails. Please try again.",
+        "error",
       );
     } finally {
       setSendingAuthorisationRequests((prev) => ({
@@ -519,7 +511,7 @@ const LDsuppliedJobs = () => {
       } else {
         console.warn(
           "Analysis due date missing for assessment:",
-          assessment._id
+          assessment._id,
         );
         return "Date unavailable";
       }
@@ -531,10 +523,10 @@ const LDsuppliedJobs = () => {
     if (diffTime < 0) {
       // Overdue
       const daysOverdue = Math.floor(
-        Math.abs(diffTime) / (1000 * 60 * 60 * 24)
+        Math.abs(diffTime) / (1000 * 60 * 60 * 24),
       );
       const hoursOverdue = Math.floor(
-        (Math.abs(diffTime) % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
+        (Math.abs(diffTime) % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60),
       );
       const daysText = daysOverdue === 1 ? "day" : "days";
       const hoursText = hoursOverdue === 1 ? "hour" : "hours";
@@ -543,7 +535,7 @@ const LDsuppliedJobs = () => {
 
     const days = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     const hours = Math.floor(
-      (diffTime % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
+      (diffTime % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60),
     );
 
     if (days === 0 && hours === 0) {
@@ -645,43 +637,58 @@ const LDsuppliedJobs = () => {
           </Breadcrumbs>
         </Box>
 
-        {/* Search Bar */}
-        <Box sx={{ mb: 3 }}>
-          <TextField
-            fullWidth
-            variant="outlined"
-            placeholder="Search by project name, client, project ID, or assessor..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
-            }}
-          />
-        </Box>
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+            fontStyle: "italic",
+            mb: 2,
+          }}
+        >
+          Note: L&D Supplied Jobs will be automatically removed from the L&D
+          Supplied Jobs table on completion of the linked asbestos assessment
+        </Typography>
 
         {/* Assessments Table */}
         <Paper sx={{ width: "100%", overflow: "hidden" }}>
           <TableContainer>
-            <Table stickyHeader>
+            <Table
+              stickyHeader
+              sx={{
+                "& .MuiTableCell-root": {
+                  padding: "11px 8px",
+                },
+              }}
+            >
               <TableHead>
                 <TableRow>
-                  <TableCell sx={{ fontWeight: "bold" }}>Project ID</TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>
+                  <TableCell sx={{ fontWeight: "bold", maxWidth: "80px" }}>
+                    Project ID
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: "bold", minWidth: "240px" }}>
                     Project Name
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>Sample Receipt Date</TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>
+                  <TableCell sx={{ fontWeight: "bold", maxWidth: "105px" }}>
+                    Sample Receipt Date
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: "bold", maxWidth: "70px" }}>
                     No. of Samples
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>Status</TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>
+                  <TableCell sx={{ fontWeight: "bold", maxWidth: "80px" }}>
+                    Status
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: "bold", Width: "110px" }}>
                     Analysis Due
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>Actions</TableCell>
+                  <TableCell
+                    sx={{
+                      fontWeight: "bold",
+                      width: "1%",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Actions
+                  </TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -691,15 +698,16 @@ const LDsuppliedJobs = () => {
                       Loading assessments...
                     </TableCell>
                   </TableRow>
-                ) : filteredAssessments.length === 0 ? (
+                ) : assessments.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} align="center">
-                      No active asbestos assessment jobs found
+                      No active asbestos survey jobs found
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredAssessments.map((assessment) => {
-                    const readyCount = getReadySamplesCount(assessment);
+                  assessments.map((assessment) => {
+                    const sampleCount = getUniqueSampleCount(assessment);
+                    const labStatus = getLabSamplesStatus(assessment);
                     return (
                       <TableRow
                         key={assessment._id}
@@ -724,9 +732,13 @@ const LDsuppliedJobs = () => {
                           <Typography variant="body2">
                             {assessment.samplesReceivedDate
                               ? new Date(
-                                  assessment.samplesReceivedDate
-                                ).toLocaleDateString("en-GB")
-                              : "N/A"}
+                                  assessment.samplesReceivedDate,
+                                ).toLocaleDateString("en-GB", {
+                                  day: "2-digit",
+                                  month: "2-digit",
+                                  year: "numeric",
+                                })
+                              : "—"}
                           </Typography>
                         </TableCell>
                         <TableCell>
@@ -734,99 +746,173 @@ const LDsuppliedJobs = () => {
                             variant="body2"
                             sx={{ fontWeight: "medium" }}
                           >
-                            {readyCount}
+                            {sampleCount}
                           </Typography>
                         </TableCell>
-                        <TableCell>
+                        <TableCell sx={{ maxWidth: "160px" }}>
                           <Chip
-                            label={getStatusLabel(assessment.status)}
-                            color={getStatusColor(assessment.status)}
+                            label={getLabStatusLabel(labStatus)}
+                            color={getLabStatusColor(labStatus)}
                             size="small"
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell sx={{ maxWidth: "100px" }}>
                           <Typography
                             variant="body2"
                             sx={{
                               color: getAnalysisDueColor(assessment),
-                              fontWeight: "medium",
+                              fontWeight: "low",
                             }}
                           >
                             {getAnalysisDueTime(assessment)}
                           </Typography>
                         </TableCell>
-                        <TableCell onClick={(e) => e.stopPropagation()}>
-                          <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+                        <TableCell
+                          onClick={(e) => e.stopPropagation()}
+                          sx={{ width: "1%", minWidth: "200px" }}
+                        >
+                          <Box
+                            sx={{
+                              display: "flex",
+                              gap: 1,
+                              flexWrap: "wrap",
+                              alignItems: "flex-start",
+                            }}
+                          >
                             <Box
                               sx={{
                                 display: "flex",
-                                flexDirection: "column",
-                                alignItems: "flex-start",
+                                flexDirection: "row",
+                                alignItems: "center",
+                                gap: 1,
+                                flexWrap: "wrap",
                               }}
                             >
-                              <Button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleGeneratePDF(assessment);
+                              <Box
+                                sx={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  alignItems: "flex-start",
                                 }}
-                                color="secondary"
-                                size="small"
-                                startIcon={<PdfIcon />}
-                                disabled={
-                                  generatingPDF[assessment._id] ||
-                                  !areAllSampledItemsAnalysed(assessment)
-                                }
                               >
-                                {generatingPDF[assessment._id] ? "..." : "PDF"}
-                              </Button>
-                              {!assessment.reportApprovedBy &&
-                                assessment.status === "sample-analysis-complete" && (
-                                  <Typography
-                                    variant="caption"
-                                    sx={{
-                                      color: "error.main",
-                                      fontSize: "0.7rem",
-                                      mt: 0.5,
-                                      ml: 0.5,
-                                    }}
-                                  >
-                                    Not approved
-                                  </Typography>
-                                )}
+                                <Button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleGeneratePDF(assessment);
+                                  }}
+                                  color="secondary"
+                                  size="small"
+                                  startIcon={<PdfIcon />}
+                                  disabled={
+                                    generatingPDF[assessment._id] ||
+                                    labStatus !== "analysis-complete"
+                                  }
+                                >
+                                  {generatingPDF[assessment._id]
+                                    ? "..."
+                                    : "PDF"}
+                                </Button>
+                                {!assessment.reportApprovedBy &&
+                                  assessment.status ===
+                                    "sample-analysis-complete" && (
+                                    <Typography
+                                      variant="caption"
+                                      sx={{
+                                        color: "error.main",
+                                        fontSize: "0.7rem",
+                                        mt: 0.5,
+                                        ml: 0.5,
+                                      }}
+                                    >
+                                      Not approved
+                                    </Typography>
+                                  )}
+                              </Box>
+                              {assessment.reportApprovedBy && (
+                                <Typography
+                                  variant="caption"
+                                  sx={{
+                                    color: "text.secondary",
+                                    fontStyle: "italic",
+                                    maxWidth: "280px",
+                                  }}
+                                >
+                                  Approved
+                                </Typography>
+                              )}
                             </Box>
                             {(() => {
                               const conditions = {
-                                notApproved: !assessment.reportApprovedBy,
+                                fibreIdApproved: Boolean(
+                                  assessment.reportApprovedBy,
+                                ),
                                 notAuthorised: !assessment.reportAuthorisedBy,
-                                reportViewed: reportViewedAssessmentIds.has(assessment._id),
+                                reportViewed: reportViewedAssessmentIds.has(
+                                  assessment._id,
+                                ),
+                                labComplete: labStatus === "analysis-complete",
                                 hasAdminPermission: hasPermission(
                                   currentUser,
-                                  "admin.view"
+                                  "admin.view",
                                 ),
                                 hasEditPermission: hasPermission(
                                   currentUser,
-                                  "asbestosAssessment.edit"
+                                  "asbestos.edit",
                                 ),
                                 isReportProofer: Boolean(
-                                  currentUser?.reportProofer
+                                  currentUser?.reportProofer,
+                                ),
+                                isLabSignatory: Boolean(
+                                  currentUser?.labSignatory,
                                 ),
                               };
-                              const baseVisible =
-                                conditions.notApproved && conditions.reportViewed;
+                              const canAuthorise =
+                                conditions.isReportProofer ||
+                                conditions.isLabSignatory;
+                              const canApproveFibreId =
+                                conditions.isReportProofer ||
+                                conditions.isLabSignatory ||
+                                currentUser?.labApprovals?.fibreCounting ||
+                                currentUser?.labApprovals?.fibreIdentification;
+                              // Approve (fibre ID): after viewing, when fibre ID not yet approved
+                              const showApproveFibreId =
+                                conditions.reportViewed &&
+                                !conditions.fibreIdApproved &&
+                                conditions.labComplete &&
+                                canApproveFibreId;
+                              // Authorise/Send: after viewing, when fibre ID approved but assessment not yet authorised
+                              const baseVisibleAuthorise =
+                                conditions.reportViewed &&
+                                conditions.fibreIdApproved &&
+                                conditions.notAuthorised;
                               const visibility = {
+                                showApproveFibreId,
                                 showAuthorise:
-                                  baseVisible &&
-                                  conditions.notAuthorised &&
+                                  baseVisibleAuthorise &&
                                   conditions.hasAdminPermission &&
-                                  conditions.isReportProofer,
+                                  canAuthorise,
                                 showSend:
-                                  baseVisible &&
-                                  conditions.notAuthorised &&
-                                  !conditions.isReportProofer &&
+                                  baseVisibleAuthorise &&
+                                  !canAuthorise &&
                                   conditions.hasEditPermission,
                               };
                               return (
                                 <>
+                                  {visibility.showApproveFibreId && (
+                                    <Button
+                                      variant="contained"
+                                      size="small"
+                                      color="primary"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleApproveReport(assessment);
+                                      }}
+                                      disabled={generatingPDF[assessment._id]}
+                                      sx={{ textTransform: "none" }}
+                                    >
+                                      Approve
+                                    </Button>
+                                  )}
                                   {visibility.showAuthorise && (
                                     <Button
                                       variant="contained"
@@ -864,10 +950,14 @@ const LDsuppliedJobs = () => {
                                         handleSendForAuthorisation(assessment);
                                       }}
                                       disabled={
-                                        sendingAuthorisationRequests[assessment._id]
+                                        sendingAuthorisationRequests[
+                                          assessment._id
+                                        ]
                                       }
                                     >
-                                      {sendingAuthorisationRequests[assessment._id]
+                                      {sendingAuthorisationRequests[
+                                        assessment._id
+                                      ]
                                         ? "Sending..."
                                         : "Send for Authorisation"}
                                     </Button>
@@ -875,23 +965,6 @@ const LDsuppliedJobs = () => {
                                 </>
                               );
                             })()}
-                            {assessment.status === "sample-analysis-complete" &&
-                              assessment.reportApprovedBy && (
-                                <Button
-                                  variant="contained"
-                                  color="success"
-                                  size="small"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleCompleteAssessment(assessment);
-                                  }}
-                                  disabled={updatingAssessment === assessment._id}
-                                >
-                                  {updatingAssessment === assessment._id
-                                    ? "Completing..."
-                                    : "Complete"}
-                                </Button>
-                              )}
                           </Box>
                         </TableCell>
                       </TableRow>

@@ -67,6 +67,26 @@ import {
   needsCompression,
   saveFileToDevice,
 } from "../../../utils/imageCompression";
+
+/**
+ * Add business days to a date, skipping weekends (Saturday and Sunday).
+ * @param {Date} date - The starting date
+ * @param {number} businessDays - Number of business days to add
+ * @returns {Date} - The resulting date with the same time of day
+ */
+const addBusinessDays = (date, businessDays) => {
+  const result = new Date(date);
+  let added = 0;
+  while (added < businessDays) {
+    result.setDate(result.getDate() + 1);
+    const dayOfWeek = result.getDay(); // 0 = Sunday, 6 = Saturday
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      added++;
+    }
+  }
+  return result;
+};
+
 const AssessmentItems = () => {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -78,7 +98,8 @@ const AssessmentItems = () => {
   const [error, setError] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
-  const [itemTypeSelectionModalOpen, setItemTypeSelectionModalOpen] = useState(false);
+  const [itemTypeSelectionModalOpen, setItemTypeSelectionModalOpen] =
+    useState(false);
   const { showSnackbar } = useSnackbar();
 
   const [form, setForm] = useState({
@@ -108,8 +129,6 @@ const AssessmentItems = () => {
   const [showLevelFloor, setShowLevelFloor] = useState(false);
   const [selectedMaterialFromDropdown, setSelectedMaterialFromDropdown] =
     useState(false);
-  const [selectedRecommendations, setSelectedRecommendations] = useState([]);
-  const [customRecommendationText, setCustomRecommendationText] = useState("");
   const [isNonACM, setIsNonACM] = useState(false);
   const [isReferredItem, setIsReferredItem] = useState(false);
   const [isVisuallyAssessedItem, setIsVisuallyAssessedItem] = useState(false);
@@ -146,6 +165,11 @@ const AssessmentItems = () => {
   const [turnaroundTime, setTurnaroundTime] = useState("");
   const [analysisDueDate, setAnalysisDueDate] = useState(new Date());
   const [showCustomTurnaround, setShowCustomTurnaround] = useState(false);
+
+  // Finalise Assessment (no samples) state
+  const [showFinaliseAssessmentDialog, setShowFinaliseAssessmentDialog] =
+    useState(false);
+  const [finalisingAssessment, setFinalisingAssessment] = useState(false);
 
   // Site Plan state
   const [sitePlanDialogOpen, setSitePlanDialogOpen] = useState(false);
@@ -209,7 +233,7 @@ const AssessmentItems = () => {
           assessmentData?.status === "samples-with-lab" ||
           assessmentData?.status === "sample-analysis-complete" ||
           assessmentData?.status === "report-ready-for-review" ||
-          assessmentData?.status === "complete"
+          assessmentData?.status === "complete",
       );
       // Load assessment scope if it exists
       if (
@@ -219,7 +243,7 @@ const AssessmentItems = () => {
         setScopeItems(
           assessmentData.assessmentScope.length > 0
             ? assessmentData.assessmentScope
-            : [""]
+            : [""],
         );
       } else {
         setScopeItems([""]);
@@ -257,7 +281,7 @@ const AssessmentItems = () => {
         customDataFieldGroupService.getFieldsByType("location_description"),
         customDataFieldGroupService.getFieldsByType("materials_description"),
         customDataFieldGroupService.getFieldsByType(
-          "materials_description_non_acm"
+          "materials_description_non_acm",
         ),
         customDataFieldGroupService.getFieldsByType("recommendation"),
       ]);
@@ -286,7 +310,7 @@ const AssessmentItems = () => {
         locationDescriptions: processData(locationDescriptionsData),
         materialsDescriptions: processData(materialsDescriptionsData),
         materialsDescriptionsNonACM: processData(
-          materialsDescriptionsNonACMData
+          materialsDescriptionsNonACMData,
         ),
         recommendations: processData(recommendationsData),
       });
@@ -316,14 +340,16 @@ const AssessmentItems = () => {
     return !items.some(
       (item) =>
         item.sampleReference === normalizedRef &&
-        (!excludeItemId || item._id !== excludeItemId)
+        (!excludeItemId || item._id !== excludeItemId),
     );
   };
 
   // Helper function to get all unique sample references from existing items
   const getAvailableSampleReferences = () => {
     const sampleRefs = items
-      .filter((item) => item.sampleReference && item.sampleReference.trim() !== "")
+      .filter(
+        (item) => item.sampleReference && item.sampleReference.trim() !== "",
+      )
       .map((item) => item.sampleReference)
       .filter((ref, index, self) => self.indexOf(ref) === index) // Get unique values
       .sort();
@@ -334,7 +360,10 @@ const AssessmentItems = () => {
     e.preventDefault();
 
     // Validate required fields
-    if (!isNonACM && !(isVisuallyAssessedItem && visuallyAssessedType === "non-asbestos")) {
+    if (
+      !isNonACM &&
+      !(isVisuallyAssessedItem && visuallyAssessedType === "non-asbestos")
+    ) {
       // Sample reference is only required for sampled items (not visually assessed or referred items)
       if (!isVisuallyAssessedItem && !isReferredItem) {
         if (!form.sampleReference || form.sampleReference.trim() === "") {
@@ -342,7 +371,7 @@ const AssessmentItems = () => {
           return;
         }
       }
-      
+
       // Asbestos type, condition, and risk are required for all non-ACM items (including visually assessed asbestos, but not non-asbestos)
       if (!form.asbestosType || form.asbestosType.trim() === "") {
         showSnackbar("Asbestos Type is required", "error");
@@ -358,17 +387,22 @@ const AssessmentItems = () => {
       }
 
       // Validate sample reference uniqueness (only for sampled items, not referred items or visually assessed items)
-      if (!isReferredItem && !isVisuallyAssessedItem && form.sampleReference && form.sampleReference.trim() !== "") {
+      if (
+        !isReferredItem &&
+        !isVisuallyAssessedItem &&
+        form.sampleReference &&
+        form.sampleReference.trim() !== ""
+      ) {
         const normalizedRef = ensureSampleReferencePrefix(form.sampleReference);
         if (
           !isSampleReferenceUnique(
             form.sampleReference,
-            editingItem?._id || null
+            editingItem?._id || null,
           )
         ) {
           showSnackbar(
             `Sample Reference "${normalizedRef}" already exists. Please use a unique value.`,
-            "error"
+            "error",
           );
           return;
         }
@@ -395,32 +429,14 @@ const AssessmentItems = () => {
       if (isNonACM) {
         // For non-ACM items, set recommendation to "No Action Required"
         recommendationsValue = "No Action Required";
-      } else if (isVisuallyAssessedItem && visuallyAssessedType === "non-asbestos") {
+      } else if (
+        isVisuallyAssessedItem &&
+        visuallyAssessedType === "non-asbestos"
+      ) {
         // For visually assessed non-asbestos items, set recommendation to "No Action Required"
         recommendationsValue = "No Action Required";
       } else {
-        // Add selected recommendation texts
-        const selectedTexts = selectedRecommendations
-          .map((id) => {
-            const rec = customDataFields.recommendations.find(
-              (r) => r._id === id
-            );
-            return rec ? rec.text : "";
-          })
-          .filter((text) => text.trim() !== "");
-
-        // Combine selected recommendations and custom text
-        const allTexts = [...selectedTexts];
-        if (customRecommendationText.trim()) {
-          allTexts.push(customRecommendationText.trim());
-        }
-
-        recommendationsValue = allTexts.join("\n\n");
-
-        // Fallback to form.recommendations for backward compatibility if nothing is selected
-        if (!recommendationsValue) {
-          recommendationsValue = form.recommendations || "";
-        }
+        recommendationsValue = (form.recommendations || "").trim();
       }
 
       // Note: itemNumber is not set initially. It will be added later in the process
@@ -430,13 +446,16 @@ const AssessmentItems = () => {
         // Only include itemNumber when editing an existing item that already has one
         ...(editingItem &&
           editingItem.itemNumber && { itemNumber: editingItem.itemNumber }),
-        sampleReference: isNonACM || isVisuallyAssessedItem
-          ? null
-          : form.sampleReference
-          ? isReferredItem
-            ? form.sampleReference // For referred items, sample reference already has LD- prefix
-            : ensureSampleReferencePrefix(form.sampleReference.toUpperCase())
-          : "",
+        sampleReference:
+          isNonACM || isVisuallyAssessedItem
+            ? null
+            : form.sampleReference
+              ? isReferredItem
+                ? form.sampleReference // For referred items, sample reference already has LD- prefix
+                : ensureSampleReferencePrefix(
+                    form.sampleReference.toUpperCase(),
+                  )
+              : "",
         levelFloor: showLevelFloor ? form.levelFloor : "",
         roomArea: form.roomArea,
         locationDescription: form.locationDescription,
@@ -446,9 +465,21 @@ const AssessmentItems = () => {
             ? "Visually Assessed as Asbestos"
             : "Visually Assessed as Non-Asbestos"
           : form.asbestosContent || "",
-        asbestosType: isNonACM || (isVisuallyAssessedItem && visuallyAssessedType === "non-asbestos") ? null : form.asbestosType || "",
-        condition: isNonACM || (isVisuallyAssessedItem && visuallyAssessedType === "non-asbestos") ? null : form.condition || "",
-        risk: isNonACM || (isVisuallyAssessedItem && visuallyAssessedType === "non-asbestos") ? null : form.risk || "",
+        asbestosType:
+          isNonACM ||
+          (isVisuallyAssessedItem && visuallyAssessedType === "non-asbestos")
+            ? null
+            : form.asbestosType || "",
+        condition:
+          isNonACM ||
+          (isVisuallyAssessedItem && visuallyAssessedType === "non-asbestos")
+            ? null
+            : form.condition || "",
+        risk:
+          isNonACM ||
+          (isVisuallyAssessedItem && visuallyAssessedType === "non-asbestos")
+            ? null
+            : form.risk || "",
         recommendationActions: recommendationsValue,
         notes: form.notes || "",
       };
@@ -457,8 +488,14 @@ const AssessmentItems = () => {
         await asbestosAssessmentService.updateItem(
           id,
           editingItem._id,
-          itemData
+          itemData,
         );
+        await asbestosAssessmentService.update(id, {
+          projectId: assessment.projectId?._id || assessment.projectId,
+          assessmentDate: assessment.assessmentDate,
+          reportApprovedBy: null,
+          reportIssueDate: null,
+        });
         showSnackbar("Item updated successfully", "success");
         setDialogOpen(false);
         setEditingItem(null);
@@ -466,6 +503,12 @@ const AssessmentItems = () => {
         await fetchData();
       } else {
         const newItem = await asbestosAssessmentService.addItem(id, itemData);
+        await asbestosAssessmentService.update(id, {
+          projectId: assessment.projectId?._id || assessment.projectId,
+          assessmentDate: assessment.assessmentDate,
+          reportApprovedBy: null,
+          reportIssueDate: null,
+        });
         showSnackbar("Item created successfully", "success");
         setDialogOpen(false);
         resetForm();
@@ -489,14 +532,17 @@ const AssessmentItems = () => {
     const isVisuallyAssessedItemCheck =
       item.asbestosContent === "Visually Assessed as Asbestos" ||
       item.asbestosContent === "Visually Assessed as Non-Asbestos";
-    
+
     // Check if this is a referred item (has a sampleReference that matches another item's sampleReference)
-    const isReferredItemCheck = item.sampleReference && item.sampleReference.trim() !== "" && 
-      items.some(otherItem => 
-        otherItem._id !== item._id && 
-        otherItem.sampleReference === item.sampleReference
+    const isReferredItemCheck =
+      item.sampleReference &&
+      item.sampleReference.trim() !== "" &&
+      items.some(
+        (otherItem) =>
+          otherItem._id !== item._id &&
+          otherItem.sampleReference === item.sampleReference,
       );
-    
+
     // Check if this is a non-ACM item (legacy support)
     const isNonACMItem =
       (!item.sampleReference || item.sampleReference.trim() === "") &&
@@ -505,7 +551,7 @@ const AssessmentItems = () => {
       (!item.risk || item.risk.trim() === "") &&
       (item.recommendationActions === "No Action Required" ||
         item.recommendations === "No Action Required");
-    
+
     // Set the appropriate modal type based on item type
     if (isVisuallyAssessedItemCheck) {
       setIsVisuallyAssessedItem(true);
@@ -513,7 +559,7 @@ const AssessmentItems = () => {
       setVisuallyAssessedType(
         item.asbestosContent === "Visually Assessed as Asbestos"
           ? "asbestos"
-          : "non-asbestos"
+          : "non-asbestos",
       );
       // Set isNonACM based on visually assessed type
       setIsNonACM(item.asbestosContent === "Visually Assessed as Non-Asbestos");
@@ -539,11 +585,12 @@ const AssessmentItems = () => {
     }
     // Check if material type matches a dropdown option
     // Use the appropriate data source based on whether it's a non-ACM item or visually assessed item
-    const materialsSource = isNonACMItem || isVisuallyAssessedItemCheck
-      ? customDataFields.materialsDescriptionsNonACM
-      : customDataFields.materialsDescriptions;
+    const materialsSource =
+      isNonACMItem || isVisuallyAssessedItemCheck
+        ? customDataFields.materialsDescriptionsNonACM
+        : customDataFields.materialsDescriptions;
     const matchingMaterial = materialsSource.find(
-      (mat) => mat.text === item.materialType
+      (mat) => mat.text === item.materialType,
     );
     const materialFromDropdown = !!matchingMaterial;
 
@@ -557,7 +604,7 @@ const AssessmentItems = () => {
       asbestosType: item.asbestosType || "",
       condition: item.condition || "",
       risk: item.risk || "",
-      recommendations: item.recommendations || "",
+      recommendations: item.recommendationActions || item.recommendations || "",
       notes: item.notes || "",
     });
     // Show level floor checkbox if item has levelFloor
@@ -565,44 +612,16 @@ const AssessmentItems = () => {
     // Set selectedMaterialFromDropdown based on whether material matches dropdown
     setSelectedMaterialFromDropdown(materialFromDropdown);
 
-    // Parse recommendations to determine which are selected and which are custom
-    if (isNonACMItem || (isVisuallyAssessedItemCheck && item.asbestosContent === "Visually Assessed as Non-asbestos")) {
-      // For non-ACM items, set recommendation to "No Action Required"
-      setSelectedRecommendations([]);
-      setCustomRecommendationText("No Action Required");
-    } else {
-      const recommendationsText =
-        item.recommendationActions || item.recommendations || "";
-      const selectedIds = [];
-      let customText = "";
-
-      if (recommendationsText) {
-        // Split by double newlines (paragraph breaks)
-        const parts = recommendationsText
-          .split(/\n\n+/)
-          .filter((p) => p.trim());
-
-        parts.forEach((part) => {
-          const trimmedPart = part.trim();
-          // Check if this part matches any predefined recommendation
-          const matchingRec = customDataFields.recommendations.find(
-            (rec) => rec.text === trimmedPart
-          );
-          if (matchingRec) {
-            selectedIds.push(matchingRec._id);
-          } else {
-            // This is custom text
-            if (customText) {
-              customText += "\n\n" + trimmedPart;
-            } else {
-              customText = trimmedPart;
-            }
-          }
-        });
-      }
-
-      setSelectedRecommendations(selectedIds);
-      setCustomRecommendationText(customText);
+    // For non-ACM / visually assessed non-asbestos, ensure recommendations shows "No Action Required"
+    if (
+      isNonACMItem ||
+      (isVisuallyAssessedItemCheck &&
+        item.asbestosContent === "Visually Assessed as Non-asbestos")
+    ) {
+      setForm((prev) => ({
+        ...prev,
+        recommendations: "No Action Required",
+      }));
     }
 
     setDialogOpen(true);
@@ -618,6 +637,12 @@ const AssessmentItems = () => {
 
     try {
       await asbestosAssessmentService.deleteItem(id, itemToDelete._id);
+      await asbestosAssessmentService.update(id, {
+        projectId: assessment.projectId?._id || assessment.projectId,
+        assessmentDate: assessment.assessmentDate,
+        reportApprovedBy: null,
+        reportIssueDate: null,
+      });
       showSnackbar("Item deleted successfully", "success");
       await fetchData();
     } catch (err) {
@@ -650,8 +675,6 @@ const AssessmentItems = () => {
     });
     setShowLevelFloor(false);
     setSelectedMaterialFromDropdown(false);
-    setSelectedRecommendations([]);
-    setCustomRecommendationText("");
     setIsNonACM(false);
     setIsReferredItem(false);
     setIsVisuallyAssessedItem(false);
@@ -672,7 +695,7 @@ const AssessmentItems = () => {
       !("SpeechRecognition" in window)
     ) {
       setDictationError(
-        "Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari."
+        "Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.",
       );
       return;
     }
@@ -701,16 +724,19 @@ const AssessmentItems = () => {
           }
         }
 
-        // Update the custom recommendations field with the final transcript
+        // Update the recommendations field with the final transcript
         if (finalTranscript) {
-          setCustomRecommendationText((prev) => {
-            const currentText = prev || "";
+          setForm((prev) => {
+            const currentText = prev.recommendations || "";
             const isFirstWord = !currentText || currentText.trim().length === 0;
             const newText = isFirstWord
               ? finalTranscript.charAt(0).toUpperCase() +
                 finalTranscript.slice(1)
               : finalTranscript;
-            return currentText + (currentText ? " " : "") + newText;
+            return {
+              ...prev,
+              recommendations: currentText + (currentText ? " " : "") + newText,
+            };
           });
         }
       };
@@ -762,7 +788,7 @@ const AssessmentItems = () => {
       !("SpeechRecognition" in window)
     ) {
       setDictationErrorExclusions(
-        "Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari."
+        "Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.",
       );
       return;
     }
@@ -826,7 +852,7 @@ const AssessmentItems = () => {
     } catch (error) {
       console.error("Error starting dictation:", error);
       setDictationErrorExclusions(
-        "Failed to start dictation. Please try again."
+        "Failed to start dictation. Please try again.",
       );
       recognitionRefExclusions.current = null;
     }
@@ -854,7 +880,7 @@ const AssessmentItems = () => {
       !("SpeechRecognition" in window)
     ) {
       setDictationErrorDiscussion(
-        "Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari."
+        "Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.",
       );
       return;
     }
@@ -880,7 +906,8 @@ const AssessmentItems = () => {
             const currentText = prev?.discussionConclusions || "";
             const isFirstWord = !currentText || currentText.trim().length === 0;
             const newText = isFirstWord
-              ? finalTranscript.charAt(0).toUpperCase() + finalTranscript.slice(1)
+              ? finalTranscript.charAt(0).toUpperCase() +
+                finalTranscript.slice(1)
               : finalTranscript;
             return {
               ...prev,
@@ -904,7 +931,9 @@ const AssessmentItems = () => {
       recognition.start();
     } catch (error) {
       console.error("Error starting dictation:", error);
-      setDictationErrorDiscussion("Failed to start dictation. Please try again.");
+      setDictationErrorDiscussion(
+        "Failed to start dictation. Please try again.",
+      );
       recognitionRefDiscussion.current = null;
     }
   };
@@ -925,14 +954,16 @@ const AssessmentItems = () => {
   const hasValidScope =
     assessment?.assessmentScope &&
     Array.isArray(assessment.assessmentScope) &&
-    assessment.assessmentScope.some((item) => item && String(item).trim() !== "");
+    assessment.assessmentScope.some(
+      (item) => item && String(item).trim() !== "",
+    );
 
   // Complete assessment handler
   const handleCompleteAssessment = () => {
     if (!hasValidScope) {
       showSnackbar(
         "At least one Scope of Assessment item is required before marking site works complete. Please add scope via the Scope of Assessment button.",
-        "error"
+        "error",
       );
       return;
     }
@@ -943,7 +974,7 @@ const AssessmentItems = () => {
     if (!hasValidScope) {
       showSnackbar(
         "At least one Scope of Assessment item is required before marking site works complete.",
-        "error"
+        "error",
       );
       return;
     }
@@ -952,6 +983,8 @@ const AssessmentItems = () => {
         projectId: assessment.projectId?._id || assessment.projectId,
         assessmentDate: assessment.assessmentDate,
         status: "site-works-complete",
+        reportApprovedBy: null,
+        reportIssueDate: null,
       });
       setAssessmentCompleted(true);
       showSnackbar("Assessment site works completed successfully!", "success");
@@ -1005,9 +1038,12 @@ const AssessmentItems = () => {
         assessmentDate: assessment.assessmentDate,
         status: "samples-with-lab",
         samplesReceivedDate: currentDate,
+        labSamplesStatus: "samples-in-lab",
         submittedBy: submittedBySignature,
         turnaroundTime: finalTurnaroundTime,
         analysisDueDate: analysisDueDate ? analysisDueDate.toISOString() : null,
+        reportApprovedBy: null,
+        reportIssueDate: null,
       });
       // Refetch assessment to update UI
       await fetchData();
@@ -1019,6 +1055,37 @@ const AssessmentItems = () => {
     } catch (error) {
       console.error("Error submitting samples to lab:", error);
       showSnackbar("Failed to submit samples to lab", "error");
+    }
+  };
+
+  // Finalise Assessment (no samples) - goes straight to report-ready-for-review
+  const handleFinaliseAssessment = () => {
+    setShowFinaliseAssessmentDialog(true);
+  };
+
+  const handleConfirmFinaliseAssessment = async () => {
+    try {
+      setFinalisingAssessment(true);
+      await asbestosAssessmentService.update(id, {
+        projectId: assessment.projectId?._id || assessment.projectId,
+        assessmentDate: assessment.assessmentDate,
+        status: "report-ready-for-review",
+        noSamplesCollected: true,
+        reportApprovedBy: null,
+        reportIssueDate: null,
+      });
+      await fetchData();
+      setShowFinaliseAssessmentDialog(false);
+      showSnackbar(
+        "Assessment finalised successfully. Report is ready for review.",
+        "success",
+      );
+      navigate(`/surveys/asbestos-assessment/${id}/items`);
+    } catch (error) {
+      console.error("Error finalising assessment:", error);
+      showSnackbar("Failed to finalise assessment", "error");
+    } finally {
+      setFinalisingAssessment(false);
     }
   };
 
@@ -1049,7 +1116,7 @@ const AssessmentItems = () => {
         return;
       }
 
-      // Save the drawn site plan to the assessment (preserve status)
+      // Save the drawn site plan to the assessment (preserve status; clear approval if changed)
       await asbestosAssessmentService.update(id, {
         projectId: assessment.projectId?._id || assessment.projectId,
         assessmentDate: assessment.assessmentDate,
@@ -1059,6 +1126,8 @@ const AssessmentItems = () => {
         sitePlanLegendTitle: legendTitle,
         sitePlanFigureTitle: figureTitle,
         sitePlanSource: "drawn",
+        reportApprovedBy: null,
+        reportIssueDate: null,
       });
 
       showSnackbar("Drawn site plan saved successfully!", "success");
@@ -1098,7 +1167,7 @@ const AssessmentItems = () => {
           const dataUrl = event.target.result;
           const base64Data = dataUrl.split(",")[1]; // Remove the "data:application/pdf;base64," prefix
 
-          // Update the assessment with the site plan file (preserve status)
+          // Update the assessment with the site plan file (preserve status; clear approval if changed)
           await asbestosAssessmentService.update(id, {
             projectId: assessment.projectId?._id || assessment.projectId,
             assessmentDate: assessment.assessmentDate,
@@ -1107,6 +1176,8 @@ const AssessmentItems = () => {
             sitePlanLegend: [],
             sitePlanLegendTitle: null,
             sitePlanSource: "uploaded",
+            reportApprovedBy: null,
+            reportIssueDate: null,
           });
 
           showSnackbar("Site plan uploaded successfully", "success");
@@ -1132,7 +1203,7 @@ const AssessmentItems = () => {
   const handleRemoveSitePlan = async () => {
     if (window.confirm("Are you sure you want to remove the site plan?")) {
       try {
-        // Update the assessment to remove the site plan file (preserve status)
+        // Update the assessment to remove the site plan file (preserve status; clear approval if changed)
         await asbestosAssessmentService.update(id, {
           projectId: assessment.projectId?._id || assessment.projectId,
           assessmentDate: assessment.assessmentDate,
@@ -1141,6 +1212,8 @@ const AssessmentItems = () => {
           sitePlanSource: null,
           sitePlanLegend: [],
           sitePlanLegendTitle: null,
+          reportApprovedBy: null,
+          reportIssueDate: null,
         });
 
         showSnackbar("Site plan removed successfully", "success");
@@ -1420,19 +1493,19 @@ const AssessmentItems = () => {
         const sourceY = (videoRef.videoHeight - sourceHeight) / 2 - panYVideo;
         const clampedSourceX = Math.max(
           0,
-          Math.min(sourceX, videoRef.videoWidth - sourceWidth)
+          Math.min(sourceX, videoRef.videoWidth - sourceWidth),
         );
         const clampedSourceY = Math.max(
           0,
-          Math.min(sourceY, videoRef.videoHeight - sourceHeight)
+          Math.min(sourceY, videoRef.videoHeight - sourceHeight),
         );
         const clampedSourceWidth = Math.min(
           sourceWidth,
-          videoRef.videoWidth - clampedSourceX
+          videoRef.videoWidth - clampedSourceX,
         );
         const clampedSourceHeight = Math.min(
           sourceHeight,
-          videoRef.videoHeight - clampedSourceY
+          videoRef.videoHeight - clampedSourceY,
         );
         context.drawImage(
           videoRef,
@@ -1443,7 +1516,7 @@ const AssessmentItems = () => {
           0,
           0,
           canvas.width,
-          canvas.height
+          canvas.height,
         );
       } else {
         context.drawImage(videoRef, 0, 0, canvas.width, canvas.height);
@@ -1478,7 +1551,7 @@ const AssessmentItems = () => {
           }
         },
         "image/jpeg",
-        1.0
+        1.0,
       );
     }
     handleCloseCamera();
@@ -1504,8 +1577,14 @@ const AssessmentItems = () => {
         id,
         selectedItemForPhotos._id,
         photoData,
-        true
+        true,
       );
+      await asbestosAssessmentService.update(id, {
+        projectId: assessment.projectId?._id || assessment.projectId,
+        assessmentDate: assessment.assessmentDate,
+        reportApprovedBy: null,
+        reportIssueDate: null,
+      });
       if (response && response.photographs) {
         setSelectedItemForPhotos((prev) => ({
           ...prev,
@@ -1546,7 +1625,7 @@ const AssessmentItems = () => {
       return localChange;
     }
     const photo = selectedItemForPhotos?.photographs?.find(
-      (p) => p._id === photoId
+      (p) => p._id === photoId,
     );
     return photo?.includeInReport ?? true;
   };
@@ -1566,7 +1645,7 @@ const AssessmentItems = () => {
       return localPhotoDescriptions[photoId];
     }
     const photo = selectedItemForPhotos?.photographs?.find(
-      (p) => p._id === photoId
+      (p) => p._id === photoId,
     );
     if (photo?.description) {
       return photo.description;
@@ -1604,18 +1683,18 @@ const AssessmentItems = () => {
       Object.entries(localPhotoChanges).forEach(
         ([photoId, includeInReport]) => {
           const photo = selectedItemForPhotos?.photographs?.find(
-            (p) => p._id === photoId
+            (p) => p._id === photoId,
           );
           if (photo && photo.includeInReport !== includeInReport) {
             togglePromises.push(
               asbestosAssessmentService.togglePhotoInReport(
                 id,
                 selectedItemForPhotos._id,
-                photoId
-              )
+                photoId,
+              ),
             );
           }
-        }
+        },
       );
 
       Object.entries(localPhotoDescriptions).forEach(
@@ -1625,10 +1704,10 @@ const AssessmentItems = () => {
               id,
               selectedItemForPhotos._id,
               photoId,
-              description
-            )
+              description,
+            ),
           );
-        }
+        },
       );
 
       if (togglePromises.length > 0) {
@@ -1644,7 +1723,7 @@ const AssessmentItems = () => {
           await asbestosAssessmentService.deletePhotoFromItem(
             id,
             selectedItemForPhotos._id,
-            photoId
+            photoId,
           );
           deletionResults.push({ status: "fulfilled", photoId });
         } catch (error) {
@@ -1665,7 +1744,7 @@ const AssessmentItems = () => {
         if (result.reason) {
           console.error(
             `Operation failed for photo ${result.photoId || "unknown"}:`,
-            result.reason
+            result.reason,
           );
         }
       });
@@ -1677,7 +1756,7 @@ const AssessmentItems = () => {
         } else {
           showSnackbar(
             `Saved ${successes.length} of ${allResults.length} changes. Some operations failed.`,
-            "warning"
+            "warning",
           );
         }
       } else {
@@ -1688,13 +1767,19 @@ const AssessmentItems = () => {
         setLocalPhotoChanges({});
         setPhotosToDelete(new Set());
         setLocalPhotoDescriptions({});
+        await asbestosAssessmentService.update(id, {
+          projectId: assessment.projectId?._id || assessment.projectId,
+          assessmentDate: assessment.assessmentDate,
+          reportApprovedBy: null,
+          reportIssueDate: null,
+        });
       }
 
       await fetchData();
 
       const updatedItems = await asbestosAssessmentService.getItems(id);
       const updatedItem = updatedItems.find(
-        (item) => item._id === selectedItemForPhotos._id
+        (item) => item._id === selectedItemForPhotos._id,
       );
       if (updatedItem) {
         setSelectedItemForPhotos(updatedItem);
@@ -1732,10 +1817,10 @@ const AssessmentItems = () => {
           });
 
           const compressedSizeKB = Math.round(
-            (compressedImage.length * 0.75) / 1024
+            (compressedImage.length * 0.75) / 1024,
           );
           const reduction = Math.round(
-            ((originalSizeKB - compressedSizeKB) / originalSizeKB) * 100
+            ((originalSizeKB - compressedSizeKB) / originalSizeKB) * 100,
           );
 
           await handleAddPhotoToItem(compressedImage);
@@ -1812,7 +1897,7 @@ const AssessmentItems = () => {
                     day: "2-digit",
                     month: "2-digit",
                     year: "2-digit",
-                  }
+                  },
                 )
               : "Unknown Date"}
           </Typography>
@@ -1869,6 +1954,18 @@ const AssessmentItems = () => {
                 </Typography>
               </>
             )}
+          {(!assessment?.assessmentScope ||
+            !Array.isArray(assessment.assessmentScope) ||
+            assessment.assessmentScope.length === 0 ||
+            !assessment.assessmentScope.some((item) => item.trim() !== "")) && (
+            <Typography
+              variant="body2"
+              color="#de0a26"
+              sx={{ fontWeight: "medium" }}
+            >
+              ⚠ At least one scope item is required.
+            </Typography>
+          )}
         </Box>
 
         {/* Site Plan Actions */}
@@ -1976,7 +2073,7 @@ const AssessmentItems = () => {
                       items.length > 0 &&
                       items.some(
                         (item) =>
-                          item.levelFloor && item.levelFloor.trim() !== ""
+                          item.levelFloor && item.levelFloor.trim() !== "",
                       ) && (
                         <TableCell sx={{ fontWeight: "bold" }}>
                           Level/Floor
@@ -2008,7 +2105,7 @@ const AssessmentItems = () => {
                           items.length > 0 &&
                           items.some(
                             (item) =>
-                              item.levelFloor && item.levelFloor.trim() !== ""
+                              item.levelFloor && item.levelFloor.trim() !== "",
                           )
                             ? 1
                             : 0)
@@ -2026,7 +2123,7 @@ const AssessmentItems = () => {
                         items.length > 0 &&
                         items.some(
                           (item) =>
-                            item.levelFloor && item.levelFloor.trim() !== ""
+                            item.levelFloor && item.levelFloor.trim() !== "",
                         );
                       return (
                         <TableRow key={item._id || item.itemNumber}>
@@ -2051,7 +2148,21 @@ const AssessmentItems = () => {
                           <TableCell>
                             {item.locationDescription || "N/A"}
                           </TableCell>
-                          <TableCell>{item.sampleReference || "N/A"}</TableCell>
+                          <TableCell>
+                            {(() => {
+                              const ref = (item.sampleReference || "").trim();
+                              const firstIdx = items.findIndex(
+                                (i) => (i.sampleReference || "").trim() === ref,
+                              );
+                              const isReferred =
+                                ref &&
+                                firstIdx >= 0 &&
+                                items.indexOf(item) !== firstIdx;
+                              return isReferred
+                                ? `Refer to sample ${item.sampleReference}`
+                                : item.sampleReference || "N/A";
+                            })()}
+                          </TableCell>
                           <TableCell>{item.asbestosContent || "N/A"}</TableCell>
                           <TableCell>
                             {(() => {
@@ -2060,7 +2171,7 @@ const AssessmentItems = () => {
                                 (item.photograph ? 1 : 0);
                               const selectedCount =
                                 item.photographs?.filter(
-                                  (p) => p.includeInReport
+                                  (p) => p.includeInReport,
                                 ).length || 0;
                               return photoCount > 0 ? (
                                 <Box
@@ -2146,11 +2257,7 @@ const AssessmentItems = () => {
               variant="contained"
               color="primary"
               onClick={handleCompleteAssessment}
-              disabled={
-                !items ||
-                items.length === 0 ||
-                !hasValidScope
-              }
+              disabled={!items || items.length === 0 || !hasValidScope}
               sx={{
                 backgroundColor: "#1976d2",
                 "&:hover": {
@@ -2161,21 +2268,45 @@ const AssessmentItems = () => {
               SITE WORKS COMPLETED
             </Button>
           )}
-          {assessment?.status === "site-works-complete" && (
-            <Button
-              variant="contained"
-              onClick={handleSamplesSubmittedToLab}
-              sx={{
-                backgroundColor: "#ff9800",
-                color: "white",
-                "&:hover": {
-                  backgroundColor: "#f57c00",
-                },
-              }}
-            >
-              Submit Samples to Lab
-            </Button>
-          )}
+          {assessment?.status === "site-works-complete" &&
+            (() => {
+              const hasSampledItems = (items || []).some(
+                (item) => (item.sampleReference || "").trim() !== "",
+              );
+              if (!hasSampledItems) {
+                return (
+                  <Button
+                    variant="contained"
+                    onClick={handleFinaliseAssessment}
+                    disabled={finalisingAssessment}
+                    sx={{
+                      backgroundColor: "#ff9800",
+                      color: "white",
+                      "&:hover": {
+                        backgroundColor: "#f57c00",
+                      },
+                    }}
+                  >
+                    Finalise Assessment
+                  </Button>
+                );
+              }
+              return (
+                <Button
+                  variant="contained"
+                  onClick={handleSamplesSubmittedToLab}
+                  sx={{
+                    backgroundColor: "#ff9800",
+                    color: "white",
+                    "&:hover": {
+                      backgroundColor: "#f57c00",
+                    },
+                  }}
+                >
+                  Submit Samples to Lab
+                </Button>
+              );
+            })()}
         </Box>
 
         {/* Item Type Selection Modal */}
@@ -2203,7 +2334,9 @@ const AssessmentItems = () => {
             Select Item Type
           </DialogTitle>
           <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 2, py: 2 }}>
+            <Box
+              sx={{ display: "flex", flexDirection: "column", gap: 2, py: 2 }}
+            >
               <Button
                 variant="contained"
                 color="primary"
@@ -2258,8 +2391,6 @@ const AssessmentItems = () => {
                   setVisuallyAssessedType("asbestos");
                   // Set isNonACM to false for asbestos (default selection) - behaves like sampled item
                   setIsNonACM(false);
-                  setCustomRecommendationText("");
-                  setSelectedRecommendations([]);
                   setItemTypeSelectionModalOpen(false);
                   setDialogOpen(true);
                 }}
@@ -2355,21 +2486,15 @@ const AssessmentItems = () => {
                         onChange={(e) => {
                           setVisuallyAssessedType(e.target.value);
                           if (e.target.value === "non-asbestos") {
-                            // Set isNonACM to true so it behaves like the checkbox
                             setIsNonACM(true);
-                            // Set recommendation to "No Action Required" for non-asbestos
-                            setCustomRecommendationText("No Action Required");
-                            setSelectedRecommendations([]);
-                            // Clear asbestos content if it was set
-                            if (form.asbestosContent) {
-                              setForm({ ...form, asbestosContent: "" });
-                            }
+                            setForm({
+                              ...form,
+                              recommendations: "No Action Required",
+                              asbestosContent: "",
+                            });
                           } else {
-                            // Clear isNonACM for asbestos
                             setIsNonACM(false);
-                            // Clear recommendation for asbestos
-                            setCustomRecommendationText("");
-                            setSelectedRecommendations([]);
+                            setForm({ ...form, recommendations: "" });
                           }
                         }}
                       >
@@ -2395,7 +2520,10 @@ const AssessmentItems = () => {
                         <Select
                           value={form.sampleReference}
                           onChange={(e) => {
-                            setForm({ ...form, sampleReference: e.target.value });
+                            setForm({
+                              ...form,
+                              sampleReference: e.target.value,
+                            });
                           }}
                           label="Sample Reference"
                           disabled={getAvailableSampleReferences().length === 0}
@@ -2413,8 +2541,13 @@ const AssessmentItems = () => {
                           )}
                         </Select>
                         {getAvailableSampleReferences().length === 0 && (
-                          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
-                            No sampled items available to reference. Please add a sampled item first.
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ mt: 0.5 }}
+                          >
+                            No sampled items available to reference. Please add
+                            a sampled item first.
                           </Typography>
                         )}
                       </FormControl>
@@ -2437,13 +2570,16 @@ const AssessmentItems = () => {
                           // Add LD- prefix when field loses focus if value exists
                           if (e.target.value && e.target.value.trim() !== "") {
                             const prefixed = ensureSampleReferencePrefix(
-                              e.target.value
+                              e.target.value,
                             );
                             // Store without prefix in form state, but show with prefix
                             const withoutPrefix = prefixed.startsWith("LD-")
                               ? prefixed.substring(3)
                               : prefixed;
-                            setForm({ ...form, sampleReference: withoutPrefix });
+                            setForm({
+                              ...form,
+                              sampleReference: withoutPrefix,
+                            });
                           }
                         }}
                         helperText={
@@ -2453,7 +2589,9 @@ const AssessmentItems = () => {
                         }
                         InputProps={{
                           startAdornment: (
-                            <InputAdornment position="start">LD-</InputAdornment>
+                            <InputAdornment position="start">
+                              LD-
+                            </InputAdornment>
                           ),
                         }}
                       />
@@ -2496,7 +2634,7 @@ const AssessmentItems = () => {
                       setForm({ ...form, roomArea: newInputValue })
                     }
                     options={customDataFields.roomAreas.map(
-                      (item) => item.text
+                      (item) => item.text,
                     )}
                     freeSolo
                     renderInput={(params) => (
@@ -2520,7 +2658,7 @@ const AssessmentItems = () => {
                       })
                     }
                     options={customDataFields.locationDescriptions.map(
-                      (item) => item.text
+                      (item) => item.text,
                     )}
                     freeSolo
                     renderInput={(params) => (
@@ -2546,8 +2684,8 @@ const AssessmentItems = () => {
                       selectedMaterialFromDropdown && form.asbestosType
                         ? 8
                         : !selectedMaterialFromDropdown
-                        ? 6
-                        : 12
+                          ? 6
+                          : 12
                     }
                   >
                     <Autocomplete
@@ -2570,19 +2708,19 @@ const AssessmentItems = () => {
                           const asbestosTypeValue = isNonACM
                             ? ""
                             : newValue.asbestosType
-                            ? newValue.asbestosType === "Friable"
-                              ? "friable"
-                              : newValue.asbestosType === "Non-friable"
-                              ? "non-friable"
-                              : newValue.asbestosType.toLowerCase()
-                            : "";
+                              ? newValue.asbestosType === "Friable"
+                                ? "friable"
+                                : newValue.asbestosType === "Non-friable"
+                                  ? "non-friable"
+                                  : newValue.asbestosType.toLowerCase()
+                              : "";
                           setForm({
                             ...form,
                             materialType: newValue.text || "",
                             asbestosType: asbestosTypeValue,
                           });
                           setSelectedMaterialFromDropdown(
-                            !isNonACM && !!asbestosTypeValue
+                            !isNonACM && !!asbestosTypeValue,
                           );
                         } else if (newValue === null || newValue === "") {
                           // Cleared
@@ -2599,7 +2737,7 @@ const AssessmentItems = () => {
                             ? customDataFields.materialsDescriptionsNonACM
                             : customDataFields.materialsDescriptions;
                           const matchingMaterial = materialsSource.find(
-                            (item) => item.text === newValue
+                            (item) => item.text === newValue,
                           );
                           if (
                             !isNonACM &&
@@ -2610,9 +2748,9 @@ const AssessmentItems = () => {
                               matchingMaterial.asbestosType === "Friable"
                                 ? "friable"
                                 : matchingMaterial.asbestosType ===
-                                  "Non-friable"
-                                ? "non-friable"
-                                : matchingMaterial.asbestosType.toLowerCase();
+                                    "Non-friable"
+                                  ? "non-friable"
+                                  : matchingMaterial.asbestosType.toLowerCase();
                             setForm({
                               ...form,
                               materialType: newValue,
@@ -2704,15 +2842,15 @@ const AssessmentItems = () => {
                               form.asbestosType === "friable"
                                 ? "Friable"
                                 : form.asbestosType === "non-friable"
-                                ? "Non-friable"
-                                : form.asbestosType
+                                  ? "Non-friable"
+                                  : form.asbestosType
                             }`}
                             color={
                               form.asbestosType === "friable"
                                 ? "error"
                                 : form.asbestosType === "non-friable"
-                                ? "warning"
-                                : "default"
+                                  ? "warning"
+                                  : "default"
                             }
                             size="medium"
                           />
@@ -2820,80 +2958,20 @@ const AssessmentItems = () => {
                     </Typography>
                   </Divider>
                 </Grid>
-                {!(isVisuallyAssessedItem && visuallyAssessedType === "non-asbestos") && (
-                  <Grid item xs={12}>
-                    <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                      Select recommendations to add (can select multiple):
-                    </Typography>
-                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-                      {customDataFields.recommendations.map((rec) => (
-                        <FormControlLabel
-                          key={rec._id}
-                          control={
-                            <Checkbox
-                              checked={selectedRecommendations.includes(rec._id)}
-                              disabled={isNonACM || (isVisuallyAssessedItem && visuallyAssessedType === "non-asbestos")}
-                              onChange={(e) => {
-                              if (e.target.checked) {
-                                // Add this recommendation
-                                setSelectedRecommendations([
-                                  ...selectedRecommendations,
-                                  rec._id,
-                                ]);
-                                // Add the text to the text box
-                                const currentText =
-                                  customRecommendationText.trim();
-                                const newText = rec.text || "";
-                                if (currentText) {
-                                  setCustomRecommendationText(
-                                    currentText + "\n\n" + newText
-                                  );
-                                } else {
-                                  setCustomRecommendationText(newText);
-                                }
-                              } else {
-                                // Remove this recommendation
-                                setSelectedRecommendations(
-                                  selectedRecommendations.filter(
-                                    (id) => id !== rec._id
-                                  )
-                                );
-                                // Remove the text from the text box
-                                const currentText = customRecommendationText;
-                                const textToRemove = rec.text || "";
-                                // Remove the text and clean up extra newlines
-                                let updatedText = currentText
-                                  .replace(
-                                    new RegExp(
-                                      textToRemove.replace(
-                                        /[.*+?^${}()|[\]\\]/g,
-                                        "\\$&"
-                                      ),
-                                      "g"
-                                    ),
-                                    ""
-                                  )
-                                  .replace(/\n\n\n+/g, "\n\n")
-                                  .trim();
-                                setCustomRecommendationText(updatedText);
-                              }
-                            }}
-                          />
-                        }
-                        label={rec.name || rec.text}
-                      />
-                    ))}
-                  </Box>
-                </Grid>
-                )}
                 <Grid item xs={12}>
                   <TextField
                     fullWidth
                     label="Recommendations"
-                    value={customRecommendationText}
+                    value={form.recommendations}
                     onChange={(e) => {
-                      if (!isNonACM && !(isVisuallyAssessedItem && visuallyAssessedType === "non-asbestos")) {
-                        setCustomRecommendationText(e.target.value);
+                      if (
+                        !isNonACM &&
+                        !(
+                          isVisuallyAssessedItem &&
+                          visuallyAssessedType === "non-asbestos"
+                        )
+                      ) {
+                        setForm({ ...form, recommendations: e.target.value });
                         if (dictationError) {
                           setDictationError("");
                         }
@@ -2901,38 +2979,50 @@ const AssessmentItems = () => {
                     }}
                     multiline
                     rows={4}
-                    disabled={isNonACM || (isVisuallyAssessedItem && visuallyAssessedType === "non-asbestos")}
+                    disabled={
+                      isNonACM ||
+                      (isVisuallyAssessedItem &&
+                        visuallyAssessedType === "non-asbestos")
+                    }
                     helperText={
-                      isNonACM || (isVisuallyAssessedItem && visuallyAssessedType === "non-asbestos")
+                      isNonACM ||
+                      (isVisuallyAssessedItem &&
+                        visuallyAssessedType === "non-asbestos")
                         ? "No Action Required for non-ACM items"
-                        : "You can edit this text directly or select recommendations above to add them"
+                        : "Enter recommendation text"
                     }
                     InputProps={{
-                      endAdornment: !isNonACM && !(isVisuallyAssessedItem && visuallyAssessedType === "non-asbestos") && (
-                        <InputAdornment position="end">
-                          <IconButton
-                            onClick={
-                              isDictating ? stopDictation : startDictation
-                            }
-                            color={isDictating ? "error" : "primary"}
-                            title={
-                              isDictating ? "Stop Dictation" : "Start Dictation"
-                            }
-                            sx={{
-                              backgroundColor: isDictating
-                                ? "error.light"
-                                : "transparent",
-                              "&:hover": {
+                      endAdornment: !isNonACM &&
+                        !(
+                          isVisuallyAssessedItem &&
+                          visuallyAssessedType === "non-asbestos"
+                        ) && (
+                          <InputAdornment position="end">
+                            <IconButton
+                              onClick={
+                                isDictating ? stopDictation : startDictation
+                              }
+                              color={isDictating ? "error" : "primary"}
+                              title={
+                                isDictating
+                                  ? "Stop Dictation"
+                                  : "Start Dictation"
+                              }
+                              sx={{
                                 backgroundColor: isDictating
-                                  ? "error.main"
-                                  : "action.hover",
-                              },
-                            }}
-                          >
-                            <MicIcon />
-                          </IconButton>
-                        </InputAdornment>
-                      ),
+                                  ? "error.light"
+                                  : "transparent",
+                                "&:hover": {
+                                  backgroundColor: isDictating
+                                    ? "error.main"
+                                    : "action.hover",
+                                },
+                              }}
+                            >
+                              <MicIcon />
+                            </IconButton>
+                          </InputAdornment>
+                        ),
                     }}
                   />
                   {/* Dictation Status and Errors */}
@@ -3340,7 +3430,7 @@ const AssessmentItems = () => {
                                   e.stopPropagation();
                                   handleTogglePhotoInReport(
                                     selectedItemForPhotos._id,
-                                    photo._id
+                                    photo._id,
                                   );
                                 }}
                                 onClick={(e) => {
@@ -3361,14 +3451,14 @@ const AssessmentItems = () => {
                                 top: 8,
                                 right: 8,
                                 backgroundColor: isPhotoMarkedForDeletion(
-                                  photo._id
+                                  photo._id,
                                 )
                                   ? "rgba(76, 175, 80, 0.8)"
                                   : "rgba(0, 0, 0, 0.6)",
                                 color: "white",
                                 "&:hover": {
                                   backgroundColor: isPhotoMarkedForDeletion(
-                                    photo._id
+                                    photo._id,
                                   )
                                     ? "rgba(76, 175, 80, 1)"
                                     : "rgba(0, 0, 0, 0.8)",
@@ -3386,7 +3476,7 @@ const AssessmentItems = () => {
                                 } else {
                                   handleDeletePhotoFromItem(
                                     selectedItemForPhotos._id,
-                                    photo._id
+                                    photo._id,
                                   );
                                 }
                               }}
@@ -3418,12 +3508,12 @@ const AssessmentItems = () => {
                                   size="small"
                                   value={getCurrentPhotoDescription(
                                     photo._id,
-                                    selectedItemForPhotos
+                                    selectedItemForPhotos,
                                   )}
                                   onChange={(e) =>
                                     handleDescriptionChange(
                                       photo._id,
-                                      e.target.value
+                                      e.target.value,
                                     )
                                   }
                                   onBlur={() =>
@@ -3485,7 +3575,7 @@ const AssessmentItems = () => {
                                   >
                                     {getCurrentPhotoDescription(
                                       photo._id,
-                                      selectedItemForPhotos
+                                      selectedItemForPhotos,
                                     )}
                                   </Typography>
                                   <Typography
@@ -3744,15 +3834,14 @@ const AssessmentItems = () => {
                       setScopeItems(newItems);
                     }}
                     required={index === 0}
-                    multiline
-                    rows={2}
                     variant="outlined"
+                    size="small"
                   />
                   {scopeItems.length > 1 && (
                     <IconButton
                       onClick={() => {
                         const newItems = scopeItems.filter(
-                          (_, i) => i !== index
+                          (_, i) => i !== index,
                         );
                         setScopeItems(newItems);
                       }}
@@ -3794,7 +3883,7 @@ const AssessmentItems = () => {
                 if (!assessment) {
                   showSnackbar(
                     "Assessment data not loaded. Please refresh the page.",
-                    "error"
+                    "error",
                   );
                   return;
                 }
@@ -3822,10 +3911,12 @@ const AssessmentItems = () => {
                     assessmentDate: assessment.assessmentDate,
                     status: assessment.status,
                     assessmentScope: filteredItems,
+                    reportApprovedBy: null,
+                    reportIssueDate: null,
                   });
                   showSnackbar(
                     "Scope of assessment saved successfully",
-                    "success"
+                    "success",
                   );
                   setScopeDialogOpen(false);
                   await fetchData();
@@ -4063,10 +4154,12 @@ const AssessmentItems = () => {
                     assessmentDate: assessment?.assessmentDate,
                     jobSpecificExclusions:
                       assessment?.jobSpecificExclusions || "",
+                    reportApprovedBy: null,
+                    reportIssueDate: null,
                   });
                   showSnackbar(
                     "Job specific exclusions saved successfully",
-                    "success"
+                    "success",
                   );
                   setExclusionsLastSaved(new Date());
                   setJobExclusionsModalOpen(false);
@@ -4074,7 +4167,7 @@ const AssessmentItems = () => {
                   console.error("Error saving job specific exclusions:", error);
                   showSnackbar(
                     "Failed to save job specific exclusions",
-                    "error"
+                    "error",
                   );
                 } finally {
                   setSavingExclusions(false);
@@ -4261,21 +4354,20 @@ const AssessmentItems = () => {
                     assessmentDate: assessment?.assessmentDate,
                     discussionConclusions:
                       assessment?.discussionConclusions || "",
+                    reportApprovedBy: null,
+                    reportIssueDate: null,
                   });
                   showSnackbar(
                     "Discussion/conclusions saved successfully",
-                    "success"
+                    "success",
                   );
                   setDiscussionLastSaved(new Date());
                   setDiscussionModalOpen(false);
                 } catch (error) {
-                  console.error(
-                    "Error saving discussion/conclusions:",
-                    error
-                  );
+                  console.error("Error saving discussion/conclusions:", error);
                   showSnackbar(
                     "Failed to save discussion/conclusions",
-                    "error"
+                    "error",
                   );
                 } finally {
                   setSavingDiscussion(false);
@@ -4347,7 +4439,8 @@ const AssessmentItems = () => {
           </DialogTitle>
           <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
             <Typography variant="body1" sx={{ color: "text.primary" }}>
-              Are you sure you want to mark site works as completed? The assessment status will be set to Site Works Complete.
+              Are you sure you want to mark site works as completed? The
+              assessment status will be set to Site Works Complete.
             </Typography>
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
@@ -4578,7 +4671,7 @@ const AssessmentItems = () => {
           <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
             <Typography variant="body1" sx={{ mb: 3, color: "text.primary" }}>
               Please confirm that the samples have been physically delivered to
-              the laboratory and when analysis tis due.
+              the laboratory and when analysis is due.
             </Typography>
 
             <Box sx={{ mb: 2 }}>
@@ -4605,8 +4698,7 @@ const AssessmentItems = () => {
                   }
                   onClick={() => {
                     const now = new Date();
-                    const dueDate = new Date(now);
-                    dueDate.setDate(now.getDate() + 3);
+                    const dueDate = addBusinessDays(now, 3);
                     setTurnaroundTime("3 day");
                     setAnalysisDueDate(dueDate);
                     setShowCustomTurnaround(false);
@@ -4636,8 +4728,7 @@ const AssessmentItems = () => {
                   }
                   onClick={() => {
                     const now = new Date();
-                    const dueDate = new Date(now);
-                    dueDate.setHours(now.getHours() + 24);
+                    const dueDate = addBusinessDays(now, 1);
                     setTurnaroundTime("24 hours");
                     setAnalysisDueDate(dueDate);
                     setShowCustomTurnaround(false);
@@ -4749,6 +4840,61 @@ const AssessmentItems = () => {
               }}
             >
               Confirm Submission
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Finalise Assessment (No Samples) Confirmation Dialog */}
+        <Dialog
+          open={showFinaliseAssessmentDialog}
+          onClose={() =>
+            !finalisingAssessment && setShowFinaliseAssessmentDialog(false)
+          }
+          maxWidth="xs"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
+        >
+          <DialogTitle sx={{ pb: 2, px: 3, pt: 3 }}>
+            Finalise Assessment
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 0, pb: 1 }}>
+            <Typography variant="body1" color="text.primary">
+              No samples were collected during this assessment. Confirm that you
+              wish to finalise and mark the assessment as ready for review?
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2 }}>
+            <Button
+              onClick={() => setShowFinaliseAssessmentDialog(false)}
+              variant="outlined"
+              disabled={finalisingAssessment}
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmFinaliseAssessment}
+              variant="contained"
+              color="primary"
+              disabled={finalisingAssessment}
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              {finalisingAssessment ? "Finalising…" : "Confirm"}
             </Button>
           </DialogActions>
         </Dialog>

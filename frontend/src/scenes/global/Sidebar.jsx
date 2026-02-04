@@ -11,7 +11,6 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
 import PeopleOutlinedIcon from "@mui/icons-material/PeopleOutlined";
-import ContactsOutlinedIcon from "@mui/icons-material/ContactsOutlined";
 import ReceiptOutlinedIcon from "@mui/icons-material/ReceiptOutlined";
 import CalendarTodayOutlinedIcon from "@mui/icons-material/CalendarTodayOutlined";
 import MapOutlinedIcon from "@mui/icons-material/MapOutlined";
@@ -27,6 +26,7 @@ import DescriptionIcon from "@mui/icons-material/Description";
 import ConstructionIcon from "@mui/icons-material/Construction";
 import SearchIcon from "@mui/icons-material/Search";
 import FolderCopyIcon from "@mui/icons-material/FolderCopy";
+import BiotechIcon from "@mui/icons-material/Biotech";
 import { tokens } from "../../theme/tokens";
 import { useAuth } from "../../context/AuthContext";
 import { usePermissions } from "../../hooks/usePermissions";
@@ -133,7 +133,7 @@ const Item = ({ title, to, icon }) => {
       !to.startsWith("/fibre-id/client-supplied/")
     ) {
       console.log(
-        "🔍 Sidebar showing unsaved changes dialog for analysis page"
+        "🔍 Sidebar showing unsaved changes dialog for analysis page",
       );
       window.pendingNavigation = to;
       if (window.showUnsavedChangesDialog) {
@@ -284,7 +284,7 @@ const CollapsibleSection = ({ title, to, icon, defaultExpanded = true }) => {
       !to.startsWith("/fibre-id/client-supplied/")
     ) {
       console.log(
-        "🔍 Sidebar showing unsaved changes dialog for analysis page"
+        "🔍 Sidebar showing unsaved changes dialog for analysis page",
       );
       window.pendingNavigation = to;
       if (window.showUnsavedChangesDialog) {
@@ -318,8 +318,8 @@ const CollapsibleSection = ({ title, to, icon, defaultExpanded = true }) => {
             ? tokens.grey[100]
             : tokens.primary[700]
           : theme.palette.mode === "dark"
-          ? tokens.grey[100]
-          : tokens.grey[700],
+            ? tokens.grey[100]
+            : tokens.grey[700],
         backgroundColor: isActive
           ? theme.palette.mode === "dark"
             ? tokens.primary[900]
@@ -332,8 +332,8 @@ const CollapsibleSection = ({ title, to, icon, defaultExpanded = true }) => {
               ? tokens.primary[800]
               : tokens.primary[200]
             : theme.palette.mode === "dark"
-            ? "rgba(255, 255, 255, 0.08)"
-            : "rgba(0, 0, 0, 0.04)",
+              ? "rgba(255, 255, 255, 0.08)"
+              : "rgba(0, 0, 0, 0.04)",
         },
       }}
     >
@@ -608,9 +608,9 @@ const Sidebar = () => {
 
           {isFeatureEnabled("ADVANCED.ASBESTOS_REMOVAL") && (
             <Item
-              title="Client Supplied"
-              to="/client-supplied"
-              icon={<ContactsOutlinedIcon />}
+              title="Laboratory Services"
+              to="/laboratory-services"
+              icon={<BiotechIcon />}
             />
           )}
         </Box>

@@ -59,6 +59,10 @@ const SurveyReportTemplates = () => {
   const templateSections = [
     { key: "introductionContent", label: "Introduction" },
     { key: "surveyFindingsContent", label: "Survey Findings" },
+    {
+      key: "surveyFindingsContentNoSamples",
+      label: "Survey Findings (No Samples)",
+    },
     { key: "discussionContent", label: "Discussion & Conclusions" },
     { key: "signOffContent", label: "Sign-off" },
     { key: "riskAssessmentContent", label: "Risk Assessment" },
@@ -105,9 +109,8 @@ const SurveyReportTemplates = () => {
         // Try to get asbestos assessment template
         let templateData;
         try {
-          templateData = await reportTemplateService.getTemplateByType(
-            "asbestosAssessment"
-          );
+          templateData =
+            await reportTemplateService.getTemplateByType("asbestosAssessment");
         } catch (error) {
           // If template doesn't exist, create it with default structure
           if (error.response?.status === 404) {
@@ -135,10 +138,10 @@ const SurveyReportTemplates = () => {
         // Load selected legislation
         if (templateData.selectedLegislation) {
           const actLegislation = templateData.selectedLegislation.filter(
-            (item) => item.jurisdiction === "ACT"
+            (item) => item.jurisdiction === "ACT",
           );
           const nswLegislation = templateData.selectedLegislation.filter(
-            (item) => item.jurisdiction === "NSW"
+            (item) => item.jurisdiction === "NSW",
           );
           setSelectedACTLegislation(actLegislation);
           setSelectedNSWLegislation(nswLegislation);
@@ -281,7 +284,7 @@ const SurveyReportTemplates = () => {
   const handleACTLegislationChange = async (event) => {
     const selectedIds = event.target.value;
     const selectedItems = legislationItems.filter(
-      (item) => selectedIds.includes(item._id) && item.jurisdiction === "ACT"
+      (item) => selectedIds.includes(item._id) && item.jurisdiction === "ACT",
     );
 
     setSelectedACTLegislation(selectedItems);
@@ -323,7 +326,7 @@ const SurveyReportTemplates = () => {
   const handleNSWLegislationChange = async (event) => {
     const selectedIds = event.target.value;
     const selectedItems = legislationItems.filter(
-      (item) => selectedIds.includes(item._id) && item.jurisdiction === "NSW"
+      (item) => selectedIds.includes(item._id) && item.jurisdiction === "NSW",
     );
 
     setSelectedNSWLegislation(selectedItems);
@@ -436,7 +439,7 @@ const SurveyReportTemplates = () => {
                         >
                           {selected.map((value) => {
                             const item = legislationItems.find(
-                              (item) => item._id === value
+                              (item) => item._id === value,
                             );
                             return (
                               <Chip
@@ -456,7 +459,7 @@ const SurveyReportTemplates = () => {
                       disabled={legislationLoading}
                     >
                       {legislationItems.filter(
-                        (item) => item.jurisdiction === "ACT"
+                        (item) => item.jurisdiction === "ACT",
                       ).length > 0 ? (
                         legislationItems
                           .filter((item) => item.jurisdiction === "ACT")
@@ -464,7 +467,7 @@ const SurveyReportTemplates = () => {
                             <MenuItem key={item._id} value={item._id}>
                               <Checkbox
                                 checked={selectedACTLegislation.some(
-                                  (selected) => selected._id === item._id
+                                  (selected) => selected._id === item._id,
                                 )}
                               />
                               <ListItemText
@@ -499,7 +502,7 @@ const SurveyReportTemplates = () => {
                         >
                           {selected.map((value) => {
                             const item = legislationItems.find(
-                              (item) => item._id === value
+                              (item) => item._id === value,
                             );
                             return (
                               <Chip
@@ -519,7 +522,7 @@ const SurveyReportTemplates = () => {
                       disabled={legislationLoading}
                     >
                       {legislationItems.filter(
-                        (item) => item.jurisdiction === "NSW"
+                        (item) => item.jurisdiction === "NSW",
                       ).length > 0 ? (
                         legislationItems
                           .filter((item) => item.jurisdiction === "NSW")
@@ -527,7 +530,7 @@ const SurveyReportTemplates = () => {
                             <MenuItem key={item._id} value={item._id}>
                               <Checkbox
                                 checked={selectedNSWLegislation.some(
-                                  (selected) => selected._id === item._id
+                                  (selected) => selected._id === item._id,
                                 )}
                               />
                               <ListItemText
@@ -634,7 +637,7 @@ const SurveyReportTemplates = () => {
                         onClick={() =>
                           handleEdit(
                             section.key,
-                            template?.standardSections?.[section.key] || ""
+                            template?.standardSections?.[section.key] || "",
                           )
                         }
                         size="small"
@@ -702,7 +705,7 @@ const SurveyReportTemplates = () => {
                       key={item.name}
                       onClick={() => {
                         const textField = document.querySelector(
-                          'textarea[aria-label*="Content"]'
+                          'textarea[aria-label*="Content"]',
                         );
                         if (textField) {
                           const start = textField.selectionStart;
@@ -765,7 +768,7 @@ const SurveyReportTemplates = () => {
                       key={format.code}
                       onClick={() => {
                         const textField = document.querySelector(
-                          'textarea[aria-label*="Content"]'
+                          'textarea[aria-label*="Content"]',
                         );
                         if (textField) {
                           const start = textField.selectionStart;

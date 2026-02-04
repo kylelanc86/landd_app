@@ -461,7 +461,6 @@ const ClientSuppliedFibreIDAnalysis = () => {
     );
 
     handleAsbestosMenuClose();
-    showSnackbar(`${AsbestosContent} preset applied successfully!`, "success");
   };
 
   const calculateFinalResult = () => {

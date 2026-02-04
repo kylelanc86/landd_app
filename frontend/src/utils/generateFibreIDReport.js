@@ -335,17 +335,6 @@ pdfMake.fonts = {
                 return false;
               });
                          
-              // Notes for L&D supplied reports
-              const ldSuppliedNotes = [
-                { text: '1. Asbestos in bulk materials requiring disintegration such as vinyl, resins, mastic and caulking can be difficult to detect using PLM and dispersion staining due to the low grade or small diameter of asbestos fibres present in the material. Where no asbestos is detected in such a sample, another, independent analytical technique should be considered.', style: 'notes' },
-                { text: '2. This report must not be reproduced except in full.', style: 'notes' },
-                { text: '3. The practical detection limit for identification of asbestos fibre using PLM and dispersion staining techniques is 0.01-0.1%, equivalent to 0.1-1g/kg.', style: 'notes' },
-                { text: '4. Reported sample weights include the weight of the sample bag.', style: 'notes' },
-                { text: '5. Fibres that cannot be unequivocally identified as one of the three asbestos forms, will be reported as Unknown Mineral Fibres (UMF). The fibres detected may or may not be asbestos fibres. To confirm the identities of these fibres, another independent analytical technique may be required.', style: 'notes' },
-                { text: '6. This report relates to samples provided by a third party and the results within apply to the samples as received.', style: 'notes' },
-                { text: '7. Accredited for compliance with ISO/IEC 17025-Testing. Accreditation no: 19512.', style: 'notes' },
-              ];
-
               // Notes for client-supplied reports
               const clientSuppliedNotes = [
                 { text: '1. Asbestos in bulk materials requiring disintegration such as vinyl, resins, mastic and caulking can be difficult to detect using PLM and dispersion staining due to the low grade or small diameter of asbestos fibres present in the material. Where no asbestos is detected in such a sample, another, independent analytical technique should be considered.', style: 'notes' },
@@ -354,8 +343,19 @@ pdfMake.fonts = {
                 { text: '4. Reported sample weights include the weight of the sample bag.', style: 'notes' },
                 { text: '5. Fibres that cannot be unequivocally identified as one of the three asbestos forms, will be reported as Unknown Mineral Fibres (UMF). The fibres detected may or may not be asbestos fibres. To confirm the identities of these fibres, another independent analytical technique may be required.', style: 'notes' },
                 { text: '6. The samples analysed covered by this report along with the site and sample descriptions were supplied by a third party. L&D makes no claim to the validity of these details', style: 'notes' },
-                { text: '7. The results of the testing relate only to the samples as supplied to the laboratory.', style: 'notes' },
+                { text: '7. This report relates to samples provided by a third party and the results within apply to the samples as received.', style: 'notes' },
                 { text: '8. Accredited for compliance with ISO/IEC 17025-Testing. Accreditation no: 19512.', style: 'notes' },
+              ];
+
+              // Notes for L&D-supplied reports
+              const ldSuppliedNotes = [
+                { text: '1. Asbestos in bulk materials requiring disintegration such as vinyl, resins, mastic and caulking can be difficult to detect using PLM and dispersion staining due to the low grade or small diameter of asbestos fibres present in the material. Where no asbestos is detected in such a sample, another, independent analytical technique should be considered.', style: 'notes' },
+                { text: '2. This report must not be reproduced except in full.', style: 'notes' },
+                { text: '3. The practical detection limit for identification of asbestos fibre using PLM and dispersion staining techniques is 0.01-0.1%, equivalent to 0.1-1g/kg.', style: 'notes' },
+                { text: '4. Reported sample weights include the weight of the sample bag.', style: 'notes' },
+                { text: '5. Fibres that cannot be unequivocally identified as one of the three asbestos forms, will be reported as Unknown Mineral Fibres (UMF). The fibres detected may or may not be asbestos fibres. To confirm the identities of these fibres, another independent analytical technique may be required.', style: 'notes' },
+                { text: '6. The results of the testing relate only to the samples as supplied to the laboratory.', style: 'notes' },
+                { text: '7. Accredited for compliance with ISO/IEC 17025-Testing. Accreditation no: 19512.', style: 'notes' },
               ];
 
               // Select notes based on report type
@@ -538,8 +538,10 @@ pdfMake.fonts = {
                       if (Array.isArray(fibres) && fibres.length > 0) {
                         fibres.forEach((fibre, fibreIndex) => {
                           if (fibre && fibre.result && fibre.result.trim() !== '' && fibre.result !== 'undefined' && fibre.result !== 'null') {
-                            if (fibre.result.includes('Asbestos')) {
-                              asbestosResultsFromFibres.push(fibre.result);
+                            const r = fibre.result.trim();
+                            const isUMF = /^umf$/i.test(r) || /^unidentified\s+mineral\s+fibre$/i.test(r);
+                            if (fibre.result.includes('Asbestos') || isUMF) {
+                              asbestosResultsFromFibres.push(isUMF ? 'UMF' : fibre.result);
                             } else {
                               nonAsbestosResults.push(fibre.result);
                             }

@@ -36,12 +36,15 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import SendIcon from "@mui/icons-material/Send";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import MailIcon from "@mui/icons-material/Mail";
 import { tokens } from "../../../theme/tokens";
 import { useTheme } from "@mui/material/styles";
-import { projectService, asbestosAssessmentService, userService } from "../../../services/api";
+import {
+  projectService,
+  asbestosAssessmentService,
+  userService,
+} from "../../../services/api";
 import { useAuth } from "../../../context/AuthContext";
 import { hasPermission } from "../../../config/permissions";
 import { getTodaySydney } from "../../../utils/dateUtils";
@@ -132,6 +135,7 @@ const AsbestosAssessment = () => {
   const [assessmentDateError, setAssessmentDateError] = useState(false);
   const [selectedState, setSelectedState] = useState("");
   const [selectedLAA, setSelectedLAA] = useState("");
+  const [secondaryHeader, setSecondaryHeader] = useState("");
 
   // Edit dialog state
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -139,17 +143,16 @@ const AsbestosAssessment = () => {
   const [editDate, setEditDate] = useState("");
   const [editState, setEditState] = useState("");
   const [editLAA, setEditLAA] = useState("");
+  const [editSecondaryHeader, setEditSecondaryHeader] = useState("");
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState(null);
 
   // View Report state
   const [generatingReportId, setGeneratingReportId] = useState(null);
 
-  // Fibre ID report and approval state
-  const [generatingFibreIDReportId, setGeneratingFibreIDReportId] = useState(null);
-  const [approvingReportId, setApprovingReportId] = useState(null);
-  const [fibreIDReportViewedJobIds, setFibreIDReportViewedJobIds] = useState(() => new Set());
-  const [sendingAuthorisationJobId, setSendingAuthorisationJobId] = useState(null);
+  // Fibre ID report state (approval happens via L&D Supplied Jobs page)
+  const [generatingFibreIDReportId, setGeneratingFibreIDReportId] =
+    useState(null);
 
   // Delete confirmation state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -158,6 +161,14 @@ const AsbestosAssessment = () => {
 
   // Complete (archive) state
   const [completingJobId, setCompletingJobId] = useState(null);
+
+  // Approval/authorisation state
+  const [reportViewedAssessmentIds, setReportViewedAssessmentIds] = useState(
+    new Set(),
+  );
+  const [authorisingReports, setAuthorisingReports] = useState({});
+  const [sendingAuthorisationRequests, setSendingAuthorisationRequests] =
+    useState({});
 
   const fetchJobs = useCallback(
     async ({ force = false, silent = false } = {}) => {
@@ -173,9 +184,7 @@ const AsbestosAssessment = () => {
         if (!force) {
           const cached = loadJobsCache();
           if (cached) {
-            console.log(
-              "[Asbestos Assessment] Serving jobs from cache"
-            );
+            console.log("[Asbestos Assessment] Serving jobs from cache");
             setJobs(cached.jobs);
             if (!silent) {
               setLoading(false);
@@ -184,7 +193,8 @@ const AsbestosAssessment = () => {
           }
         }
 
-        const jobsResponse = await asbestosAssessmentService.getAsbestosAssessments();
+        const jobsResponse =
+          await asbestosAssessmentService.getAsbestosAssessments();
         const jobs = jobsResponse.data || jobsResponse || [];
 
         if (!Array.isArray(jobs)) {
@@ -193,9 +203,7 @@ const AsbestosAssessment = () => {
           return;
         }
 
-        console.log(
-          `[Asbestos Assessment] Found ${jobs.length} active jobs`
-        );
+        console.log(`[Asbestos Assessment] Found ${jobs.length} active jobs`);
 
         const processedJobs = jobs.map((job) => {
           const projectRef = job.projectId || {};
@@ -217,6 +225,7 @@ const AsbestosAssessment = () => {
             status: job.status || "in-progress",
             LAA: job.LAA || null,
             reportAuthorisedBy: job.reportAuthorisedBy || null,
+            noSamplesCollected: job.noSamplesCollected || false,
             samplesCount: Array.isArray(job.items) ? job.items.length : 0,
             originalData: job,
           };
@@ -234,7 +243,7 @@ const AsbestosAssessment = () => {
         const errorTime = performance.now() - startTime;
         console.error(
           `[Asbestos Assessment] Error after ${errorTime.toFixed(2)}ms:`,
-          err
+          err,
         );
         setError(err.message || "Failed to fetch jobs");
         if (!force) {
@@ -247,12 +256,12 @@ const AsbestosAssessment = () => {
         const finalTime = performance.now() - startTime;
         console.log(
           `[Asbestos Assessment] fetchJobs completed in ${finalTime.toFixed(
-            2
-          )}ms`
+            2,
+          )}ms`,
         );
       }
     },
-    []
+    [],
   );
 
   const fetchProjects = useCallback(async () => {
@@ -288,7 +297,7 @@ const AsbestosAssessment = () => {
     try {
       const response = await userService.getAsbestosAssessors();
       const assessors = response.data || [];
-      
+
       const sortedAssessors = assessors.sort((a, b) => {
         const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
         const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
@@ -318,7 +327,10 @@ const AsbestosAssessment = () => {
 
   const getStatusColor = useCallback(
     (status) => {
-      const normalizedStatus = status?.toLowerCase().replace(/\s+/g, "_").replace(/-/g, "_");
+      const normalizedStatus = status
+        ?.toLowerCase()
+        .replace(/\s+/g, "_")
+        .replace(/-/g, "_");
 
       switch (normalizedStatus) {
         case "completed":
@@ -340,7 +352,7 @@ const AsbestosAssessment = () => {
           return theme.palette.grey[500];
       }
     },
-    [theme]
+    [theme],
   );
 
   const formatStatusLabel = useCallback((status) => {
@@ -364,7 +376,7 @@ const AsbestosAssessment = () => {
       status
         .split(/[_-]/)
         .map(
-          (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+          (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase(),
         )
         .join(" ")
     );
@@ -394,6 +406,7 @@ const AsbestosAssessment = () => {
     setModalError(null);
     setSelectedState("");
     setSelectedLAA("");
+    setSecondaryHeader("");
   };
 
   const handleSubmitModal = async () => {
@@ -423,9 +436,11 @@ const AsbestosAssessment = () => {
         assessmentDate: assessmentDate,
         state: selectedState,
         LAA: selectedLAA || null,
+        secondaryHeader: secondaryHeader?.trim() || null,
       };
 
-      const response = await asbestosAssessmentService.createAsbestosAssessment(newJobData);
+      const response =
+        await asbestosAssessmentService.createAsbestosAssessment(newJobData);
 
       if (response.data) {
         clearJobsCache();
@@ -440,7 +455,7 @@ const AsbestosAssessment = () => {
     } catch (err) {
       console.error("Error creating job:", err);
       setModalError(
-        err.response?.data?.message || err.message || "Failed to create job"
+        err.response?.data?.message || err.message || "Failed to create job",
       );
     } finally {
       setModalLoading(false);
@@ -471,7 +486,7 @@ const AsbestosAssessment = () => {
     } catch (err) {
       console.error("Error deleting job:", err);
       setError(
-        err.response?.data?.message || err.message || "Failed to delete job"
+        err.response?.data?.message || err.message || "Failed to delete job",
       );
     } finally {
       setDeleteLoading(false);
@@ -483,10 +498,54 @@ const AsbestosAssessment = () => {
     setJobToDelete(null);
   };
 
+  const hasNoSamplesCollected = (job) =>
+    job.noSamplesCollected === true ||
+    job.originalData?.noSamplesCollected === true;
+
+  const canCompleteAssessment =
+    currentUser?.role === "admin" ||
+    currentUser?.role === "manager" ||
+    currentUser?.canSetJobComplete === true;
+
   const hasSamplesSubmitted = (job) => {
+    if (hasNoSamplesCollected(job)) return false;
     const status = job.status || "";
-    const submittedStatuses = ["samples-with-lab", "sample-analysis-complete", "report-ready-for-review", "complete"];
-    return (job.samplesCount > 0 || (job.originalData?.items?.length ?? 0) > 0) && submittedStatuses.includes(status);
+    const submittedStatuses = [
+      "samples-with-lab",
+      "sample-analysis-complete",
+      "report-ready-for-review",
+      "complete",
+    ];
+    return (
+      (job.samplesCount > 0 || (job.originalData?.items?.length ?? 0) > 0) &&
+      submittedStatuses.includes(status)
+    );
+  };
+
+  // LD supplied job status label (matches LDsuppliedJobs table)
+  const getLabStatusLabel = (job) => {
+    const data = job.originalData || job;
+    if (data.labSamplesStatus) {
+      return data.labSamplesStatus === "analysis-complete"
+        ? "Analysis complete"
+        : "Samples in lab";
+    }
+    const status = data.status || job.status || "";
+    if (
+      [
+        "sample-analysis-complete",
+        "report-ready-for-review",
+        "complete",
+      ].includes(status)
+    ) {
+      return "Analysis complete";
+    }
+    return "Samples in lab";
+  };
+
+  const getLabStatusColor = (job) => {
+    const label = getLabStatusLabel(job);
+    return label === "Analysis complete" ? "success" : "primary";
   };
 
   const formatTimeUntilDue = (dueDate) => {
@@ -516,10 +575,18 @@ const AsbestosAssessment = () => {
       clearJobsCache();
       setJobs((prev) => prev.filter((j) => j.id !== job.id));
       await fetchJobs({ force: true, silent: true });
-      showSnackbar("Assessment marked as complete and removed from the table.", "success");
+      showSnackbar(
+        "Assessment marked as complete and removed from the table.",
+        "success",
+      );
     } catch (err) {
       console.error("Error completing assessment:", err);
-      showSnackbar(err.response?.data?.message || err.message || "Failed to complete assessment", "error");
+      showSnackbar(
+        err.response?.data?.message ||
+          err.message ||
+          "Failed to complete assessment",
+        "error",
+      );
     } finally {
       setCompletingJobId(null);
     }
@@ -528,9 +595,16 @@ const AsbestosAssessment = () => {
   const handleEditClick = (event, job) => {
     event.stopPropagation();
     setJobToEdit(job);
-    setEditDate(job.surveyDate ? new Date(job.surveyDate).toISOString().split('T')[0] : getTodaySydney());
+    setEditDate(
+      job.surveyDate
+        ? new Date(job.surveyDate).toISOString().split("T")[0]
+        : getTodaySydney(),
+    );
     setEditState(job.originalData?.state || job.state || "ACT");
     setEditLAA(job.LAA || "");
+    setEditSecondaryHeader(
+      job.originalData?.secondaryHeader || job.secondaryHeader || "",
+    );
     setEditError(null);
     setEditDialogOpen(true);
   };
@@ -541,6 +615,7 @@ const AsbestosAssessment = () => {
     setEditDate("");
     setEditState("");
     setEditLAA("");
+    setEditSecondaryHeader("");
     setEditError(null);
   };
 
@@ -555,20 +630,28 @@ const AsbestosAssessment = () => {
 
     try {
       const updateData = {
-        projectId: jobToEdit.originalData.projectId?._id || jobToEdit.originalData.projectId,
+        projectId:
+          jobToEdit.originalData.projectId?._id ||
+          jobToEdit.originalData.projectId,
         assessmentDate: editDate,
         state: editState || null,
         LAA: editLAA || null,
+        secondaryHeader: editSecondaryHeader?.trim() || null,
       };
 
-      await asbestosAssessmentService.updateAsbestosAssessment(jobToEdit.id, updateData);
+      await asbestosAssessmentService.updateAsbestosAssessment(
+        jobToEdit.id,
+        updateData,
+      );
       clearJobsCache();
       await fetchJobs({ force: true });
       handleCloseEditDialog();
     } catch (err) {
       console.error("Error updating job:", err);
       setEditError(
-        err.response?.data?.message || err.message || "Failed to update assessment"
+        err.response?.data?.message ||
+          err.message ||
+          "Failed to update assessment",
       );
     } finally {
       setEditLoading(false);
@@ -581,18 +664,26 @@ const AsbestosAssessment = () => {
 
     setGeneratingReportId(job.id);
     try {
-      const response = await asbestosAssessmentService.getAsbestosAssessmentById(job.id);
+      const response =
+        await asbestosAssessmentService.getAsbestosAssessmentById(job.id);
       const fullAssessment = response.data;
 
-      const { data: pdfBlob } = await asbestosAssessmentService.generateAsbestosAssessmentPdf(fullAssessment);
+      const { data: pdfBlob } =
+        await asbestosAssessmentService.generateAsbestosAssessmentPdf(
+          fullAssessment,
+        );
 
       const url = window.URL.createObjectURL(pdfBlob);
       const link = document.createElement("a");
       link.href = url;
-      const projectId = fullAssessment.projectId?.projectID || job.projectID || "Unknown";
-      const siteName = fullAssessment.projectId?.name || job.projectName || "Unknown";
+      const projectId =
+        fullAssessment.projectId?.projectID || job.projectID || "Unknown";
+      const siteName =
+        fullAssessment.projectId?.name || job.projectName || "Unknown";
       const assessmentDate = fullAssessment.assessmentDate
-        ? new Date(fullAssessment.assessmentDate).toLocaleDateString("en-GB").replace(/\//g, "-")
+        ? new Date(fullAssessment.assessmentDate)
+            .toLocaleDateString("en-GB")
+            .replace(/\//g, "-")
         : "Unknown";
       link.download = `${projectId}: Asbestos Assessment Report - ${siteName} (${assessmentDate}).pdf`;
       document.body.appendChild(link);
@@ -600,10 +691,19 @@ const AsbestosAssessment = () => {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
 
-      showSnackbar("Asbestos assessment report generated successfully.", "success");
+      setReportViewedAssessmentIds((prev) => new Set(prev).add(job.id));
+      showSnackbar(
+        "Asbestos assessment report generated successfully.",
+        "success",
+      );
     } catch (err) {
       console.error("Error generating asbestos assessment report:", err);
-      showSnackbar(err.response?.data?.message || err.message || "Failed to generate report", "error");
+      showSnackbar(
+        err.response?.data?.message ||
+          err.message ||
+          "Failed to generate report",
+        "error",
+      );
     } finally {
       setGeneratingReportId(null);
     }
@@ -621,7 +721,9 @@ const AsbestosAssessment = () => {
       if (!item.sampleReference?.trim()) return false;
       if (isVA(item)) return false;
       const ref = item.sampleReference.trim();
-      const firstIndex = items.findIndex((i) => (i.sampleReference || "").trim() === ref);
+      const firstIndex = items.findIndex(
+        (i) => (i.sampleReference || "").trim() === ref,
+      );
       return index === firstIndex;
     });
     if (sampled.length === 0) return false;
@@ -633,7 +735,8 @@ const AsbestosAssessment = () => {
     if (generatingFibreIDReportId) return;
     setGeneratingFibreIDReportId(job.id);
     try {
-      const response = await asbestosAssessmentService.getAsbestosAssessmentById(job.id);
+      const response =
+        await asbestosAssessmentService.getAsbestosAssessmentById(job.id);
       const fullAssessment = response.data;
       const items = fullAssessment.items || [];
       const isVA = (i) =>
@@ -644,7 +747,9 @@ const AsbestosAssessment = () => {
         if (!item.sampleReference?.trim()) return false;
         if (isVA(item)) return false;
         const ref = item.sampleReference.trim();
-        const firstIndex = items.findIndex((x) => (x.sampleReference || "").trim() === ref);
+        const firstIndex = items.findIndex(
+          (x) => (x.sampleReference || "").trim() === ref,
+        );
         return index === firstIndex && item.analysisData?.isAnalysed === true;
       });
       const sampleItemsForReport = sampledItems.map((item, index) => ({
@@ -658,7 +763,9 @@ const AsbestosAssessment = () => {
       if (fullAssessment.analyst?.firstName) {
         analyst = `${fullAssessment.analyst.firstName} ${fullAssessment.analyst.lastName}`;
       } else {
-        const itemWithAnalyst = fullAssessment.items?.find((i) => i.analysedBy && i.analysisData?.isAnalysed);
+        const itemWithAnalyst = fullAssessment.items?.find(
+          (i) => i.analysedBy && i.analysisData?.isAnalysed,
+        );
         if (itemWithAnalyst?.analysedBy?.firstName) {
           analyst = `${itemWithAnalyst.analysedBy.firstName} ${itemWithAnalyst.analysedBy.lastName}`;
         }
@@ -684,11 +791,14 @@ const AsbestosAssessment = () => {
       });
       if (pdfDataUrl) {
         // Use blob URL so the new tab opens reliably (data URLs can be too long or fail in window.open)
-        const base64 = pdfDataUrl.includes(",") ? pdfDataUrl.split(",")[1] : pdfDataUrl;
+        const base64 = pdfDataUrl.includes(",")
+          ? pdfDataUrl.split(",")[1]
+          : pdfDataUrl;
         if (base64) {
           const binary = atob(base64);
           const bytes = new Uint8Array(binary.length);
-          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          for (let i = 0; i < binary.length; i++)
+            bytes[i] = binary.charCodeAt(i);
           const blob = new Blob([bytes], { type: "application/pdf" });
           const blobUrl = URL.createObjectURL(blob);
           window.open(blobUrl, "_blank");
@@ -698,53 +808,16 @@ const AsbestosAssessment = () => {
         }
       }
       showSnackbar("Fibre ID report generated successfully.", "success");
-      setFibreIDReportViewedJobIds((prev) => new Set(prev).add(job.id));
     } catch (err) {
       console.error("Error generating Fibre ID report:", err);
-      showSnackbar(err.response?.data?.message || err.message || "Failed to generate Fibre ID report", "error");
+      showSnackbar(
+        err.response?.data?.message ||
+          err.message ||
+          "Failed to generate Fibre ID report",
+        "error",
+      );
     } finally {
       setGeneratingFibreIDReportId(null);
-    }
-  };
-
-  const handleApproveReport = async (event, job) => {
-    event.stopPropagation();
-    if (approvingReportId) return;
-    setApprovingReportId(job.id);
-    try {
-      const approver =
-        currentUser?.firstName && currentUser?.lastName
-          ? `${currentUser.firstName} ${currentUser.lastName}`
-          : currentUser?.name || currentUser?.email || "Unknown";
-      const assessment = job.originalData || job;
-      await asbestosAssessmentService.updateAsbestosAssessment(job.id, {
-        ...assessment,
-        reportApprovedBy: approver,
-        reportIssueDate: new Date().toISOString(),
-        status: "report-ready-for-review",
-      });
-      clearJobsCache();
-      await fetchJobs({ force: true, silent: true });
-      showSnackbar("Report approved successfully.", "success");
-    } catch (err) {
-      console.error("Error approving report:", err);
-      showSnackbar(err.response?.data?.message || err.message || "Failed to approve report", "error");
-    } finally {
-      setApprovingReportId(null);
-    }
-  };
-
-  const handleSendForAuthorisation = async (event, job) => {
-    event.stopPropagation();
-    if (sendingAuthorisationJobId) return;
-    setSendingAuthorisationJobId(job.id);
-    try {
-      showSnackbar("Authorisation request functionality will be implemented soon.", "info");
-    } catch (err) {
-      console.error("Error sending authorisation request:", err);
-      showSnackbar(err.response?.data?.message || err.message || "Failed to send for authorisation", "error");
-    } finally {
-      setSendingAuthorisationJobId(null);
     }
   };
 
@@ -752,11 +825,91 @@ const AsbestosAssessment = () => {
     navigate("/surveys");
   };
 
+  const handleAuthoriseReport = async (event, job) => {
+    event.stopPropagation();
+    if (authorisingReports[job.id]) return;
+
+    setAuthorisingReports((prev) => ({ ...prev, [job.id]: true }));
+    try {
+      const now = new Date().toISOString();
+      const authoriser =
+        currentUser?.firstName && currentUser?.lastName
+          ? `${currentUser.firstName} ${currentUser.lastName}`
+          : currentUser?.name || currentUser?.email || "Unknown";
+
+      const orig = job.originalData || {};
+      await asbestosAssessmentService.updateAsbestosAssessment(job.id, {
+        projectId: orig.projectId?._id || orig.projectId,
+        assessmentDate: orig.assessmentDate || job.surveyDate,
+        reportApprovedBy: authoriser,
+        reportIssueDate: now,
+        reportAuthorisedBy: authoriser,
+        reportAuthorisedAt: now,
+        status: "complete",
+      });
+
+      clearJobsCache();
+      await fetchJobs({ force: true });
+      showSnackbar("Assessment report authorised successfully.", "success");
+    } catch (err) {
+      console.error("Error authorising report:", err);
+      showSnackbar(
+        err.response?.data?.message ||
+          err.message ||
+          "Failed to authorise report",
+        "error",
+      );
+    } finally {
+      setAuthorisingReports((prev) => ({ ...prev, [job.id]: false }));
+    }
+  };
+
+  const handleSendForAuthorisation = async (event, job) => {
+    event.stopPropagation();
+    if (sendingAuthorisationRequests[job.id]) return;
+
+    setSendingAuthorisationRequests((prev) => ({
+      ...prev,
+      [job.id]: true,
+    }));
+    try {
+      const response = await asbestosAssessmentService.sendForAuthorisation(
+        job.id,
+      );
+      showSnackbar(
+        response.data?.message ||
+          `Authorisation request emails sent successfully to ${
+            response.data?.recipients?.length || 0
+          } report proofer user(s)`,
+        "success",
+      );
+      clearJobsCache();
+      await fetchJobs({ force: true });
+    } catch (err) {
+      console.error("Error sending authorisation request:", err);
+      showSnackbar(
+        err.response?.data?.message ||
+          err.message ||
+          "Failed to send authorisation request",
+        "error",
+      );
+    } finally {
+      setSendingAuthorisationRequests((prev) => ({
+        ...prev,
+        [job.id]: false,
+      }));
+    }
+  };
+
   return (
     <Container maxWidth="xl">
       <PDFLoadingOverlay
         open={!!generatingReportId || !!generatingFibreIDReportId}
-        message={generatingFibreIDReportId ? "Generating Fibre ID PDF..." : "Generating Asbestos Assessment PDF..."}
+        message={
+          generatingFibreIDReportId
+            ? "Generating Fibre ID PDF..."
+            : "Generating Asbestos Assessment PDF..."
+        }
       />
       <Box sx={{ mt: 4, mb: 4 }}>
         <Breadcrumbs sx={{ mb: 3 }}>
@@ -816,9 +969,11 @@ const AsbestosAssessment = () => {
                   <TableCell sx={{ fontWeight: "bold", minWidth: "110px" }}>
                     Survey Date
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", maxWidth: "140px" }}>Status</TableCell>
+                  <TableCell sx={{ fontWeight: "bold", maxWidth: "140px" }}>
+                    Status
+                  </TableCell>
                   <TableCell sx={{ fontWeight: "bold", minWidth: "180px" }}>
-                    Sample
+                    Sample Analysis
                   </TableCell>
                   <TableCell sx={{ fontWeight: "bold", minWidth: "120px" }}>
                     Actions
@@ -877,7 +1032,9 @@ const AsbestosAssessment = () => {
                       <TableCell sx={{ width: "105px" }}>
                         <Typography variant="body2">
                           {job.surveyDate
-                            ? new Date(job.surveyDate).toLocaleDateString("en-GB")
+                            ? new Date(job.surveyDate).toLocaleDateString(
+                                "en-GB",
+                              )
                             : "N/A"}
                         </Typography>
                       </TableCell>
@@ -895,111 +1052,189 @@ const AsbestosAssessment = () => {
                         onClick={(e) => e.stopPropagation()}
                         sx={{ maxWidth: "140px" }}
                       >
-                        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
-                          {hasSamplesSubmitted(job) && (
-                            <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
-                              <Button
-                                variant="outlined"
-                                size="small"
-                                onClick={(e) => handleAnalysisClick(e, job)}
-                                sx={{
-                                  textTransform: "none",
-                                  color: "#1976d2",
-                                  borderColor: "#1976d2",
-                                  "&:hover": {
-                                    borderColor: "#1565c0",
-                                    backgroundColor: "rgba(25, 118, 210, 0.04)",
-                                  },
-                                }}
-                              >
-                                Analysis
-                              </Button>
-                              {job.status === "samples-with-lab" &&
-                                job.originalData?.analysisDueDate && (
-                                  <Typography
-                                    variant="caption"
-                                    color="text.secondary"
-                                    sx={{ mt: 0.5, display: "block" }}
-                                  >
-                                    {formatTimeUntilDue(
-                                      job.originalData.analysisDueDate
-                                    ) === "Overdue"
-                                      ? "Overdue"
-                                      : `Due: ${formatTimeUntilDue(
-                                          job.originalData.analysisDueDate
-                                        )}`}
-                                  </Typography>
-                                )}
+                        <Box
+                          sx={{
+                            display: "flex",
+                            gap: 1,
+                            flexWrap: "wrap",
+                            alignItems: "center",
+                          }}
+                        >
+                          {!hasSamplesSubmitted(job) && (
+                            <Box
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRowClick(job);
+                              }}
+                              sx={{
+                                cursor: "pointer",
+                                // "&:hover": {
+                                //   textDecoration: "underline",
+                                // },
+                              }}
+                            >
+                              {hasNoSamplesCollected(job) ? (
+                                <Typography
+                                  variant="body2"
+                                  color="text.secondary"
+                                  fontStyle="italic"
+                                >
+                                  No samples submitted to lab
+                                </Typography>
+                              ) : (
+                                <Typography
+                                  variant="body2"
+                                  fontStyle="italic"
+                                  color="text.secondary"
+                                >
+                                  No samples submitted to lab
+                                </Typography>
+                              )}
                             </Box>
                           )}
-                          {areAllSampledItemsAnalysed(job) && (
-                            <>
-                              <Tooltip title="View Fibre ID Report">
-                                <IconButton
-                                  onClick={(e) => handleViewFibreIDReport(e, job)}
-                                  color="primary"
+                          {hasSamplesSubmitted(job) &&
+                            currentUser?.labApprovals?.fibreCounting ===
+                              true && (
+                              <Box
+                                sx={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  alignItems: "flex-start",
+                                }}
+                              >
+                                <Button
+                                  variant="outlined"
                                   size="small"
-                                  disabled={generatingFibreIDReportId === job.id}
+                                  onClick={(e) => handleAnalysisClick(e, job)}
+                                  sx={
+                                    job.originalData?.reportApprovedBy ||
+                                    job.reportApprovedBy
+                                      ? {
+                                          textTransform: "none",
+                                          color: "success.main",
+                                          borderColor: "success.main",
+                                          "&:hover": {
+                                            borderColor: "success.dark",
+                                            backgroundColor:
+                                              "rgba(46, 125, 50, 0.04)",
+                                          },
+                                        }
+                                      : areAllSampledItemsAnalysed(job)
+                                        ? {
+                                            textTransform: "none",
+                                            color: "text.secondary",
+                                            borderColor: "action.disabled",
+                                            "&:hover": {
+                                              borderColor: "text.secondary",
+                                              backgroundColor: "action.hover",
+                                            },
+                                          }
+                                        : {
+                                            textTransform: "none",
+                                            color: "error.main",
+                                            borderColor: "error.main",
+                                            "&:hover": {
+                                              borderColor: "error.dark",
+                                              backgroundColor:
+                                                "rgba(211, 47, 47, 0.04)",
+                                            },
+                                          }
+                                  }
                                 >
-                                  <PictureAsPdfIcon />
-                                </IconButton>
-                              </Tooltip>
-                              {job.status === "sample-analysis-complete" &&
-                                !job.originalData?.reportApprovedBy &&
-                                fibreIDReportViewedJobIds.has(job.id) &&
-                                (() => {
-                                  const canApproveFibreIDReport =
-                                    hasPermission(currentUser, "admin.view") &&
-                                    Boolean(currentUser?.reportProofer);
-                                  return canApproveFibreIDReport ? (
-                                    <Tooltip title="Approve Report">
-                                      <IconButton
-                                        onClick={(e) => handleApproveReport(e, job)}
-                                        color="success"
-                                        size="small"
-                                        disabled={approvingReportId === job.id}
-                                      >
-                                        <CheckCircleIcon />
-                                      </IconButton>
-                                    </Tooltip>
-                                  ) : (
-                                    <Tooltip title="Send for Authorisation">
-                                      <IconButton
-                                        onClick={(e) => handleSendForAuthorisation(e, job)}
-                                        color="primary"
-                                        size="small"
-                                        disabled={sendingAuthorisationJobId === job.id}
-                                      >
-                                        <SendIcon />
-                                      </IconButton>
-                                    </Tooltip>
-                                  );
-                                })()}
-                            </>
-                          )}
+                                  {job.originalData?.reportApprovedBy ||
+                                  job.reportApprovedBy
+                                    ? "Approved"
+                                    : areAllSampledItemsAnalysed(job)
+                                      ? "Analysed"
+                                      : "Analyse"}
+                                </Button>
+                                {job.status === "samples-with-lab" &&
+                                  job.originalData?.analysisDueDate && (
+                                    <Typography
+                                      variant="caption"
+                                      color="text.secondary"
+                                      sx={{ mt: 0.5, display: "block" }}
+                                    >
+                                      {formatTimeUntilDue(
+                                        job.originalData.analysisDueDate,
+                                      ) === "Overdue"
+                                        ? "Overdue"
+                                        : `Due: ${formatTimeUntilDue(
+                                            job.originalData.analysisDueDate,
+                                          )}`}
+                                    </Typography>
+                                  )}
+                              </Box>
+                            )}
+                          {hasSamplesSubmitted(job) &&
+                            currentUser?.labApprovals?.fibreCounting !==
+                              true && (
+                              <Chip
+                                label={getLabStatusLabel(job)}
+                                size="small"
+                                color={getLabStatusColor(job)}
+                                sx={{ color: "white" }}
+                              />
+                            )}
+                          {currentUser?.labApprovals?.fibreCounting === true &&
+                            areAllSampledItemsAnalysed(job) && (
+                              <>
+                                <Tooltip title="View Fibre ID Report">
+                                  <IconButton
+                                    onClick={(e) =>
+                                      handleViewFibreIDReport(e, job)
+                                    }
+                                    color="primary"
+                                    size="small"
+                                    disabled={
+                                      generatingFibreIDReportId === job.id
+                                    }
+                                  >
+                                    <PictureAsPdfIcon />
+                                  </IconButton>
+                                </Tooltip>
+                              </>
+                            )}
                         </Box>
                       </TableCell>
                       <TableCell
                         onClick={(e) => e.stopPropagation()}
                         sx={{ minWidth: "120px" }}
                       >
-                        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
-                          {job.status === "complete" && job.reportAuthorisedBy && (
-                            <Button
-                              variant="outlined"
-                              size="small"
-                              color="success"
-                              onClick={(event) => handleCompleteClick(event, job)}
-                              disabled={completingJobId === job.id}
-                              sx={{ textTransform: "none" }}
-                            >
-                              Complete
-                            </Button>
-                          )}
-                          {(job.status === "report-ready-for-review" || job.status === "complete") && (
+                        <Box
+                          sx={{
+                            display: "flex",
+                            gap: 1,
+                            flexWrap: "wrap",
+                            alignItems: "center",
+                          }}
+                        >
+                          {/* Complete: only when ASSESSMENT report is authorised (reportAuthorisedBy), NOT fibre ID approval (reportApprovedBy). Restricted to admins or users with Can Set Job Complete. */}
+                          {!!(
+                            job.originalData?.reportAuthorisedBy ||
+                            job.reportAuthorisedBy
+                          ) &&
+                            canCompleteAssessment && (
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                color="success"
+                                onClick={(event) =>
+                                  handleCompleteClick(event, job)
+                                }
+                                disabled={completingJobId === job.id}
+                                sx={{ textTransform: "none" }}
+                              >
+                                Complete
+                              </Button>
+                            )}
+                          {(job.status === "report-ready-for-review" ||
+                            job.status === "complete") && (
                             <Tooltip title="View Asbestos Assessment Report">
                               <IconButton
-                                onClick={(event) => handleViewReport(event, job)}
+                                onClick={(event) =>
+                                  handleViewReport(event, job)
+                                }
                                 color="primary"
                                 size="small"
                                 disabled={generatingReportId === job.id}
@@ -1008,6 +1243,83 @@ const AsbestosAssessment = () => {
                               </IconButton>
                             </Tooltip>
                           )}
+                          {(() => {
+                            const reportAuthorised =
+                              job.originalData?.reportAuthorisedBy ||
+                              job.reportAuthorisedBy;
+                            const reportViewed = reportViewedAssessmentIds.has(
+                              job.id,
+                            );
+                            const canAuthorise =
+                              (currentUser?.reportProofer ||
+                                currentUser?.labSignatory) &&
+                              hasPermission(currentUser, "admin.view");
+                            const canSendForApproval =
+                              hasPermission(currentUser, "asbestos.edit") &&
+                              !canAuthorise;
+
+                            const showAuthorise =
+                              !reportAuthorised &&
+                              reportViewed &&
+                              canAuthorise &&
+                              (job.status === "report-ready-for-review" ||
+                                job.status === "complete");
+                            const showSend =
+                              !reportAuthorised &&
+                              reportViewed &&
+                              canSendForApproval &&
+                              (job.status === "report-ready-for-review" ||
+                                job.status === "complete");
+
+                            return (
+                              <>
+                                {showAuthorise && (
+                                  <Button
+                                    variant="contained"
+                                    size="small"
+                                    color="success"
+                                    onClick={(event) =>
+                                      handleAuthoriseReport(event, job)
+                                    }
+                                    disabled={
+                                      authorisingReports[job.id] ||
+                                      generatingReportId === job.id
+                                    }
+                                    sx={{
+                                      textTransform: "none",
+                                      backgroundColor: "#4caf50",
+                                      "&:hover": {
+                                        backgroundColor: "#45a049",
+                                      },
+                                    }}
+                                  >
+                                    {authorisingReports[job.id]
+                                      ? "Authorising..."
+                                      : "Authorise Report"}
+                                  </Button>
+                                )}
+                                {showSend && (
+                                  <Button
+                                    variant="outlined"
+                                    size="small"
+                                    color="primary"
+                                    startIcon={<MailIcon />}
+                                    onClick={(event) =>
+                                      handleSendForAuthorisation(event, job)
+                                    }
+                                    disabled={
+                                      sendingAuthorisationRequests[job.id]
+                                    }
+                                    sx={{ textTransform: "none" }}
+                                  >
+                                    {sendingAuthorisationRequests[job.id]
+                                      ? "Sending..."
+                                      : "Send for Approval"}
+                                  </Button>
+                                )}
+                              </>
+                            );
+                          })()}
                           <Tooltip title="Edit Assessment">
                             <IconButton
                               onClick={(event) => handleEditClick(event, job)}
@@ -1020,7 +1332,9 @@ const AsbestosAssessment = () => {
                           {hasPermission(currentUser, "asbestos.delete") && (
                             <Tooltip title="Delete Assessment">
                               <IconButton
-                                onClick={(event) => handleDeleteClick(event, job)}
+                                onClick={(event) =>
+                                  handleDeleteClick(event, job)
+                                }
                                 color="error"
                                 size="small"
                               >
@@ -1175,13 +1489,31 @@ const AsbestosAssessment = () => {
               })}
             </Select>
           </FormControl>
+
+          <TextField
+            fullWidth
+            label="Secondary Header (Optional)"
+            value={secondaryHeader}
+            onChange={(e) => {
+              setSecondaryHeader(e.target.value);
+              setModalError(null);
+            }}
+            placeholder="Enter secondary header text"
+            helperText="This will appear as a smaller header beneath the project site name on the cover page"
+            sx={{ mb: 2 }}
+          />
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseModal}>Cancel</Button>
           <Button
             onClick={handleSubmitModal}
             variant="contained"
-            disabled={!selectedProject || !assessmentDate || !selectedState || modalLoading}
+            disabled={
+              !selectedProject ||
+              !assessmentDate ||
+              !selectedState ||
+              modalLoading
+            }
             sx={{
               backgroundColor: colors.primary[700],
               color: colors.grey[100],
@@ -1289,6 +1621,19 @@ const AsbestosAssessment = () => {
               })}
             </Select>
           </FormControl>
+
+          <TextField
+            fullWidth
+            label="Secondary Header (Optional)"
+            value={editSecondaryHeader}
+            onChange={(e) => {
+              setEditSecondaryHeader(e.target.value);
+              setEditError(null);
+            }}
+            placeholder="Enter secondary header text"
+            helperText="This will appear as a smaller header beneath the project site name on the cover page"
+            sx={{ mb: 2 }}
+          />
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseEditDialog} disabled={editLoading}>
@@ -1379,4 +1724,3 @@ const AsbestosAssessment = () => {
 };
 
 export default AsbestosAssessment;
-

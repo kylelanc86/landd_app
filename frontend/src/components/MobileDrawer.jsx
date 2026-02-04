@@ -12,7 +12,6 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
 import PeopleOutlinedIcon from "@mui/icons-material/PeopleOutlined";
-import ContactsOutlinedIcon from "@mui/icons-material/ContactsOutlined";
 import SettingsIcon from "@mui/icons-material/Settings";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import StorageIcon from "@mui/icons-material/Storage";
@@ -21,6 +20,7 @@ import ConstructionIcon from "@mui/icons-material/Construction";
 import SearchIcon from "@mui/icons-material/Search";
 import FolderCopyIcon from "@mui/icons-material/FolderCopy";
 import ScienceIcon from "@mui/icons-material/Science";
+import BiotechIcon from "@mui/icons-material/Biotech";
 import { tokens } from "../theme/tokens";
 import { useAuth } from "../context/AuthContext";
 import { usePermissions } from "../hooks/usePermissions";
@@ -81,7 +81,7 @@ const MobileDrawer = ({ open, onClose }) => {
       !to.startsWith("/fibre-id/client-supplied/")
     ) {
       console.log(
-        "🔍 Sidebar showing unsaved changes dialog for analysis page"
+        "🔍 Sidebar showing unsaved changes dialog for analysis page",
       );
       window.pendingNavigation = to;
       if (window.showUnsavedChangesDialog) {
@@ -223,7 +223,7 @@ const MobileDrawer = ({ open, onClose }) => {
                 to="/timesheets/monthly"
                 icon={<AccessTimeIcon />}
               />
-            
+
               <MenuItem
                 title="Clients"
                 to="/clients"
@@ -233,11 +233,7 @@ const MobileDrawer = ({ open, onClose }) => {
 
             <Divider sx={{ my: 1 }} />
 
-            <MenuItem
-              title="Projects"
-              to="/projects"
-              icon={<StorageIcon />}
-            />
+            <MenuItem title="Projects" to="/projects" icon={<StorageIcon />} />
 
             {/* Invoices link hidden for all users */}
             {/* <MenuItem
@@ -291,13 +287,11 @@ const MobileDrawer = ({ open, onClose }) => {
 
             {isFeatureEnabled("ADVANCED.ASBESTOS_REMOVAL") && (
               <MenuItem
-                title="Client Supplied"
-                to="/client-supplied"
-                icon={<ContactsOutlinedIcon />}
+                title="Laboratory Services"
+                to="/laboratory-services"
+                icon={<BiotechIcon />}
               />
             )}
-
-
           </List>
         </Box>
       </Box>

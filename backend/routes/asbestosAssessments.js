@@ -1,6 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const AsbestosAssessment = require('../models/assessmentTemplates/asbestos/AsbestosAssessment');
+const User = require('../models/User');
+const { sendMail } = require('../services/mailer');
+const auth = require('../middleware/auth');
+const checkPermission = require('../middleware/checkPermission');
 
 // GET /api/assessments - list all assessment jobs (populate project and assessor); excludes archived
 router.get('/', async (req, res) => {
@@ -29,7 +33,7 @@ router.post('/', async (req, res) => {
     if (!req.user || !req.user._id) {
       return res.status(401).json({ message: 'Not authenticated' });
     }
-    const { projectId, assessmentDate, LAA, state } = req.body;
+    const { projectId, assessmentDate, LAA, state, secondaryHeader } = req.body;
     if (!projectId || !assessmentDate) {
       return res.status(400).json({ message: 'projectId and assessmentDate are required' });
     }
@@ -39,6 +43,7 @@ router.post('/', async (req, res) => {
       assessmentDate,
       LAA: LAA || null,
       state: state && ['ACT', 'NSW', 'Commonwealth'].includes(state) ? state : null,
+      secondaryHeader: secondaryHeader || undefined,
     });
     await job.save();
     const populatedJob = await AsbestosAssessment.findById(job._id)
@@ -226,6 +231,7 @@ router.put('/:id', async (req, res) => {
       submittedBy,
       turnaroundTime,
       analysisDueDate,
+      labSamplesStatus,
       jobSpecificExclusions,
       discussionConclusions,
       sitePlan,
@@ -236,10 +242,13 @@ router.put('/:id', async (req, res) => {
       sitePlanSource,
       LAA,
       state,
+      secondaryHeader,
       reportApprovedBy,
+      reportIssueDate,
       reportAuthorisedBy,
       reportAuthorisedAt,
-      archived
+      archived,
+      noSamplesCollected
     } = req.body;
     if (!projectId || !assessmentDate) {
       return res.status(400).json({ message: 'projectId and assessmentDate are required' });
@@ -273,6 +282,9 @@ router.put('/:id', async (req, res) => {
     if (analysisDueDate !== undefined) {
       updateData.analysisDueDate = analysisDueDate;
     }
+    if (labSamplesStatus !== undefined && ['samples-in-lab', 'analysis-complete'].includes(labSamplesStatus)) {
+      updateData.labSamplesStatus = labSamplesStatus;
+    }
     if (jobSpecificExclusions !== undefined) {
       updateData.jobSpecificExclusions = jobSpecificExclusions;
     }
@@ -291,8 +303,14 @@ router.put('/:id', async (req, res) => {
     if (state !== undefined) {
       updateData.state = state && ['ACT', 'NSW', 'Commonwealth'].includes(state) ? state : null;
     }
+    if (secondaryHeader !== undefined) {
+      updateData.secondaryHeader = secondaryHeader || null;
+    }
     if (reportApprovedBy !== undefined) {
       updateData.reportApprovedBy = reportApprovedBy;
+    }
+    if (reportIssueDate !== undefined) {
+      updateData.reportIssueDate = reportIssueDate;
     }
     if (reportAuthorisedBy !== undefined) {
       updateData.reportAuthorisedBy = reportAuthorisedBy;
@@ -303,7 +321,10 @@ router.put('/:id', async (req, res) => {
     if (archived !== undefined) {
       updateData.archived = archived;
     }
-    
+    if (noSamplesCollected !== undefined) {
+      updateData.noSamplesCollected = !!noSamplesCollected;
+    }
+
     const job = await AsbestosAssessment.findByIdAndUpdate(
       req.params.id,
       updateData,
@@ -325,8 +346,16 @@ router.put('/:id', async (req, res) => {
 });
 
 // PATCH /api/assessments/:id/archive - mark assessment as complete (removes from table)
-router.patch('/:id/archive', async (req, res) => {
+router.patch('/:id/archive', auth, async (req, res) => {
   try {
+    const user = req.user;
+    if (!user) return res.status(401).json({ message: 'Not authenticated' });
+    const canComplete = user.role === 'admin' || user.role === 'manager' || user.canSetJobComplete === true;
+    if (!canComplete) {
+      return res.status(403).json({
+        message: 'You do not have permission to complete asbestos assessments. Admin, manager, or Can Set Job Complete approval required.',
+      });
+    }
     const job = await AsbestosAssessment.findByIdAndUpdate(
       req.params.id,
       { archived: true, updatedAt: new Date() },
@@ -342,6 +371,115 @@ router.patch('/:id/archive', async (req, res) => {
     res.json(job);
   } catch (err) {
     res.status(400).json({ message: 'Failed to archive assessment', error: err.message });
+  }
+});
+
+// POST /api/assessments/:id/send-for-authorisation - send authorisation request emails to report proofers
+router.post('/:id/send-for-authorisation', auth, checkPermission('asbestos.edit'), async (req, res) => {
+  try {
+    const assessment = await AsbestosAssessment.findById(req.params.id)
+      .populate({
+        path: 'projectId',
+        select: 'name projectID',
+        populate: {
+          path: 'client',
+          select: 'name'
+        }
+      });
+
+    if (!assessment) {
+      return res.status(404).json({ message: 'Assessment not found' });
+    }
+
+    if (assessment.reportAuthorisedBy) {
+      return res.status(400).json({
+        message: 'Report has already been authorised'
+      });
+    }
+
+    if (!['report-ready-for-review', 'complete'].includes(assessment.status)) {
+      return res.status(400).json({
+        message: 'Assessment report must be ready for review before sending for authorisation'
+      });
+    }
+
+    const reportProoferUsers = await User.find({
+      reportProofer: true,
+      isActive: true
+    }).select('firstName lastName email');
+
+    if (reportProoferUsers.length === 0) {
+      return res.status(400).json({
+        message: 'No report proofer users found'
+      });
+    }
+
+    const requesterName =
+      req.user?.firstName && req.user?.lastName
+        ? `${req.user.firstName} ${req.user.lastName}`
+        : req.user?.email || 'A user';
+
+    assessment.authorisationRequestedBy = req.user._id;
+    await assessment.save();
+
+    const projectName = assessment.projectId?.name || 'Unknown Project';
+    const projectID = assessment.projectId?.projectID || 'N/A';
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const jobUrl = `${frontendUrl}/surveys/asbestos-assessment`;
+
+    const emailPromises = reportProoferUsers.map(async (user) => {
+      try {
+        await sendMail({
+          to: user.email,
+          subject: `Report Authorisation Required - ${projectID}: Asbestos Assessment Report`,
+          text: `
+An Asbestos Assessment report is ready for authorisation.
+
+Project: ${projectName} (${projectID})
+Requested by: ${requesterName}
+
+Please review and authorise the report at: ${jobUrl}
+          `,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+              <div style="margin-bottom: 30px;">
+                <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
+                <p style="color: #666; font-size: 16px; margin: 10px 0 0 0;">Environmental Services</p>
+              </div>
+              <div style="color: #333; line-height: 1.6;">
+                <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Report Authorisation Required</h2>
+                <p>Hello ${user.firstName},</p>
+                <p>An Asbestos Assessment report is ready for your authorisation:</p>
+                <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
+                  <p style="margin: 5px 0;"><strong>Project:</strong> ${projectName}</p>
+                  <p style="margin: 5px 0;"><strong>Project ID:</strong> ${projectID}</p>
+                  <p style="margin: 5px 0;"><strong>Requested by:</strong> ${requesterName}</p>
+                </div>
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="${jobUrl}" style="background-color: rgb(25, 138, 44); color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Review Report</a>
+                </div>
+                <p>Please review and authorise the report at your earliest convenience.</p>
+                <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;">
+                <p style="color: #666; font-size: 12px;">This is an automated message, please do not reply to this email.</p>
+              </div>
+            </div>
+          `
+        });
+      } catch (emailError) {
+        console.error(`Failed to send email to ${user.email}:`, emailError);
+        throw emailError;
+      }
+    });
+
+    await Promise.all(emailPromises);
+
+    res.json({
+      message: `Authorisation request emails sent successfully to ${reportProoferUsers.length} report proofer user(s)`,
+      recipients: reportProoferUsers.map(u => ({ email: u.email, name: `${u.firstName} ${u.lastName}` }))
+    });
+  } catch (err) {
+    console.error('Error sending authorisation request emails:', err);
+    res.status(500).json({ message: 'Failed to send authorisation request emails', error: err.message });
   }
 });
 

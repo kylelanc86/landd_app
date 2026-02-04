@@ -64,6 +64,10 @@ const asbestosAssessmentTemplateSchema = new mongoose.Schema(
         type: String,
         default: "Table 1 below details the suspected ACM sampled as part of the assessment. Information is also included regarding materials which are presumed to contain asbestos and materials which the assessor visually assessed to be the consistent with a sampled material. Photographs of assessed materials are also presented in the sample register below.\n\nSample analysis was undertaken by L&D's National Association of Testing Authorities (NATA) accredited laboratory. The samples were analysed by Polarised Light Microscopy using dispersion staining techniques in accordance with AS 4964-2004.",
       },
+      surveyFindingsContentNoSamples: {
+        type: String,
+        default: "No physical samples were collected during this assessment. The assessment was conducted as a visual inspection only, with no materials sent for laboratory analysis.",
+      },
       
       // Discussion and Conclusions Content
       discussionTitle: {

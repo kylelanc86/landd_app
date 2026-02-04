@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -185,11 +185,40 @@
         max-width: 100% !important;
         box-sizing: border-box !important;
       }
-      
+
       /* Ensure list item content wraps properly - override global * rule */
       .bullets li * {
         word-break: keep-all !important;
         overflow-wrap: normal !important;
+      }
+
+      /* [BULLET] placeholder output - smaller text for clearance (assessment keeps its own .bullet-list styling) */
+      .bullet-list {
+        margin: 0 0 8px 0 !important;
+        padding: 0 0 0 24px !important;
+        font-size: 0.8rem !important;
+        color: #222 !important;
+        list-style: none !important;
+        page-break-inside: avoid;
+        text-align: left !important;
+      }
+
+      .bullet-list li {
+        position: relative;
+        padding-left: 20px;
+        margin-bottom: 8px;
+        line-height: 1.5;
+        text-align: left;
+      }
+
+      .bullet-list li::before {
+        content: "•";
+        position: absolute;
+        left: 0;
+        top: 0.25em;
+        font-size: 1em;
+        color: #222;
+        line-height: 1;
       }
 
       .table-container {

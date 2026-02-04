@@ -463,6 +463,7 @@ export const asbestosAssessmentService = {
   createAsbestosAssessment: (data) => api.post('/assessments', data),
   updateAsbestosAssessment: (id, data) => api.put(`/assessments/${id}`, data),
   archiveAsbestosAssessment: (id) => api.patch(`/assessments/${id}/archive`),
+  sendForAuthorisation: (id) => api.post(`/assessments/${id}/send-for-authorisation`),
   deleteAsbestosAssessment: (id) => api.delete(`/assessments/${id}`),
   markSampleReadyForAnalysis: (assessmentId, itemId, readyForAnalysis) => 
     api.patch(`/assessments/${assessmentId}/items/${itemId}/ready-for-analysis`, { readyForAnalysis }),
@@ -480,8 +481,12 @@ export const asbestosAssessmentService = {
     api.post(`/assessments/${id}/upload-fibre-analysis-report`, reportData).then(res => res.data),
 
   // Generate asbestos assessment PDF using DocRaptor templates (pdf-docraptor-v2)
-  generateAsbestosAssessmentPdf: (assessmentData) =>
-    api.post('/pdf-docraptor-v2/generate-asbestos-assessment-v3', { assessmentData }, { responseType: 'blob' })
+  // Ensure _id/id is included so backend can fetch fibreAnalysisReport from DB
+  generateAsbestosAssessmentPdf: (assessmentData) => {
+    const id = assessmentData?._id || assessmentData?.id;
+    const payload = { assessmentData: { ...assessmentData, _id: id, id } };
+    return api.post('/pdf-docraptor-v2/generate-asbestos-assessment-v3', payload, { responseType: 'blob' });
+  },
 };
 
 // Client Supplied Jobs service

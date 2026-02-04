@@ -81,6 +81,7 @@ const reportTemplateSchema = new mongoose.Schema(
       introductionContent: String,
       surveyFindingsTitle: String,
       surveyFindingsContent: String,
+      surveyFindingsContentNoSamples: String,
       discussionTitle: String,
       discussionContent: String,
       riskAssessmentTitle: String,

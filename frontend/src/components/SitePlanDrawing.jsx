@@ -38,6 +38,9 @@ import {
 import loadGoogleMapsApi from "../utils/loadGoogleMapsApi";
 import GoogleMapsDialog from "./GoogleMapsDialog";
 
+// A4 landscape aspect ratio (297mm x 210mm) - matches the site plan page in the PDF report
+const A4_LANDSCAPE_ASPECT_RATIO = 297 / 210;
+
 // Canvas dimensions will be set dynamically based on viewport
 const DEFAULT_DRAW_OPACITY = 1;
 const TRANSPARENT_DRAW_OPACITY = 0.35;
@@ -154,7 +157,7 @@ const SitePlanDrawing = ({
   const [legendEntries, setLegendEntries] = useState([]);
   const [legendTitle, setLegendTitle] = useState("Key");
   const [figureTitle, setFigureTitle] = useState(
-    existingFigureTitle || "Asbestos Removal Site Plan"
+    existingFigureTitle || "Asbestos Removal Site Plan",
   );
   const [legendDialogOpen, setLegendDialogOpen] = useState(false);
   const [legendDraftEntries, setLegendDraftEntries] = useState([]);
@@ -192,14 +195,14 @@ const SitePlanDrawing = ({
   const handleLegendEntryChange = (entryId, value) => {
     setLegendDraftEntries((prev) =>
       prev.map((entry) =>
-        entry.id === entryId ? { ...entry, description: value } : entry
-      )
+        entry.id === entryId ? { ...entry, description: value } : entry,
+      ),
     );
   };
 
   const handleLegendDialogClear = () => {
     setLegendDraftEntries((prev) =>
-      prev.map((entry) => ({ ...entry, description: "" }))
+      prev.map((entry) => ({ ...entry, description: "" })),
     );
   };
 
@@ -217,15 +220,15 @@ const SitePlanDrawing = ({
 
   const handleRemoveLegendEntry = (entryId) => {
     setLegendDraftEntries((prev) =>
-      prev.filter((entry) => entry.id !== entryId)
+      prev.filter((entry) => entry.id !== entryId),
     );
   };
 
   const handleLegendColorChange = (entryId, newColor) => {
     setLegendDraftEntries((prev) =>
       prev.map((entry) =>
-        entry.id === entryId ? { ...entry, color: newColor } : entry
-      )
+        entry.id === entryId ? { ...entry, color: newColor } : entry,
+      ),
     );
   };
 
@@ -279,7 +282,7 @@ const SitePlanDrawing = ({
         prev.map((entry) => [
           entry.color?.toLowerCase(),
           { description: entry.description || "", id: entry.id },
-        ])
+        ]),
       );
       const nextEntries = orderedColors.map((colorValue) => {
         const lower = colorValue.toLowerCase();
@@ -373,7 +376,7 @@ const SitePlanDrawing = ({
             parentStyle.visibility === "hidden"))
       ) {
         console.warn(
-          "Map container or parent is not visible, waiting for visibility..."
+          "Map container or parent is not visible, waiting for visibility...",
         );
         setTimeout(() => {
           if (showGoogleMaps && !mapLoaded) {
@@ -461,7 +464,7 @@ const SitePlanDrawing = ({
     ctx.strokeStyle = color;
     ctx.fillStyle = color;
     ctx.lineWidth = lineWidth || 2;
-    
+
     // Draw the line
     ctx.beginPath();
     ctx.moveTo(x1, y1);
@@ -478,11 +481,11 @@ const SitePlanDrawing = ({
     ctx.moveTo(x2, y2);
     ctx.lineTo(
       x2 - arrowLength * Math.cos(angle - Math.PI / 6),
-      y2 - arrowLength * Math.sin(angle - Math.PI / 6)
+      y2 - arrowLength * Math.sin(angle - Math.PI / 6),
     );
     ctx.lineTo(
       x2 - arrowLength * Math.cos(angle + Math.PI / 6),
-      y2 - arrowLength * Math.sin(angle + Math.PI / 6)
+      y2 - arrowLength * Math.sin(angle + Math.PI / 6),
     );
     ctx.closePath();
     ctx.fill();
@@ -571,7 +574,7 @@ const SitePlanDrawing = ({
 
       // Update the item in the array
       setDrawnItems((prev) =>
-        prev.map((item) => (item.id === selectedItem.id ? updatedItem : item))
+        prev.map((item) => (item.id === selectedItem.id ? updatedItem : item)),
       );
 
       setDragStart({ x, y });
@@ -588,13 +591,13 @@ const SitePlanDrawing = ({
         selectedItem,
         resizeHandle,
         deltaX,
-        deltaY
+        deltaY,
       );
       setSelectedItem(updatedItem);
 
       // Update the item in the array
       setDrawnItems((prev) =>
-        prev.map((item) => (item.id === selectedItem.id ? updatedItem : item))
+        prev.map((item) => (item.id === selectedItem.id ? updatedItem : item)),
       );
 
       setDragStart({ x, y });
@@ -624,7 +627,7 @@ const SitePlanDrawing = ({
           0,
           0,
           canvas.width,
-          canvas.height
+          canvas.height,
         );
       }
 
@@ -637,7 +640,7 @@ const SitePlanDrawing = ({
       ctx.save();
       ctx.globalAlpha = previewOpacity;
       const radius = Math.sqrt(
-        Math.pow(x - canvas.startX, 2) + Math.pow(y - canvas.startY, 2)
+        Math.pow(x - canvas.startX, 2) + Math.pow(y - canvas.startY, 2),
       );
       ctx.beginPath();
       ctx.arc(canvas.startX, canvas.startY, radius, 0, 2 * Math.PI);
@@ -659,7 +662,7 @@ const SitePlanDrawing = ({
           0,
           0,
           canvas.width,
-          canvas.height
+          canvas.height,
         );
       }
 
@@ -693,7 +696,7 @@ const SitePlanDrawing = ({
           0,
           0,
           canvas.width,
-          canvas.height
+          canvas.height,
         );
       }
 
@@ -722,7 +725,7 @@ const SitePlanDrawing = ({
           0,
           0,
           canvas.width,
-          canvas.height
+          canvas.height,
         );
       }
 
@@ -781,7 +784,7 @@ const SitePlanDrawing = ({
 
         if (currentTool === "circle") {
           const radius = Math.sqrt(
-            Math.pow(x - canvas.startX, 2) + Math.pow(y - canvas.startY, 2)
+            Math.pow(x - canvas.startX, 2) + Math.pow(y - canvas.startY, 2),
           );
           const newItem = {
             id: Date.now().toString(),
@@ -989,7 +992,7 @@ const SitePlanDrawing = ({
           // Calculate new radius based on mouse position
           const newRadius = Math.sqrt(
             Math.pow(handle.x + deltaX - item.centerX, 2) +
-              Math.pow(handle.y + deltaY - item.centerY, 2)
+              Math.pow(handle.y + deltaY - item.centerY, 2),
           );
           updatedItem.radius = Math.max(5, newRadius); // Minimum radius of 5
         }
@@ -1000,7 +1003,7 @@ const SitePlanDrawing = ({
           handle.type,
           "delta:",
           deltaX,
-          deltaY
+          deltaY,
         );
         if (handle.type === "topLeft") {
           const newWidth = item.width - deltaX;
@@ -1019,7 +1022,7 @@ const SitePlanDrawing = ({
             "topRight - newWidth:",
             newWidth,
             "newHeight:",
-            newHeight
+            newHeight,
           );
           if (newWidth > 5 && newHeight > 5) {
             updatedItem.y += deltaY;
@@ -1033,7 +1036,7 @@ const SitePlanDrawing = ({
             "bottomLeft - newWidth:",
             newWidth,
             "newHeight:",
-            newHeight
+            newHeight,
           );
           if (newWidth > 5 && newHeight > 5) {
             updatedItem.x += deltaX;
@@ -1047,7 +1050,7 @@ const SitePlanDrawing = ({
             "bottomRight - newWidth:",
             newWidth,
             "newHeight:",
-            newHeight
+            newHeight,
           );
           if (newWidth > 5 && newHeight > 5) {
             updatedItem.width = newWidth;
@@ -1162,7 +1165,7 @@ const SitePlanDrawing = ({
   const deleteSelectedItem = useCallback(() => {
     if (selectedItem) {
       setDrawnItems((prev) =>
-        prev.filter((item) => item.id !== selectedItem.id)
+        prev.filter((item) => item.id !== selectedItem.id),
       );
       setSelectedItem(null);
       saveToHistory();
@@ -1292,7 +1295,7 @@ const SitePlanDrawing = ({
           item.x2,
           item.y2,
           item.color,
-          item.lineWidth || 2
+          item.lineWidth || 2,
         );
         break;
       case "pen":
@@ -1348,7 +1351,7 @@ const SitePlanDrawing = ({
             item.x,
             item.y,
             item.width,
-            item.height
+            item.height,
           );
         }
         break;
@@ -1384,7 +1387,7 @@ const SitePlanDrawing = ({
     }
   }, [drawnItems, selectedItem, drawSelectionHandles]);
 
-  // Calculate canvas size to fill viewport
+  // Calculate canvas size to match A4 landscape aspect ratio (same as PDF output)
   useEffect(() => {
     const updateCanvasSize = () => {
       if (!canvasContainerRef.current) return;
@@ -1392,13 +1395,20 @@ const SitePlanDrawing = ({
       const container = canvasContainerRef.current;
       const containerRect = container.getBoundingClientRect();
 
-      // Calculate available space (accounting for padding)
-      // Use full container size - padding is handled by the container Box
       const availableWidth = containerRect.width;
       const availableHeight = containerRect.height;
 
-      // Set canvas size to fill available space
-      setCanvasSize({ width: availableWidth, height: availableHeight });
+      // Fit canvas to container while maintaining A4 landscape aspect ratio
+      let width, height;
+      if (availableWidth / availableHeight > A4_LANDSCAPE_ASPECT_RATIO) {
+        height = availableHeight;
+        width = availableHeight * A4_LANDSCAPE_ASPECT_RATIO;
+      } else {
+        width = availableWidth;
+        height = availableWidth / A4_LANDSCAPE_ASPECT_RATIO;
+      }
+
+      setCanvasSize({ width: Math.floor(width), height: Math.floor(height) });
     };
 
     updateCanvasSize();
@@ -1432,7 +1442,7 @@ const SitePlanDrawing = ({
       case "arrow":
         handles.push(
           { x: item.x1, y: item.y1, type: "start" },
-          { x: item.x2, y: item.y2, type: "end" }
+          { x: item.x2, y: item.y2, type: "end" },
         );
         break;
       case "pen":
@@ -1442,14 +1452,14 @@ const SitePlanDrawing = ({
           const lastPoint = item.path[item.path.length - 1];
           handles.push(
             { x: firstPoint.x, y: firstPoint.y, type: "start" },
-            { x: lastPoint.x, y: lastPoint.y, type: "end" }
+            { x: lastPoint.x, y: lastPoint.y, type: "end" },
           );
         }
         break;
       case "circle":
         handles.push(
           { x: item.centerX, y: item.centerY, type: "center" },
-          { x: item.centerX + item.radius, y: item.centerY, type: "radius" }
+          { x: item.centerX + item.radius, y: item.centerY, type: "radius" },
         );
         break;
       case "rectangle":
@@ -1461,7 +1471,7 @@ const SitePlanDrawing = ({
             x: item.x + item.width,
             y: item.y + item.height,
             type: "bottomRight",
-          }
+          },
         );
         break;
       case "text":
@@ -1476,7 +1486,7 @@ const SitePlanDrawing = ({
             x: item.x + item.width,
             y: item.y + item.height,
             type: "bottomRight",
-          }
+          },
         );
         break;
       default:
@@ -1524,7 +1534,7 @@ const SitePlanDrawing = ({
           item.x1,
           item.y1,
           item.x2,
-          item.y2
+          item.y2,
         );
         return lineDist < 10; // 10 pixel tolerance
       case "pen":
@@ -1533,7 +1543,7 @@ const SitePlanDrawing = ({
           for (let i = 0; i < item.path.length; i++) {
             const point = item.path[i];
             const dist = Math.sqrt(
-              Math.pow(x - point.x, 2) + Math.pow(y - point.y, 2)
+              Math.pow(x - point.x, 2) + Math.pow(y - point.y, 2),
             );
             if (dist < 15) {
               // 15 pixel tolerance for pen strokes
@@ -1544,7 +1554,7 @@ const SitePlanDrawing = ({
         return false;
       case "circle":
         const dist = Math.sqrt(
-          Math.pow(x - item.centerX, 2) + Math.pow(y - item.centerY, 2)
+          Math.pow(x - item.centerX, 2) + Math.pow(y - item.centerY, 2),
         );
         return Math.abs(dist - item.radius) < 10;
       case "rectangle":
@@ -1678,11 +1688,11 @@ const SitePlanDrawing = ({
         const containerRect = container.getBoundingClientRect();
         const maxPanX = Math.max(
           0,
-          (rect.width * newZoom - containerRect.width) / 2
+          (rect.width * newZoom - containerRect.width) / 2,
         );
         const maxPanY = Math.max(
           0,
-          (rect.height * newZoom - containerRect.height) / 2
+          (rect.height * newZoom - containerRect.height) / 2,
         );
 
         setPanOffset((prev) => ({
@@ -1823,7 +1833,7 @@ const SitePlanDrawing = ({
 
       // Set map type first
       mapInstanceRef.current.setMapTypeId(
-        window.google.maps.MapTypeId[mapData.mapType.toUpperCase()]
+        window.google.maps.MapTypeId[mapData.mapType.toUpperCase()],
       );
 
       // Use center and zoom directly to match the exact view from dialog
@@ -1903,7 +1913,7 @@ const SitePlanDrawing = ({
         0, // Destination X
         0, // Destination Y
         canvas.width, // Destination width
-        canvas.height // Destination height
+        canvas.height, // Destination height
       );
 
       // Convert to image and set as canvas background
@@ -1940,7 +1950,7 @@ const SitePlanDrawing = ({
       // Ensure the map container element exists and is a valid DOM element
       if (!mapRef.current || !(mapRef.current instanceof Element)) {
         console.error(
-          "Map container element is not available after loading API"
+          "Map container element is not available after loading API",
         );
         return;
       }
@@ -1949,7 +1959,7 @@ const SitePlanDrawing = ({
         "Creating map with center:",
         mapData.center,
         "zoom:",
-        mapData.zoom
+        mapData.zoom,
       );
 
       // Log container dimensions
@@ -1958,7 +1968,7 @@ const SitePlanDrawing = ({
         "Map container dimensions:",
         containerRect.width,
         "x",
-        containerRect.height
+        containerRect.height,
       );
 
       // Check if container has proper dimensions
@@ -1987,7 +1997,7 @@ const SitePlanDrawing = ({
       // Double-check the element still exists before creating the map
       if (!mapRef.current || !(mapRef.current instanceof Element)) {
         console.error(
-          "Map container element is not available before map creation"
+          "Map container element is not available before map creation",
         );
         return;
       }
@@ -2047,7 +2057,11 @@ const SitePlanDrawing = ({
   };
 
   const tools = [
-    { id: "select", icon: <ForwardIcon sx={{ transform: 'rotate(315deg)' }} />, label: "Select" },
+    {
+      id: "select",
+      icon: <ForwardIcon sx={{ transform: "rotate(315deg)" }} />,
+      label: "Select",
+    },
     { id: "pen", icon: <EditIcon />, label: "Pen" },
     { id: "circle", icon: <CircleIcon />, label: "Circle" },
     { id: "rectangle", icon: <SquareIcon />, label: "Rectangle" },

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -233,6 +233,15 @@
         white-space: pre-wrap;
       }
 
+      .discussion-conclusions-page .subsection-header-underline {
+        font-size: 0.8rem;
+        font-weight: 600;
+        margin: 12px 0 6px 0;
+        padding-bottom: 2px;
+        text-decoration: underline;
+        color: #222;
+      }
+
       .discussion-conclusions-page .signoff {
         margin-top: 40px;
         font-size: 0.8rem;
@@ -302,26 +311,23 @@
       </div>
       <div class="green-line"></div>
       <div class="content">
-        <div class="section-header first-section">Discussion and Conclusions</div>
-        <div class="paragraph">
-          The following asbestos-containing materials were identified during the
-          assessment:
+        <div class="section-header first-section">
+          Discussion and Conclusions
         </div>
-        <ul class="asbestos-list">
-          [IDENTIFIED_ASBESTOS_ITEMS]
-        </ul>
         <div class="paragraph">
-          The following non-asbestos materials were identified during the
-          assessment:
+          The following is a summary of asbestos and non-asbestos materials
+          identified during this assessment:
         </div>
-        <ul class="non-asbestos-list">
-          [IDENTIFIED_NON_ASBESTOS_ITEMS]
-        </ul>
+        <div class="subsection-header-underline">Asbestos Items</div>
+        [ASBESTOS_ITEMS_SECTION]
+        <div class="subsection-header-underline">Non-asbestos Items</div>
+        [NON_ASBESTOS_ITEMS_SECTION]
         <div class="paragraph discussion-conclusions-content">
           [DISCUSSION_CONCLUSIONS_CONTENT]
         </div>
-        <div class="section-header">INSPECTION EXCLUSIONS</div>
-        <div class="paragraph">[JOB_SPECIFIC_EXCLUSIONS]</div>
+        <div class="paragraph" style="margin-top: 12px">
+          [JOB_SPECIFIC_EXCLUSIONS]
+        </div>
         <div class="signoff">[SIGN_OFF_CONTENT]</div>
         <div class="signature">[SIGNATURE_IMAGE]</div>
       </div>

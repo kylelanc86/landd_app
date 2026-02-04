@@ -115,6 +115,7 @@ const getTemplateByType = async (templateType) => {
           
           surveyFindingsTitle: "SURVEY FINDINGS",
           surveyFindingsContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
+          surveyFindingsContentNoSamples: "[DYNAMIC_CONTENT_NOT_LOADED]",
           
           discussionTitle: "DISCUSSION AND CONCLUSIONS",
           discussionContent: "[DYNAMIC_CONTENT_NOT_LOADED]",

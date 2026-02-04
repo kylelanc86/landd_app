@@ -142,16 +142,19 @@ const AsbestosAssessmentSchema = new mongoose.Schema({
   assessorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   LAA: { type: String }, // Licensed Asbestos Assessor name
   state: { type: String, enum: ['ACT', 'NSW', 'Commonwealth'] }, // State (ACT, NSW or Commonwealth)
+  secondaryHeader: { type: String }, // Optional secondary header beneath project site name on cover page
   assessmentDate: { type: Date, required: true },
   status: { 
     type: String, 
     default: 'in-progress',
     enum: ['in-progress', 'site-works-complete', 'samples-with-lab', 'sample-analysis-complete', 'report-ready-for-review', 'complete']
   },
-  samplesReceivedDate: { type: Date }, // Date when samples were submitted to lab
+  samplesReceivedDate: { type: Date }, // Date when samples were submitted to lab (set when "Submit samples to lab" modal is confirmed)
   submittedBy: { type: String }, // Name of person who submitted samples to lab
   turnaroundTime: { type: String }, // Turnaround time for analysis (e.g., "3 day", "24 hours", or custom value)
-  analysisDueDate: { type: Date }, // Date and time when analysis is due
+  analysisDueDate: { type: Date }, // Date and time when analysis is due (calculated from turnaround time)
+  labSamplesStatus: { type: String, enum: ['samples-in-lab', 'analysis-complete'] }, // L&D supplied jobs table status only (independent of assessment workflow status)
+  noSamplesCollected: { type: Boolean, default: false }, // When true, assessment was finalised without sending samples to lab (visual inspection only)
   analyst: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Analyst for all samples in this assessment
   items: [AssessmentItemSchema],
   assessmentScope: [{ type: String }], // Array of scope items for the assessment
@@ -182,10 +185,11 @@ const AsbestosAssessmentSchema = new mongoose.Schema({
     type: String,
   },
   fibreAnalysisReport: { type: String }, // Base64 PDF data for fibre analysis report
-  reportApprovedBy: { type: String }, // Name of person who approved the report
+  reportApprovedBy: { type: String }, // Fibre ID report approval (lab analyst)
   reportIssueDate: { type: Date }, // Date when report was issued/approved
-  reportAuthorisedBy: { type: String }, // Name of person who authorised the report
+  reportAuthorisedBy: { type: String }, // Assessment report authorisation (final sign-off) - distinct from reportApprovedBy
   reportAuthorisedAt: { type: Date }, // Date when report was authorised
+  authorisationRequestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // User who requested authorisation (send-for-authorisation)
   archived: { type: Boolean, default: false }, // When true, job is removed from the assessment table (completed)
   revision: { type: Number, default: 0 }, // Report revision number
   createdAt: { type: Date, default: Date.now },

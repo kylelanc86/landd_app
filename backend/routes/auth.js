@@ -134,7 +134,12 @@ router.post('/login', async (req, res) => {
           role: user.role,
           phone: user.phone,
           notifications: user.notifications,
-          labSignatory: user.labSignatory || false
+          labSignatory: user.labSignatory || false,
+          labApprovals: user.labApprovals || {
+            fibreCounting: false,
+            fibreIdentification: false,
+            calibrations: false,
+          },
         }
       });
     } catch (tokenError) {
