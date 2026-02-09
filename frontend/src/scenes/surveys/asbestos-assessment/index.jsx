@@ -503,37 +503,25 @@ const AsbestosAssessment = () => {
     currentUser?.role === "manager" ||
     currentUser?.canSetJobComplete === true;
 
+  // Samples submitted to lab: use explicit submission indicator (samplesReceivedDate set by Submit modal).
+  // Only reliance on assessment: we do not use assessment status here, so if samples are retracted
+  // (samplesReceivedDate cleared), this will show "No samples submitted to lab" without status change.
   const hasSamplesSubmitted = (job) => {
     if (hasNoSamplesCollected(job)) return false;
-    const status = job.status || "";
-    const submittedStatuses = [
-      "samples-with-lab",
-      "sample-analysis-complete",
-      "report-ready-for-review",
-      "complete",
-    ];
-    return (
-      (job.samplesCount > 0 || (job.originalData?.items?.length ?? 0) > 0) &&
-      submittedStatuses.includes(status)
-    );
+    const hasItems =
+      job.samplesCount > 0 || (job.originalData?.items?.length ?? 0) > 0;
+    if (!hasItems) return false;
+    const data = job.originalData || job;
+    const submitted =
+      data.samplesReceivedDate != null || data.labSamplesStatus != null;
+    return submitted;
   };
 
-  // LD supplied job status label (matches LDsuppliedJobs table)
+  // LD supplied job status only (labSamplesStatus). No fallback to assessment status.
+  // When submitted but labSamplesStatus not yet set, show "Samples in lab".
   const getLabStatusLabel = (job) => {
     const data = job.originalData || job;
-    if (data.labSamplesStatus) {
-      return data.labSamplesStatus === "analysis-complete"
-        ? "Analysis complete"
-        : "Samples in lab";
-    }
-    const status = data.status || job.status || "";
-    if (
-      [
-        "sample-analysis-complete",
-        "report-ready-for-review",
-        "complete",
-      ].includes(status)
-    ) {
+    if (data.labSamplesStatus === "analysis-complete") {
       return "Analysis complete";
     }
     return "Samples in lab";
@@ -1057,7 +1045,8 @@ const AsbestosAssessment = () => {
                                       ? "Analysed (not approved)"
                                       : "Analyse"}
                                 </Button>
-                                {job.status === "samples-with-lab" &&
+                                {hasSamplesSubmitted(job) &&
+                                  job.originalData?.labSamplesStatus !== "analysis-complete" &&
                                   job.originalData?.analysisDueDate && (
                                     <Typography
                                       variant="caption"
@@ -1352,7 +1341,7 @@ const AsbestosAssessment = () => {
             >
               <MenuItem value="ACT">ACT</MenuItem>
               <MenuItem value="NSW">NSW</MenuItem>
-              <MenuItem value="Commonwealth">Commonwealth</MenuItem>
+              {/* <MenuItem value="Commonwealth">Commonwealth</MenuItem> */}
             </Select>
           </FormControl>
 

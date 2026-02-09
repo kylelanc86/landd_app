@@ -88,6 +88,144 @@ const addBusinessDays = (date, businessDays) => {
   return result;
 };
 
+/**
+ * Get the effective asbestos display for an item (matches backend logic for discussion count).
+ * Returns 'No Asbestos Detected', 'Visually Assessed as Non-Asbestos', or an asbestos type string.
+ */
+const getEffectiveAsbestosDisplayForItem = (item, items) => {
+  const findSampled = (ref) => {
+    const r = String(ref || "").trim();
+    if (!r) return null;
+    return (items || []).find((i) => (i.sampleReference || "").trim() === r) || null;
+  };
+  const sampled = findSampled(item.sampleReference);
+  const source = sampled && sampled !== item ? sampled : item;
+  const raw = (source.analysisData?.finalResult || source.asbestosContent || item.asbestosContent || "").trim();
+  if (!raw) return "No Asbestos Detected";
+  if (/^no asbestos detected$/i.test(raw)) return "No Asbestos Detected";
+  if (/Visually Assessed as Non-Asbestos/i.test(raw) || /Visually Assessed as Non-ACM/i.test(raw)) return "Visually Assessed as Non-Asbestos";
+  if (raw === "Visually Assessed as Asbestos") return "Visually Assessed as Asbestos";
+  if (/chrysotile|amosite|crocidolite|umf|unidentified\s+mineral\s+fibre/i.test(raw)) return raw;
+  if (/trace.*detected/i.test(raw)) return raw;
+  return "No Asbestos Detected";
+};
+
+const isVisuallyAssessedContent = (ac) => {
+  const s = (ac || "").trim();
+  return (
+    s === "Visually Assessed as Non-Asbestos" ||
+    s === "Visually Assessed as Non-ACM" ||
+    s === "Visually Assessed as Asbestos"
+  );
+};
+
+/** Text appended to discussion/conclusions for residential assessments (ceiling void and subfloor). */
+const RESIDENTIAL_CEILING_SUBFLOOR_TEXT =
+  "The assessment of the ceiling void was limited to a visual inspection from the access hatch. A combination of insulation batts and loose-fill insulation was identified within the ceiling void, these materials were visually assessed as synthetic mineral fibres (SMF). No suspect ACM was identified during the assessment of the ceiling void however, it is common for ACM to be present within ceiling voids in the forms of debris and/or packers. It is recommended that persons accessing the ceiling void wear a minimum P2 respirator and coveralls.\n\nNo suspect ACM was identified during the assessment of the subfloor, it is common for ACM to be present within subfloors in the form of debris, packers, and/or formwork. It is recommended that persons accessing the crawl space wear a minimum P2 respirator and coveralls.";
+
+const ACM_REMOVAL_SENTENCE =
+  "ACM should be removed prior to the commencement of works which may damage or disturb the material.";
+
+/** Default job specific exclusions for non-intrusive residential assessments. */
+const DEFAULT_JOB_SPECIFIC_EXCLUSIONS_NON_INTRUSIVE_RESIDENTIAL =
+  "This assessment was non-intrusive in nature. Therefore further ACM may be present in concealed locations on site.";
+
+/** Converts 1–99 to words (e.g. 11 -> "Eleven"); returns String(n) for 0 or 100+. */
+const numberToWords = (n) => {
+  const num = Number(n);
+  if (num <= 0 || num >= 100) return String(n);
+  const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+  const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+  if (num < 20) return ones[num];
+  const t = Math.floor(num / 10);
+  const o = num % 10;
+  return tens[t] + (o ? `-${ones[o]}` : "");
+};
+
+/** Format asbestos count for discussion/conclusions: "Eleven (11)" or "Analysis incomplete". */
+const formatAsbestosCountForDisplay = (asbestosCount, analysisComplete) => {
+  if (asbestosCount > 0 && !analysisComplete) return "Analysis incomplete";
+  return `${numberToWords(asbestosCount)} (${asbestosCount})`;
+};
+
+/**
+ * Default discussion/conclusions text when none is entered (matches PDF backend).
+ * Shows "{ANALYSIS INCOMPLETE}" instead of the count until lab analysis is complete for the assessment.
+ * For residential assessments, appends ceiling void and subfloor text.
+ */
+const getDefaultDiscussionConclusions = (assessment, isResidential = false) => {
+  const items = assessment?.items || [];
+  const siteName = assessment?.projectId?.name || assessment?.siteName || "Unknown Site";
+  const asbestosCount = items.filter((item) => {
+    const display = getEffectiveAsbestosDisplayForItem(item, items);
+    return display !== "No Asbestos Detected" && display !== "Visually Assessed as Non-Asbestos";
+  }).length;
+  let baseText;
+  if (asbestosCount === 0) {
+    baseText = `No asbestos containing materials were identified during the assessment conducted at ${siteName}.`;
+  } else {
+    const hasSampledItemsRequiringAnalysis = items.some(
+      (i) => (i.sampleReference || "").trim() && !isVisuallyAssessedContent(i.asbestosContent),
+    );
+    const firstSampledPerRef = hasSampledItemsRequiringAnalysis
+      ? items.filter((item, index) => {
+          if (!(item.sampleReference || "").trim() || isVisuallyAssessedContent(item.asbestosContent)) return false;
+          const ref = (item.sampleReference || "").trim();
+          return index === items.findIndex((i) => (i.sampleReference || "").trim() === ref);
+        })
+      : [];
+    const analysisComplete =
+      assessment?.status === "sample-analysis-complete" ||
+      !hasSampledItemsRequiringAnalysis ||
+      firstSampledPerRef.every((i) => i.analysisData?.isAnalysed === true);
+    const asbestosCountDisplay =
+      asbestosCount > 0 && !analysisComplete ? "{ANALYSIS INCOMPLETE}" : formatAsbestosCountForDisplay(asbestosCount, analysisComplete);
+    baseText = `${asbestosCountDisplay} asbestos items were identified during the assessment of ${siteName}.`;
+  }
+  if (asbestosCount > 0) {
+    if (isResidential) {
+      return baseText + "\n\n" + RESIDENTIAL_CEILING_SUBFLOOR_TEXT + "\n\n" + ACM_REMOVAL_SENTENCE;
+    }
+    return baseText + "\n\n" + ACM_REMOVAL_SENTENCE;
+  }
+  if (isResidential) {
+    return baseText + "\n\n" + RESIDENTIAL_CEILING_SUBFLOOR_TEXT;
+  }
+  return baseText;
+};
+
+/**
+ * Resolves {ANALYSIS INCOMPLETE} / {ANALYSIS_INCOMPLETE} in discussion text for display in the modal:
+ * shows the asbestos count when analysis is complete, or "Analysis incomplete" when not.
+ */
+const resolveAnalysisIncompleteForDisplay = (text, assessment) => {
+  if (!text || (typeof text !== "string")) return text;
+  if (!text.includes("ANALYSIS") || !text.includes("INCOMPLETE")) return text;
+  const items = assessment?.items || [];
+  const asbestosCount = items.filter((item) => {
+    const display = getEffectiveAsbestosDisplayForItem(item, items);
+    return display !== "No Asbestos Detected" && display !== "Visually Assessed as Non-Asbestos";
+  }).length;
+  const hasSampledItemsRequiringAnalysis = items.some(
+    (i) => (i.sampleReference || "").trim() && !isVisuallyAssessedContent(i.asbestosContent),
+  );
+  const firstSampledPerRef = hasSampledItemsRequiringAnalysis
+    ? items.filter((item, index) => {
+        if (!(item.sampleReference || "").trim() || isVisuallyAssessedContent(item.asbestosContent)) return false;
+        const ref = (item.sampleReference || "").trim();
+        return index === items.findIndex((i) => (i.sampleReference || "").trim() === ref);
+      })
+    : [];
+  const analysisComplete =
+    assessment?.status === "sample-analysis-complete" ||
+    !hasSampledItemsRequiringAnalysis ||
+    firstSampledPerRef.every((i) => i.analysisData?.isAnalysed === true);
+  const replacement = formatAsbestosCountForDisplay(asbestosCount, analysisComplete);
+  return text
+    .replace(/\{ANALYSIS INCOMPLETE\}/g, replacement)
+    .replace(/\{ANALYSIS_INCOMPLETE\}/g, replacement);
+};
+
 const AssessmentItems = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -513,8 +651,6 @@ const AssessmentItems = () => {
         await asbestosAssessmentService.update(id, {
           projectId: assessment.projectId?._id || assessment.projectId,
           assessmentDate: assessment.assessmentDate,
-          reportApprovedBy: null,
-          reportIssueDate: null,
         });
         showSnackbar("Item updated successfully", "success");
         setDialogOpen(false);
@@ -526,8 +662,6 @@ const AssessmentItems = () => {
         await asbestosAssessmentService.update(id, {
           projectId: assessment.projectId?._id || assessment.projectId,
           assessmentDate: assessment.assessmentDate,
-          reportApprovedBy: null,
-          reportIssueDate: null,
         });
         showSnackbar("Item created successfully", "success");
         setDialogOpen(false);
@@ -553,15 +687,17 @@ const AssessmentItems = () => {
       item.asbestosContent === "Visually Assessed as Asbestos" ||
       item.asbestosContent === "Visually Assessed as Non-Asbestos";
 
-    // Check if this is a referred item (has a sampleReference that matches another item's sampleReference)
+    // Referred = same sample ref as another item but this is not the first occurrence (so it "refers to" the primary).
+    // Primary sampled item (first with this ref) gets editable field; referred items get dropdown.
+    const currentRef = (item.sampleReference || "").trim();
+    const firstIndexWithThisRef = items.findIndex(
+      (i) => (i.sampleReference || "").trim() === currentRef,
+    );
+    const currentIndex = items.findIndex((i) => i._id === item._id);
     const isReferredItemCheck =
-      item.sampleReference &&
-      item.sampleReference.trim() !== "" &&
-      items.some(
-        (otherItem) =>
-          otherItem._id !== item._id &&
-          otherItem.sampleReference === item.sampleReference,
-      );
+      currentRef !== "" &&
+      firstIndexWithThisRef !== -1 &&
+      firstIndexWithThisRef !== currentIndex;
 
     // Check if this is a non-ACM item (legacy support)
     const isNonACMItem =
@@ -660,8 +796,6 @@ const AssessmentItems = () => {
       await asbestosAssessmentService.update(id, {
         projectId: assessment.projectId?._id || assessment.projectId,
         assessmentDate: assessment.assessmentDate,
-        reportApprovedBy: null,
-        reportIssueDate: null,
       });
       showSnackbar("Item deleted successfully", "success");
       await fetchData();
@@ -923,7 +1057,9 @@ const AssessmentItems = () => {
         }
         if (finalTranscript) {
           setAssessment((prev) => {
-            const currentText = prev?.discussionConclusions || "";
+            const currentText =
+              (prev?.discussionConclusions || "").trim() ||
+              getDefaultDiscussionConclusions(prev, isResidential);
             const isFirstWord = !currentText || currentText.trim().length === 0;
             const newText = isFirstWord
               ? finalTranscript.charAt(0).toUpperCase() +
@@ -1010,8 +1146,6 @@ const AssessmentItems = () => {
         projectId: assessment.projectId?._id || assessment.projectId,
         assessmentDate: assessment.assessmentDate,
         status: "site-works-complete",
-        reportApprovedBy: null,
-        reportIssueDate: null,
       });
       setAssessmentCompleted(true);
       showSnackbar("Assessment site works completed successfully!", "success");
@@ -1153,8 +1287,6 @@ const AssessmentItems = () => {
         sitePlanLegendTitle: legendTitle,
         sitePlanFigureTitle: figureTitle,
         sitePlanSource: "drawn",
-        reportApprovedBy: null,
-        reportIssueDate: null,
       });
 
       showSnackbar("Drawn site plan saved successfully!", "success");
@@ -1203,8 +1335,6 @@ const AssessmentItems = () => {
             sitePlanLegend: [],
             sitePlanLegendTitle: null,
             sitePlanSource: "uploaded",
-            reportApprovedBy: null,
-            reportIssueDate: null,
           });
 
           showSnackbar("Site plan uploaded successfully", "success");
@@ -1239,8 +1369,6 @@ const AssessmentItems = () => {
           sitePlanSource: null,
           sitePlanLegend: [],
           sitePlanLegendTitle: null,
-          reportApprovedBy: null,
-          reportIssueDate: null,
         });
 
         showSnackbar("Site plan removed successfully", "success");
@@ -1609,8 +1737,6 @@ const AssessmentItems = () => {
       await asbestosAssessmentService.update(id, {
         projectId: assessment.projectId?._id || assessment.projectId,
         assessmentDate: assessment.assessmentDate,
-        reportApprovedBy: null,
-        reportIssueDate: null,
       });
       if (response && response.photographs) {
         setSelectedItemForPhotos((prev) => ({
@@ -1797,8 +1923,6 @@ const AssessmentItems = () => {
         await asbestosAssessmentService.update(id, {
           projectId: assessment.projectId?._id || assessment.projectId,
           assessmentDate: assessment.assessmentDate,
-          reportApprovedBy: null,
-          reportIssueDate: null,
         });
       }
 
@@ -3950,8 +4074,6 @@ const AssessmentItems = () => {
                         assessmentDate: assessment.assessmentDate,
                         status: assessment.status,
                         assessmentScope: filteredItems,
-                        reportApprovedBy: null,
-                        reportIssueDate: null,
                       });
                       showSnackbar(
                         "Scope of assessment saved successfully",
@@ -4077,7 +4199,13 @@ const AssessmentItems = () => {
             <Box sx={{ mb: 3 }}>
               <TextField
                 fullWidth
-                value={assessment?.jobSpecificExclusions || ""}
+                value={
+                  (assessment?.jobSpecificExclusions ?? "")?.trim()
+                    ? assessment.jobSpecificExclusions
+                    : isResidential && assessment?.intrusiveness === "non-intrusive"
+                      ? DEFAULT_JOB_SPECIFIC_EXCLUSIONS_NON_INTRUSIVE_RESIDENTIAL
+                      : assessment?.jobSpecificExclusions ?? ""
+                }
                 onChange={(e) => {
                   // Update local state for the text field
                   setAssessment((prev) => ({
@@ -4189,14 +4317,16 @@ const AssessmentItems = () => {
               onClick={async () => {
                 try {
                   setSavingExclusions(true);
+                  const exclusionsToSave =
+                    (assessment?.jobSpecificExclusions ?? "")?.trim() ||
+                    (isResidential && assessment?.intrusiveness === "non-intrusive"
+                      ? DEFAULT_JOB_SPECIFIC_EXCLUSIONS_NON_INTRUSIVE_RESIDENTIAL
+                      : "");
                   await asbestosAssessmentService.update(id, {
                     projectId:
                       assessment?.projectId?._id || assessment?.projectId,
                     assessmentDate: assessment?.assessmentDate,
-                    jobSpecificExclusions:
-                      assessment?.jobSpecificExclusions || "",
-                    reportApprovedBy: null,
-                    reportIssueDate: null,
+                    jobSpecificExclusions: exclusionsToSave,
                   });
                   showSnackbar(
                     "Job specific exclusions saved successfully",
@@ -4243,6 +4373,10 @@ const AssessmentItems = () => {
             sx: {
               borderRadius: 3,
               boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+              height: "80vh",
+              maxHeight: "90vh",
+              display: "flex",
+              flexDirection: "column",
             },
           }}
         >
@@ -4255,6 +4389,7 @@ const AssessmentItems = () => {
               display: "flex",
               alignItems: "center",
               gap: 2,
+              flexShrink: 0,
             }}
           >
             <Box
@@ -4274,12 +4409,37 @@ const AssessmentItems = () => {
             <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
               Discussion/Conclusions
             </Typography>
+
           </DialogTitle>
-          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
-            <Box sx={{ mb: 3 }}>
+          <DialogContent
+            sx={{
+              px: 3,
+              pt: 3,
+              pb: 1,
+              border: "none",
+              flex: 1,
+              minHeight: 0,
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+            }}
+          >
+            <Box
+              sx={{
+                flex: 1,
+                minHeight: 0,
+                display: "flex",
+                flexDirection: "column",
+                mb: 3,
+              }}
+            >
               <TextField
                 fullWidth
-                value={assessment?.discussionConclusions || ""}
+                value={resolveAnalysisIncompleteForDisplay(
+                  (assessment?.discussionConclusions || "").trim() ||
+                    getDefaultDiscussionConclusions(assessment, isResidential),
+                  assessment,
+                )}
                 onChange={(e) => {
                   setAssessment((prev) => ({
                     ...prev,
@@ -4287,8 +4447,23 @@ const AssessmentItems = () => {
                   }));
                 }}
                 multiline
-                rows={6}
                 placeholder="Enter discussion and conclusions for the assessment report"
+                sx={{
+                  flex: 1,
+                  display: "flex",
+                  flexDirection: "column",
+                  minHeight: 0,
+                  "& .MuiInputBase-root": {
+                    flex: 1,
+                    minHeight: 0,
+                    alignItems: "flex-start",
+                  },
+                  "& .MuiInputBase-input": {
+                    height: "100% !important",
+                    overflow: "auto !important",
+                    boxSizing: "border-box",
+                  },
+                }}
                 InputProps={{
                   endAdornment: (
                     <InputAdornment position="end">
@@ -4324,7 +4499,6 @@ const AssessmentItems = () => {
                     </InputAdornment>
                   ),
                 }}
-                sx={{ mb: 2 }}
               />
               {isDictatingDiscussion && (
                 <Box
@@ -4372,7 +4546,7 @@ const AssessmentItems = () => {
               )}
             </Box>
           </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none", flexShrink: 0 }}>
             <Button
               onClick={() => setDiscussionModalOpen(false)}
               variant="outlined"
@@ -4389,15 +4563,20 @@ const AssessmentItems = () => {
               onClick={async () => {
                 try {
                   setSavingDiscussion(true);
+                  const rawContent =
+                    (assessment?.discussionConclusions || "").trim() ||
+                    getDefaultDiscussionConclusions(assessment, isResidential);
+                  const valueToSave = resolveAnalysisIncompleteForDisplay(rawContent, assessment);
                   await asbestosAssessmentService.update(id, {
                     projectId:
                       assessment?.projectId?._id || assessment?.projectId,
                     assessmentDate: assessment?.assessmentDate,
-                    discussionConclusions:
-                      assessment?.discussionConclusions || "",
-                    reportApprovedBy: null,
-                    reportIssueDate: null,
+                    discussionConclusions: valueToSave,
                   });
+                  setAssessment((prev) => ({
+                    ...prev,
+                    discussionConclusions: valueToSave,
+                  }));
                   showSnackbar(
                     "Discussion/conclusions saved successfully",
                     "success",

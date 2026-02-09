@@ -623,12 +623,14 @@ const replacePlaceholders = async (content, data) => {
       }
       return ''; // Return empty for now until defined
     })(),
-    '{IDENTIFIED_ASBESTOS_ITEMS}': data.identifiedAsbestosItems || '<li>No asbestos-containing materials identified</li>',
-    '[IDENTIFIED_ASBESTOS_ITEMS]': data.identifiedAsbestosItems || '<li>No asbestos-containing materials identified</li>',
+    '{IDENTIFIED_ASBESTOS_ITEMS}': data.identifiedAsbestosItems || '<ul class="bullet-list" style="margin: 0 0 8px 0; padding-left: 24px; list-style-position: outside;"><li style="padding-left: 20px;">No asbestos-containing materials identified</li></ul>',
+    '[IDENTIFIED_ASBESTOS_ITEMS]': data.identifiedAsbestosItems || '<ul class="bullet-list" style="margin: 0 0 8px 0; padding-left: 24px; list-style-position: outside;"><li style="padding-left: 20px;">No asbestos-containing materials identified</li></ul>',
     '{RISK_ASSESSMENT_TABLE}': generateRiskAssessmentTable(),
     '[RISK_ASSESSMENT_TABLE]': generateRiskAssessmentTable(),
     '{STATE}': data.state || '',
     '[STATE]': data.state || '',
+    '{INTRUSIVENESS}': (data.intrusiveness === 'intrusive' ? 'Intrusive' : 'Non-intrusive'),
+    '[INTRUSIVENESS]': (data.intrusiveness === 'intrusive' ? 'Intrusive' : 'Non-intrusive'),
     '{REGULATOR}': (() => {
       const state = data.state;
       if (state === 'ACT') return 'Worksafe ACT';

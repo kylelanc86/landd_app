@@ -67,6 +67,27 @@ const escapeHtml = (value = "") =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
+/** HTML for a half line break in PDF (used in discussion/conclusions and job exclusions). */
+const halfLineBreakHtml = '<span style="display:block; height:0.5em;"></span>';
+
+/** Converts 1–99 to words (e.g. 11 -> "Eleven"); returns String(n) for 0 or 100+. */
+const numberToWords = (n) => {
+  const num = Number(n);
+  if (num <= 0 || num >= 100) return String(n);
+  const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+  if (num < 20) return ones[num];
+  const t = Math.floor(num / 10);
+  const o = num % 10;
+  return tens[t] + (o ? '-' + ones[o] : '');
+};
+
+/** Format asbestos count for discussion/conclusions: "Eleven (11)" or "Analysis incomplete". */
+const formatAsbestosCountForPdf = (asbestosCount, analysisComplete) => {
+  if (asbestosCount > 0 && !analysisComplete) return 'Analysis incomplete';
+  return numberToWords(asbestosCount) + ' (' + asbestosCount + ')';
+};
+
 const normalizeColorForDisplay = (value) => {
   const color = String(value || "").trim();
   if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(color)) {
@@ -2389,11 +2410,13 @@ const generateAssessmentHTML = async (assessmentData) => {
       ? new Date(assessmentData.reportAuthorisedAt).toLocaleDateString('en-GB')
       : (assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown');
 
-    // Populate cover template with data (REPORT_TITLE, SITE_ADDRESS, SECONDARY_HEADER, CLIENT_NAME, JOB_REFERENCE, ASSESSMENT_DATE, no watermark/footer)
+    const assessmentIntrusivenessLabel = assessmentData.intrusiveness === 'intrusive' ? 'Intrusive' : 'Non-intrusive';
+    // Populate cover template with data (REPORT_TITLE, SITE_ADDRESS, SECONDARY_HEADER, CLIENT_NAME, JOB_REFERENCE, ASSESSMENT_DATE, INTRUSIVENESS, no watermark/footer)
     const populatedCover = coverTemplateWithUrl
       .replace(/\[REPORT_TITLE\]/g, assessmentReportTitle)
       .replace(/\[SITE_ADDRESS\]/g, assessmentSiteAddress)
       .replace(/\[SECONDARY_HEADER\]/g, assessmentData.secondaryHeader || '')
+      .replace(/\[INTRUSIVENESS\]/g, assessmentIntrusivenessLabel)
       .replace(/\[CLIENT_NAME\]/g, assessmentClientName)
       .replace(/\[JOB_REFERENCE\]/g, assessmentData.projectId?.projectID || 'Unknown')
       .replace(/\[ASSESSMENT_DATE\]/g, assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown')
@@ -2557,57 +2580,66 @@ const generateAssessmentHTML = async (assessmentData) => {
     };
     const getConditionDisplay = (item) => hasNoAsbestosContent(item) ? '-' : (item.condition || 'Unknown');
     const getRiskDisplay = (item) => hasNoAsbestosContent(item) ? '-' : (item.risk || 'Unknown');
-    const getSamplePhotoCellHtml = (item) => {
-      let src = item.photograph || (item.photographs && item.photographs[0] && item.photographs[0].data) || '';
-      src = (src || '').trim();
+    const getItemNumber = (items, idx) => {
+      const item = items[idx];
+      if (!item) return '-';
+      if (hasNoAsbestosContent(item)) return '-';
+      const count = items.slice(0, idx + 1).filter((i) => !hasNoAsbestosContent(i)).length;
+      return String(count);
+    };
+    // Multiple images per item: include all photos marked includeInReport; fallback to legacy single photograph; one table per photo with identical item info
+    const getIncludedPhotoSources = (item) => {
+      const fromArray = (item.photographs || []).filter(p => p.includeInReport !== false).map(p => (p.data || '').trim()).filter(Boolean);
+      if (fromArray.length > 0) return fromArray;
+      const legacy = (item.photograph || '').trim();
+      if (legacy) return [legacy];
+      return [null];
+    };
+    const getSamplePhotoCellHtmlFromSrc = (photoSrc) => {
+      let src = photoSrc || '';
       if (src && !src.startsWith('data:') && !src.startsWith('http://') && !src.startsWith('https://') && src.startsWith('/')) {
         src = frontendUrl + src;
       }
       if (src) {
         const safe = String(src).replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        return `<div class="sample-photo-cell-inner"><img class="sample-photo" src="${safe}" alt="Sample Photo" /></div>`;
+        return `<div class="sample-photo-cell-inner"><img class="sample-photo" src="${safe}" alt="" /></div>`;
       }
       return '<div class="sample-photo-cell-inner"><div class="sample-no-photo">No photograph available</div></div>';
     };
-    const firstSampleTable = firstSampleItem ? asbestosSampleItemTemplateWithUrl
-      .replace(/\[PHOTO_CELL\]/g, getSamplePhotoCellHtml(firstSampleItem))
-      .replace(/\[SAMPLE_REFERENCE\]/g, getSampleRefDisplay(firstSampleItem, 'Sample 1'))
-      .replace(/\[LOCATION_DESCRIPTION\]/g, getLocationContent(firstSampleItem))
-      .replace(/\[MATERIAL_TYPE\]/g, firstSampleItem.materialType || 'Unknown Material')
-      .replace(/\[ASBESTOS_CONTENT\]/g, getAsbestosContentHtml(firstSampleItem))
-      .replace(/\[ASBESTOS_TYPE\]/g, getAsbestosTypeDisplay(firstSampleItem))
-      .replace(/\[CONDITION\]/g, getConditionDisplay(firstSampleItem))
-      .replace(/\[RISK\]/g, getRiskDisplay(firstSampleItem))
-      .replace(/\[COMMENTS\]/g, getCommentsValue(firstSampleItem)) : '';
+    const buildTableBlock = (block) => {
+      const { item, itemIndex, photoSrc } = block;
+      return asbestosSampleItemTemplateWithUrl
+        .replace(/\[PHOTO_CELL\]/g, getSamplePhotoCellHtmlFromSrc(photoSrc))
+        .replace(/\[ITEM_NUMBER\]/g, getItemNumber(assessmentItems, itemIndex))
+        .replace(/\[SAMPLE_REFERENCE\]/g, getSampleRefDisplay(item, `Sample ${itemIndex + 1}`))
+        .replace(/\[LOCATION_DESCRIPTION\]/g, getLocationContent(item))
+        .replace(/\[MATERIAL_TYPE\]/g, item.materialType || 'Unknown Material')
+        .replace(/\[ASBESTOS_CONTENT\]/g, getAsbestosContentHtml(item))
+        .replace(/\[ASBESTOS_TYPE\]/g, getAsbestosTypeDisplay(item))
+        .replace(/\[CONDITION\]/g, getConditionDisplay(item))
+        .replace(/\[RISK\]/g, getRiskDisplay(item))
+        .replace(/\[COMMENTS\]/g, getCommentsValue(item));
+    };
+    const tableBlocks = [];
+    assessmentItems.forEach((item, itemIndex) => {
+      const sources = getIncludedPhotoSources(item);
+      sources.forEach(photoSrc => tableBlocks.push({ item, itemIndex, photoSrc }));
+    });
+    const firstSampleTable = tableBlocks.length > 0 ? buildTableBlock(tableBlocks[0]) : '';
 
-    // Generate assessment register items as separate pages
+    // Generate assessment register items as separate pages (one table per photo, 2 tables per page)
     let sampleRegisterPages = '';
     
     if (shouldMoveFirstItemToNewPage) {
-      // For 6+ items: First item starts new page, then 2 items per page
-      const itemsForSeparatePages = assessmentItems;
+      // For 6+ items: all table blocks on separate pages, 2 per page
+      const blocksForPages = tableBlocks;
       const pages = [];
-      
-      for (let i = 0; i < itemsForSeparatePages.length; i += 2) {
-        const pageItems = itemsForSeparatePages.slice(i, i + 2);
-        const pageContent = pageItems.map((item, pageIndex) => {
-          const sampleTable = asbestosSampleItemTemplateWithUrl
-            .replace(/\[PHOTO_CELL\]/g, getSamplePhotoCellHtml(item))
-            .replace(/\[SAMPLE_REFERENCE\]/g, getSampleRefDisplay(item, `Sample ${i + pageIndex + 1}`))
-            .replace(/\[LOCATION_DESCRIPTION\]/g, getLocationContent(item))
-            .replace(/\[MATERIAL_TYPE\]/g, item.materialType || 'Unknown Material')
-            .replace(/\[ASBESTOS_CONTENT\]/g, getAsbestosContentHtml(item))
-            .replace(/\[ASBESTOS_TYPE\]/g, getAsbestosTypeDisplay(item))
-            .replace(/\[CONDITION\]/g, getConditionDisplay(item))
-            .replace(/\[RISK\]/g, getRiskDisplay(item))
-            .replace(/\[COMMENTS\]/g, getCommentsValue(item));
-          
-          return `
-            <div class="sample-register-header">Assessment Register - Item ${i + pageIndex + 1}</div>
-            ${sampleTable}
-          `;
-        }).join('');
-        
+      for (let i = 0; i < blocksForPages.length; i += 2) {
+        const pageBlocks = blocksForPages.slice(i, i + 2);
+        const pageContent = pageBlocks.map(block => buildTableBlock(block)).join('<div style="margin-bottom: 20px;"></div>');
+        const continuationHeader = i >= 2 && i % 2 === 0
+          ? '<div class="section-header">TABLE 1: ASSESSMENT REGISTER cont.</div>'
+          : '';
         const pageNumber = 2 + pages.length;
         pages.push(`
           <div class="assessment-page">
@@ -2622,6 +2654,7 @@ const generateAssessmentHTML = async (assessmentData) => {
             </div>
             <div class="green-line"></div>
             <div class="content">
+              ${continuationHeader}
               ${pageContent}
             </div>
             <div class="footer">
@@ -2634,33 +2667,15 @@ const generateAssessmentHTML = async (assessmentData) => {
           </div>
         `);
       }
-      
       sampleRegisterPages = pages.join('<div class="page-break"></div>');
     } else {
-      // For ≤5 items: First item on main page (page 1), remaining items on separate pages (page 2, 3, ...)
-      const remainingItems = assessmentItems.slice(1);
+      // For ≤5 items: first table block on page 1, remaining blocks 2 per page
+      const remainingBlocks = tableBlocks.slice(1);
       const pages = [];
-      
-      for (let i = 0; i < remainingItems.length; i += 2) {
-        const pageItems = remainingItems.slice(i, i + 2);
-        const pageContent = pageItems.map((item, pageIndex) => {
-          const sampleTable = asbestosSampleItemTemplateWithUrl
-            .replace(/\[PHOTO_CELL\]/g, getSamplePhotoCellHtml(item))
-            .replace(/\[SAMPLE_REFERENCE\]/g, getSampleRefDisplay(item, `Sample ${i + pageIndex + 2}`))
-            .replace(/\[LOCATION_DESCRIPTION\]/g, getLocationContent(item))
-            .replace(/\[MATERIAL_TYPE\]/g, item.materialType || 'Unknown Material')
-            .replace(/\[ASBESTOS_CONTENT\]/g, getAsbestosContentHtml(item))
-            .replace(/\[ASBESTOS_TYPE\]/g, getAsbestosTypeDisplay(item))
-            .replace(/\[CONDITION\]/g, getConditionDisplay(item))
-            .replace(/\[RISK\]/g, getRiskDisplay(item))
-            .replace(/\[COMMENTS\]/g, getCommentsValue(item));
-          
-          return `
-            <div class="sample-register-header">Assessment Register - Item ${i + pageIndex + 2}</div>
-            ${sampleTable}
-          `;
-        }).join('<div style="margin-bottom: 20px;"></div>');
-        
+      for (let i = 0; i < remainingBlocks.length; i += 2) {
+        const pageBlocks = remainingBlocks.slice(i, i + 2);
+        const pageContent = pageBlocks.map(block => buildTableBlock(block)).join('<div style="margin-bottom: 20px;"></div>');
+        const continuationHeader = '<div class="section-header">TABLE 1: ASSESSMENT REGISTER cont.</div>';
         const pageNumber = 2 + pages.length;
         pages.push(`
           <div class="assessment-page">
@@ -2675,6 +2690,7 @@ const generateAssessmentHTML = async (assessmentData) => {
             </div>
             <div class="green-line"></div>
             <div class="content">
+              ${continuationHeader}
               ${pageContent}
             </div>
             <div class="footer">
@@ -2687,7 +2703,6 @@ const generateAssessmentHTML = async (assessmentData) => {
           </div>
         `);
       }
-      
       sampleRegisterPages = pages.join('<div class="page-break"></div>');
     }
 
@@ -2782,9 +2797,31 @@ const generateAssessmentHTML = async (assessmentData) => {
       ? `<ul class="non-asbestos-list">${identifiedNonAsbestosItems.map(item => `<li>${formatDiscussionListItem(item)}</li>`).join('')}</ul>`
       : '<div class="paragraph">No non-asbestos items were identified during the assessment.</div>';
 
-    const discussionConclusionsRaw = (assessmentData.discussionConclusions || '').trim();
+    const asbestosCount = identifiedAsbestosItems.length;
+    const siteName = assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site';
+    const hasSampledItemsRequiringAnalysis = assessmentItems.some((i) => (i.sampleReference || '').trim() && !isVisuallyAssessed(i.asbestosContent));
+    const firstSampledPerRef = hasSampledItemsRequiringAnalysis
+      ? assessmentItems.filter((item, index) => {
+          if (!(item.sampleReference || '').trim() || isVisuallyAssessed(item.asbestosContent)) return false;
+          const ref = item.sampleReference.trim();
+          return index === assessmentItems.findIndex((i) => (i.sampleReference || '').trim() === ref);
+        })
+      : [];
+    const analysisComplete = assessmentData.status === 'sample-analysis-complete' ||
+      !hasSampledItemsRequiringAnalysis ||
+      firstSampledPerRef.every((i) => i.analysisData?.isAnalysed === true);
+    const asbestosCountDisplay = asbestosCount > 0 ? formatAsbestosCountForPdf(asbestosCount, analysisComplete) : String(asbestosCount);
+    const acmRemovalSentence = 'ACM should be removed prior to the commencement of works which may damage or disturb the material.';
+    const defaultDiscussionText = asbestosCount === 0
+      ? `No asbestos containing materials were identified during the assessment conducted at ${siteName}.`
+      : `${asbestosCountDisplay} asbestos items were identified during the assessment of ${siteName}.\n\n${acmRemovalSentence}`;
+    let discussionConclusionsRaw = (assessmentData.discussionConclusions || '').trim() || defaultDiscussionText;
+    const analysisIncompleteReplacement = formatAsbestosCountForPdf(asbestosCount, analysisComplete);
+    discussionConclusionsRaw = discussionConclusionsRaw
+      .replace(/\{ANALYSIS INCOMPLETE\}/g, analysisIncompleteReplacement)
+      .replace(/\{ANALYSIS_INCOMPLETE\}/g, analysisIncompleteReplacement);
     const discussionConclusionsHtml = discussionConclusionsRaw
-      ? discussionConclusionsRaw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br />')
+      ? discussionConclusionsRaw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, halfLineBreakHtml)
       : '';
 
     // Page numbers: cover=1, version=2, item1=3, then assessment register pages, then discussion, then optional RCM page, then additional 1 & 2
@@ -2793,16 +2830,17 @@ const generateAssessmentHTML = async (assessmentData) => {
       : Math.ceil(Math.max(0, (assessmentItems.length || 1) - 1) / 2);
     const discussionPageNum = 4 + sampleRegisterPageCount;
 
+    const templateData = { ...assessmentData, identifiedAsbestosItems: asbestosItemsSection, selectedLegislation: templateContent?.selectedLegislation || [] };
     const discussionSignOffContent = templateContent?.standardSections?.signOffContent
-      ? await replacePlaceholders(templateContent.standardSections.signOffContent, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] })
+      ? await replacePlaceholders(templateContent.standardSections.signOffContent, templateData)
       : '';
     const discussionSignatureContent = templateContent?.standardSections?.signaturePlaceholder
-      ? await replacePlaceholders(templateContent.standardSections.signaturePlaceholder, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] })
+      ? await replacePlaceholders(templateContent.standardSections.signaturePlaceholder, templateData)
       : '';
 
     const jobSpecificExclusionsRawTemplate = (assessmentData.jobSpecificExclusions || '').trim();
     const jobSpecificExclusionsHtmlTemplate = jobSpecificExclusionsRawTemplate
-      ? jobSpecificExclusionsRawTemplate.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br />')
+      ? jobSpecificExclusionsRawTemplate.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, halfLineBreakHtml)
       : '';
 
     const populatedDiscussionConclusions = asbestosDiscussionConclusionsTemplateWithUrl
@@ -2819,7 +2857,7 @@ const generateAssessmentHTML = async (assessmentData) => {
       .replace(/\[FOOTER_TEXT\]/g, assessmentFooterText)
       .replace(/\[PAGE_NUMBER\]/g, String(discussionPageNum))
       .replace(/\[DISCUSSION_TITLE\]/g, templateContent?.standardSections?.discussionTitle || 'DISCUSSION AND CONCLUSIONS')
-      .replace(/\[DISCUSSION_CONTENT\]/g, templateContent?.standardSections?.discussionContent ? await replacePlaceholders(templateContent.standardSections.discussionContent, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] }) : 'Discussion and conclusions content not found');
+      .replace(/\[DISCUSSION_CONTENT\]/g, templateContent?.standardSections?.discussionContent ? await replacePlaceholders(templateContent.standardSections.discussionContent, templateData) : 'Discussion and conclusions content not found');
 
 
 
@@ -2828,31 +2866,31 @@ const generateAssessmentHTML = async (assessmentData) => {
     const sections = [
       {
         title: templateContent?.standardSections?.assessmentMethodologyTitle || 'ASSESSMENT METHODOLOGY',
-        content: templateContent?.standardSections?.assessmentMethodologyContent ? await replacePlaceholders(templateContent.standardSections.assessmentMethodologyContent, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] }) : ''
+        content: templateContent?.standardSections?.assessmentMethodologyContent ? await replacePlaceholders(templateContent.standardSections.assessmentMethodologyContent, templateData) : ''
       },
       {
         title: templateContent?.standardSections?.recommendedControlMeasuresTitle || 'RECOMMENDED CONTROL MEASURES',
-        content: templateContent?.standardSections?.recommendedControlMeasuresContent ? await replacePlaceholders(templateContent.standardSections.recommendedControlMeasuresContent, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] }) : ''
+        content: templateContent?.standardSections?.recommendedControlMeasuresContent ? await replacePlaceholders(templateContent.standardSections.recommendedControlMeasuresContent, templateData) : ''
       },
       {
         title: templateContent?.standardSections?.riskAssessmentTitle || 'RISK ASSESSMENT',
-        content: templateContent?.standardSections?.riskAssessmentContent ? await replacePlaceholders(templateContent.standardSections.riskAssessmentContent, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] }) : 'Risk assessment content not found'
+        content: templateContent?.standardSections?.riskAssessmentContent ? await replacePlaceholders(templateContent.standardSections.riskAssessmentContent, templateData) : 'Risk assessment content not found'
       },
       {
         title: templateContent?.standardSections?.controlMeasuresTitle || 'DETERMINING SUITABLE CONTROL MEASURES',
-        content: templateContent?.standardSections?.controlMeasuresContent ? await replacePlaceholders(templateContent.standardSections.controlMeasuresContent, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] }) : 'Control measures content not found'
+        content: templateContent?.standardSections?.controlMeasuresContent ? await replacePlaceholders(templateContent.standardSections.controlMeasuresContent, templateData) : 'Control measures content not found'
       },
       {
         title: templateContent?.standardSections?.remediationRequirementsTitle || 'REQUIREMENTS FOR REMEDIATION/REMOVAL WORKS INVOLVING ACM',
-        content: templateContent?.standardSections?.remediationRequirementsContent ? await replacePlaceholders(templateContent.standardSections.remediationRequirementsContent, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] }) : 'Remediation requirements content not found'
+        content: templateContent?.standardSections?.remediationRequirementsContent ? await replacePlaceholders(templateContent.standardSections.remediationRequirementsContent, templateData) : 'Remediation requirements content not found'
       },
       {
         title: templateContent?.standardSections?.legislationTitle || 'LEGISLATION',
-        content: templateContent?.standardSections?.legislationContent ? await replacePlaceholders(templateContent.standardSections.legislationContent, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] }) : 'Legislation content not found'
+        content: templateContent?.standardSections?.legislationContent ? await replacePlaceholders(templateContent.standardSections.legislationContent, templateData) : 'Legislation content not found'
       },
       {
         title: templateContent?.standardSections?.assessmentLimitationsTitle || 'ASSESSMENT LIMITATIONS/CAVEATS',
-        content: templateContent?.standardSections?.assessmentLimitationsContent ? await replacePlaceholders(templateContent.standardSections.assessmentLimitationsContent, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] }) : 'Assessment limitations content not found'
+        content: templateContent?.standardSections?.assessmentLimitationsContent ? await replacePlaceholders(templateContent.standardSections.assessmentLimitationsContent, templateData) : 'Assessment limitations content not found'
       }
     ];
 
@@ -3044,10 +3082,10 @@ const generateAssessmentHTML = async (assessmentData) => {
       .assessment-page .sample-table { width: 100%; border-collapse: collapse; margin-bottom: 18px; table-layout: fixed; font-size: 0.64rem; }
       .assessment-page .sample-table th, .assessment-page .sample-table td { border: 1.5px solid #888; padding: 6px 8px; font-size: 0.64rem; vertical-align: top; }
       .assessment-page .sample-table th { background: #f5f5f5; font-weight: 700; text-align: left; }
-      .assessment-page .sample-photo-cell { width: 71% !important; height: 300px !important; overflow: hidden !important; box-sizing: border-box !important; text-align: center; vertical-align: middle; background: #fafafa; padding: 0 !important; margin: 0 !important; }
-      .assessment-page .sample-photo-cell-inner { display: block; width: 100%; height: 100%; max-width: 100%; max-height: 100%; overflow: hidden; box-sizing: border-box; padding: 0; margin: 0; }
-      .assessment-page .sample-photo-cell-inner .sample-photo { max-width: 100% !important; max-height: 280px !important; width: auto !important; height: auto !important; object-fit: contain !important; border: 1px solid #ccc; border-radius: 4px; display: block; margin: 0 auto !important; padding: 0 !important; }
-      .assessment-page .sample-photo { max-width: 100%; max-height: 300px; object-fit: contain; border: 1px solid #ccc; border-radius: 4px; }
+      .assessment-page .sample-photo-cell { width: 71% !important; height: 340px !important; overflow: hidden !important; box-sizing: border-box !important; text-align: center; vertical-align: middle; background: #fff; padding: 0 !important; margin: 0 !important; }
+      .assessment-page .sample-photo-cell-inner { display: block; width: 100%; height: 340px; overflow: hidden; box-sizing: border-box; padding: 0; margin: 0; }
+      .assessment-page .sample-photo-cell-inner .sample-photo { display: block !important; width: 100% !important; height: 100% !important; object-fit: contain !important; object-position: center !important; padding: 0 !important; }
+      .assessment-page .sample-photo { display: block; width: 100%; height: 100%; object-fit: contain; object-position: center; padding: 0; }
       .assessment-page .sample-label { font-weight: 700; width: 12.5%; background: #f5f5f5; }
       .assessment-page .sample-ref-label { width: 13.75%; }
       .assessment-page .sample-ref-value { width: 11.25%; }
@@ -3057,7 +3095,7 @@ const generateAssessmentHTML = async (assessmentData) => {
       .assessment-page .sample-location-content { height: 60px; vertical-align: top; padding: 8px; background: #fafafa; border: 1.5px solid #888; font-size: 0.64rem; line-height: 1.4; }
       .assessment-page .comments-row td { background: #eaeaea; font-size: 0.64rem; font-style: italic; width: 100%; line-height: 1.4; }
       .assessment-page .comments-cell-inner { min-height: 2.7rem; display: block; }
-      .assessment-page .sample-no-photo { display: flex; align-items: center; justify-content: center; min-height: 280px; height: 100%; color: #666; font-style: italic; font-size: 0.64rem; }
+      .assessment-page .sample-no-photo { display: flex; align-items: center; justify-content: center; min-height: 340px; height: 100%; color: #666; font-style: italic; font-size: 0.64rem; }
       .assessment-page .asbestos-content-asbestos { color: #c62828; }
       .assessment-page .asbestos-content-non-asbestos { color: #2e7d32; }
     `;
@@ -3170,10 +3208,12 @@ const generateAssessmentCoverVersionHTMLV3 = async (assessmentData, isResidentia
     ? `${assessmentData.projectId?.projectID || 'Unknown'}_Residential_Asbestos_Assessment_Report - ${assessmentSiteAddress} (${assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown'}).pdf`
     : `${assessmentData.projectId?.projectID || 'Unknown'}_Asbestos_Assessment_Report - ${assessmentSiteAddress} (${assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown'}).pdf`;
 
+  const assessmentIntrusivenessLabelV3 = assessmentData.intrusiveness === 'intrusive' ? 'Intrusive' : 'Non-intrusive';
   const populatedCover = coverTemplateWithUrl
     .replace(/\[REPORT_TITLE\]/g, assessmentReportTitle)
     .replace(/\[SITE_ADDRESS\]/g, assessmentSiteAddress)
     .replace(/\[SECONDARY_HEADER\]/g, assessmentData.secondaryHeader || '')
+    .replace(/\[INTRUSIVENESS\]/g, assessmentIntrusivenessLabelV3)
     .replace(/\[CLIENT_NAME\]/g, assessmentClientName)
     .replace(/\[JOB_REFERENCE\]/g, assessmentData.projectId?.projectID || 'Unknown')
     .replace(/\[ASSESSMENT_DATE\]/g, assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown')
@@ -3341,15 +3381,29 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
   };
   const getConditionDisplay = (item) => hasNoAsbestosContentFlow(item) ? '-' : (item.condition || 'Unknown');
   const getRiskDisplay = (item) => hasNoAsbestosContentFlow(item) ? '-' : (item.risk || 'Unknown');
-  const getSamplePhotoCellHtml = (item) => {
-    let src = item.photograph || (item.photographs && item.photographs[0] && item.photographs[0].data) || '';
-    src = (src || '').trim();
+  const getItemNumberFlow = (items, idx) => {
+    const item = items[idx];
+    if (!item) return '-';
+    if (hasNoAsbestosContentFlow(item)) return '-';
+    const count = items.slice(0, idx + 1).filter((i) => !hasNoAsbestosContentFlow(i)).length;
+    return String(count);
+  };
+  // Multiple images per item: one table per photo with identical item info
+  const getIncludedPhotoSourcesFlow = (item) => {
+    const fromArray = (item.photographs || []).filter(p => p.includeInReport !== false).map(p => (p.data || '').trim()).filter(Boolean);
+    if (fromArray.length > 0) return fromArray;
+    const legacy = (item.photograph || '').trim();
+    if (legacy) return [legacy];
+    return [null];
+  };
+  const getSamplePhotoCellHtmlFromSrcFlow = (photoSrc) => {
+    let src = photoSrc || '';
     if (src && !src.startsWith('data:') && !src.startsWith('http://') && !src.startsWith('https://') && src.startsWith('/')) {
       src = frontendUrl + src;
     }
     if (src) {
       const safe = String(src).replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      return `<div class="sample-photo-cell-inner"><img class="sample-photo" src="${safe}" alt="Sample Photo" /></div>`;
+      return `<div class="sample-photo-cell-inner"><img class="sample-photo" src="${safe}" alt="" /></div>`;
     }
     return '<div class="sample-photo-cell-inner"><div class="sample-no-photo">No photograph available</div></div>';
   };
@@ -3359,10 +3413,16 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
   const asbestosSampleItemTemplate = fs.readFileSync(path.join(templateDir, 'AsbestosSampleItem.html'), 'utf8');
   const asbestosSampleItemTemplateWithUrl = asbestosSampleItemTemplate.replace(/\[FRONTEND_URL\]/g, frontendUrl);
 
-  const sampleTablesHtml = assessmentItems.map((item, idx) => {
+  const flowTableBlocks = [];
+  assessmentItems.forEach((item, idx) => {
+    getIncludedPhotoSourcesFlow(item).forEach(photoSrc => flowTableBlocks.push({ item, idx, photoSrc }));
+  });
+  const sampleTablesHtml = flowTableBlocks.map((block, blockIndex) => {
+    const { item, idx, photoSrc } = block;
     const n = idx + 1;
     const sampleTable = asbestosSampleItemTemplateWithUrl
-      .replace(/\[PHOTO_CELL\]/g, getSamplePhotoCellHtml(item))
+      .replace(/\[PHOTO_CELL\]/g, getSamplePhotoCellHtmlFromSrcFlow(photoSrc))
+      .replace(/\[ITEM_NUMBER\]/g, getItemNumberFlow(assessmentItems, idx))
       .replace(/\[SAMPLE_REFERENCE\]/g, getSampleRefDisplay(item, `Sample ${n}`))
       .replace(/\[LOCATION_DESCRIPTION\]/g, getLocationContent(item))
       .replace(/\[MATERIAL_TYPE\]/g, item.materialType || 'Unknown Material')
@@ -3372,35 +3432,13 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
       .replace(/\[RISK\]/g, getRiskDisplay(item))
       .replace(/\[COMMENTS\]/g, getCommentsValue(item));
 
-    return `<div class="sample-block"><div class="sample-register-header">Assessment Register - Item ${n}</div>${sampleTable}</div>`;
+    const continuationHeader = blockIndex >= 2 && blockIndex % 2 === 0
+      ? '<div class="page-break"></div><div class="section-header">TABLE 1: ASSESSMENT REGISTER cont.</div>'
+      : '';
+    return `${continuationHeader}<div class="sample-block">${sampleTable}</div>`;
   }).join('');
 
-  const introductionHtml = templateContent?.standardSections?.introductionContent
-    ? await replacePlaceholders(templateContent.standardSections.introductionContent, { ...assessmentData, jurisdiction: assessmentJurisdiction, selectedLegislation: templateContent?.selectedLegislation || [] })
-    : 'Introduction content not found';
-
-  // Background section (residential only): before Introduction
-  const backgroundContentRawFlow = templateContent?.standardSections?.backgroundContent;
-  const backgroundHtml = (isResidential && backgroundContentRawFlow)
-    ? String(await replacePlaceholders(backgroundContentRawFlow, { ...assessmentData, jurisdiction: assessmentJurisdiction, selectedLegislation: templateContent?.selectedLegislation || [] }) || '').replace(/\n/g, '<br />')
-    : '';
-
-  // Survey findings: use No Asbestos content when no asbestos items; otherwise use main survey findings content
-  const hasAsbestosItemsFlow = assessmentItems.some((item) => !hasNoAsbestosContentFlow(item));
-  const surveyFindingsSourceFlow = hasAsbestosItemsFlow
-    ? (templateContent?.standardSections?.surveyFindingsContent || 'Survey findings content not found')
-    : (templateContent?.standardSections?.surveyFindingsContentNoSamples || "No asbestos-containing materials were identified during this assessment.");
-  let surveyFindingsHtml = surveyFindingsSourceFlow !== 'Survey findings content not found'
-    ? await replacePlaceholders(surveyFindingsSourceFlow, { ...assessmentData, jurisdiction: assessmentJurisdiction, selectedLegislation: templateContent?.selectedLegislation || [] })
-    : surveyFindingsSourceFlow;
-  const hasSitePlanFlow = !!(assessmentData.sitePlan && assessmentData.sitePlanFile);
-  const hasFibreIdReportFlow = !!assessmentData.fibreAnalysisReport;
-  const sitePlanAppendixFlow = hasFibreIdReportFlow ? 'Appendix B' : 'Appendix A';
-  if (hasSitePlanFlow) {
-    surveyFindingsHtml += `<p style="margin-top: 12px;">A site plan for this assessment is presented in ${escapeHtml(sitePlanAppendixFlow)} of this report.</p>`;
-  }
-
-  // Discussion & Conclusions: asbestos items, then non-asbestos items
+  // Discussion & Conclusions: asbestos items, then non-asbestos items (build early so flowTemplateData can be used in replacePlaceholders)
   // Use same effective asbestos display logic as sample tables (includes fibres array, referred items)
   const getEffectiveAsbestosDisplayForDiscussionFlow = (item) => {
     const sampled = findSampledItemForRefFlow(item.sampleReference);
@@ -3441,36 +3479,93 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
     ? '<p style="margin: 8px 0 0 0; font-style: italic; font-size: 0.8rem;"><em>* Item was found to contain Unidentified Mineral Fibre (UMF). Material should be considered to be asbestos unless further analysis can confirm otherwise.</em></p>'
     : '';
   const asbestosItemsSectionFlow = identifiedAsbestosItems.length > 0
-    ? `<ul style="margin: 0 0 12px 0; padding-left: 24px;">${identifiedAsbestosItems.map(item => `<li>${formatDiscussionListItemFlow(item)}</li>`).join('')}</ul>${umfFootnoteFlow}`
+    ? `<ul class="bullet-list" style="margin: 0 0 12px 0;">${identifiedAsbestosItems.map(item => `<li>${formatDiscussionListItemFlow(item)}</li>`).join('')}</ul>${umfFootnoteFlow}`
     : '<p style="margin: 0 0 12px 0;">No asbestos items were identified during the assessment.</p>';
 
   const nonAsbestosItemsSectionFlow = identifiedNonAsbestosItems.length > 0
-    ? `<ul style="margin: 0 0 12px 0; padding-left: 24px;">${identifiedNonAsbestosItems.map(item => `<li>${formatDiscussionListItemFlow(item)}</li>`).join('')}</ul>`
+    ? `<ul class="bullet-list" style="margin: 0 0 12px 0;">${identifiedNonAsbestosItems.map(item => `<li>${formatDiscussionListItemFlow(item)}</li>`).join('')}</ul>`
     : '<p style="margin: 0 0 12px 0;">No non-asbestos items were identified during the assessment.</p>';
 
-  const discussionConclusionsRaw = (assessmentData.discussionConclusions || '').trim();
+  // Data for replacePlaceholders (includes identified asbestos list so {IDENTIFIED_ASBESTOS_ITEMS} resolves correctly)
+  const flowTemplateData = { ...assessmentData, identifiedAsbestosItems: asbestosItemsSectionFlow, jurisdiction: assessmentJurisdiction, selectedLegislation: templateContent?.selectedLegislation || [] };
+
+  const introductionHtml = templateContent?.standardSections?.introductionContent
+    ? await replacePlaceholders(templateContent.standardSections.introductionContent, flowTemplateData)
+    : 'Introduction content not found';
+
+  // Background section (residential only): before Introduction
+  const backgroundContentRawFlow = templateContent?.standardSections?.backgroundContent;
+  const backgroundHtml = (isResidential && backgroundContentRawFlow)
+    ? String(await replacePlaceholders(backgroundContentRawFlow, flowTemplateData) || '').replace(/\n/g, '<br />')
+    : '';
+
+  // Survey findings: use No Asbestos content when no asbestos items; otherwise use main survey findings content
+  const hasAsbestosItemsFlow = assessmentItems.some((item) => !hasNoAsbestosContentFlow(item));
+  const surveyFindingsSourceFlow = hasAsbestosItemsFlow
+    ? (templateContent?.standardSections?.surveyFindingsContent || 'Survey findings content not found')
+    : (templateContent?.standardSections?.surveyFindingsContentNoSamples || "No asbestos-containing materials were identified during this assessment.");
+  let surveyFindingsHtml = surveyFindingsSourceFlow !== 'Survey findings content not found'
+    ? await replacePlaceholders(surveyFindingsSourceFlow, flowTemplateData)
+    : surveyFindingsSourceFlow;
+  const hasSitePlanFlow = !!(assessmentData.sitePlan && assessmentData.sitePlanFile);
+  const hasFibreIdReportFlow = !!assessmentData.fibreAnalysisReport;
+  const sitePlanAppendixFlow = hasFibreIdReportFlow ? 'Appendix B' : 'Appendix A';
+  if (hasSitePlanFlow) {
+    surveyFindingsHtml += `<p style="margin-top: 12px;">A site plan for this assessment is presented in ${escapeHtml(sitePlanAppendixFlow)} of this report.</p>`;
+  }
+
+  const asbestosCountFlow = identifiedAsbestosItems.length;
+  const hasSampledItemsRequiringAnalysisFlow = assessmentItems.some((i) => (i.sampleReference || '').trim() && !isVisuallyAssessed(i.asbestosContent));
+  const firstSampledPerRefFlow = hasSampledItemsRequiringAnalysisFlow
+    ? assessmentItems.filter((item, index) => {
+        if (!(item.sampleReference || '').trim() || isVisuallyAssessed(item.asbestosContent)) return false;
+        const ref = item.sampleReference.trim();
+        return index === assessmentItems.findIndex((i) => (i.sampleReference || '').trim() === ref);
+      })
+    : [];
+  const analysisCompleteFlow = assessmentData.status === 'sample-analysis-complete' ||
+    !hasSampledItemsRequiringAnalysisFlow ||
+    firstSampledPerRefFlow.every((i) => i.analysisData?.isAnalysed === true);
+  const asbestosCountDisplayFlow = asbestosCountFlow > 0 ? formatAsbestosCountForPdf(asbestosCountFlow, analysisCompleteFlow) : String(asbestosCountFlow);
+  const acmRemovalSentenceFlow = 'ACM should be removed prior to the commencement of works which may damage or disturb the material.';
+  let defaultDiscussionTextFlow = asbestosCountFlow === 0
+    ? `No asbestos containing materials were identified during the assessment conducted at ${assessmentSiteAddress}.`
+    : `${asbestosCountDisplayFlow} asbestos items were identified during the assessment of ${assessmentSiteAddress}.`;
+  const residentialCeilingSubfloorText = 'The assessment of the ceiling void was limited to a visual inspection from the access hatch. A combination of insulation batts and loose-fill insulation was identified within the ceiling void, these materials were visually assessed as synthetic mineral fibres (SMF). No suspect ACM was identified during the assessment of the ceiling void however, it is common for ACM to be present within ceiling voids in the forms of debris and/or packers. It is recommended that persons accessing the ceiling void wear a minimum P2 respirator and coveralls.\n\nNo suspect ACM was identified during the assessment of the subfloor, it is common for ACM to be present within subfloors in the form of debris, packers, and/or formwork. It is recommended that persons accessing the crawl space wear a minimum P2 respirator and coveralls.';
+  if (isResidential) {
+    defaultDiscussionTextFlow = defaultDiscussionTextFlow + '\n\n' + residentialCeilingSubfloorText;
+  }
+  if (asbestosCountFlow > 0) {
+    defaultDiscussionTextFlow = defaultDiscussionTextFlow + '\n\n' + acmRemovalSentenceFlow;
+  }
+  // Use saved discussion/conclusions as-is when present (modal already includes ACM sentence and residential text in its default)
+  let discussionConclusionsRaw = (assessmentData.discussionConclusions || '').trim() || defaultDiscussionTextFlow;
+  const analysisIncompleteReplacementFlow = formatAsbestosCountForPdf(asbestosCountFlow, analysisCompleteFlow);
+  discussionConclusionsRaw = discussionConclusionsRaw
+    .replace(/\{ANALYSIS INCOMPLETE\}/g, analysisIncompleteReplacementFlow)
+    .replace(/\{ANALYSIS_INCOMPLETE\}/g, analysisIncompleteReplacementFlow);
   const discussionConclusionsHtml = discussionConclusionsRaw
-    ? escapeHtml(discussionConclusionsRaw).replace(/\n/g, '<br />')
+    ? escapeHtml(discussionConclusionsRaw).replace(/\n/g, halfLineBreakHtml)
     : '';
 
   const jobSpecificExclusionsRaw = (assessmentData.jobSpecificExclusions || '').trim();
   const inspectionExclusionsHtml = jobSpecificExclusionsRaw
-    ? escapeHtml(jobSpecificExclusionsRaw).replace(/\n/g, '<br />')
+    ? escapeHtml(jobSpecificExclusionsRaw).replace(/\n/g, halfLineBreakHtml)
     : '';
 
   // Recommended Control Measures is rendered between Discussion and Conclusions and sign-off (see flow HTML)
   const recommendedControlMeasuresContentFlow = templateContent?.standardSections?.recommendedControlMeasuresContent
-    ? await replacePlaceholders(templateContent.standardSections.recommendedControlMeasuresContent, { ...assessmentData, jurisdiction: assessmentJurisdiction, selectedLegislation: templateContent?.selectedLegislation || [] })
+    ? await replacePlaceholders(templateContent.standardSections.recommendedControlMeasuresContent, flowTemplateData)
     : '';
   const recommendedControlMeasuresHtml = `<div class="section-header">${escapeHtml(templateContent?.standardSections?.recommendedControlMeasuresTitle || 'RECOMMENDED CONTROL MEASURES')}</div><div class="section-body">${recommendedControlMeasuresContentFlow || ''}</div>`;
 
   const additionalSections = [
-    { title: templateContent?.standardSections?.assessmentMethodologyTitle || 'ASSESSMENT METHODOLOGY', content: templateContent?.standardSections?.assessmentMethodologyContent ? await replacePlaceholders(templateContent.standardSections.assessmentMethodologyContent, { ...assessmentData, jurisdiction: assessmentJurisdiction, selectedLegislation: templateContent?.selectedLegislation || [] }) : '' },
-    { title: templateContent?.standardSections?.riskAssessmentTitle || 'RISK ASSESSMENT', content: templateContent?.standardSections?.riskAssessmentContent ? await replacePlaceholders(templateContent.standardSections.riskAssessmentContent, { ...assessmentData, jurisdiction: assessmentJurisdiction, selectedLegislation: templateContent?.selectedLegislation || [] }) : '' },
-    { title: templateContent?.standardSections?.controlMeasuresTitle || 'DETERMINING SUITABLE CONTROL MEASURES', content: templateContent?.standardSections?.controlMeasuresContent ? await replacePlaceholders(templateContent.standardSections.controlMeasuresContent, { ...assessmentData, jurisdiction: assessmentJurisdiction, selectedLegislation: templateContent?.selectedLegislation || [] }) : '' },
-    { title: templateContent?.standardSections?.remediationRequirementsTitle || 'REQUIREMENTS FOR REMEDIATION/REMOVAL WORKS INVOLVING ACM', content: templateContent?.standardSections?.remediationRequirementsContent ? await replacePlaceholders(templateContent.standardSections.remediationRequirementsContent, { ...assessmentData, jurisdiction: assessmentJurisdiction, selectedLegislation: templateContent?.selectedLegislation || [] }) : '' },
-    { title: templateContent?.standardSections?.legislationTitle || 'LEGISLATION', content: templateContent?.standardSections?.legislationContent ? await replacePlaceholders(templateContent.standardSections.legislationContent, { ...assessmentData, jurisdiction: assessmentJurisdiction, selectedLegislation: templateContent?.selectedLegislation || [] }) : '' },
-    { title: templateContent?.standardSections?.assessmentLimitationsTitle || 'ASSESSMENT LIMITATIONS/CAVEATS', content: templateContent?.standardSections?.assessmentLimitationsContent ? await replacePlaceholders(templateContent.standardSections.assessmentLimitationsContent, { ...assessmentData, jurisdiction: assessmentJurisdiction, selectedLegislation: templateContent?.selectedLegislation || [] }) : '' }
+    { title: templateContent?.standardSections?.assessmentMethodologyTitle || 'ASSESSMENT METHODOLOGY', content: templateContent?.standardSections?.assessmentMethodologyContent ? await replacePlaceholders(templateContent.standardSections.assessmentMethodologyContent, flowTemplateData) : '' },
+    { title: templateContent?.standardSections?.riskAssessmentTitle || 'RISK ASSESSMENT', content: templateContent?.standardSections?.riskAssessmentContent ? await replacePlaceholders(templateContent.standardSections.riskAssessmentContent, flowTemplateData) : '' },
+    { title: templateContent?.standardSections?.controlMeasuresTitle || 'DETERMINING SUITABLE CONTROL MEASURES', content: templateContent?.standardSections?.controlMeasuresContent ? await replacePlaceholders(templateContent.standardSections.controlMeasuresContent, flowTemplateData) : '' },
+    { title: templateContent?.standardSections?.remediationRequirementsTitle || 'REQUIREMENTS FOR REMEDIATION/REMOVAL WORKS INVOLVING ACM', content: templateContent?.standardSections?.remediationRequirementsContent ? await replacePlaceholders(templateContent.standardSections.remediationRequirementsContent, flowTemplateData) : '' },
+    { title: templateContent?.standardSections?.legislationTitle || 'LEGISLATION', content: templateContent?.standardSections?.legislationContent ? await replacePlaceholders(templateContent.standardSections.legislationContent, flowTemplateData) : '' },
+    { title: templateContent?.standardSections?.assessmentLimitationsTitle || 'ASSESSMENT LIMITATIONS/CAVEATS', content: templateContent?.standardSections?.assessmentLimitationsContent ? await replacePlaceholders(templateContent.standardSections.assessmentLimitationsContent, flowTemplateData) : '' }
   ];
 
   const bodySectionsHtml = additionalSections.map((s, i) => {
@@ -3480,10 +3575,10 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
   }).join('');
 
   const discussionSignOffContent = templateContent?.standardSections?.signOffContent
-    ? await replacePlaceholders(templateContent.standardSections.signOffContent, { ...assessmentData, jurisdiction: assessmentJurisdiction, selectedLegislation: templateContent?.selectedLegislation || [] })
+    ? await replacePlaceholders(templateContent.standardSections.signOffContent, flowTemplateData)
     : '';
   const discussionSignatureContent = templateContent?.standardSections?.signaturePlaceholder
-    ? await replacePlaceholders(templateContent.standardSections.signaturePlaceholder, { ...assessmentData, jurisdiction: assessmentJurisdiction, selectedLegislation: templateContent?.selectedLegislation || [] })
+    ? await replacePlaceholders(templateContent.standardSections.signaturePlaceholder, flowTemplateData)
     : '';
 
   // Appendix cover pages are generated as separate PDFs (no page number in footer) and merged after flow + fibre analysis
@@ -3568,6 +3663,7 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
           .section-header { font-size: 0.9rem; font-weight: 700; text-transform: uppercase; margin: 10px 0 10px 0; letter-spacing: 0.01em; }
           .page-break + .section-header { margin-top: 0; } /* avoid starting too low at top of a new page */
           .section-body { font-size: 0.8rem; line-height: 1.5; text-align: justify; margin-bottom: 18px; }
+          .section-body.discussion-conclusions-content { text-align: justify !important; width: 100%; }
           .section-body br { line-height: 1.5; display: block; margin-bottom: 0.25em; }
           .section-body .paragraph { margin-bottom: 8px; }
           .section-body .bullet-list { margin: 0 0 8px 0; padding: 0 0 0 24px; list-style: none; font-size: 0.8rem; color: #222; }
@@ -3590,16 +3686,16 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
           .comments-cell-inner { min-height: 2.7rem; display: block; }
           .sample-risk-cell { line-height: 1; height: 1.2em; padding: 4px 4px; vertical-align: middle; }
           .sample-location-content { height: 60px; vertical-align: top; padding: 8px; background: #fafafa; border: 1.5px solid #888; font-size: 0.64rem; line-height: 1.4; }
-          .sample-photo-cell { width: 71% !important; height: 300px !important; overflow: hidden !important; box-sizing: border-box !important; text-align: center; vertical-align: middle; background: #fafafa; padding: 0 !important; margin: 0 !important; }
-          .sample-photo-cell-inner { display: block; width: 100%; height: 100%; max-width: 100%; max-height: 100%; overflow: hidden; box-sizing: border-box; padding: 0; margin: 0; }
-          .sample-photo { max-width: 100% !important; max-height: 280px !important; width: auto !important; height: auto !important; object-fit: contain !important; border: 1px solid #ccc; border-radius: 4px; display: block; margin: 0 auto !important; padding: 0 !important; }
-          .sample-no-photo { display: flex; align-items: center; justify-content: center; min-height: 280px; height: 100%; color: #666; font-style: italic; font-size: 0.64rem; }
+          .sample-photo-cell { width: 71% !important; height: 340px !important; overflow: hidden !important; box-sizing: border-box !important; text-align: center; vertical-align: middle; background: #fff; padding: 0 !important; margin: 0 !important; }
+          .sample-photo-cell-inner { display: block; width: 100%; height: 340px; overflow: hidden; box-sizing: border-box; padding: 0; margin: 0; }
+          .sample-photo { display: block !important; width: 100% !important; height: 100% !important; object-fit: contain !important; object-position: center !important; padding: 0 !important; }
+          .sample-no-photo { display: flex; align-items: center; justify-content: center; min-height: 340px; height: 100%; color: #666; font-style: italic; font-size: 0.64rem; }
           .asbestos-content-asbestos { color: #c62828; font-weight: 700; }
           .asbestos-content-non-asbestos { color: #2e7d32; font-weight: 700; }
 
           /* Glossary page: 2-column table (same header/footer as other flow pages) */
-          .glossary-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; color: #222; margin: 10px 0 0 0; }
-          .glossary-table th, .glossary-table td { border: 1.5px solid #888; padding: 8px 12px; text-align: left; vertical-align: top; line-height: 1.5; }
+          .glossary-table { width: 100%; border-collapse: collapse; font-size: 0.9em; color: #222; margin: 10px 0 0 0; }
+          .glossary-table th, .glossary-table td { border: 1.5px solid #888; padding: 8px 12px; text-align: left; vertical-align: top; line-height: 1.5; font-size: 0.8em; }
           .glossary-table th { background: #f5f5f5; font-weight: 700; }
           .glossary-table .glossary-term { width: 28%; font-weight: 600; }
           .glossary-table .glossary-definition { width: 72%; }
@@ -3646,14 +3742,14 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
         <div class="section-header">${escapeHtml(templateContent?.standardSections?.discussionTitle || 'DISCUSSION AND CONCLUSIONS')}</div>
         <div class="section-body">
           ${isResidential
-            ? `${discussionConclusionsHtml ? `<div class="section-body discussion-conclusions-content" style="white-space: pre-wrap;">${discussionConclusionsHtml}</div>` : ''}${inspectionExclusionsHtml ? `<div style="margin-top: 12px; white-space: pre-wrap;">${inspectionExclusionsHtml}</div>` : ''}`
+            ? `${discussionConclusionsHtml ? `<div class="section-body discussion-conclusions-content" style="white-space: pre-wrap; text-align: justify !important; width: 100%;">${discussionConclusionsHtml}</div>` : ''}${inspectionExclusionsHtml ? `<div style="margin-top: 12px; white-space: pre-wrap; text-align: justify !important; width: 100%;">${inspectionExclusionsHtml}</div>` : ''}`
             : `<p style="margin: 0; padding-bottom: 8px;">The following is a summary of asbestos and non-asbestos materials identified during this assessment:</p>
           <p style="margin: 0; padding-bottom: 4px; text-decoration: underline; font-weight: 600; font-size: 0.8rem;">Asbestos Items</p>
           ${asbestosItemsSectionFlow}
           <p style="margin: 0; padding-bottom: 4px; text-decoration: underline; font-weight: 600; font-size: 0.8rem;">Non-asbestos Items</p>
           ${nonAsbestosItemsSectionFlow}
-          ${discussionConclusionsHtml ? `<div class="section-body discussion-conclusions-content" style="margin-top: 12px; white-space: pre-wrap;">${discussionConclusionsHtml}</div>` : ''}
-          ${inspectionExclusionsHtml ? `<div style="margin-top: 12px; white-space: pre-wrap;">${inspectionExclusionsHtml}</div>` : ''}`}
+          ${discussionConclusionsHtml ? `<div class="section-body discussion-conclusions-content" style="margin-top: 12px; white-space: pre-wrap; text-align: justify !important; width: 100%;">${discussionConclusionsHtml}</div>` : ''}
+          ${inspectionExclusionsHtml ? `<div style="margin-top: 12px; white-space: pre-wrap; text-align: justify !important; width: 100%;">${inspectionExclusionsHtml}</div>` : ''}`}
         </div>
 
         ${recommendedControlMeasuresHtml}
@@ -3719,30 +3815,39 @@ const generateAssessmentPhotographsContent = (items) => {
     return '<div class="photo-container"><div class="photo"><div class="photo-placeholder">No photographs available</div></div></div>';
   }
 
-  // Filter out items that don't have photographs
-  const itemsWithPhotos = items.filter(item => 
-    item.photograph && item.photograph.trim() !== ''
-  );
+  // Flatten: each item can have multiple photos (photographs array with includeInReport, or legacy photograph)
+  const photoEntries = [];
+  items.forEach((item) => {
+    const fromArray = (item.photographs || []).filter(p => p.includeInReport !== false).map(p => (p.data || '').trim()).filter(Boolean);
+    if (fromArray.length > 0) {
+      fromArray.forEach(src => photoEntries.push({ src, item }));
+    } else if (item.photograph && item.photograph.trim() !== '') {
+      photoEntries.push({ src: item.photograph.trim(), item });
+    }
+  });
 
-  if (itemsWithPhotos.length === 0) {
+  if (photoEntries.length === 0) {
     return '<div class="photo-container"><div class="photo"><div class="photo-placeholder">No photographs available</div></div></div>';
   }
 
   // Split photos into pages of 2 photos each
   const pages = [];
-  for (let i = 0; i < itemsWithPhotos.length; i += 2) {
-    const pageItems = itemsWithPhotos.slice(i, i + 2);
-    const pageContent = pageItems.map((item, index) => {
+  for (let i = 0; i < photoEntries.length; i += 2) {
+    const pageItems = photoEntries.slice(i, i + 2);
+    const pageContent = pageItems.map((entry, index) => {
       const photoNumber = i + index + 1;
+      const safe = String(entry.src).replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const loc = (entry.item.locationDescription || 'Unknown Location').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const mat = (entry.item.materialType || entry.item.materialDescription || 'Unknown Material').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       return `
         <div class="photo-container">
           <div class="photo">
-            <img src="${item.photograph}" alt="Assessment Photo ${photoNumber}" />
+            <img src="${safe}" alt="Assessment Photo ${photoNumber}" />
           </div>
           <div class="photo-details">
             <div class="photo-number">Photo ${photoNumber}</div>
-            <div class="photo-location">${item.locationDescription || 'Unknown Location'}</div>
-            <div class="photo-materials">${item.materialDescription || 'Unknown Material'}</div>
+            <div class="photo-location">${loc}</div>
+            <div class="photo-materials">${mat}</div>
           </div>
         </div>
       `;
@@ -3774,7 +3879,7 @@ const generateAssessmentPhotographsContent = (items) => {
           </div>
         </div>
       </div>
-      ${i + 2 < itemsWithPhotos.length ? '<div class="page-break"></div>' : ''}
+      ${i + 2 < photoEntries.length ? '<div class="page-break"></div>' : ''}
     `);
   }
 

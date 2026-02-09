@@ -46,11 +46,12 @@ router.post('/', async (req, res) => {
     if (!req.user || !req.user._id) {
       return res.status(401).json({ message: 'Not authenticated' });
     }
-    const { projectId, assessmentDate, LAA, state, secondaryHeader, jobType } = req.body;
+    const { projectId, assessmentDate, LAA, state, secondaryHeader, jobType, intrusiveness } = req.body;
     if (!projectId || !assessmentDate) {
       return res.status(400).json({ message: 'projectId and assessmentDate are required' });
     }
     const validJobType = jobType === 'residential-asbestos' ? 'residential-asbestos' : 'asbestos-assessment';
+    const validIntrusiveness = intrusiveness === 'intrusive' ? 'intrusive' : 'non-intrusive';
     const job = new AsbestosAssessment({
       projectId,
       assessorId: req.user._id,
@@ -59,6 +60,7 @@ router.post('/', async (req, res) => {
       LAA: LAA || null,
       state: state && ['ACT', 'NSW', 'Commonwealth'].includes(state) ? state : null,
       secondaryHeader: secondaryHeader || undefined,
+      intrusiveness: validIntrusiveness,
     });
     await job.save();
     const populatedJob = await AsbestosAssessment.findById(job._id)
@@ -266,7 +268,8 @@ router.put('/:id', async (req, res) => {
       reportAuthorisedBy,
       reportAuthorisedAt,
       archived,
-      noSamplesCollected
+      noSamplesCollected,
+      intrusiveness
     } = req.body;
     if (!projectId || !assessmentDate) {
       return res.status(400).json({ message: 'projectId and assessmentDate are required' });
@@ -341,6 +344,9 @@ router.put('/:id', async (req, res) => {
     }
     if (noSamplesCollected !== undefined) {
       updateData.noSamplesCollected = !!noSamplesCollected;
+    }
+    if (intrusiveness !== undefined && ['non-intrusive', 'intrusive'].includes(intrusiveness)) {
+      updateData.intrusiveness = intrusiveness;
     }
 
     // Fetch existing doc to detect newly set authorisation (for requester notification email)
@@ -605,8 +611,27 @@ router.put('/:id/items/:itemId', async (req, res) => {
     if (!job) return res.status(404).json({ message: 'Assessment job not found' });
     const item = job.items.id(req.params.itemId);
     if (!item) return res.status(404).json({ message: 'Item not found' });
+
+    const oldSampleRef = item.sampleReference ? String(item.sampleReference).trim() : '';
     Object.assign(item, req.body);
     item.updatedAt = new Date();
+
+    // When sample reference is changed on an item, cascade the new value to all other items that had the old value
+    if (req.body.sampleReference !== undefined) {
+      const newSampleRef = item.sampleReference ? String(item.sampleReference).trim() : '';
+      if (oldSampleRef !== '' && newSampleRef !== '' && oldSampleRef !== newSampleRef) {
+        job.items.forEach((other) => {
+          if (other._id.toString() !== req.params.itemId) {
+            const otherRef = other.sampleReference ? String(other.sampleReference).trim() : '';
+            if (otherRef === oldSampleRef) {
+              other.sampleReference = newSampleRef;
+              other.updatedAt = new Date();
+            }
+          }
+        });
+      }
+    }
+
     await job.save();
     res.json(item);
   } catch (err) {
@@ -1058,10 +1083,11 @@ router.put('/:id/items/:itemNumber/analysis', async (req, res) => {
     // Update the item's updatedAt timestamp
     assessment.items[itemIndex].updatedAt = new Date();
     
-    // Check if all items are analysed to update assessment status
+    // Check if all items are analysed to update assessment status and LD supplied lab status
     const allItemsAnalysed = assessment.items.every(item => item.analysisData?.isAnalysed);
     if (allItemsAnalysed && assessment.status === 'samples-with-lab') {
       assessment.status = 'sample-analysis-complete';
+      assessment.labSamplesStatus = 'analysis-complete'; // Keep Sample Analysis column in sync with LD supplied jobs
     }
     
     assessment.updatedAt = new Date();

@@ -21,10 +21,14 @@ import {
   DialogActions,
   TextField,
   FormControl,
+  FormControlLabel,
+  FormLabel,
   InputLabel,
   Select,
   MenuItem,
   Autocomplete,
+  Radio,
+  RadioGroup,
   Container,
   Breadcrumbs,
   Link,
@@ -135,6 +139,7 @@ const ResidentialAsbestosAssessment = () => {
   const [selectedState, setSelectedState] = useState("");
   const [selectedLAA, setSelectedLAA] = useState("");
   const [secondaryHeader, setSecondaryHeader] = useState("");
+  const [intrusiveness, setIntrusiveness] = useState("non-intrusive");
 
   // Edit dialog state
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -143,6 +148,7 @@ const ResidentialAsbestosAssessment = () => {
   const [editState, setEditState] = useState("");
   const [editLAA, setEditLAA] = useState("");
   const [editSecondaryHeader, setEditSecondaryHeader] = useState("");
+  const [editIntrusiveness, setEditIntrusiveness] = useState("non-intrusive");
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState(null);
 
@@ -385,6 +391,7 @@ const ResidentialAsbestosAssessment = () => {
     setModalError(null);
     setSelectedState("ACT");
     setSelectedLAA("");
+    setIntrusiveness("non-intrusive");
     if (projects.length === 0) {
       fetchProjects();
     }
@@ -402,6 +409,7 @@ const ResidentialAsbestosAssessment = () => {
     setSelectedState("");
     setSelectedLAA("");
     setSecondaryHeader("");
+    setIntrusiveness("non-intrusive");
   };
 
   const handleSubmitModal = async () => {
@@ -432,6 +440,7 @@ const ResidentialAsbestosAssessment = () => {
         state: selectedState,
         LAA: selectedLAA || null,
         secondaryHeader: secondaryHeader?.trim() || null,
+        intrusiveness: intrusiveness,
         jobType: 'residential-asbestos',
       };
 
@@ -503,37 +512,25 @@ const ResidentialAsbestosAssessment = () => {
     currentUser?.role === "manager" ||
     currentUser?.canSetJobComplete === true;
 
+  // Samples submitted to lab: use explicit submission indicator (samplesReceivedDate set by Submit modal).
+  // Only reliance on assessment: we do not use assessment status here, so if samples are retracted
+  // (samplesReceivedDate cleared), this will show "No samples submitted to lab" without status change.
   const hasSamplesSubmitted = (job) => {
     if (hasNoSamplesCollected(job)) return false;
-    const status = job.status || "";
-    const submittedStatuses = [
-      "samples-with-lab",
-      "sample-analysis-complete",
-      "report-ready-for-review",
-      "complete",
-    ];
-    return (
-      (job.samplesCount > 0 || (job.originalData?.items?.length ?? 0) > 0) &&
-      submittedStatuses.includes(status)
-    );
+    const hasItems =
+      job.samplesCount > 0 || (job.originalData?.items?.length ?? 0) > 0;
+    if (!hasItems) return false;
+    const data = job.originalData || job;
+    const submitted =
+      data.samplesReceivedDate != null || data.labSamplesStatus != null;
+    return submitted;
   };
 
-  // LD supplied job status label (matches LDsuppliedJobs table)
+  // LD supplied job status only (labSamplesStatus). No fallback to assessment status.
+  // When submitted but labSamplesStatus not yet set, show "Samples in lab".
   const getLabStatusLabel = (job) => {
     const data = job.originalData || job;
-    if (data.labSamplesStatus) {
-      return data.labSamplesStatus === "analysis-complete"
-        ? "Analysis complete"
-        : "Samples in lab";
-    }
-    const status = data.status || job.status || "";
-    if (
-      [
-        "sample-analysis-complete",
-        "report-ready-for-review",
-        "complete",
-      ].includes(status)
-    ) {
+    if (data.labSamplesStatus === "analysis-complete") {
       return "Analysis complete";
     }
     return "Samples in lab";
@@ -606,6 +603,9 @@ const ResidentialAsbestosAssessment = () => {
     setEditSecondaryHeader(
       job.originalData?.secondaryHeader || job.secondaryHeader || "",
     );
+    setEditIntrusiveness(
+      job.originalData?.intrusiveness || job.intrusiveness || "non-intrusive",
+    );
     setEditError(null);
     setEditDialogOpen(true);
   };
@@ -617,6 +617,7 @@ const ResidentialAsbestosAssessment = () => {
     setEditState("");
     setEditLAA("");
     setEditSecondaryHeader("");
+    setEditIntrusiveness("non-intrusive");
     setEditError(null);
   };
 
@@ -638,6 +639,7 @@ const ResidentialAsbestosAssessment = () => {
         state: editState || null,
         LAA: editLAA || null,
         secondaryHeader: editSecondaryHeader?.trim() || null,
+        intrusiveness: editIntrusiveness,
       };
 
       await asbestosAssessmentService.updateAsbestosAssessment(
@@ -1058,7 +1060,8 @@ const ResidentialAsbestosAssessment = () => {
                                       ? "Analysed (not approved)"
                                       : "Analyse"}
                                 </Button>
-                                {job.status === "samples-with-lab" &&
+                                {hasSamplesSubmitted(job) &&
+                                  job.originalData?.labSamplesStatus !== "analysis-complete" &&
                                   job.originalData?.analysisDueDate && (
                                     <Typography
                                       variant="caption"
@@ -1355,8 +1358,31 @@ const ResidentialAsbestosAssessment = () => {
             >
               <MenuItem value="ACT">ACT</MenuItem>
               <MenuItem value="NSW">NSW</MenuItem>
-              <MenuItem value="Commonwealth">Commonwealth</MenuItem>
+              {/* <MenuItem value="Commonwealth">Commonwealth</MenuItem> */}
             </Select>
+          </FormControl>
+
+          <FormControl component="fieldset" sx={{ mb: 2 }}>
+            <FormLabel component="legend">Assessment type</FormLabel>
+            <RadioGroup
+              row
+              value={intrusiveness}
+              onChange={(e) => {
+                setIntrusiveness(e.target.value);
+                setModalError(null);
+              }}
+            >
+              <FormControlLabel
+                value="non-intrusive"
+                control={<Radio />}
+                label="Non-intrusive"
+              />
+              <FormControlLabel
+                value="intrusive"
+                control={<Radio />}
+                label="Intrusive"
+              />
+            </RadioGroup>
           </FormControl>
 
           <FormControl fullWidth sx={{ mb: 2 }}>
@@ -1491,6 +1517,29 @@ const ResidentialAsbestosAssessment = () => {
               <MenuItem value="NSW">NSW</MenuItem>
               <MenuItem value="Commonwealth">Commonwealth</MenuItem>
             </Select>
+          </FormControl>
+
+          <FormControl component="fieldset" sx={{ mb: 2 }}>
+            <FormLabel component="legend">Assessment type</FormLabel>
+            <RadioGroup
+              row
+              value={editIntrusiveness}
+              onChange={(e) => {
+                setEditIntrusiveness(e.target.value);
+                setEditError(null);
+              }}
+            >
+              <FormControlLabel
+                value="non-intrusive"
+                control={<Radio />}
+                label="Non-intrusive"
+              />
+              <FormControlLabel
+                value="intrusive"
+                control={<Radio />}
+                label="Intrusive"
+              />
+            </RadioGroup>
           </FormControl>
 
           <FormControl fullWidth sx={{ mb: 2 }}>

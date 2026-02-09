@@ -149,6 +149,7 @@ const AsbestosAssessmentSchema = new mongoose.Schema({
   LAA: { type: String }, // Licensed Asbestos Assessor name
   state: { type: String, enum: ['ACT', 'NSW', 'Commonwealth'] }, // State (ACT, NSW or Commonwealth)
   secondaryHeader: { type: String }, // Optional secondary header beneath project site name on cover page
+  intrusiveness: { type: String, enum: ['non-intrusive', 'intrusive'], default: 'non-intrusive' }, // Residential: Non-intrusive (default) or Intrusive – affects PDF report
   assessmentDate: { type: Date, required: true },
   status: { 
     type: String, 

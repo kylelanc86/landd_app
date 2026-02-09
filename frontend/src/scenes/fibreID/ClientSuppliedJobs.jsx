@@ -1422,8 +1422,9 @@ const ClientSuppliedJobs = () => {
                                 <Box
                                   sx={{
                                     display: "flex",
-                                    alignItems: "center",
-                                    gap: 1,
+                                    flexDirection: "column",
+                                    alignItems: "flex-start",
+                                    gap: 0.5,
                                   }}
                                 >
                                   <Button

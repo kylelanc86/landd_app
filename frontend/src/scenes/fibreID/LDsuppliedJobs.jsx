@@ -173,7 +173,10 @@ const LDsuppliedJobs = () => {
   };
 
   const handleGeneratePDF = async (assessment, options = {}) => {
-    const { uploadToAssessment = false } = options; // Only true when authorising – save report to assessment so it attaches to asbestos assessment PDF
+    const {
+      uploadToAssessment = false,
+      skipOpenDownload = false,
+    } = options; // uploadToAssessment: when authorising/approving – save report to assessment. skipOpenDownload: when true, don't open PDF in new tab (e.g. on approve).
     try {
       setGeneratingPDF((prev) => ({ ...prev, [assessment._id]: true }));
 
@@ -307,8 +310,8 @@ const LDsuppliedJobs = () => {
         }
       }
 
-      // Open PDF in new tab (use blob URL so the new tab opens reliably; data URLs can be too long or fail in window.open)
-      if (pdfDataUrl) {
+      // Open PDF in new tab unless skipOpenDownload (e.g. when approving – we still upload to assessment but don't open/download)
+      if (pdfDataUrl && !skipOpenDownload) {
         const base64 = pdfDataUrl.includes(",")
           ? pdfDataUrl.split(",")[1]
           : pdfDataUrl;
@@ -324,7 +327,7 @@ const LDsuppliedJobs = () => {
         } else {
           window.open(pdfDataUrl, "_blank");
         }
-      } else {
+      } else if (!pdfDataUrl) {
         showSnackbar(
           "PDF could not be generated (e.g. logo failed to load).",
           "error",
@@ -365,14 +368,17 @@ const LDsuppliedJobs = () => {
       // Refresh the assessments list
       await fetchAsbestosAssessments();
 
-      // Generate and download the approved report, and attach to assessment
+      // Generate and attach the approved report to the assessment (no automatic download)
       try {
-        await handleGeneratePDF(assessment, { uploadToAssessment: true });
-        showSnackbar("Report approved and downloaded successfully.", "success");
+        await handleGeneratePDF(assessment, {
+          uploadToAssessment: true,
+          skipOpenDownload: true,
+        });
+        showSnackbar("Report approved successfully.", "success");
       } catch (reportError) {
         console.error("Error generating approved report:", reportError);
         showSnackbar(
-          "Report approved but failed to generate download.",
+          "Report approved but failed to save report to assessment.",
           "warning",
         );
       }

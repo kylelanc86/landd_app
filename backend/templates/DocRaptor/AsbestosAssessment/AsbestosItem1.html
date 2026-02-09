@@ -202,45 +202,40 @@
       .assessment-page .sample-photo-cell {
         /* ABSOLUTELY FIXED dimensions - cell NEVER expands */
         width: 71% !important;
-        height: 300px !important;
+        height: 340px !important;
         overflow: hidden !important;
         box-sizing: border-box !important;
         text-align: center;
         vertical-align: middle;
-        background: #fafafa;
+        background: #fff;
         padding: 0 !important;
         margin: 0 !important;
       }
+      /* Container fills the cell so image can scale to touch one dimension */
       .assessment-page .sample-photo-cell-inner {
         display: block;
         width: 100%;
-        height: 100%;
-        max-width: 100%;
-        max-height: 100%;
+        height: 340px;
         overflow: hidden;
         box-sizing: border-box;
         padding: 0;
         margin: 0;
       }
       .assessment-page .sample-photo-cell-inner .sample-photo {
-        /* Image constrained to fit within 300px high cell - use explicit pixel limits */
-        max-width: 100% !important;
-        max-height: 280px !important;
-        width: auto !important;
-        height: auto !important;
+        display: block !important;
+        width: 100% !important;
+        height: 100% !important;
         object-fit: contain !important;
-        border: 1px solid #ccc;
-        border-radius: 4px;
-        display: block;
-        margin: 0 auto !important;
+        object-position: center !important;
         padding: 0 !important;
       }
       .assessment-page .sample-photo {
-        max-width: 100%;
-        max-height: 300px;
+        display: block;
+        width: 100%;
+        height: 100%;
         object-fit: contain;
-        border: 1px solid #ccc;
-        border-radius: 4px;
+        object-position: center;
+        padding: 0;
       }
       .assessment-page .sample-label {
         font-weight: 700;
@@ -280,7 +275,7 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        min-height: 280px;
+        min-height: 340px;
         height: 100%;
         color: #666;
         font-style: italic;
