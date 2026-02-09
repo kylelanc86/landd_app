@@ -25,6 +25,8 @@ import {
   ListItemText,
   OutlinedInput,
   CircularProgress,
+  Tabs,
+  Tab,
 } from "@mui/material";
 import {
   ArrowBack as ArrowBackIcon,
@@ -35,9 +37,22 @@ import {
 import PermissionGate from "../../components/PermissionGate";
 import reportTemplateService from "../../services/reportTemplateService";
 import customDataFieldService from "../../services/customDataFieldService";
+const TEMPLATE_TYPES = {
+  asbestos: "asbestosAssessment",
+  residential: "residentialAsbestosAssessment",
+};
+
+const TAB_LABELS = {
+  [TEMPLATE_TYPES.asbestos]: "Asbestos Assessment",
+  [TEMPLATE_TYPES.residential]: "Residential Asbestos Surveys",
+};
+
 const SurveyReportTemplates = () => {
   const navigate = useNavigate();
 
+  const [activeTemplateType, setActiveTemplateType] = useState(
+    TEMPLATE_TYPES.asbestos,
+  );
   const [template, setTemplate] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editingSection, setEditingSection] = useState(null);
@@ -55,16 +70,21 @@ const SurveyReportTemplates = () => {
   const [selectedNSWLegislation, setSelectedNSWLegislation] = useState([]);
   const [legislationLoading, setLegislationLoading] = useState(false);
 
-  // Template sections in the specified order
-  const templateSections = [
+  // Template sections in the specified order (Asbestos Assessment tab)
+  const asbestosTemplateSections = [
     { key: "introductionContent", label: "Introduction" },
-    { key: "surveyFindingsContent", label: "Survey Findings" },
+    { key: "surveyFindingsContent", label: "Summary of Identified ACM" },
     {
       key: "surveyFindingsContentNoSamples",
-      label: "Survey Findings (No Samples)",
+      label: "Summary of Identified ACM (No Asbestos)",
     },
     { key: "discussionContent", label: "Discussion & Conclusions" },
+    {
+      key: "recommendedControlMeasuresContent",
+      label: "Recommended Control Measures",
+    },
     { key: "signOffContent", label: "Sign-off" },
+    { key: "assessmentMethodologyContent", label: "Assessment Methodology" },
     { key: "riskAssessmentContent", label: "Risk Assessment" },
     {
       key: "controlMeasuresContent",
@@ -80,6 +100,43 @@ const SurveyReportTemplates = () => {
       label: "Assessment Limitations/Caveats",
     },
   ];
+
+  // Residential: Background before Introduction, "Summary of Identified ACM" instead of Survey Findings
+  const residentialTemplateSections = [
+    { key: "backgroundContent", label: "Background" },
+    { key: "introductionContent", label: "Introduction" },
+    { key: "surveyFindingsContent", label: "Summary of Identified ACM" },
+    {
+      key: "surveyFindingsContentNoSamples",
+      label: "Summary of Identified ACM (No Asbestos)",
+    },
+    { key: "discussionContent", label: "Discussion & Conclusions" },
+    {
+      key: "recommendedControlMeasuresContent",
+      label: "Recommended Control Measures",
+    },
+    { key: "signOffContent", label: "Sign-off" },
+    { key: "assessmentMethodologyContent", label: "Assessment Methodology" },
+    { key: "riskAssessmentContent", label: "Risk Assessment" },
+    {
+      key: "controlMeasuresContent",
+      label: "Determining Suitable Control Measures",
+    },
+    {
+      key: "remediationRequirementsContent",
+      label: "Requirements for Remediation/Removal Works Involving ACM",
+    },
+    { key: "legislationContent", label: "Legislation" },
+    {
+      key: "assessmentLimitationsContent",
+      label: "Assessment Limitations/Caveats",
+    },
+  ];
+
+  const templateSections =
+    activeTemplateType === TEMPLATE_TYPES.residential
+      ? residentialTemplateSections
+      : asbestosTemplateSections;
 
   // Load legislation items
   const loadLegislationItems = async () => {
@@ -101,33 +158,81 @@ const SurveyReportTemplates = () => {
     }
   };
 
-  // Load template on component mount
+  // Load template when active tab changes
   useEffect(() => {
     const loadTemplate = async () => {
       try {
         setLoading(true);
-        // Try to get asbestos assessment template
         let templateData;
         try {
           templateData =
-            await reportTemplateService.getTemplateByType("asbestosAssessment");
+            await reportTemplateService.getTemplateByType(activeTemplateType);
         } catch (error) {
-          // If template doesn't exist, create it with default structure
+          // If template doesn't exist, create it
           if (error.response?.status === 404) {
-            const defaultSections = {};
-            templateSections.forEach((section) => {
-              defaultSections[section.key] = "";
-            });
-
-            templateData = await reportTemplateService.createTemplate({
-              templateType: "asbestosAssessment",
-              reportHeaders: {
-                title: "Asbestos Assessment Report",
-                subtitle: "",
-              },
-              standardSections: defaultSections,
-              selectedLegislation: [],
-            });
+            if (activeTemplateType === TEMPLATE_TYPES.residential) {
+              // Copy from asbestos assessment template (same template for now)
+              let asbestosTemplate;
+              try {
+                asbestosTemplate =
+                  await reportTemplateService.getTemplateByType(
+                    TEMPLATE_TYPES.asbestos,
+                  );
+              } catch (e) {
+                // Fallback: create with default structure
+                const defaultSections = {};
+                templateSections.forEach((section) => {
+                  defaultSections[section.key] = "";
+                });
+                templateData = await reportTemplateService.createTemplate({
+                  templateType: TEMPLATE_TYPES.residential,
+                  reportHeaders: {
+                    title: "Residential Asbestos Assessment Report",
+                    subtitle: "",
+                  },
+                  standardSections: defaultSections,
+                  selectedLegislation: [],
+                });
+                setTemplate(templateData);
+                setSelectedACTLegislation([]);
+                setSelectedNSWLegislation([]);
+                return;
+              }
+              templateData = await reportTemplateService.createTemplate({
+                templateType: TEMPLATE_TYPES.residential,
+                reportHeaders: {
+                  ...asbestosTemplate.reportHeaders,
+                  title: "Residential Asbestos Assessment Report",
+                  subtitle:
+                    asbestosTemplate.reportHeaders?.subtitle ||
+                    "Assessment Report",
+                },
+                standardSections: {
+                  ...(asbestosTemplate.standardSections || {}),
+                  backgroundTitle: "BACKGROUND",
+                  backgroundContent: "",
+                  surveyFindingsTitle: "SUMMARY OF IDENTIFIED ACM",
+                },
+                selectedLegislation: asbestosTemplate.selectedLegislation || [],
+              });
+            } else {
+              const defaultSections = {};
+              templateSections.forEach((section) => {
+                defaultSections[section.key] = "";
+              });
+              templateData = await reportTemplateService.createTemplate({
+                templateType: activeTemplateType,
+                reportHeaders: {
+                  title:
+                    activeTemplateType === TEMPLATE_TYPES.asbestos
+                      ? "Asbestos Assessment Report"
+                      : "Residential Asbestos Assessment Report",
+                  subtitle: "",
+                },
+                standardSections: defaultSections,
+                selectedLegislation: [],
+              });
+            }
           } else {
             throw error;
           }
@@ -135,8 +240,7 @@ const SurveyReportTemplates = () => {
 
         setTemplate(templateData);
 
-        // Load selected legislation
-        if (templateData.selectedLegislation) {
+        if (templateData?.selectedLegislation) {
           const actLegislation = templateData.selectedLegislation.filter(
             (item) => item.jurisdiction === "ACT",
           );
@@ -145,6 +249,9 @@ const SurveyReportTemplates = () => {
           );
           setSelectedACTLegislation(actLegislation);
           setSelectedNSWLegislation(nswLegislation);
+        } else {
+          setSelectedACTLegislation([]);
+          setSelectedNSWLegislation([]);
         }
       } catch (error) {
         console.error("Error loading template:", error);
@@ -159,9 +266,11 @@ const SurveyReportTemplates = () => {
     };
 
     loadTemplate();
-    loadLegislationItems();
+    if (legislationItems.length === 0) {
+      loadLegislationItems();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [activeTemplateType]);
 
   const handleEdit = (sectionKey, content) => {
     setEditingSection(sectionKey);
@@ -176,7 +285,7 @@ const SurveyReportTemplates = () => {
         [editingSection]: editData.content,
       };
 
-      await reportTemplateService.updateTemplate("asbestosAssessment", {
+      await reportTemplateService.updateTemplate(activeTemplateType, {
         standardSections: updatedSections,
       });
 
@@ -295,7 +404,7 @@ const SurveyReportTemplates = () => {
         ...selectedNSWLegislation,
       ];
 
-      await reportTemplateService.updateTemplate("asbestosAssessment", {
+      await reportTemplateService.updateTemplate(activeTemplateType, {
         selectedLegislation: allSelectedLegislation,
       });
 
@@ -337,7 +446,7 @@ const SurveyReportTemplates = () => {
         ...selectedItems,
       ];
 
-      await reportTemplateService.updateTemplate("asbestosAssessment", {
+      await reportTemplateService.updateTemplate(activeTemplateType, {
         selectedLegislation: allSelectedLegislation,
       });
 
@@ -384,6 +493,21 @@ const SurveyReportTemplates = () => {
           </Link>
           <Typography color="text.primary">Asbestos/HAZMAT Surveys</Typography>
         </Breadcrumbs>
+
+        <Tabs
+          value={activeTemplateType}
+          onChange={(_, value) => setActiveTemplateType(value)}
+          sx={{ borderBottom: 1, borderColor: "divider", mb: 3 }}
+        >
+          <Tab
+            label={TAB_LABELS[TEMPLATE_TYPES.asbestos]}
+            value={TEMPLATE_TYPES.asbestos}
+          />
+          <Tab
+            label={TAB_LABELS[TEMPLATE_TYPES.residential]}
+            value={TEMPLATE_TYPES.residential}
+          />
+        </Tabs>
 
         {saveStatus.show && (
           <Alert severity={saveStatus.severity} sx={{ mt: 2, mb: 2 }}>

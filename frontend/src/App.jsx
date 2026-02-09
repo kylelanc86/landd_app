@@ -56,12 +56,12 @@ import UserManual from "./scenes/userManual/UserManual";
 
 // Lazy loaded components
 const Projects = lazy(() => import("./scenes/projects"));
-const DraftInvoicePage = lazy(() =>
-  import("./scenes/invoices/DraftInvoicePage")
+const DraftInvoicePage = lazy(
+  () => import("./scenes/invoices/DraftInvoicePage"),
 );
 const EditInvoicePage = lazy(() => import("./scenes/invoices/EditInvoicePage"));
-const SampleList = lazy(() =>
-  import("./scenes/air-monitoring/air-monitoring-sample-list")
+const SampleList = lazy(
+  () => import("./scenes/air-monitoring/air-monitoring-sample-list"),
 );
 const NewSample = lazy(() => import("./scenes/air-monitoring/new-sample"));
 const EditSample = lazy(() => import("./scenes/air-monitoring/edit-sample"));
@@ -76,14 +76,14 @@ const ClearanceItems = lazy(() => import("./scenes/clearances/ClearanceItems"));
 const Clients = lazy(() => import("./scenes/clients"));
 const ClientDetails = lazy(() => import("./scenes/clients/ClientDetails"));
 const AdminDashboard = lazy(() => import("./scenes/admin/AdminDashboard"));
-const ReportTemplatesIndex = lazy(() =>
-  import("./scenes/admin/ReportTemplatesIndex")
+const ReportTemplatesIndex = lazy(
+  () => import("./scenes/admin/ReportTemplatesIndex"),
 );
-const ClearanceReportTemplates = lazy(() =>
-  import("./scenes/admin/ClearanceReportTemplates")
+const ClearanceReportTemplates = lazy(
+  () => import("./scenes/admin/ClearanceReportTemplates"),
 );
-const SurveyReportTemplates = lazy(() =>
-  import("./scenes/admin/SurveyReportTemplates")
+const SurveyReportTemplates = lazy(
+  () => import("./scenes/admin/SurveyReportTemplates"),
 );
 
 const TemplateTestPage = lazy(() => import("./scenes/admin/TemplateTestPage"));
@@ -92,31 +92,31 @@ const CustomDataFields = lazy(() => import("./scenes/admin/CustomDataFields"));
 const ArchivedData = lazy(() => import("./scenes/admin/ArchivedData"));
 
 // New lazy loaded components for missing pages
-const LeadAssessment = lazy(() =>
-  import("./scenes/surveys/lead/LeadAssessment")
+const LeadAssessment = lazy(
+  () => import("./scenes/surveys/lead/LeadAssessment"),
 );
 
 // New survey page components
-const AsbestosAssessment = lazy(() =>
-  import("./scenes/surveys/asbestos-assessment")
+const AsbestosAssessment = lazy(
+  () => import("./scenes/surveys/asbestos-assessment"),
 );
-const AssessmentItems = lazy(() =>
-  import("./scenes/surveys/asbestos-assessment/AssessmentItems")
+const AssessmentItems = lazy(
+  () => import("./scenes/surveys/asbestos-assessment/AssessmentItems"),
 );
-const ResidentialAsbestosAssessment = lazy(() =>
-  import("./scenes/surveys/residential-asbestos")
+const ResidentialAsbestosAssessment = lazy(
+  () => import("./scenes/surveys/residential-asbestos"),
 );
-const CommercialAsbestosAssessment = lazy(() =>
-  import("./scenes/surveys/commercial-asbestos")
+const CommercialAsbestosAssessment = lazy(
+  () => import("./scenes/surveys/commercial-asbestos"),
 );
 const HAZMATSurveys = lazy(() => import("./scenes/surveys/hazmat"));
 
-const MouldMoistureAssessment = lazy(() =>
-  import("./scenes/surveys/mould-moisture")
+const MouldMoistureAssessment = lazy(
+  () => import("./scenes/surveys/mould-moisture"),
 );
 const LeadClearance = lazy(() => import("./scenes/clearances/LeadClearance"));
-const MouldValidation = lazy(() =>
-  import("./scenes/clearances/MouldValidation")
+const MouldValidation = lazy(
+  () => import("./scenes/clearances/MouldValidation"),
 );
 
 // New dashboard components
@@ -128,50 +128,52 @@ const Reports = lazy(() => import("./scenes/reports"));
 const Records = lazy(() => import("./scenes/records"));
 const AsbestosRemoval = lazy(() => import("./scenes/asbestos-removal"));
 const LaboratoryServices = lazy(() => import("./scenes/laboratory-services"));
-const AsbestosRemovalJobDetails = lazy(() =>
-  import("./scenes/asbestos-removal/AsbestosRemovalJobDetails")
+const AsbestosRemovalJobDetails = lazy(
+  () => import("./scenes/asbestos-removal/AsbestosRemovalJobDetails"),
 );
 
 // Records pages
 const TrainingRecords = lazy(() => import("./scenes/records/training"));
 const StaffMeetings = lazy(() => import("./scenes/records/staff-meetings"));
-const DocumentRegister = lazy(() =>
-  import("./scenes/records/document-register")
+const DocumentRegister = lazy(
+  () => import("./scenes/records/document-register"),
 );
-const ApprovedSuppliers = lazy(() =>
-  import("./scenes/records/approved-suppliers")
+const ApprovedSuppliers = lazy(
+  () => import("./scenes/records/approved-suppliers"),
 );
 const AssetRegister = lazy(() => import("./scenes/records/asset-register"));
 const Incidents = lazy(() => import("./scenes/records/incidents"));
-const OHSEnvironmental = lazy(() =>
-  import("./scenes/records/ohs-environmental")
+const OHSEnvironmental = lazy(
+  () => import("./scenes/records/ohs-environmental"),
 );
-const ImpartialityRisks = lazy(() =>
-  import("./scenes/records/impartiality-risks")
+const ImpartialityRisks = lazy(
+  () => import("./scenes/records/impartiality-risks"),
 );
 const Feedback = lazy(() => import("./scenes/records/feedback"));
 const QualityControl = lazy(() => import("./scenes/records/quality-control"));
-const IndoorAirQuality = lazy(() =>
-  import("./scenes/records/indoor-air-quality")
+const IndoorAirQuality = lazy(
+  () => import("./scenes/records/indoor-air-quality"),
 );
-const IAQSampleList = lazy(() =>
-  import("./scenes/records/indoor-air-quality/IAQSampleList")
+const IAQSampleList = lazy(
+  () => import("./scenes/records/indoor-air-quality/IAQSampleList"),
 );
-const IAQNewSample = lazy(() =>
-  import("./scenes/records/indoor-air-quality/IAQNewSample")
+const IAQNewSample = lazy(
+  () => import("./scenes/records/indoor-air-quality/IAQNewSample"),
 );
-const IAQEditSample = lazy(() =>
-  import("./scenes/records/indoor-air-quality/IAQEditSample")
+const IAQEditSample = lazy(
+  () => import("./scenes/records/indoor-air-quality/IAQEditSample"),
 );
-const IAQAnalysis = lazy(() =>
-  import("./scenes/records/indoor-air-quality/IAQAnalysis")
+const IAQAnalysis = lazy(
+  () => import("./scenes/records/indoor-air-quality/IAQAnalysis"),
 );
 const Blanks = lazy(() => import("./scenes/records/blanks"));
-const BlankAnalysis = lazy(() => import("./scenes/records/blanks/BlankAnalysis"));
+const BlankAnalysis = lazy(
+  () => import("./scenes/records/blanks/BlankAnalysis"),
+);
 const Audits = lazy(() => import("./scenes/records/audits"));
 
-const ProjectReports = lazy(() =>
-  import("./scenes/reports/ProjectReports.jsx")
+const ProjectReports = lazy(
+  () => import("./scenes/reports/ProjectReports.jsx"),
 );
 
 function App() {
@@ -459,18 +461,32 @@ function App() {
                               )}
 
                               {isFeatureEnabled("ADVANCED.SURVEYS") && (
-                                <Route
-                                  path="/surveys/residential-asbestos"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["asbestos.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <ResidentialAsbestosAssessment />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
+                                <>
+                                  <Route
+                                    path="/surveys/residential-asbestos"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["asbestos.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <ResidentialAsbestosAssessment />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                  <Route
+                                    path="/surveys/residential-asbestos/:id/items"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["asbestos.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <AssessmentItems />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                </>
                               )}
 
                               {isFeatureEnabled("ADVANCED.SURVEYS") && (
@@ -560,7 +576,7 @@ function App() {
                                 />
                               )}
                               {isFeatureEnabled(
-                                "ADVANCED.ASBESTOS_REMOVAL"
+                                "ADVANCED.ASBESTOS_REMOVAL",
                               ) && (
                                 <Route
                                   path="/clearances/:clearanceId/items"
@@ -850,7 +866,7 @@ function App() {
                               )}
                               {(isFeatureEnabled("ADVANCED.FIBRE_ID") ||
                                 isFeatureEnabled(
-                                  "ADVANCED.ASBESTOS_REMOVAL"
+                                  "ADVANCED.ASBESTOS_REMOVAL",
                                 )) && (
                                 <Route
                                   path="/client-supplied/:jobId/sample/:sampleIndex/analysis"
@@ -870,7 +886,7 @@ function App() {
                                 />
                               )}
                               {isFeatureEnabled(
-                                "ADVANCED.ASBESTOS_REMOVAL"
+                                "ADVANCED.ASBESTOS_REMOVAL",
                               ) && (
                                 <Route
                                   path="/client-supplied/:jobId/analysis"
@@ -940,7 +956,7 @@ function App() {
                                 }
                               />
                               {isFeatureEnabled(
-                                "ADMIN.TEMPLATE_MANAGEMENT"
+                                "ADMIN.TEMPLATE_MANAGEMENT",
                               ) && (
                                 <>
                                   <Route
@@ -983,7 +999,7 @@ function App() {
                               )}
 
                               {isFeatureEnabled(
-                                "ADMIN.TEMPLATE_MANAGEMENT"
+                                "ADMIN.TEMPLATE_MANAGEMENT",
                               ) && (
                                 <Route
                                   path="/admin/template-test"
@@ -1412,7 +1428,7 @@ function App() {
                                 />
                               )}
                               {isFeatureEnabled(
-                                "ADVANCED.ASBESTOS_REMOVAL"
+                                "ADVANCED.ASBESTOS_REMOVAL",
                               ) && (
                                 <Route
                                   path="/asbestos-removal"
@@ -1428,7 +1444,7 @@ function App() {
                                 />
                               )}
                               {isFeatureEnabled(
-                                "ADVANCED.ASBESTOS_REMOVAL"
+                                "ADVANCED.ASBESTOS_REMOVAL",
                               ) && (
                                 <Route
                                   path="/asbestos-removal/jobs/:jobId/details"
@@ -1444,7 +1460,7 @@ function App() {
                                 />
                               )}
                               {isFeatureEnabled(
-                                "ADVANCED.ASBESTOS_REMOVAL"
+                                "ADVANCED.ASBESTOS_REMOVAL",
                               ) && (
                                 <Route
                                   path="/client-supplied"
@@ -1458,7 +1474,7 @@ function App() {
                                 />
                               )}
                               {isFeatureEnabled(
-                                "ADVANCED.ASBESTOS_REMOVAL"
+                                "ADVANCED.ASBESTOS_REMOVAL",
                               ) && (
                                 <Route
                                   path="/client-supplied/:jobId/samples"

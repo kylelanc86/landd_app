@@ -109,6 +109,10 @@ const ClientSuppliedJobs = () => {
   const [editSampleReceiptDate, setEditSampleReceiptDate] = useState("");
   const [editSampleReceiptDateError, setEditSampleReceiptDateError] =
     useState(false);
+  const [editTurnaroundTime, setEditTurnaroundTime] = useState("");
+  const [editAnalysisDueDate, setEditAnalysisDueDate] = useState(null);
+  const [editShowCustomTurnaround, setEditShowCustomTurnaround] =
+    useState(false);
   const [updatingDate, setUpdatingDate] = useState(false);
   const [turnaroundTime, setTurnaroundTime] = useState("");
   const [analysisDueDate, setAnalysisDueDate] = useState(new Date());
@@ -990,8 +994,57 @@ const ClientSuppliedJobs = () => {
       setEditSampleReceiptDate("");
     }
     setEditSampleReceiptDateError(false);
+    // Initialise turnaround and analysis due from job
+    const jobTurnaround = job.turnaroundTime;
+    const jobDue = job.analysisDueDate ? new Date(job.analysisDueDate) : null;
+    const receiptDate =
+      job.sampleReceiptDate && !isNaN(new Date(job.sampleReceiptDate).getTime())
+        ? new Date(job.sampleReceiptDate)
+        : new Date();
+    if (jobTurnaround === "3 day") {
+      setEditTurnaroundTime("3 day");
+      setEditAnalysisDueDate(
+        jobDue && !isNaN(jobDue.getTime())
+          ? jobDue
+          : addBusinessDays(receiptDate, 3),
+      );
+      setEditShowCustomTurnaround(false);
+    } else if (jobTurnaround === "24 hours") {
+      setEditTurnaroundTime("24 hours");
+      setEditAnalysisDueDate(
+        jobDue && !isNaN(jobDue.getTime())
+          ? jobDue
+          : addBusinessDays(receiptDate, 1),
+      );
+      setEditShowCustomTurnaround(false);
+    } else {
+      setEditTurnaroundTime("");
+      setEditShowCustomTurnaround(true);
+      setEditAnalysisDueDate(
+        jobDue && !isNaN(jobDue.getTime())
+          ? jobDue
+          : addBusinessDays(receiptDate, 3),
+      );
+    }
     setEditDialogOpen(true);
   };
+
+  // Recalculate edit analysis due date when receipt date or turnaround changes in edit dialog
+  useEffect(() => {
+    if (
+      !editDialogOpen ||
+      !editSampleReceiptDate ||
+      editSampleReceiptDate.trim() === ""
+    ) {
+      return;
+    }
+    if (editTurnaroundTime === "3 day" || editTurnaroundTime === "24 hours") {
+      const base = new Date(editSampleReceiptDate);
+      if (isNaN(base.getTime())) return;
+      const businessDays = editTurnaroundTime === "3 day" ? 3 : 1;
+      setEditAnalysisDueDate(addBusinessDays(base, businessDays));
+    }
+  }, [editDialogOpen, editSampleReceiptDate, editTurnaroundTime]);
 
   const handleUpdateDate = async () => {
     if (
@@ -1002,14 +1055,33 @@ const ClientSuppliedJobs = () => {
       setEditSampleReceiptDateError(true);
       return;
     }
+    if (!editTurnaroundTime && !editShowCustomTurnaround) {
+      showSnackbar("Please select a turnaround time", "error");
+      return;
+    }
+    if (editShowCustomTurnaround && !editAnalysisDueDate) {
+      showSnackbar("Please select an analysis due date", "error");
+      return;
+    }
 
     try {
       setEditSampleReceiptDateError(false);
       setUpdatingDate(true);
 
-      await clientSuppliedJobsService.update(jobToEdit._id, {
+      const payload = {
         sampleReceiptDate: editSampleReceiptDate,
-      });
+        turnaroundTime: editShowCustomTurnaround
+          ? "custom"
+          : editTurnaroundTime,
+        analysisDueDate:
+          editAnalysisDueDate && !isNaN(new Date(editAnalysisDueDate).getTime())
+            ? (editAnalysisDueDate instanceof Date
+                ? editAnalysisDueDate
+                : new Date(editAnalysisDueDate)
+              ).toISOString()
+            : undefined,
+      };
+      await clientSuppliedJobsService.update(jobToEdit._id, payload);
 
       // Refresh the jobs list
       await fetchClientSuppliedJobs();
@@ -1019,6 +1091,9 @@ const ClientSuppliedJobs = () => {
       setJobToEdit(null);
       setEditSampleReceiptDate("");
       setEditSampleReceiptDateError(false);
+      setEditTurnaroundTime("");
+      setEditAnalysisDueDate(null);
+      setEditShowCustomTurnaround(false);
       showSnackbar("Sample receipt date updated successfully!", "success");
     } catch (error) {
       console.error("Error updating sample receipt date:", error);
@@ -1038,6 +1113,9 @@ const ClientSuppliedJobs = () => {
     setJobToEdit(null);
     setEditSampleReceiptDate("");
     setEditSampleReceiptDateError(false);
+    setEditTurnaroundTime("");
+    setEditAnalysisDueDate(null);
+    setEditShowCustomTurnaround(false);
   };
 
   return (
@@ -2303,6 +2381,173 @@ const ClientSuppliedJobs = () => {
                       Sample receipt date is required.
                     </Typography>
                   )}
+
+                  <Box sx={{ mt: 1 }}>
+                    <Typography variant="h6" sx={{ mb: 2 }}>
+                      Turnaround
+                    </Typography>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        gap: 2,
+                        mb: 2,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <Button
+                        variant={
+                          editTurnaroundTime === "3 day"
+                            ? "contained"
+                            : "outlined"
+                        }
+                        onClick={() => {
+                          const base = editSampleReceiptDate
+                            ? new Date(editSampleReceiptDate)
+                            : new Date();
+                          setEditTurnaroundTime("3 day");
+                          setEditAnalysisDueDate(addBusinessDays(base, 3));
+                          setEditShowCustomTurnaround(false);
+                        }}
+                        sx={{
+                          minWidth: 100,
+                          borderRadius: 2,
+                          textTransform: "none",
+                          fontWeight: 500,
+                          backgroundColor:
+                            editTurnaroundTime === "3 day"
+                              ? "#1976d2"
+                              : "transparent",
+                          color:
+                            editTurnaroundTime === "3 day"
+                              ? "white"
+                              : "#1976d2",
+                          borderColor: "#1976d2",
+                          "&:hover": {
+                            backgroundColor:
+                              editTurnaroundTime === "3 day"
+                                ? "#1565c0"
+                                : "rgba(25, 118, 210, 0.04)",
+                          },
+                        }}
+                      >
+                        3 day
+                      </Button>
+                      <Button
+                        variant={
+                          editTurnaroundTime === "24 hours"
+                            ? "contained"
+                            : "outlined"
+                        }
+                        onClick={() => {
+                          const base = editSampleReceiptDate
+                            ? new Date(editSampleReceiptDate)
+                            : new Date();
+                          setEditTurnaroundTime("24 hours");
+                          setEditAnalysisDueDate(addBusinessDays(base, 1));
+                          setEditShowCustomTurnaround(false);
+                        }}
+                        sx={{
+                          minWidth: 100,
+                          borderRadius: 2,
+                          textTransform: "none",
+                          fontWeight: 500,
+                          backgroundColor:
+                            editTurnaroundTime === "24 hours"
+                              ? "#1976d2"
+                              : "transparent",
+                          color:
+                            editTurnaroundTime === "24 hours"
+                              ? "white"
+                              : "#1976d2",
+                          borderColor: "#1976d2",
+                          "&:hover": {
+                            backgroundColor:
+                              editTurnaroundTime === "24 hours"
+                                ? "#1565c0"
+                                : "rgba(25, 118, 210, 0.04)",
+                          },
+                        }}
+                      >
+                        24 hours
+                      </Button>
+                      <Button
+                        variant={
+                          editShowCustomTurnaround ? "contained" : "outlined"
+                        }
+                        onClick={() => {
+                          setEditShowCustomTurnaround(true);
+                          setEditTurnaroundTime("");
+                          setEditAnalysisDueDate(
+                            editAnalysisDueDate || new Date(),
+                          );
+                        }}
+                        sx={{
+                          minWidth: 100,
+                          borderRadius: 2,
+                          textTransform: "none",
+                          fontWeight: 500,
+                          backgroundColor: editShowCustomTurnaround
+                            ? "#1976d2"
+                            : "transparent",
+                          color: editShowCustomTurnaround ? "white" : "#1976d2",
+                          borderColor: "#1976d2",
+                          "&:hover": {
+                            backgroundColor: editShowCustomTurnaround
+                              ? "#1565c0"
+                              : "rgba(25, 118, 210, 0.04)",
+                          },
+                        }}
+                      >
+                        Custom
+                      </Button>
+                    </Box>
+                    {(editTurnaroundTime === "3 day" ||
+                      editTurnaroundTime === "24 hours") &&
+                      editAnalysisDueDate && (
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{ mt: 1, fontStyle: "italic" }}
+                        >
+                          Analysis due date:{" "}
+                          {format(
+                            editAnalysisDueDate instanceof Date
+                              ? editAnalysisDueDate
+                              : new Date(editAnalysisDueDate),
+                            "dd/MM/yyyy HH:mm",
+                          )}
+                        </Typography>
+                      )}
+                    {editShowCustomTurnaround && (
+                      <Box sx={{ mt: 2 }}>
+                        <LocalizationProvider dateAdapter={AdapterDateFns}>
+                          <DateTimePicker
+                            label="Analysis Due Date & Time"
+                            value={
+                              editAnalysisDueDate instanceof Date
+                                ? editAnalysisDueDate
+                                : editAnalysisDueDate
+                                  ? new Date(editAnalysisDueDate)
+                                  : null
+                            }
+                            onChange={(newValue) =>
+                              setEditAnalysisDueDate(newValue)
+                            }
+                            slots={{ textField: TextField }}
+                            slotProps={{
+                              textField: {
+                                fullWidth: true,
+                                inputProps: {
+                                  format: "dd/MM/yyyy HH:mm",
+                                },
+                              },
+                            }}
+                            format="dd/MM/yyyy HH:mm"
+                          />
+                        </LocalizationProvider>
+                      </Box>
+                    )}
+                  </Box>
                 </>
               )}
             </Box>
@@ -2323,7 +2568,12 @@ const ClientSuppliedJobs = () => {
             <Button
               onClick={handleUpdateDate}
               variant="contained"
-              disabled={!editSampleReceiptDate || updatingDate}
+              disabled={
+                !editSampleReceiptDate ||
+                updatingDate ||
+                (!editTurnaroundTime && !editShowCustomTurnaround) ||
+                (editShowCustomTurnaround && !editAnalysisDueDate)
+              }
               startIcon={<EditIcon />}
               sx={{
                 minWidth: 120,

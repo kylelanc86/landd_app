@@ -98,10 +98,15 @@ const asbestosAssessmentService = {
   },
 
   // Generate asbestos assessment PDF using DocRaptor templates (pdf-docraptor-v2)
-  generateAsbestosAssessmentPdf: async (assessmentData) => {
+  // options.isResidential: when true, cover/version control and footer use "Residential Asbestos Assessment Report" and filename includes "Residential"
+  generateAsbestosAssessmentPdf: async (assessmentData, options = {}) => {
+    const payload = {
+      assessmentData,
+      ...(options.isResidential === true && { isResidential: true }),
+    };
     const response = await api.post(
       '/pdf-docraptor-v2/generate-asbestos-assessment-v3',
-      { assessmentData },
+      payload,
       { responseType: 'blob' }
     );
     return response.data;

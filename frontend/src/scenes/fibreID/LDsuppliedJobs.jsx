@@ -595,12 +595,7 @@ const LDsuppliedJobs = () => {
       return "error.main"; // Overdue - red
     }
 
-    const hours = diffTime / (1000 * 60 * 60);
-    if (hours <= 24) {
-      return "warning.main"; // Less than 24 hours - orange
-    }
-
-    return "text.primary"; // Normal - default color
+    return "success.main"; // Not overdue - green (same as ClientSuppliedJobs)
   };
 
   return (
@@ -759,9 +754,9 @@ const LDsuppliedJobs = () => {
                         <TableCell sx={{ maxWidth: "100px" }}>
                           <Typography
                             variant="body2"
+                            fontWeight="bold"
                             sx={{
                               color: getAnalysisDueColor(assessment),
-                              fontWeight: "low",
                             }}
                           >
                             {getAnalysisDueTime(assessment)}

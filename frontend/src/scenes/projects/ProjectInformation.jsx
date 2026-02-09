@@ -41,6 +41,7 @@ import AddIcon from "@mui/icons-material/Add";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import AssessmentIcon from "@mui/icons-material/Assessment";
+import DescriptionIcon from "@mui/icons-material/Description";
 import { projectService, clientService, userService } from "../../services/api";
 import ProjectAuditService from "../../services/projectAuditService";
 import { useAuth } from "../../context/AuthContext";
@@ -375,7 +376,7 @@ const ProjectInformation = () => {
     const handleRefreshClick = (e) => {
       // Check if it's a refresh button click or F5 key
       const isRefreshButton = e.target.closest(
-        'button[aria-label*="refresh"], button[title*="refresh"], .refresh-button'
+        'button[aria-label*="refresh"], button[title*="refresh"], .refresh-button',
       );
       const isF5Key = e.key === "F5";
 
@@ -469,19 +470,19 @@ const ProjectInformation = () => {
       // If user is employee (not admin or manager), filter out restricted statuses
       if (!isAdmin && !isManager) {
         let filteredActive = active.filter(
-          (status) => !restrictedStatuses.includes(status)
+          (status) => !restrictedStatuses.includes(status),
         );
         let filteredInactive = inactive.filter(
-          (status) => !restrictedStatuses.includes(status)
+          (status) => !restrictedStatuses.includes(status),
         );
 
         // Check if user can set "Job complete" status
         if (!currentUser.canSetJobComplete) {
           filteredActive = filteredActive.filter(
-            (status) => status !== "Job complete"
+            (status) => status !== "Job complete",
           );
           filteredInactive = filteredInactive.filter(
-            (status) => status !== "Job complete"
+            (status) => status !== "Job complete",
           );
         }
 
@@ -503,7 +504,7 @@ const ProjectInformation = () => {
         }));
         // Close the dropdown after selection
         setStatusDropdownOpen(false);
-      })
+      }),
     );
 
     const inactiveItems = accessibleStatuses.inactive.map((status) =>
@@ -514,7 +515,7 @@ const ProjectInformation = () => {
         }));
         // Close the dropdown after selection
         setStatusDropdownOpen(false);
-      })
+      }),
     );
 
     return { activeItems, inactiveItems };
@@ -537,19 +538,19 @@ const ProjectInformation = () => {
       // If user is employee (not admin or manager), filter out restricted statuses
       if (!isAdmin && !isManager) {
         let filteredActive = active.filter(
-          (status) => !restrictedStatuses.includes(status)
+          (status) => !restrictedStatuses.includes(status),
         );
         let filteredInactive = inactive.filter(
-          (status) => !restrictedStatuses.includes(status)
+          (status) => !restrictedStatuses.includes(status),
         );
 
         // Check if user can set "Job complete" status
         if (!currentUser.canSetJobComplete) {
           filteredActive = filteredActive.filter(
-            (status) => status !== "Job complete"
+            (status) => status !== "Job complete",
           );
           filteredInactive = filteredInactive.filter(
-            (status) => status !== "Job complete"
+            (status) => status !== "Job complete",
           );
         }
 
@@ -590,9 +591,8 @@ const ProjectInformation = () => {
       setAuditLoading(true);
       setAuditError(null);
 
-      const response = await ProjectAuditService.getAllProjectAuditTrail(
-        projectId
-      );
+      const response =
+        await ProjectAuditService.getAllProjectAuditTrail(projectId);
       const auditTime = performance.now() - auditStartTime;
 
       setAuditTrail(response.auditTrail || []);
@@ -680,7 +680,7 @@ const ProjectInformation = () => {
 
       if (!apiKey) {
         setGoogleMapsError(
-          "Google Maps API key is missing. Please check your environment configuration."
+          "Google Maps API key is missing. Please check your environment configuration.",
         );
         return;
       }
@@ -711,7 +711,7 @@ const ProjectInformation = () => {
         const autocompleteService =
           new google.maps.places.AutocompleteService();
         const placesService = new google.maps.places.PlacesService(
-          placesServiceDivRef.current
+          placesServiceDivRef.current,
         );
 
         setAutocompleteService(autocompleteService);
@@ -723,7 +723,7 @@ const ProjectInformation = () => {
         setGoogleMapsError(
           `Error loading Google Maps: ${
             error.message || "Please try refreshing the page."
-          }`
+          }`,
         );
       }
     };
@@ -737,7 +737,7 @@ const ProjectInformation = () => {
         placesServiceDivRef.current.parentNode
       ) {
         placesServiceDivRef.current.parentNode.removeChild(
-          placesServiceDivRef.current
+          placesServiceDivRef.current,
         );
         placesServiceDivRef.current = null;
       }
@@ -795,28 +795,28 @@ const ProjectInformation = () => {
                 break;
               case googleMaps.maps.places.PlacesServiceStatus.REQUEST_DENIED:
                 console.error(
-                  "REQUEST_DENIED: API key may be invalid or have restrictions"
+                  "REQUEST_DENIED: API key may be invalid or have restrictions",
                 );
                 console.error("Check Google Cloud Console API key settings:");
                 console.error("1. Verify API key is correct");
                 console.error("2. Ensure Places API is enabled");
                 console.error(
-                  "3. Check API key restrictions (HTTP referrers, IP addresses)"
+                  "3. Check API key restrictions (HTTP referrers, IP addresses)",
                 );
                 console.error("4. Verify billing is enabled");
                 setGoogleMapsError(
-                  "Address search is unavailable. Please check API configuration."
+                  "Address search is unavailable. Please check API configuration.",
                 );
                 break;
               case googleMaps.maps.places.PlacesServiceStatus.OVER_QUERY_LIMIT:
                 console.error("OVER_QUERY_LIMIT: API quota exceeded");
                 setGoogleMapsError(
-                  "Address search quota exceeded. Please try again later."
+                  "Address search quota exceeded. Please try again later.",
                 );
                 break;
               case googleMaps.maps.places.PlacesServiceStatus.INVALID_REQUEST:
                 console.error(
-                  "INVALID_REQUEST: Request parameters are invalid"
+                  "INVALID_REQUEST: Request parameters are invalid",
                 );
                 break;
               case googleMaps.maps.places.PlacesServiceStatus.UNKNOWN_ERROR:
@@ -829,14 +829,14 @@ const ProjectInformation = () => {
             setAddressOptions([]);
           }
           setIsAddressLoading(false);
-        }
+        },
       );
     } catch (error) {
       console.error("Error fetching address predictions:", error);
       setAddressOptions([]);
       setIsAddressLoading(false);
       setGoogleMapsError(
-        "Error fetching address suggestions. Please try again."
+        "Error fetching address suggestions. Please try again.",
       );
     }
   };
@@ -863,7 +863,9 @@ const ProjectInformation = () => {
             status === googleMaps.maps.places.PlacesServiceStatus.OK &&
             place
           ) {
-            const cleanedAddress = stripAustraliaFromAddress(place.formatted_address);
+            const cleanedAddress = stripAustraliaFromAddress(
+              place.formatted_address,
+            );
             setForm((prev) => ({
               ...prev,
               address: cleanedAddress,
@@ -872,7 +874,7 @@ const ProjectInformation = () => {
           } else {
             console.error("Error getting place details:", status);
           }
-        }
+        },
       );
     } catch (error) {
       console.error("Error getting place details:", error);
@@ -927,24 +929,24 @@ const ProjectInformation = () => {
             ) {
               console.error("REQUEST_DENIED for new client address");
               setGoogleMapsError(
-                "Address search is unavailable. Please check API configuration."
+                "Address search is unavailable. Please check API configuration.",
               );
             }
             console.log(
               "No new client address predictions found or error:",
-              status
+              status,
             );
             setNewClientAddressOptions([]);
           }
           setIsNewClientAddressLoading(false);
-        }
+        },
       );
     } catch (error) {
       console.error("Error fetching new client address predictions:", error);
       setNewClientAddressOptions([]);
       setIsNewClientAddressLoading(false);
       setGoogleMapsError(
-        "Error fetching address suggestions. Please try again."
+        "Error fetching address suggestions. Please try again.",
       );
     }
   };
@@ -961,7 +963,9 @@ const ProjectInformation = () => {
       (place, status) => {
         console.log("Selected new client place:", place, "Status:", status);
         if (status === googleMaps.maps.places.PlacesServiceStatus.OK) {
-          const cleanedAddress = stripAustraliaFromAddress(place.formatted_address);
+          const cleanedAddress = stripAustraliaFromAddress(
+            place.formatted_address,
+          );
           setNewClientForm((prev) => ({
             ...prev,
             address: cleanedAddress,
@@ -970,7 +974,7 @@ const ProjectInformation = () => {
         } else {
           console.error("Error getting new client place details:", status);
         }
-      }
+      },
     );
   };
 
@@ -1147,20 +1151,26 @@ const ProjectInformation = () => {
 
   const handleSaveAndContinue = async (e) => {
     e.preventDefault();
-    
+
     // Trigger HTML5 form validation before proceeding
     if (formElementRef.current && !formElementRef.current.checkValidity()) {
       // If validation fails, show validation messages
       formElementRef.current.reportValidity();
       return;
     }
-    
+
     // Additional custom validation for email fields
-    if (form.projectContact?.email && !form.projectContact.email.includes("@")) {
-      showSnackbar("Please enter a valid email address for project contact", "error");
+    if (
+      form.projectContact?.email &&
+      !form.projectContact.email.includes("@")
+    ) {
+      showSnackbar(
+        "Please enter a valid email address for project contact",
+        "error",
+      );
       return;
     }
-    
+
     await handleSubmit(e, false); // Pass false to indicate don't navigate away
   };
 
@@ -1172,7 +1182,7 @@ const ProjectInformation = () => {
       console.log("🚫 SUBMISSION BLOCKED - Already saving");
       return;
     }
-    
+
     // Set saving flag immediately to prevent duplicate submissions
     setSaving(true);
 
@@ -1215,7 +1225,7 @@ const ProjectInformation = () => {
     try {
       // Check if this is an edit operation (either by URL param or by having an _id after creation)
       const isUpdateOperation = isEditMode || form._id;
-      
+
       if (isUpdateOperation) {
         const updateStartTime = performance.now();
         const projectIdToUpdate = id || form._id;
@@ -1292,7 +1302,10 @@ const ProjectInformation = () => {
         });
 
         const apiStartTime = performance.now();
-        const response = await projectService.update(projectIdToUpdate, updateData);
+        const response = await projectService.update(
+          projectIdToUpdate,
+          updateData,
+        );
         const apiEndTime = performance.now();
 
         console.log("✅ PROJECT UPDATE API COMPLETE", {
@@ -1309,7 +1322,7 @@ const ProjectInformation = () => {
         });
 
         console.log(
-          "🔍 Creating new project (ID will be generated by backend)"
+          "🔍 Creating new project (ID will be generated by backend)",
         );
 
         // Remove projectID from form if it exists (shouldn't for new projects)
@@ -1338,10 +1351,10 @@ const ProjectInformation = () => {
         // Update form with returned project ID and _id so it's displayed immediately
         // Setting _id ensures subsequent "Save and Continue" clicks will update instead of create
         if (response.data?.projectID) {
-          setForm((prev) => ({ 
-            ...prev, 
+          setForm((prev) => ({
+            ...prev,
             projectID: response.data.projectID,
-            _id: response.data._id // Set _id to mark this as an existing project
+            _id: response.data._id, // Set _id to mark this as an existing project
           }));
 
           // Update reports cache with new project (pass full project object)
@@ -1359,7 +1372,7 @@ const ProjectInformation = () => {
       const totalOperationTime = operationEndTime - operationStartTime;
       console.log("✅ PROJECT OPERATION COMPLETE", {
         operation: isUpdateOperation ? "UPDATE" : "CREATE",
-        projectId: isUpdateOperation ? (id || form._id) : form.projectID,
+        projectId: isUpdateOperation ? id || form._id : form.projectID,
         totalTime: `${totalOperationTime.toFixed(2)}ms`,
         timestamp: new Date().toISOString(),
       });
@@ -1371,7 +1384,7 @@ const ProjectInformation = () => {
         isUpdateOperation
           ? "Project updated successfully!"
           : "Project created successfully!",
-        "success"
+        "success",
       );
 
       // Reset unsaved changes flag and update original form
@@ -1392,9 +1405,10 @@ const ProjectInformation = () => {
       const operationEndTime = performance.now();
       const totalOperationTime = operationEndTime - operationStartTime;
       // Determine operation type for error logging (isUpdateOperation may not be in scope if error occurred early)
-      const errorOperationType = (isEditMode || form._id) ? "UPDATE" : "CREATE";
-      const errorProjectId = (isEditMode || form._id) ? (id || form._id) : form.projectID;
-      
+      const errorOperationType = isEditMode || form._id ? "UPDATE" : "CREATE";
+      const errorProjectId =
+        isEditMode || form._id ? id || form._id : form.projectID;
+
       console.log("❌ PROJECT OPERATION ERROR", {
         operation: errorOperationType,
         projectId: errorProjectId,
@@ -1465,7 +1479,7 @@ const ProjectInformation = () => {
         `Error creating client: ${
           err.response?.data?.message || "Unknown error"
         }`,
-        "error"
+        "error",
       );
     } finally {
       setCreatingClient(false);
@@ -1559,13 +1573,25 @@ const ProjectInformation = () => {
           </Box>
         </Box>
         {isEditMode && (
-          <Button
-            variant="outlined"
-            startIcon={<AssessmentIcon />}
-            onClick={() => setLogModalOpen(true)}
-          >
-            View Project Log
-          </Button>
+          <Box display="flex" alignItems="center" gap={2}>
+            {id && id !== "new" && id !== "add-new" && (
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={<DescriptionIcon />}
+                onClick={() => safeNavigate(`/reports/project/${id}`)}
+              >
+                Project Reports
+              </Button>
+            )}
+            <Button
+              variant="outlined"
+              startIcon={<AssessmentIcon />}
+              onClick={() => setLogModalOpen(true)}
+            >
+              View Project Log
+            </Button>
+          </Box>
         )}
         {!isEditMode && id === "new" && (
           <Button
@@ -1646,8 +1672,8 @@ const ProjectInformation = () => {
                     {isEditMode
                       ? form.projectID
                       : form.projectID
-                      ? form.projectID
-                      : "Generated on Save"}
+                        ? form.projectID
+                        : "Generated on Save"}
                   </Typography>
                   {!isEditMode && (
                     <Typography
@@ -1714,7 +1740,7 @@ const ProjectInformation = () => {
                       due.setHours(0, 0, 0, 0);
                       const diffTime = due.getTime() - today.getTime();
                       const diffDays = Math.ceil(
-                        diffTime / (1000 * 60 * 60 * 24)
+                        diffTime / (1000 * 60 * 60 * 24),
                       );
 
                       if (diffDays === 0) {
@@ -2022,9 +2048,7 @@ const ProjectInformation = () => {
                   renderTags={(value, getTagProps) =>
                     value.map((option, index) => {
                       const { key, ...tagProps } = getTagProps({ index });
-                      return (
-                        <Chip key={key} label={option} {...tagProps} />
-                      );
+                      return <Chip key={key} label={option} {...tagProps} />;
                     })
                   }
                 />
@@ -2903,7 +2927,7 @@ const ProjectInformation = () => {
                   <TableBody>
                     {auditTrail
                       .sort(
-                        (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+                        (a, b) => new Date(a.timestamp) - new Date(b.timestamp),
                       )
                       .map((entry, index) => {
                         // Format the event name
@@ -2964,7 +2988,7 @@ const ProjectInformation = () => {
                                     hour: "2-digit",
                                     minute: "2-digit",
                                     hour12: true,
-                                  }
+                                  },
                                 )}
                               </Typography>
                             </TableCell>

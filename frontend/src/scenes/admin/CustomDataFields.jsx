@@ -57,13 +57,16 @@ const CustomDataFields = () => {
   const [asbestosRemovalists, setAsbestosRemovalists] = useState([]);
   const [locationDescriptions, setLocationDescriptions] = useState([]);
   const [materialsDescriptions, setMaterialsDescriptions] = useState([]);
-  const [materialsDescriptionsNonACM, setMaterialsDescriptionsNonACM] = useState([]);
+  const [materialsDescriptionsNonACM, setMaterialsDescriptionsNonACM] =
+    useState([]);
   const [roomAreas, setRoomAreas] = useState([]);
   const [legislation, setLegislation] = useState([]);
   const [projectStatuses, setProjectStatuses] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
   const [glossary, setGlossary] = useState([]);
-  const [fibreIdSamplesDescriptions, setFibreIdSamplesDescriptions] = useState([]);
+  const [fibreIdSamplesDescriptions, setFibreIdSamplesDescriptions] = useState(
+    [],
+  );
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [newItemText, setNewItemText] = useState("");
@@ -101,13 +104,17 @@ const CustomDataFields = () => {
         customDataFieldGroupService.getFieldsByType("asbestos_removalist"),
         customDataFieldGroupService.getFieldsByType("location_description"),
         customDataFieldGroupService.getFieldsByType("materials_description"),
-        customDataFieldGroupService.getFieldsByType("materials_description_non_acm"),
+        customDataFieldGroupService.getFieldsByType(
+          "materials_description_non_acm",
+        ),
         customDataFieldGroupService.getFieldsByType("room_area"),
         customDataFieldGroupService.getFieldsByType("legislation"),
         customDataFieldGroupService.getProjectStatuses(),
         customDataFieldGroupService.getFieldsByType("recommendation"),
         customDataFieldGroupService.getFieldsByType("glossary"),
-        customDataFieldGroupService.getFieldsByType("fibre_id_samples_description"),
+        customDataFieldGroupService.getFieldsByType(
+          "fibre_id_samples_description",
+        ),
       ]);
 
       setAsbestosRemovalists(asbestosData || []);
@@ -218,7 +225,7 @@ const CustomDataFields = () => {
             data: Array.isArray(projectStatuses)
               ? projectStatuses
               : (projectStatuses?.activeStatuses || []).concat(
-                  projectStatuses?.inactiveStatuses || []
+                  projectStatuses?.inactiveStatuses || [],
                 ),
             setter: setProjectStatuses,
             title: "Projects Status",
@@ -272,19 +279,19 @@ const CustomDataFields = () => {
       currentTab === "Recommendations"
         ? item.text || ""
         : currentTab === "Glossary"
-        ? item.text || ""
-        : item.text || item.name || ""
+          ? item.text || ""
+          : item.text || item.name || "",
     );
     setNewLegislationTitle(item.legislationTitle || "");
     setNewJurisdiction(item.jurisdiction || "ACT"); // Set jurisdiction on edit
     setNewIsActiveStatus(
-      item.isActiveStatus !== undefined ? item.isActiveStatus : true
+      item.isActiveStatus !== undefined ? item.isActiveStatus : true,
     ); // Set isActiveStatus on edit
     setNewStatusColor(item.statusColor || "#1976d2"); // Set status color on edit
     setNewAsbestosType(item.asbestosType || ""); // Set asbestos type on edit
     setNewRecommendationName(item.name || ""); // Set recommendation name on edit
-    setNewGlossaryName(currentTab === "Glossary" ? (item.name || "") : "");
-    setNewGlossaryDescription(currentTab === "Glossary" ? (item.text || "") : "");
+    setNewGlossaryName(currentTab === "Glossary" ? item.name || "" : "");
+    setNewGlossaryDescription(currentTab === "Glossary" ? item.text || "" : "");
     setDialogOpen(true);
   };
 
@@ -292,24 +299,23 @@ const CustomDataFields = () => {
     const { data, setter, title } = getCurrentData();
     try {
       // For all custom data field types, we need to update the backend group
-        if (
-          [
-            "Projects Status",
-            "Legislation",
-            "Asbestos Removalists",
-            "Room/Area",
-            "Location Descriptions",
-            "Materials Descriptions",
-            "Materials Descriptions (non-ACM)",
-            "Glossary",
-            "Fibre ID Samples Descriptions",
-          ].includes(title)
-        ) {
+      if (
+        [
+          "Projects Status",
+          "Legislation",
+          "Asbestos Removalists",
+          "Room/Area",
+          "Location Descriptions",
+          "Materials Descriptions",
+          "Materials Descriptions (non-ACM)",
+          "Glossary",
+          "Fibre ID Samples Descriptions",
+        ].includes(title)
+      ) {
         // Get the current group
         const groupType = getTypeFromTitle(title);
-        const group = await customDataFieldGroupService.getGroupByType(
-          groupType
-        );
+        const group =
+          await customDataFieldGroupService.getGroupByType(groupType);
 
         console.log(`${title} group response:`, group);
 
@@ -320,7 +326,7 @@ const CustomDataFields = () => {
 
         // Remove the field from the group's fields array
         const updatedFields = group.fields.filter(
-          (field) => field._id.toString() !== itemId.toString()
+          (field) => field._id.toString() !== itemId.toString(),
         );
 
         // Update the group with the new fields array
@@ -346,7 +352,7 @@ const CustomDataFields = () => {
         const updatedData = data.filter((item) => item._id !== itemId);
         setter(updatedData);
         showSnackbar(
-          `${title} removed from display (backend deletion not implemented for this type)`
+          `${title} removed from display (backend deletion not implemented for this type)`,
         );
       }
     } catch (error) {
@@ -416,7 +422,7 @@ const CustomDataFields = () => {
     if (currentTab === "Materials Descriptions" && !newAsbestosType.trim()) {
       showSnackbar(
         "Asbestos type is required for Materials Descriptions",
-        "error"
+        "error",
       );
       return;
     }
@@ -550,7 +556,7 @@ const CustomDataFields = () => {
           // Update local state
           const updatedItem = { ...editingItem, ...updateData };
           const updatedData = data.map((item) =>
-            item._id === editingItem._id ? updatedItem : item
+            item._id === editingItem._id ? updatedItem : item,
           );
           setter(updatedData);
 
@@ -578,7 +584,7 @@ const CustomDataFields = () => {
           // For other types, just update local state
           const updatedItem = { ...editingItem, ...updateData };
           const updatedData = data.map((item) =>
-            item._id === editingItem._id ? updatedItem : item
+            item._id === editingItem._id ? updatedItem : item,
           );
           setter(updatedData);
 
@@ -646,9 +652,8 @@ const CustomDataFields = () => {
             const groupType = getTypeFromTitle(title);
             let group;
             try {
-              group = await customDataFieldGroupService.getGroupByType(
-                groupType
-              );
+              group =
+                await customDataFieldGroupService.getGroupByType(groupType);
             } catch (getError) {
               // If group doesn't exist (404), create it
               if (
@@ -743,13 +748,13 @@ const CustomDataFields = () => {
 
             console.log(
               "Adding recommendation - Update payload:",
-              JSON.stringify(updatePayload, null, 2)
+              JSON.stringify(updatePayload, null, 2),
             );
             console.log("New field being added:", newField);
 
             await customDataFieldGroupService.updateGroup(
               group._id,
-              updatePayload
+              updatePayload,
             );
 
             // Create new item for local state
@@ -880,7 +885,8 @@ const CustomDataFields = () => {
               >
                 <ListItemText
                   primary={
-                    (title === "Recommendations" || title === "Glossary") && item.name ? (
+                    (title === "Recommendations" || title === "Glossary") &&
+                    item.name ? (
                       <Typography
                         variant="subtitle1"
                         sx={{ fontWeight: "bold" }}
@@ -895,10 +901,10 @@ const CustomDataFields = () => {
                     title === "Materials Descriptions" && item.asbestosType
                       ? `Asbestos Type: ${item.asbestosType}`
                       : title === "Recommendations" && item.text
-                      ? item.text
-                      : title === "Glossary" && item.text
-                      ? item.text
-                      : null
+                        ? item.text
+                        : title === "Glossary" && item.text
+                          ? item.text
+                          : null
                   }
                 />
                 <ListItemSecondaryAction>
@@ -1295,7 +1301,7 @@ const CustomDataFields = () => {
                             </IconButton>
                           </Box>
                         </Box>
-                      )
+                      ),
                     )}
                   </Box>
                 </Box>
@@ -1368,21 +1374,21 @@ const CustomDataFields = () => {
               <TabPanel value={itemDescriptionsTabValue} index={1}>
                 {renderTabContent(
                   locationDescriptions,
-                  "Location Descriptions"
+                  "Location Descriptions",
                 )}
               </TabPanel>
 
               <TabPanel value={itemDescriptionsTabValue} index={2}>
                 {renderTabContent(
                   materialsDescriptions,
-                  "Materials Descriptions"
+                  "Materials Descriptions",
                 )}
               </TabPanel>
 
               <TabPanel value={itemDescriptionsTabValue} index={3}>
                 {renderTabContent(
                   materialsDescriptionsNonACM,
-                  "Materials Descriptions (non-ACM)"
+                  "Materials Descriptions (non-ACM)",
                 )}
               </TabPanel>
             </Box>
@@ -1405,7 +1411,10 @@ const CustomDataFields = () => {
           </TabPanel>
 
           <TabPanel value={tabValue} index={6}>
-            {renderTabContent(fibreIdSamplesDescriptions, "Fibre ID Samples Descriptions")}
+            {renderTabContent(
+              fibreIdSamplesDescriptions,
+              "Fibre ID Samples Descriptions",
+            )}
           </TabPanel>
         </Paper>
 
@@ -1494,7 +1503,9 @@ const CustomDataFields = () => {
                   required
                   error={!newGlossaryDescription.trim()}
                   helperText={
-                    !newGlossaryDescription.trim() ? "Description is required" : ""
+                    !newGlossaryDescription.trim()
+                      ? "Description is required"
+                      : ""
                   }
                 />
               </>

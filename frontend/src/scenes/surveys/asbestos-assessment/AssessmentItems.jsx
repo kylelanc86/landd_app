@@ -53,7 +53,7 @@ import {
 import MicIcon from "@mui/icons-material/Mic";
 import WarningIcon from "@mui/icons-material/Warning";
 
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import PermissionGate from "../../../components/PermissionGate";
 import SitePlanDrawing from "../../../components/SitePlanDrawing";
 import { useAuth } from "../../../context/AuthContext";
@@ -90,8 +90,21 @@ const addBusinessDays = (date, businessDays) => {
 
 const AssessmentItems = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams();
   const { currentUser } = useAuth();
+
+  // Support both asbestos-assessment and residential-asbestos routes
+  const isResidential = (location.pathname || "").includes(
+    "residential-asbestos",
+  );
+  const listPath = isResidential
+    ? "/surveys/residential-asbestos"
+    : "/surveys/asbestos-assessment";
+  const itemsPathForId = (assessmentId) =>
+    isResidential
+      ? `/surveys/residential-asbestos/${assessmentId}/items`
+      : `/surveys/asbestos-assessment/${assessmentId}/items`;
 
   const [items, setItems] = useState([]);
   const [assessment, setAssessment] = useState(null);
@@ -240,18 +253,20 @@ const AssessmentItems = () => {
           assessmentData?.status === "report-ready-for-review" ||
           assessmentData?.status === "complete",
       );
-      // Load assessment scope if it exists
-      if (
-        assessmentData?.assessmentScope &&
-        Array.isArray(assessmentData.assessmentScope)
-      ) {
-        setScopeItems(
-          assessmentData.assessmentScope.length > 0
-            ? assessmentData.assessmentScope
-            : [""],
-        );
-      } else {
-        setScopeItems([""]);
+      // Load assessment scope if it exists (not used for residential asbestos)
+      if (!(location.pathname || "").includes("residential-asbestos")) {
+        if (
+          assessmentData?.assessmentScope &&
+          Array.isArray(assessmentData.assessmentScope)
+        ) {
+          setScopeItems(
+            assessmentData.assessmentScope.length > 0
+              ? assessmentData.assessmentScope
+              : [""],
+          );
+        } else {
+          setScopeItems([""]);
+        }
       }
     } catch (err) {
       console.error("Error fetching data:", err);
@@ -955,13 +970,14 @@ const AssessmentItems = () => {
     setIsDictatingDiscussion(false);
   };
 
-  // Scope valid = at least one non-empty scope item (required for Site Works Complete)
+  // Scope valid = at least one non-empty scope item (required for Site Works Complete). Not required for residential.
   const hasValidScope =
-    assessment?.assessmentScope &&
-    Array.isArray(assessment.assessmentScope) &&
-    assessment.assessmentScope.some(
-      (item) => item && String(item).trim() !== "",
-    );
+    isResidential ||
+    (assessment?.assessmentScope &&
+      Array.isArray(assessment.assessmentScope) &&
+      assessment.assessmentScope.some(
+        (item) => item && String(item).trim() !== "",
+      ));
 
   // Complete assessment handler
   const handleCompleteAssessment = () => {
@@ -1062,7 +1078,7 @@ const AssessmentItems = () => {
       setShowSamplesSubmittedDialog(false);
       showSnackbar("Samples submitted to lab successfully", "success");
       // Navigate to the assessment items page
-      navigate(`/surveys/asbestos-assessment/${id}/items`);
+      navigate(itemsPathForId(id));
     } catch (error) {
       console.error("Error submitting samples to lab:", error);
       showSnackbar("Failed to submit samples to lab", "error");
@@ -1091,7 +1107,7 @@ const AssessmentItems = () => {
         "Assessment finalised successfully. Report is ready for review.",
         "success",
       );
-      navigate(`/surveys/asbestos-assessment/${id}/items`);
+      navigate(itemsPathForId(id));
     } catch (error) {
       console.error("Error finalising assessment:", error);
       showSnackbar("Failed to finalise assessment", "error");
@@ -1893,25 +1909,14 @@ const AssessmentItems = () => {
           <Link
             component="button"
             variant="body1"
-            onClick={() => navigate("/surveys/asbestos-assessment")}
+            onClick={() => navigate(listPath)}
             sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
           >
             <ArrowBackIcon sx={{ mr: 1 }} />
-            Asbestos Assessment
+            {isResidential
+              ? "Residential Asbestos Surveys"
+              : "Asbestos Assessment"}
           </Link>
-          <Typography color="text.primary">
-            {assessment?.projectId?.name || "Unknown Project"}:{" "}
-            {assessment?.assessmentDate
-              ? new Date(assessment.assessmentDate).toLocaleDateString(
-                  "en-GB",
-                  {
-                    day: "2-digit",
-                    month: "2-digit",
-                    year: "2-digit",
-                  },
-                )
-              : "Unknown Date"}
-          </Typography>
         </Breadcrumbs>
 
         {/* Project Info */}
@@ -1923,61 +1928,76 @@ const AssessmentItems = () => {
             <Typography variant="h6" color="text.secondary">
               Site Name: {assessment.projectId?.name || "N/A"}
             </Typography>
+            <Typography variant="h6" color="text.secondary">
+              Date of Assessment: {assessment?.assessmentDate
+              ? new Date(assessment.assessmentDate).toLocaleDateString(
+                  "en-GB",
+                  {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "2-digit",
+                  },
+                )
+              : "Unknown Date"}
+
+          </Typography>
           </Box>
         )}
 
-        <Box
-          display="flex"
-          gap={2}
-          sx={{ mt: 3 }}
-          alignItems="center"
-          flexWrap="wrap"
-        >
-          <Button
-            variant="outlined"
-            color="primary"
-            onClick={() => {
-              // Load current scope items when opening dialog
-              if (
-                assessment?.assessmentScope &&
-                Array.isArray(assessment.assessmentScope) &&
-                assessment.assessmentScope.length > 0
-              ) {
-                setScopeItems(assessment.assessmentScope);
-              } else {
-                setScopeItems([""]);
-              }
-              setScopeDialogOpen(true);
-            }}
+        {!isResidential && (
+          <Box
+            display="flex"
+            gap={2}
+            sx={{ mt: 3 }}
+            alignItems="center"
+            flexWrap="wrap"
           >
-            Scope of Assessment
-          </Button>
-          {assessment?.assessmentScope &&
-            Array.isArray(assessment.assessmentScope) &&
-            assessment.assessmentScope.length > 0 &&
-            assessment.assessmentScope.some((item) => item.trim() !== "") && (
-              <>
-                <ArrowForwardIcon sx={{ color: "text.secondary" }} />
-                <Typography variant="body1">
-                  {assessment.assessmentScope
-                    .filter((item) => item.trim() !== "")
-                    .join(" | ")}
-                </Typography>
-              </>
-            )}
-          {(!assessment?.assessmentScope ||
-            !Array.isArray(assessment.assessmentScope) ||
-            assessment.assessmentScope.length === 0 ||
-            !assessment.assessmentScope.some((item) => item.trim() !== "")) && (
-            <Typography
-              variant="body2"
-              color="#de0a26"
-              sx={{ fontWeight: "medium" }}
+            <Button
+              variant="outlined"
+              color="primary"
+              onClick={() => {
+                // Load current scope items when opening dialog
+                if (
+                  assessment?.assessmentScope &&
+                  Array.isArray(assessment.assessmentScope) &&
+                  assessment.assessmentScope.length > 0
+                ) {
+                  setScopeItems(assessment.assessmentScope);
+                } else {
+                  setScopeItems([""]);
+                }
+                setScopeDialogOpen(true);
+              }}
             >
-              ⚠ At least one scope item is required.
-            </Typography>
-          )}
-        </Box>
+              Scope of Assessment
+            </Button>
+            {assessment?.assessmentScope &&
+              Array.isArray(assessment.assessmentScope) &&
+              assessment.assessmentScope.length > 0 &&
+              assessment.assessmentScope.some((item) => item.trim() !== "") && (
+                <>
+                  <ArrowForwardIcon sx={{ color: "text.secondary" }} />
+                  <Typography variant="body1">
+                    {assessment.assessmentScope
+                      .filter((item) => item.trim() !== "")
+                      .join(" | ")}
+                  </Typography>
+                </>
+              )}
+            {(!assessment?.assessmentScope ||
+              !Array.isArray(assessment.assessmentScope) ||
+              assessment.assessmentScope.length === 0 ||
+              !assessment.assessmentScope.some((item) => item.trim() !== "")) && (
+              <Typography
+                variant="body2"
+                color="#de0a26"
+                sx={{ fontWeight: "medium" }}
+              >
+                ⚠ At least one scope item is required.
+              </Typography>
+            )}
+          </Box>
+        )}
 
         {/* Site Plan Actions */}
         <Box
@@ -3782,178 +3802,182 @@ const AssessmentItems = () => {
           </DialogActions>
         </Dialog>
 
-        {/* Scope of Assessment Dialog */}
-        <Dialog
-          open={scopeDialogOpen}
-          onClose={() => setScopeDialogOpen(false)}
-          maxWidth="md"
-          fullWidth
-          PaperProps={{
-            sx: {
-              borderRadius: 3,
-              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
-            },
-          }}
-        >
-          <DialogTitle
-            sx={{
-              pb: 2,
-              px: 3,
-              pt: 3,
-              border: "none",
-              display: "flex",
-              alignItems: "center",
-              gap: 2,
-            }}
-          >
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 40,
-                height: 40,
-                borderRadius: "50%",
-                bgcolor: "primary.main",
-                color: "white",
+        {!isResidential && (
+          <>
+            {/* Scope of Assessment Dialog */}
+            <Dialog
+              open={scopeDialogOpen}
+              onClose={() => setScopeDialogOpen(false)}
+              maxWidth="md"
+              fullWidth
+              PaperProps={{
+                sx: {
+                  borderRadius: 3,
+                  boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+                },
               }}
             >
-              <Typography sx={{ fontSize: 20, fontWeight: "bold" }}>
-                S
-              </Typography>
-            </Box>
-            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
-              Scope of Assessment
-            </Typography>
-          </DialogTitle>
-          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Enter the scope items for this assessment. These will be displayed
-              as bullet points in the report.
-            </Typography>
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              {scopeItems.map((item, index) => (
+              <DialogTitle
+                sx={{
+                  pb: 2,
+                  px: 3,
+                  pt: 3,
+                  border: "none",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 2,
+                }}
+              >
                 <Box
-                  key={index}
-                  sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 40,
+                    height: 40,
+                    borderRadius: "50%",
+                    bgcolor: "primary.main",
+                    color: "white",
+                  }}
                 >
-                  <TextField
-                    fullWidth
-                    label={
-                      index === 0
-                        ? "Scope Item (Required)"
-                        : `Scope Item ${index + 1}`
-                    }
-                    value={item}
-                    onChange={(e) => {
-                      const newItems = [...scopeItems];
-                      newItems[index] = e.target.value;
-                      setScopeItems(newItems);
-                    }}
-                    required={index === 0}
-                    variant="outlined"
-                    size="small"
-                  />
-                  {scopeItems.length > 1 && (
-                    <IconButton
-                      onClick={() => {
-                        const newItems = scopeItems.filter(
-                          (_, i) => i !== index,
-                        );
-                        setScopeItems(newItems);
-                      }}
-                      color="error"
-                      sx={{ mt: 1 }}
-                      title="Remove this item"
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  )}
+                  <Typography sx={{ fontSize: 20, fontWeight: "bold" }}>
+                    S
+                  </Typography>
                 </Box>
-              ))}
-            </Box>
-            <Button
-              variant="outlined"
-              startIcon={<AddIcon />}
-              onClick={() => setScopeItems([...scopeItems, ""])}
-              sx={{ mt: 2 }}
-            >
-              Add Scope Item
-            </Button>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
-            <Button
-              onClick={() => setScopeDialogOpen(false)}
-              variant="outlined"
-              sx={{
-                minWidth: 100,
-                borderRadius: 2,
-                textTransform: "none",
-                fontWeight: 500,
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={async () => {
-                // Validate that assessment exists
-                if (!assessment) {
-                  showSnackbar(
-                    "Assessment data not loaded. Please refresh the page.",
-                    "error",
-                  );
-                  return;
-                }
+                <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+                  Scope of Assessment
+                </Typography>
+              </DialogTitle>
+              <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                  Enter the scope items for this assessment. These will be displayed
+                  as bullet points in the report.
+                </Typography>
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  {scopeItems.map((item, index) => (
+                    <Box
+                      key={index}
+                      sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}
+                    >
+                      <TextField
+                        fullWidth
+                        label={
+                          index === 0
+                            ? "Scope Item (Required)"
+                            : `Scope Item ${index + 1}`
+                        }
+                        value={item}
+                        onChange={(e) => {
+                          const newItems = [...scopeItems];
+                          newItems[index] = e.target.value;
+                          setScopeItems(newItems);
+                        }}
+                        required={index === 0}
+                        variant="outlined"
+                        size="small"
+                      />
+                      {scopeItems.length > 1 && (
+                        <IconButton
+                          onClick={() => {
+                            const newItems = scopeItems.filter(
+                              (_, i) => i !== index,
+                            );
+                            setScopeItems(newItems);
+                          }}
+                          color="error"
+                          sx={{ mt: 1 }}
+                          title="Remove this item"
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      )}
+                    </Box>
+                  ))}
+                </Box>
+                <Button
+                  variant="outlined"
+                  startIcon={<AddIcon />}
+                  onClick={() => setScopeItems([...scopeItems, ""])}
+                  sx={{ mt: 2 }}
+                >
+                  Add Scope Item
+                </Button>
+              </DialogContent>
+              <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+                <Button
+                  onClick={() => setScopeDialogOpen(false)}
+                  variant="outlined"
+                  sx={{
+                    minWidth: 100,
+                    borderRadius: 2,
+                    textTransform: "none",
+                    fontWeight: 500,
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={async () => {
+                    // Validate that assessment exists
+                    if (!assessment) {
+                      showSnackbar(
+                        "Assessment data not loaded. Please refresh the page.",
+                        "error",
+                      );
+                      return;
+                    }
 
-                // Validate that at least the first item is filled
-                if (!scopeItems[0] || scopeItems[0].trim() === "") {
-                  showSnackbar("At least one scope item is required", "error");
-                  return;
-                }
+                    // Validate that at least the first item is filled
+                    if (!scopeItems[0] || scopeItems[0].trim() === "") {
+                      showSnackbar("At least one scope item is required", "error");
+                      return;
+                    }
 
-                // Filter out empty items (except keep at least one)
-                const filteredItems = scopeItems
-                  .map((item) => item.trim())
-                  .filter((item) => item !== "");
+                    // Filter out empty items (except keep at least one)
+                    const filteredItems = scopeItems
+                      .map((item) => item.trim())
+                      .filter((item) => item !== "");
 
-                if (filteredItems.length === 0) {
-                  showSnackbar("At least one scope item is required", "error");
-                  return;
-                }
+                    if (filteredItems.length === 0) {
+                      showSnackbar("At least one scope item is required", "error");
+                      return;
+                    }
 
-                try {
-                  await asbestosAssessmentService.update(id, {
-                    projectId:
-                      assessment.projectId?._id || assessment.projectId,
-                    assessmentDate: assessment.assessmentDate,
-                    status: assessment.status,
-                    assessmentScope: filteredItems,
-                    reportApprovedBy: null,
-                    reportIssueDate: null,
-                  });
-                  showSnackbar(
-                    "Scope of assessment saved successfully",
-                    "success",
-                  );
-                  setScopeDialogOpen(false);
-                  await fetchData();
-                } catch (err) {
-                  console.error("Error saving scope:", err);
-                  showSnackbar("Failed to save scope of assessment", "error");
-                }
-              }}
-              variant="contained"
-              sx={{
-                minWidth: 120,
-                borderRadius: 2,
-                textTransform: "none",
-                fontWeight: 500,
-              }}
-            >
-              Save Scope
-            </Button>
-          </DialogActions>
-        </Dialog>
+                    try {
+                      await asbestosAssessmentService.update(id, {
+                        projectId:
+                          assessment.projectId?._id || assessment.projectId,
+                        assessmentDate: assessment.assessmentDate,
+                        status: assessment.status,
+                        assessmentScope: filteredItems,
+                        reportApprovedBy: null,
+                        reportIssueDate: null,
+                      });
+                      showSnackbar(
+                        "Scope of assessment saved successfully",
+                        "success",
+                      );
+                      setScopeDialogOpen(false);
+                      await fetchData();
+                    } catch (err) {
+                      console.error("Error saving scope:", err);
+                      showSnackbar("Failed to save scope of assessment", "error");
+                    }
+                  }}
+                  variant="contained"
+                  sx={{
+                    minWidth: 120,
+                    borderRadius: 2,
+                    textTransform: "none",
+                    fontWeight: 500,
+                  }}
+                >
+                  Save Scope
+                </Button>
+              </DialogActions>
+            </Dialog>
+          </>
+        )}
 
         {/* Full Size Photo Dialog */}
         <Dialog

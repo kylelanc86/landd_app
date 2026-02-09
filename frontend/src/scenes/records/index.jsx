@@ -14,13 +14,11 @@ import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import SchoolIcon from "@mui/icons-material/School";
 import GroupIcon from "@mui/icons-material/Group";
 import DescriptionIcon from "@mui/icons-material/Description";
 import BusinessIcon from "@mui/icons-material/Business";
 import InventoryIcon from "@mui/icons-material/Inventory";
 import ReportProblemIcon from "@mui/icons-material/ReportProblem";
-import SecurityIcon from "@mui/icons-material/Security";
 import GavelIcon from "@mui/icons-material/Gavel";
 import FeedbackIcon from "@mui/icons-material/Feedback";
 import ScienceIcon from "@mui/icons-material/Science";
@@ -41,13 +39,11 @@ const RecordWidget = ({ title, icon, onClick, color = "#1976d2" }) => {
         transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
         overflow: "hidden",
         borderRadius: "16px",
-        boxShadow:
-          "0 4px 20px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.06)",
+        boxShadow: "0 4px 20px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.06)",
         border: "1px solid rgba(0,0,0,0.05)",
         "&:hover": {
           transform: "translateY(-4px)",
-          boxShadow:
-            "0 8px 25px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.08)",
+          boxShadow: "0 8px 25px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.08)",
         },
       }}
     >
@@ -178,8 +174,7 @@ const Records = () => {
     const isAdminOrManager =
       currentUser?.role === "admin" || currentUser?.role === "manager";
     const hasOnlyCalibrationsApproval =
-      currentUser?.labApprovals?.calibrations === true &&
-      !isAdminOrManager;
+      currentUser?.labApprovals?.calibrations === true && !isAdminOrManager;
 
     if (urlView && (urlView === "general" || urlView === "laboratory")) {
       // Check if user has access to laboratory view
@@ -212,12 +207,12 @@ const Records = () => {
   }, [searchParams, currentUser, setSearchParams]);
 
   const generalRecordWidgets = [
-    {
-      title: "Training Records",
-      icon: <SchoolIcon />,
-      color: "#1976d2",
-      onClick: () => navigate("/records/training?view=general"),
-    },
+    // {
+    //   title: "Training Records",
+    //   icon: <SchoolIcon />,
+    //   color: "#1976d2",
+    //   onClick: () => navigate("/records/training?view=general"),
+    // },
     {
       title: "Staff Meetings",
       icon: <GroupIcon />,
@@ -248,12 +243,12 @@ const Records = () => {
       color: "#d32f2f",
       onClick: () => navigate("/records/incidents?view=general"),
     },
-    {
-      title: "OHS & Environmental Targets & Risks",
-      icon: <SecurityIcon />,
-      color: "#1565c0",
-      onClick: () => navigate("/records/ohs-environmental?view=general"),
-    },
+    // {
+    //   title: "OHS & Environmental Targets & Risks",
+    //   icon: <SecurityIcon />,
+    //   color: "#1565c0",
+    //   onClick: () => navigate("/records/ohs-environmental?view=general"),
+    // },
     {
       title: "Impartiality Risks",
       icon: <GavelIcon />,
@@ -282,12 +277,12 @@ const Records = () => {
       onClick: () =>
         navigate("/records/laboratory/calibrations?view=laboratory"),
     },
-    {
-      title: "Quality Control",
-      icon: <AssignmentIcon />,
-      color: "#0288d1",
-      onClick: () => navigate("/records/quality-control?view=laboratory"),
-    },
+    // {
+    //   title: "Quality Control",
+    //   icon: <AssignmentIcon />,
+    //   color: "#0288d1",
+    //   onClick: () => navigate("/records/quality-control?view=laboratory"),
+    // },
     {
       title: "Indoor Air Quality",
       icon: <AirIcon />,
@@ -312,8 +307,7 @@ const Records = () => {
     {
       id: "general",
       title: "General Records",
-      description:
-        "Access training records, staff meetings, document register, and more",
+      description: "Access staff meetings, document register, and more",
       icon: <DescriptionIcon />,
       color: "#1976d2",
       view: "general",
@@ -335,7 +329,7 @@ const Records = () => {
     // Check if user is admin or manager - they can see all modules
     const isAdminOrManager =
       currentUser?.role === "admin" || currentUser?.role === "manager";
-    
+
     // If user only has calibrations approval (not admin/manager), hide general records
     const hasOnlyCalibrationsApproval =
       currentUser?.labApprovals?.calibrations === true &&
@@ -349,8 +343,7 @@ const Records = () => {
 
     if (module.requiresCalibrationsApproval) {
       return (
-        currentUser?.labApprovals?.calibrations === true ||
-        isAdminOrManager
+        currentUser?.labApprovals?.calibrations === true || isAdminOrManager
       );
     }
     return true;
@@ -573,12 +566,12 @@ const Records = () => {
                 ? generalRecordWidgets
                 : laboratoryRecordWidgets
               ).map((widget, index) => (
-                <Grid 
-                  item 
-                  xs={12} 
-                  sm={6} 
-                  md={view === "general" ? 3 : 4} 
-                  lg={view === "general" ? 3 : 4} 
+                <Grid
+                  item
+                  xs={12}
+                  sm={6}
+                  md={view === "general" ? 3 : 4}
+                  lg={view === "general" ? 3 : 4}
                   key={index}
                 >
                   <RecordWidget {...widget} />

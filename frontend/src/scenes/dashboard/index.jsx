@@ -34,7 +34,7 @@ import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { useNavigate } from "react-router-dom";
 import React, { useEffect, useState, useMemo, lazy, Suspense } from "react";
-import { invoiceService } from "../../services/api";
+import { invoiceService, projectService } from "../../services/api";
 
 import Header from "../../components/Header";
 import { tokens } from "../../theme/tokens";
@@ -136,6 +136,7 @@ const Dashboard = () => {
     readyForInvoicingProjects: 0,
     invoiceSentProjects: 0,
     awaitingPaymentProjects: 0,
+    allActiveProjects: 0,
   });
 
   // Load user preferences from database
@@ -170,7 +171,7 @@ const Dashboard = () => {
             if (DEBUG_PREFS) {
               console.log(
                 "Loading widget order from preferences:",
-                dashboardPrefs.widgetOrder
+                dashboardPrefs.widgetOrder,
               );
             }
 
@@ -187,7 +188,7 @@ const Dashboard = () => {
             };
 
             const mappedOrder = dashboardPrefs.widgetOrder.map(
-              (id) => idMapping[id] || id
+              (id) => idMapping[id] || id,
             );
 
             // Remove duplicates while preserving order
@@ -201,13 +202,13 @@ const Dashboard = () => {
             // Cache the widget order
             localStorage.setItem(
               "dashboardWidgetOrder",
-              JSON.stringify(uniqueOrder)
+              JSON.stringify(uniqueOrder),
             );
             if (DEBUG_PREFS) console.log("Cached widget order:", uniqueOrder);
           } else {
             if (DEBUG_PREFS) {
               console.log(
-                "No valid widget order in preferences, keeping default"
+                "No valid widget order in preferences, keeping default",
               );
             }
           }
@@ -289,7 +290,7 @@ const Dashboard = () => {
             // Cache the default widgets
             localStorage.setItem(
               "dashboardWidgets",
-              JSON.stringify(defaultWidgets)
+              JSON.stringify(defaultWidgets),
             );
             if (DEBUG_PREFS)
               console.log("Cached default widgets:", defaultWidgets);
@@ -315,7 +316,7 @@ const Dashboard = () => {
           // Cache the default widgets
           localStorage.setItem(
             "dashboardWidgets",
-            JSON.stringify(defaultWidgets)
+            JSON.stringify(defaultWidgets),
           );
           if (DEBUG_PREFS)
             console.log("Cached default widgets:", defaultWidgets);
@@ -360,7 +361,7 @@ const Dashboard = () => {
           } catch (parseError) {
             console.error(
               "Error parsing saved widget preferences:",
-              parseError
+              parseError,
             );
             // Use default state if parsing fails
             setVisibleWidgets({
@@ -398,6 +399,34 @@ const Dashboard = () => {
     loadUserPreferences();
   }, []);
 
+  // Fetch project status counts for dashboard widgets
+  useEffect(() => {
+    const fetchStatusCounts = async () => {
+      try {
+        setDataLoading(true);
+        const response = await projectService.getStatusCounts();
+        const statusCounts = response.data?.statusCounts || {};
+        setStats({
+          inProgressProjects: statusCounts["In progress"] ?? 0,
+          samplesSubmittedProjects:
+            statusCounts["Samples Submitted to Lab"] ?? 0,
+          labCompleteProjects: statusCounts["Lab Analysis Completed"] ?? 0,
+          reportReviewProjects: statusCounts["Report sent for review"] ?? 0,
+          readyForInvoicingProjects: statusCounts["Ready for invoicing"] ?? 0,
+          invoiceSentProjects: statusCounts["Invoice sent"] ?? 0,
+          awaitingPaymentProjects:
+            statusCounts["Invoiced - Awaiting Payment"] ?? 0,
+          allActiveProjects: statusCounts.all_active ?? 0,
+        });
+      } catch (error) {
+        console.error("Error fetching project status counts:", error);
+      } finally {
+        setDataLoading(false);
+      }
+    };
+    fetchStatusCounts();
+  }, []);
+
   // Fetch daily timesheet status only (optimized - removed unnecessary entries fetch)
   useEffect(() => {
     const fetchDailyTimesheetStatus = async () => {
@@ -409,14 +438,14 @@ const Dashboard = () => {
         // OPTIMIZATION: Only fetch status, not timesheet entries
         // Removed: /timesheets/range API call (was unused - calculated totalTime but never displayed it)
         const statusResponse = await api.get(
-          `/timesheets/status/range/${formattedDate}/${formattedDate}`
+          `/timesheets/status/range/${formattedDate}/${formattedDate}`,
         );
 
         const fetchTime = performance.now() - startTime;
         console.log(
           `⚡ Dashboard timesheet status loaded in ${fetchTime.toFixed(
-            2
-          )}ms (was 2 API calls)`
+            2,
+          )}ms (was 2 API calls)`,
         );
 
         const dailyStatus = statusResponse.data[0]?.status || "incomplete";
@@ -547,7 +576,7 @@ const Dashboard = () => {
         onClick: () => navigate("/records/laboratory/calibrations/list"),
       },
     ],
-    [dailyTimesheetStatus, currentUser, navigate]
+    [dailyTimesheetStatus, currentUser, navigate],
   );
 
   // Clean up invalid widget IDs after gridItems is defined
@@ -555,7 +584,7 @@ const Dashboard = () => {
     if (gridItems.length > 0) {
       const validWidgetIds = gridItems.map((item) => item.id);
       const hasInvalidIds = Object.keys(visibleWidgets).some(
-        (id) => !validWidgetIds.includes(id)
+        (id) => !validWidgetIds.includes(id),
       );
 
       if (hasInvalidIds) {
@@ -568,7 +597,7 @@ const Dashboard = () => {
         setVisibleWidgets(cleanedWidgets);
         localStorage.setItem(
           "dashboardWidgets",
-          JSON.stringify(cleanedWidgets)
+          JSON.stringify(cleanedWidgets),
         );
       }
     }
@@ -600,6 +629,22 @@ const Dashboard = () => {
   //   );
   // }, [visibleWidgets]);
 
+  // Map widget id to stats key for project count (excludes dailyTimesheet and calibrations)
+  const getWidgetCount = (widgetId) => {
+    const keyMap = {
+      inProgress: "inProgressProjects",
+      samplesSubmitted: "samplesSubmittedProjects",
+      labComplete: "labCompleteProjects",
+      reportReview: "reportReviewProjects",
+      readyForInvoicing: "readyForInvoicingProjects",
+      invoiceSent: "invoiceSentProjects",
+      awaitingPayment: "awaitingPaymentProjects",
+      allActive: "allActiveProjects",
+    };
+    const key = keyMap[widgetId];
+    return key ? stats[key] : null;
+  };
+
   // Get ordered and visible widgets - limit to 3 additional widgets + daily timesheet = 4 total
   const displayWidgets = useMemo(() => {
     const DEBUG = false; // Set to true to enable verbose widget debugging
@@ -616,7 +661,7 @@ const Dashboard = () => {
     // First, ensure we have valid widget IDs
     const validWidgetIds = gridItems.map((item) => item.id);
     const filteredOrder = widgetOrder.filter((id) =>
-      validWidgetIds.includes(id)
+      validWidgetIds.includes(id),
     );
 
     // If no valid widgets in order, use all grid items
@@ -624,16 +669,16 @@ const Dashboard = () => {
 
     // Add any visible widgets that are not in the order
     const visibleWidgetIds = Object.keys(visibleWidgets).filter(
-      (id) => visibleWidgets[id]
+      (id) => visibleWidgets[id],
     );
     const missingVisibleWidgets = visibleWidgetIds.filter(
-      (id) => !orderToUse.includes(id)
+      (id) => !orderToUse.includes(id),
     );
     if (missingVisibleWidgets.length > 0) {
       if (DEBUG) {
         console.log(
           "Adding missing visible widgets to order:",
-          missingVisibleWidgets
+          missingVisibleWidgets,
         );
       }
       orderToUse = [...orderToUse, ...missingVisibleWidgets];
@@ -685,7 +730,7 @@ const Dashboard = () => {
     if (DEBUG) {
       console.log(
         "Final display widgets:",
-        result.map((item) => ({ id: item.id, title: item.title }))
+        result.map((item) => ({ id: item.id, title: item.title })),
       );
       console.log("displayWidgets length:", result.length);
     }
@@ -726,7 +771,7 @@ const Dashboard = () => {
     // If trying to enable a widget and we're already at the limit, prevent it
     if (!isCurrentlyVisible && currentVisibleCount >= 4) {
       console.log(
-        "Cannot enable widget - already at limit of 4 (1 required + 3 additional)"
+        "Cannot enable widget - already at limit of 4 (1 required + 3 additional)",
       );
       return; // Exit early - already at limit
     }
@@ -803,7 +848,7 @@ const Dashboard = () => {
           onClick={() => {
             console.log(
               "Opening widget dialog with current state:",
-              visibleWidgets
+              visibleWidgets,
             );
             setWidgetDialogOpen(true);
           }}
@@ -844,15 +889,15 @@ const Dashboard = () => {
                     minWidth: isExtraSmall
                       ? "120px" // Ensure minimum width to prevent concealment
                       : isMobile
-                      ? "140px"
-                      : isTablet
-                      ? "160px"
-                      : "180px",
+                        ? "140px"
+                        : isTablet
+                          ? "160px"
+                          : "180px",
                     height: isExtraSmall
                       ? "100px"
                       : isMobile
-                      ? "120px"
-                      : "160px",
+                        ? "120px"
+                        : "160px",
                     width: "100%",
                   },
                   // Handle very small screens
@@ -910,8 +955,8 @@ const Dashboard = () => {
                           height: isExtraSmall
                             ? "100px"
                             : isMobile
-                            ? "120px"
-                            : "160px",
+                              ? "120px"
+                              : "160px",
                           transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                           "&:hover": {
                             transform: "translateY(-2px)",
@@ -958,8 +1003,8 @@ const Dashboard = () => {
                               padding: isExtraSmall
                                 ? "8px"
                                 : isMobile
-                                ? "12px"
-                                : "16px",
+                                  ? "12px"
+                                  : "16px",
                               boxShadow: `0 4px 20px ${item.bgcolor}20, 0 2px 8px ${item.bgcolor}15`,
                               backdropFilter: "blur(10px)",
                               transition: "all 0.3s ease-in-out",
@@ -978,25 +1023,25 @@ const Dashboard = () => {
                                 width: isExtraSmall
                                   ? "32px"
                                   : isMobile
-                                  ? "40px"
-                                  : isTablet
-                                  ? "48px"
-                                  : "56px",
+                                    ? "40px"
+                                    : isTablet
+                                      ? "48px"
+                                      : "56px",
                                 height: isExtraSmall
                                   ? "32px"
                                   : isMobile
-                                  ? "40px"
-                                  : isTablet
-                                  ? "48px"
-                                  : "56px",
+                                    ? "40px"
+                                    : isTablet
+                                      ? "48px"
+                                      : "56px",
                                 borderRadius: "50%",
                                 background: `linear-gradient(135deg, ${item.bgcolor}20 0%, ${item.bgcolor}10 100%)`,
                                 border: `2px solid ${item.bgcolor}30`,
                                 marginBottom: isExtraSmall
                                   ? "6px"
                                   : isMobile
-                                  ? "8px"
-                                  : "12px",
+                                    ? "8px"
+                                    : "12px",
                                 boxShadow: `0 2px 8px ${item.bgcolor}25`,
                               }}
                             >
@@ -1005,10 +1050,10 @@ const Dashboard = () => {
                                   fontSize: isExtraSmall
                                     ? 20
                                     : isMobile
-                                    ? 24
-                                    : isTablet
-                                    ? 28
-                                    : 32,
+                                      ? 24
+                                      : isTablet
+                                        ? 28
+                                        : 32,
                                   color: item.bgcolor,
                                   filter:
                                     "drop-shadow(0 1px 2px rgba(0,0,0,0.1))",
@@ -1023,10 +1068,10 @@ const Dashboard = () => {
                                 fontSize: isExtraSmall
                                   ? "0.7rem"
                                   : isMobile
-                                  ? "0.8rem"
-                                  : isTablet
-                                  ? "0.9rem"
-                                  : "1rem",
+                                    ? "0.8rem"
+                                    : isTablet
+                                      ? "0.9rem"
+                                      : "1rem",
                                 fontWeight: "700",
                                 color: "#1a1a1a",
                                 textAlign: "center",
@@ -1040,8 +1085,8 @@ const Dashboard = () => {
                                 marginBottom: isExtraSmall
                                   ? "4px"
                                   : isMobile
-                                  ? "6px"
-                                  : "8px",
+                                    ? "6px"
+                                    : "8px",
                                 textShadow: "0 1px 2px rgba(255,255,255,0.8)",
                                 letterSpacing: "0.02em",
                                 // Responsive font sizing for small widgets
@@ -1049,24 +1094,54 @@ const Dashboard = () => {
                                   fontSize: isExtraSmall
                                     ? "0.65rem"
                                     : isMobile
-                                    ? "0.75rem"
-                                    : isTablet
-                                    ? "0.85rem"
-                                    : "0.9rem",
+                                      ? "0.75rem"
+                                      : isTablet
+                                        ? "0.85rem"
+                                        : "0.9rem",
                                 },
                                 "@media (max-width: 900px)": {
                                   fontSize: isExtraSmall
                                     ? "0.6rem"
                                     : isMobile
-                                    ? "0.7rem"
-                                    : isTablet
-                                    ? "0.8rem"
-                                    : "0.85rem",
+                                      ? "0.7rem"
+                                      : isTablet
+                                        ? "0.8rem"
+                                        : "0.85rem",
                                 },
                               }}
                             >
                               {item.title}
                             </Typography>
+
+                            {/* Show project count for project-type widgets (not dailyTimesheet or calibrations) */}
+                            {getWidgetCount(item.id) !== null && (
+                              <Chip
+                                label={`${getWidgetCount(item.id)} ${getWidgetCount(item.id) === 1 ? "project" : "projects"}`}
+                                size="small"
+                                sx={{
+                                  backgroundColor: `${item.bgcolor}25`,
+                                  border: `1px solid ${item.bgcolor}50`,
+                                  color: "black",
+                                  fontWeight: "600",
+                                  fontSize: isExtraSmall
+                                    ? "0.6rem"
+                                    : isMobile
+                                      ? "0.65rem"
+                                      : isTablet
+                                        ? "0.75rem"
+                                        : "0.8rem",
+                                  height: isExtraSmall
+                                    ? "20px"
+                                    : isMobile
+                                      ? "22px"
+                                      : "24px",
+                                  "& .MuiChip-label": {
+                                    px: 1,
+                                    py: 0,
+                                  },
+                                }}
+                              />
+                            )}
 
                             {/* Show subtitle in colored text for timesheet widget */}
                             {item.id === "dailyTimesheet" && item.subtitle && (
@@ -1093,10 +1168,10 @@ const Dashboard = () => {
                                     fontSize: isExtraSmall
                                       ? "0.6rem"
                                       : isMobile
-                                      ? "0.7rem"
-                                      : isTablet
-                                      ? "0.8rem"
-                                      : "0.9rem",
+                                        ? "0.7rem"
+                                        : isTablet
+                                          ? "0.8rem"
+                                          : "0.9rem",
                                     fontWeight: "600",
                                     overflow: "hidden",
                                     textOverflow: "ellipsis",
@@ -1108,19 +1183,19 @@ const Dashboard = () => {
                                       fontSize: isExtraSmall
                                         ? "0.55rem"
                                         : isMobile
-                                        ? "0.65rem"
-                                        : isTablet
-                                        ? "0.75rem"
-                                        : "0.8rem",
+                                          ? "0.65rem"
+                                          : isTablet
+                                            ? "0.75rem"
+                                            : "0.8rem",
                                     },
                                     "@media (max-width: 900px)": {
                                       fontSize: isExtraSmall
                                         ? "0.5rem"
                                         : isMobile
-                                        ? "0.6rem"
-                                        : isTablet
-                                        ? "0.7rem"
-                                        : "0.75rem",
+                                          ? "0.6rem"
+                                          : isTablet
+                                            ? "0.7rem"
+                                            : "0.75rem",
                                     },
                                   }}
                                 >
@@ -1154,8 +1229,8 @@ const Dashboard = () => {
                                   fontSize: isExtraSmall
                                     ? 14
                                     : isMobile
-                                    ? 18
-                                    : 22,
+                                      ? 18
+                                      : 22,
                                   filter:
                                     "drop-shadow(0 1px 2px rgba(0,0,0,0.1))",
                                 }}
@@ -1212,17 +1287,23 @@ const Dashboard = () => {
               .filter((item) => {
                 // Exclude daily timesheet from selection
                 if (item.id === "dailyTimesheet") return false;
-                
+
                 // Filter calibrations widget based on permissions
                 if (item.id === "calibrations") {
                   // Only show for admin level users, or users with calibrations approval, or users with lab signatory approval
                   const isAdmin = currentUser?.role === "admin";
-                  const hasCalibrationsApproval = currentUser?.labApprovals?.calibrations === true;
-                  const hasLabSignatoryApproval = currentUser?.labSignatory === true;
-                  
-                  return isAdmin || hasCalibrationsApproval || hasLabSignatoryApproval;
+                  const hasCalibrationsApproval =
+                    currentUser?.labApprovals?.calibrations === true;
+                  const hasLabSignatoryApproval =
+                    currentUser?.labSignatory === true;
+
+                  return (
+                    isAdmin ||
+                    hasCalibrationsApproval ||
+                    hasLabSignatoryApproval
+                  );
                 }
-                
+
                 // Show all other widgets
                 return true;
               })

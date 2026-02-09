@@ -39,7 +39,7 @@ const SurveysDashboard = () => {
       icon: <ApartmentIcon />,
       color: "#2e7d32",
       onClick: () => navigate("/surveys/residential-asbestos"),
-      underDevelopment: true,
+      underDevelopment: false,
     },
     {
       id: "commercial-asbestos",

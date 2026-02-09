@@ -458,7 +458,7 @@ export const timesheetService = {
 
 // Asbestos Assessment service
 export const asbestosAssessmentService = {
-  getAsbestosAssessments: () => api.get('/assessments'),
+  getAsbestosAssessments: (params = {}) => api.get('/assessments', { params }),
   getAsbestosAssessmentById: (id) => api.get(`/assessments/${id}`),
   createAsbestosAssessment: (data) => api.post('/assessments', data),
   updateAsbestosAssessment: (id, data) => api.put(`/assessments/${id}`, data),
@@ -482,9 +482,13 @@ export const asbestosAssessmentService = {
 
   // Generate asbestos assessment PDF using DocRaptor templates (pdf-docraptor-v2)
   // Ensure _id/id is included so backend can fetch fibreAnalysisReport from DB
-  generateAsbestosAssessmentPdf: (assessmentData) => {
+  // options.isResidential: when true, cover/version/footer use "Residential Asbestos Assessment Report" and filename includes "Residential"
+  generateAsbestosAssessmentPdf: (assessmentData, options = {}) => {
     const id = assessmentData?._id || assessmentData?.id;
-    const payload = { assessmentData: { ...assessmentData, _id: id, id } };
+    const payload = {
+      assessmentData: { ...assessmentData, _id: id, id },
+      ...(options.isResidential === true && { isResidential: true }),
+    };
     return api.post('/pdf-docraptor-v2/generate-asbestos-assessment-v3', payload, { responseType: 'blob' });
   },
 };

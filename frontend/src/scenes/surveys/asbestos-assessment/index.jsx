@@ -50,7 +50,6 @@ import { hasPermission } from "../../../config/permissions";
 import { getTodaySydney } from "../../../utils/dateUtils";
 import { useSnackbar } from "../../../context/SnackbarContext";
 import PDFLoadingOverlay from "../../../components/PDFLoadingOverlay";
-import { generateFibreIDReport } from "../../../utils/generateFibreIDReport";
 
 const CACHE_KEY = "asbestosAssessmentJobsCache";
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -150,10 +149,6 @@ const AsbestosAssessment = () => {
   // View Report state
   const [generatingReportId, setGeneratingReportId] = useState(null);
 
-  // Fibre ID report state (approval happens via L&D Supplied Jobs page)
-  const [generatingFibreIDReportId, setGeneratingFibreIDReportId] =
-    useState(null);
-
   // Delete confirmation state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [jobToDelete, setJobToDelete] = useState(null);
@@ -194,7 +189,7 @@ const AsbestosAssessment = () => {
         }
 
         const jobsResponse =
-          await asbestosAssessmentService.getAsbestosAssessments();
+          await asbestosAssessmentService.getAsbestosAssessments({ jobType: 'asbestos-assessment' });
         const jobs = jobsResponse.data || jobsResponse || [];
 
         if (!Array.isArray(jobs)) {
@@ -437,6 +432,7 @@ const AsbestosAssessment = () => {
         state: selectedState,
         LAA: selectedLAA || null,
         secondaryHeader: secondaryHeader?.trim() || null,
+        jobType: 'asbestos-assessment',
       };
 
       const response =
@@ -564,6 +560,11 @@ const AsbestosAssessment = () => {
   const handleAnalysisClick = (event, job) => {
     event.stopPropagation();
     navigate(`/fibre-id/assessment/${job.id}/item/1/analysis`);
+  };
+
+  const handleGoToLDSuppliedJobs = (event, job) => {
+    event.stopPropagation();
+    navigate("/laboratory-services/ld-supplied");
   };
 
   const handleCompleteClick = async (event, job) => {
@@ -730,97 +731,6 @@ const AsbestosAssessment = () => {
     return sampled.every((item) => item.analysisData?.isAnalysed === true);
   };
 
-  const handleViewFibreIDReport = async (event, job) => {
-    event.stopPropagation();
-    if (generatingFibreIDReportId) return;
-    setGeneratingFibreIDReportId(job.id);
-    try {
-      const response =
-        await asbestosAssessmentService.getAsbestosAssessmentById(job.id);
-      const fullAssessment = response.data;
-      const items = fullAssessment.items || [];
-      const isVA = (i) =>
-        i.asbestosContent === "Visually Assessed as Asbestos" ||
-        i.asbestosContent === "Visually Assessed as Non-Asbestos" ||
-        i.asbestosContent === "Visually Assessed as Non-asbestos";
-      const sampledItems = items.filter((item, index) => {
-        if (!item.sampleReference?.trim()) return false;
-        if (isVA(item)) return false;
-        const ref = item.sampleReference.trim();
-        const firstIndex = items.findIndex(
-          (x) => (x.sampleReference || "").trim() === ref,
-        );
-        return index === firstIndex && item.analysisData?.isAnalysed === true;
-      });
-      const sampleItemsForReport = sampledItems.map((item, index) => ({
-        itemNumber: item.itemNumber || index + 1,
-        sampleReference: item.sampleReference || `Sample ${index + 1}`,
-        labReference: item.sampleReference || `Sample ${index + 1}`,
-        locationDescription: item.locationDescription || "N/A",
-        analysisData: item.analysisData,
-      }));
-      let analyst = "Unknown Analyst";
-      if (fullAssessment.analyst?.firstName) {
-        analyst = `${fullAssessment.analyst.firstName} ${fullAssessment.analyst.lastName}`;
-      } else {
-        const itemWithAnalyst = fullAssessment.items?.find(
-          (i) => i.analysedBy && i.analysisData?.isAnalysed,
-        );
-        if (itemWithAnalyst?.analysedBy?.firstName) {
-          analyst = `${itemWithAnalyst.analysedBy.firstName} ${itemWithAnalyst.analysedBy.lastName}`;
-        }
-      }
-      const assessmentForReport = {
-        _id: fullAssessment._id,
-        projectId: fullAssessment.projectId,
-        status: fullAssessment.status,
-        assessmentDate: fullAssessment.assessmentDate,
-        samplesReceivedDate: fullAssessment.samplesReceivedDate,
-        revision: fullAssessment.revision || 0,
-        LAA: fullAssessment.LAA,
-        assessorId: fullAssessment.assessorId,
-      };
-      const pdfDataUrl = await generateFibreIDReport({
-        assessment: assessmentForReport,
-        sampleItems: sampleItemsForReport,
-        analyst,
-        openInNewTab: false,
-        returnPdfData: true,
-        reportApprovedBy: fullAssessment.reportApprovedBy || null,
-        reportIssueDate: fullAssessment.reportIssueDate || null,
-      });
-      if (pdfDataUrl) {
-        // Use blob URL so the new tab opens reliably (data URLs can be too long or fail in window.open)
-        const base64 = pdfDataUrl.includes(",")
-          ? pdfDataUrl.split(",")[1]
-          : pdfDataUrl;
-        if (base64) {
-          const binary = atob(base64);
-          const bytes = new Uint8Array(binary.length);
-          for (let i = 0; i < binary.length; i++)
-            bytes[i] = binary.charCodeAt(i);
-          const blob = new Blob([bytes], { type: "application/pdf" });
-          const blobUrl = URL.createObjectURL(blob);
-          window.open(blobUrl, "_blank");
-          setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-        } else {
-          window.open(pdfDataUrl, "_blank");
-        }
-      }
-      showSnackbar("Fibre ID report generated successfully.", "success");
-    } catch (err) {
-      console.error("Error generating Fibre ID report:", err);
-      showSnackbar(
-        err.response?.data?.message ||
-          err.message ||
-          "Failed to generate Fibre ID report",
-        "error",
-      );
-    } finally {
-      setGeneratingFibreIDReportId(null);
-    }
-  };
-
   const handleBackToSurveys = () => {
     navigate("/surveys");
   };
@@ -904,12 +814,8 @@ const AsbestosAssessment = () => {
   return (
     <Container maxWidth="xl">
       <PDFLoadingOverlay
-        open={!!generatingReportId || !!generatingFibreIDReportId}
-        message={
-          generatingFibreIDReportId
-            ? "Generating Fibre ID PDF..."
-            : "Generating Asbestos Assessment PDF..."
-        }
+        open={!!generatingReportId}
+        message="Generating Asbestos Assessment PDF..."
       />
       <Box sx={{ mt: 4, mb: 4 }}>
         <Breadcrumbs sx={{ mb: 3 }}>
@@ -922,7 +828,6 @@ const AsbestosAssessment = () => {
             <ArrowBackIcon sx={{ mr: 1 }} />
             Surveys Home
           </Link>
-          <Typography color="text.primary">Asbestos Assessment</Typography>
         </Breadcrumbs>
 
         <Box
@@ -1105,7 +1010,11 @@ const AsbestosAssessment = () => {
                                 <Button
                                   variant="outlined"
                                   size="small"
-                                  onClick={(e) => handleAnalysisClick(e, job)}
+                                  onClick={(e) =>
+                                    areAllSampledItemsAnalysed(job)
+                                      ? handleGoToLDSuppliedJobs(e, job)
+                                      : handleAnalysisClick(e, job)
+                                  }
                                   sx={
                                     job.originalData?.reportApprovedBy ||
                                     job.reportApprovedBy
@@ -1145,7 +1054,7 @@ const AsbestosAssessment = () => {
                                   job.reportApprovedBy
                                     ? "Approved"
                                     : areAllSampledItemsAnalysed(job)
-                                      ? "Analysed"
+                                      ? "Analysed (not approved)"
                                       : "Analyse"}
                                 </Button>
                                 {job.status === "samples-with-lab" &&
@@ -1175,25 +1084,6 @@ const AsbestosAssessment = () => {
                                 color={getLabStatusColor(job)}
                                 sx={{ color: "white" }}
                               />
-                            )}
-                          {currentUser?.labApprovals?.fibreCounting === true &&
-                            areAllSampledItemsAnalysed(job) && (
-                              <>
-                                <Tooltip title="View Fibre ID Report">
-                                  <IconButton
-                                    onClick={(e) =>
-                                      handleViewFibreIDReport(e, job)
-                                    }
-                                    color="primary"
-                                    size="small"
-                                    disabled={
-                                      generatingFibreIDReportId === job.id
-                                    }
-                                  >
-                                    <PictureAsPdfIcon />
-                                  </IconButton>
-                                </Tooltip>
-                              </>
                             )}
                         </Box>
                       </TableCell>

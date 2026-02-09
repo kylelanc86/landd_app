@@ -1,3 +1,18 @@
+// Format date with full month name (e.g. 01 January 2026)
+export const formatDateFull = (date) => {
+  if (!date) return "N/A";
+  try {
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return "Invalid Date";
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = d.toLocaleString("default", { month: "long" });
+    const year = d.getFullYear();
+    return `${day} ${month} ${year}`;
+  } catch (error) {
+    return "Invalid Date";
+  }
+};
+
 // Format date to Australian format (dd/mm/yyyy)
 export const formatDate = (date) => {
   if (!date) return "N/A";
