@@ -11,6 +11,7 @@ const reportTemplateSchema = new mongoose.Schema(
         "asbestosClearanceVehicle",
         "leadAssessment",
         "asbestosAssessment",
+        "residentialAsbestosAssessment",
       ],
       required: true,
     },
@@ -77,6 +78,8 @@ const reportTemplateSchema = new mongoose.Schema(
       vehicleCertificateLimitationsContent: String,
       
       // Asbestos Assessment specific
+      backgroundTitle: String,
+      backgroundContent: String,
       introductionTitle: String,
       introductionContent: String,
       surveyFindingsTitle: String,
@@ -84,6 +87,8 @@ const reportTemplateSchema = new mongoose.Schema(
       surveyFindingsContentNoSamples: String,
       discussionTitle: String,
       discussionContent: String,
+      recommendedControlMeasuresTitle: String,
+      recommendedControlMeasuresContent: String,
       riskAssessmentTitle: String,
       riskAssessmentContent: String,
       controlMeasuresTitle: String,

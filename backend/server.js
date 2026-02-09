@@ -43,6 +43,13 @@ const invoiceItemsRoutes = require('./routes/invoiceItems');
 const iaqRecordsRoutes = require('./routes/iaqRecords');
 const blanksRoutes = require('./routes/blanks');
 const iaqSamplesRoutes = require('./routes/iaqSamples');
+const staffMeetingsRoutes = require('./routes/staffMeetings');
+const approvedSuppliersRoutes = require('./routes/approvedSuppliers');
+const assetsRoutes = require('./routes/assets');
+const controlledDocumentsRoutes = require('./routes/controlledDocuments');
+const impartialityRisksRoutes = require('./routes/impartialityRisks');
+const feedbackRoutes = require('./routes/feedback');
+const incidentsRoutes = require('./routes/incidents');
 
 // Load environment variables
 dotenv.config();
@@ -302,6 +309,26 @@ connectDB()
 
     app.use('/api/blanks', requireAuth, checkTokenBlacklist, blanksRoutes);
     app.use('/blanks', requireAuth, checkTokenBlacklist, blanksRoutes);
+
+    app.use('/api/staff-meetings', requireAuth, checkTokenBlacklist, staffMeetingsRoutes);
+    app.use('/staff-meetings', requireAuth, checkTokenBlacklist, staffMeetingsRoutes);
+
+    app.use('/api/approved-suppliers', requireAuth, checkTokenBlacklist, approvedSuppliersRoutes);
+    app.use('/approved-suppliers', requireAuth, checkTokenBlacklist, approvedSuppliersRoutes);
+
+    app.use('/api/asset-register', requireAuth, checkTokenBlacklist, assetsRoutes);
+    app.use('/asset-register', requireAuth, checkTokenBlacklist, assetsRoutes);
+
+    app.use('/api/controlled-documents', requireAuth, checkTokenBlacklist, controlledDocumentsRoutes);
+    app.use('/controlled-documents', requireAuth, checkTokenBlacklist, controlledDocumentsRoutes);
+
+    app.use('/api/impartiality-risks', requireAuth, checkTokenBlacklist, impartialityRisksRoutes);
+    app.use('/impartiality-risks', requireAuth, checkTokenBlacklist, impartialityRisksRoutes);
+
+    app.use('/api/feedback', requireAuth, checkTokenBlacklist, feedbackRoutes);
+    app.use('/feedback', requireAuth, checkTokenBlacklist, feedbackRoutes);
+    app.use('/api/incidents', requireAuth, checkTokenBlacklist, incidentsRoutes);
+    app.use('/incidents', requireAuth, checkTokenBlacklist, incidentsRoutes);
 
     
     // Error handling middleware

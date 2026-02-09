@@ -2188,7 +2188,7 @@ router.post('/generate-asbestos-assessment-v3', auth, async (req, res) => {
   const pdfId = `assessment-v3-${Date.now()}`;
 
   try {
-    const { assessmentData } = req.body;
+    const { assessmentData, isResidential } = req.body;
     if (!assessmentData) {
       throw new Error('Assessment data is required');
     }
@@ -2227,11 +2227,11 @@ router.post('/generate-asbestos-assessment-v3', auth, async (req, res) => {
     const logoBase64 = fs.existsSync(logoPath) ? fs.readFileSync(logoPath).toString('base64') : '';
 
     // Generate cover + version control PDF (existing templates)
-    const coverVersionHtml = await generateAssessmentCoverVersionHTMLV3(assessmentData);
+    const coverVersionHtml = await generateAssessmentCoverVersionHTMLV3(assessmentData, isResidential === true);
     const coverVersionPdf = await docRaptorService.generatePDF(coverVersionHtml);
 
     // Generate flow-based body PDF (automatic pagination; page numbers only on these pages)
-    const flowHtml = await generateAssessmentFlowHTMLV3(assessmentData);
+    const flowHtml = await generateAssessmentFlowHTMLV3(assessmentData, isResidential === true);
     const flowPdf = await docRaptorService.generatePDF(flowHtml);
 
     const hasFibreIdReport = !!assessmentData.fibreAnalysisReport;
@@ -2276,7 +2276,9 @@ router.post('/generate-asbestos-assessment-v3', auth, async (req, res) => {
           const trimmedSitePlan = await trimSitePlanImage(assessmentData.sitePlanFile);
           const assessmentDataTrimmed = { ...assessmentData, sitePlanFile: trimmedSitePlan };
           const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-          const assessmentFooterText = `Asbestos Assessment Report: ${assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site'}`;
+          const assessmentFooterText = isResidential
+            ? `Residential Asbestos Assessment Report: ${assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site'}`
+            : `Asbestos Assessment Report: ${assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site'}`;
           const sitePlanFigureTitle = assessmentData.sitePlanFigureTitle || 'Asbestos Assessment Site Plan';
           const sitePlanLetter = hasFibreIdReport ? 'B' : 'A';
           const sitePlanFragment = generateSitePlanContentPage(assessmentDataTrimmed, sitePlanLetter, logoBase64, assessmentFooterText, 'sitePlanFile', 'SITE PLAN', sitePlanFigureTitle, 'sitePlanLegend', 'sitePlanLegendTitle');
@@ -2370,16 +2372,16 @@ const generateAssessmentHTML = async (assessmentData) => {
     const backgroundPath = path.join(__dirname, '../assets/clearance_front - Copy.jpg');
     const backgroundBase64 = fs.existsSync(backgroundPath) ? fs.readFileSync(backgroundPath).toString('base64') : '';
 
-    // Use asbestos assessment template type (not clearance)
-    const templateType = 'asbestosAssessment';
+    // Use residential template when isResidential (has Background section and "Summary of Identified ACM")
+    const templateType = isResidential ? 'residentialAsbestosAssessment' : 'asbestosAssessment';
     const templateContent = await getTemplateByType(templateType);
     
 
     // Assessment cover/version control: match clearance structure (REPORT_TITLE, FOOTER_TEXT, etc.)
     const assessmentSiteAddress = assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site';
-    const assessmentReportTitle = 'ASBESTOS ASSESSMENT<br />REPORT';
+    const assessmentReportTitle = isResidential ? 'RESIDENTIAL ASBESTOS ASSESSMENT REPORT' : 'ASBESTOS ASSESSMENT<br />REPORT';
     const assessmentClientName = assessmentData.projectId?.client?.name || assessmentData.clientName || 'Unknown Client';
-    const assessmentFooterText = `Asbestos Assessment Report: ${assessmentSiteAddress}`;
+    const assessmentFooterText = isResidential ? `Residential Asbestos Assessment Report: ${assessmentSiteAddress}` : `Asbestos Assessment Report: ${assessmentSiteAddress}`;
     const reportAuthorName = assessmentData.LAA || (assessmentData.assessorId?.firstName && assessmentData.assessorId?.lastName
       ? `${assessmentData.assessorId.firstName} ${assessmentData.assessorId.lastName}` : null) || 'Unknown Assessor';
     const reportApprovedBy = assessmentData.reportApprovedBy || assessmentData.reportAuthorisedBy || 'Awaiting authorisation';
@@ -2399,13 +2401,17 @@ const generateAssessmentHTML = async (assessmentData) => {
       .replace(/\[BACKGROUND_IMAGE\]/g, `data:image/jpeg;base64,${backgroundBase64}`);
 
     // Populate version control template with data (like clearance: REPORT_TITLE, FOOTER_TEXT, document-details-table, WATERMARK_PATH)
+    const versionControlReportTitle = isResidential ? 'RESIDENTIAL ASBESTOS ASSESSMENT REPORT' : 'ASBESTOS ASSESSMENT REPORT';
+    const versionControlFilename = isResidential
+      ? `${assessmentData.projectId?.projectID || 'Unknown'}_Residential_Asbestos_Assessment_Report - ${assessmentData.projectId?.name || 'Unknown'} (${assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown'}).pdf`
+      : `${assessmentData.projectId?.projectID || 'Unknown'}_Asbestos_Assessment_Report - ${assessmentData.projectId?.name || 'Unknown'} (${assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown'}).pdf`;
     const populatedVersionControl = versionControlTemplateWithUrl
-      .replace(/\[REPORT_TITLE\]/g, 'ASBESTOS ASSESSMENT REPORT')
+      .replace(/\[REPORT_TITLE\]/g, versionControlReportTitle)
       .replace(/\[SITE_ADDRESS\]/g, assessmentSiteAddress)
       .replace(/\[CLIENT_NAME\]/g, assessmentData.projectId?.client?.name || assessmentData.clientName || 'Unknown Client')
       .replace(/\[ASSESSMENT_DATE\]/g, assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown')
       .replace(/\[ASSESSOR_NAME\]/g, reportAuthorName)
-      .replace(/\[FILENAME\]/g, `${assessmentData.projectId?.projectID || 'Unknown'}_Asbestos_Assessment_Report - ${assessmentData.projectId?.name || 'Unknown'} (${assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown'}).pdf`)
+      .replace(/\[FILENAME\]/g, versionControlFilename)
       .replace(/\[REPORT_APPROVED_BY\]/g, reportApprovedBy)
       .replace(/\[REPORT_ISSUE_DATE\]/g, reportIssueDate)
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
@@ -2687,11 +2693,11 @@ const generateAssessmentHTML = async (assessmentData) => {
 
 
     
-    // Survey findings: use no-samples content when no items have sampleReference (no physical samples collected)
-    const hasSampledItems = assessmentItems.some((item) => (item.sampleReference || '').trim() !== '');
-    const surveyFindingsSource = hasSampledItems
+    // Survey findings: use No Asbestos content when no asbestos items; otherwise use main survey findings content
+    const hasAsbestosItems = assessmentItems.some((item) => !hasNoAsbestosContent(item));
+    const surveyFindingsSource = hasAsbestosItems
       ? (templateContent?.standardSections?.surveyFindingsContent || 'Survey findings content not found')
-      : (templateContent?.standardSections?.surveyFindingsContentNoSamples || "No physical samples were collected during this assessment. The assessment was conducted as a visual inspection only, with no materials sent for laboratory analysis.");
+      : (templateContent?.standardSections?.surveyFindingsContentNoSamples || "No asbestos-containing materials were identified during this assessment.");
     let surveyFindingsContentPopulated = surveyFindingsSource !== 'Survey findings content not found'
       ? await replacePlaceholders(surveyFindingsSource, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] })
       : surveyFindingsSource;
@@ -2704,15 +2710,26 @@ const generateAssessmentHTML = async (assessmentData) => {
     // Ensure newlines render in HTML (replacePlaceholders may not convert \n)
     surveyFindingsContentPopulated = surveyFindingsContentPopulated.replace(/\n/g, '<br />');
 
+    // Background section (residential template only): before Introduction
+    let backgroundSectionHtmlResolved = '';
+    const backgroundContentRaw = templateContent?.standardSections?.backgroundContent;
+    if (isResidential && backgroundContentRaw) {
+      const bgTitle = templateContent?.standardSections?.backgroundTitle || 'BACKGROUND';
+      const bgContent = await replacePlaceholders(backgroundContentRaw, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] });
+      const bgContentHtml = String(bgContent || '').replace(/\n/g, '<br />');
+      backgroundSectionHtmlResolved = `<div class="section-header first-section">${bgTitle}</div><div class="paragraph">${bgContentHtml}</div>`;
+    }
+
     // Populate AsbestosItem1 template with dynamic content (footer matches VersionControl; page number 1)
     const populatedAsbestosItem1 = asbestosItem1TemplateWithUrl
       .replace(/\[SITE_ADDRESS\]/g, assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site')
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
       .replace(/\[FOOTER_TEXT\]/g, assessmentFooterText)
       .replace(/\[PAGE_NUMBER\]/g, '1')
+      .replace(/\[BACKGROUND_SECTION\]/g, backgroundSectionHtmlResolved)
       .replace(/\[INTRODUCTION_TITLE\]/g, templateContent?.standardSections?.introductionTitle || 'INTRODUCTION')
       .replace(/\[INTRODUCTION_CONTENT\]/g, templateContent?.standardSections?.introductionContent ? await replacePlaceholders(templateContent.standardSections.introductionContent, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] }) : 'Introduction content not found')
-      .replace(/\[SURVEY_FINDINGS_TITLE\]/g, templateContent?.standardSections?.surveyFindingsTitle || 'SURVEY FINDINGS')
+      .replace(/\[SURVEY_FINDINGS_TITLE\]/g, templateContent?.standardSections?.surveyFindingsTitle || 'SUMMARY OF IDENTIFIED ACM')
       .replace(/\[SURVEY_FINDINGS_CONTENT\]/g, surveyFindingsContentPopulated)
       .replace(/\[SAMPLE_REGISTER_ITEMS\]/g, shouldMoveFirstItemToNewPage ? '' : firstSampleTable); // Conditionally include the first sample table
 
@@ -2770,13 +2787,11 @@ const generateAssessmentHTML = async (assessmentData) => {
       ? discussionConclusionsRaw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br />')
       : '';
 
-    // Page numbers: cover=1, version=2, item1=3, then assessment register pages, then discussion, then additional 1 & 2
+    // Page numbers: cover=1, version=2, item1=3, then assessment register pages, then discussion, then optional RCM page, then additional 1 & 2
     const sampleRegisterPageCount = shouldMoveFirstItemToNewPage
       ? Math.ceil((assessmentItems.length || 0) / 2)
       : Math.ceil(Math.max(0, (assessmentItems.length || 1) - 1) / 2);
     const discussionPageNum = 4 + sampleRegisterPageCount;
-    const additionalSection1PageNum = discussionPageNum + 1;
-    const additionalSection2PageNum = additionalSection1PageNum + 1;
 
     const discussionSignOffContent = templateContent?.standardSections?.signOffContent
       ? await replacePlaceholders(templateContent.standardSections.signOffContent, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] })
@@ -2809,7 +2824,16 @@ const generateAssessmentHTML = async (assessmentData) => {
 
 
     // Generate two pages of additional sections with proper content distribution
+    // Order: Assessment Methodology, Recommended Control Measures (own page), Risk, Control Measures, Remediation, Legislation, Limitations
     const sections = [
+      {
+        title: templateContent?.standardSections?.assessmentMethodologyTitle || 'ASSESSMENT METHODOLOGY',
+        content: templateContent?.standardSections?.assessmentMethodologyContent ? await replacePlaceholders(templateContent.standardSections.assessmentMethodologyContent, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] }) : ''
+      },
+      {
+        title: templateContent?.standardSections?.recommendedControlMeasuresTitle || 'RECOMMENDED CONTROL MEASURES',
+        content: templateContent?.standardSections?.recommendedControlMeasuresContent ? await replacePlaceholders(templateContent.standardSections.recommendedControlMeasuresContent, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] }) : ''
+      },
       {
         title: templateContent?.standardSections?.riskAssessmentTitle || 'RISK ASSESSMENT',
         content: templateContent?.standardSections?.riskAssessmentContent ? await replacePlaceholders(templateContent.standardSections.riskAssessmentContent, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] }) : 'Risk assessment content not found'
@@ -2873,7 +2897,8 @@ const generateAssessmentHTML = async (assessmentData) => {
 
     // Split remediation requirements content so the last paragraph is on page 2 with Legislation
     // Content may use <br> (from replacePlaceholders) or \n
-    const remediationSection = sections[2]; // Requirements for Remediation/Removal Works
+    // sections[4] = Remediation (Assessment Methodology=0, Recommended Control Measures=1, Risk=2, Control Measures=3, Remediation=4, Legislation=5, Limitations=6)
+    const remediationSection = sections[4];
     let remediationContentPage1 = remediationSection.content;
     let remediationContentPage2 = '';
     const followingCompletionText = 'Following Completion of Asbestos Removal Works';
@@ -2883,21 +2908,35 @@ const generateAssessmentHTML = async (assessmentData) => {
       remediationContentPage2 = remediationSection.content.substring(splitIndex);
     }
 
-    // Generate first page content (first 2 sections + first part of remediation)
+    // First additional page: Assessment Methodology, Risk Assessment, first part of Remediation
     const firstPageContent = [
-      ...sections.slice(0, 2).map(section => 
-        `<div class="section-header">${section.title}</div>${convertContentToHtml(section.content)}`
-      ),
+      `<div class="section-header">${sections[0].title}</div>${convertContentToHtml(sections[0].content)}`,
+      `<div class="section-header">${sections[2].title}</div>${convertContentToHtml(sections[2].content)}`,
       `<div class="section-header">${remediationSection.title}</div>${convertContentToHtml(remediationContentPage1)}`
     ].join('');
 
-    // Generate second page content (remaining remediation content + remaining sections)
+    // Second additional page: remaining remediation content + Legislation + Limitations
     const secondPageContent = [
       ...(remediationContentPage2 ? [`<div class="section-header">${remediationSection.title}</div>${convertContentToHtml(remediationContentPage2)}`] : []),
-      ...sections.slice(3).map(section => 
+      ...sections.slice(5).map(section =>
         `<div class="section-header">${section.title}</div>${convertContentToHtml(section.content)}`
       )
     ].join('');
+
+    // Recommended Control Measures gets its own page after Discussion when it has content
+    const hasRcmPage = !!(sections[1].content && String(sections[1].content).trim());
+    const recommendedControlMeasuresPageNum = discussionPageNum + 1;
+    const additionalSection1PageNum = discussionPageNum + (hasRcmPage ? 2 : 1);
+    const additionalSection2PageNum = additionalSection1PageNum + 1;
+
+    const rcmPageContent = `<div class="section-header">${sections[1].title}</div>${convertContentToHtml(sections[1].content)}`;
+    const populatedRecommendedControlMeasures = hasRcmPage
+      ? asbestosAdditionalSectionsTemplateWithUrl
+          .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
+          .replace(/\[ADDITIONAL_SECTIONS_CONTENT\]/g, rcmPageContent)
+          .replace(/\[FOOTER_TEXT\]/g, assessmentFooterText)
+          .replace(/\[PAGE_NUMBER\]/g, String(recommendedControlMeasuresPageNum))
+      : '';
 
     const populatedAdditionalSectionsPage1 = asbestosAdditionalSectionsTemplateWithUrl
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
@@ -3062,7 +3101,7 @@ const generateAssessmentHTML = async (assessmentData) => {
         <!-- Discussion and Conclusions Page -->
         ${populatedDiscussionConclusions}
         <div class="page-break"></div>
-        
+        ${hasRcmPage ? `<!-- Recommended Control Measures Page -->\n        ${populatedRecommendedControlMeasures}\n        <div class="page-break"></div>\n        ` : ''}
         <!-- Additional Sections Page 1 -->
         ${populatedAdditionalSectionsPage1}
         <div class="page-break"></div>
@@ -3092,7 +3131,7 @@ const generateAssessmentHTML = async (assessmentData) => {
  * V3 (experimental): Cover + Version Control only, using existing templates unchanged.
  * This keeps the legacy layout for the opening pages while we test flow pagination for the rest.
  */
-const generateAssessmentCoverVersionHTMLV3 = async (assessmentData) => {
+const generateAssessmentCoverVersionHTMLV3 = async (assessmentData, isResidential = false) => {
   // Load DocRaptor-optimized templates (existing)
   const templateDir = path.join(__dirname, '../templates/DocRaptor/AsbestosAssessment');
   const coverTemplate = fs.readFileSync(path.join(templateDir, 'CoverPage.html'), 'utf8');
@@ -3112,19 +3151,24 @@ const generateAssessmentCoverVersionHTMLV3 = async (assessmentData) => {
   const backgroundPath = path.join(__dirname, '../assets/clearance_front - Copy.jpg');
   const backgroundBase64 = fs.existsSync(backgroundPath) ? fs.readFileSync(backgroundPath).toString('base64') : '';
 
-  const templateType = 'asbestosAssessment';
+  const templateType = isResidential ? 'residentialAsbestosAssessment' : 'asbestosAssessment';
   const templateContent = await getTemplateByType(templateType);
 
   const assessmentSiteAddress = assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site';
-  const assessmentReportTitle = 'ASBESTOS ASSESSMENT<br />REPORT';
+  const assessmentReportTitle = isResidential ? 'RESIDENTIAL ASBESTOS ASSESSMENT REPORT' : 'ASBESTOS ASSESSMENT<br />REPORT';
   const assessmentClientName = assessmentData.projectId?.client?.name || assessmentData.clientName || 'Unknown Client';
-  const assessmentFooterText = `Asbestos Assessment Report: ${assessmentSiteAddress}`;
+  const assessmentFooterText = isResidential ? `Residential Asbestos Assessment Report: ${assessmentSiteAddress}` : `Asbestos Assessment Report: ${assessmentSiteAddress}`;
   const reportAuthorName = assessmentData.LAA || (assessmentData.assessorId?.firstName && assessmentData.assessorId?.lastName
     ? `${assessmentData.assessorId.firstName} ${assessmentData.assessorId.lastName}` : null) || 'Unknown Assessor';
   const reportApprovedBy = assessmentData.reportApprovedBy || assessmentData.reportAuthorisedBy || 'Awaiting authorisation';
   const reportIssueDate = assessmentData.reportAuthorisedAt
     ? new Date(assessmentData.reportAuthorisedAt).toLocaleDateString('en-GB')
     : (assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown');
+
+  const versionControlReportTitle = isResidential ? 'RESIDENTIAL ASBESTOS ASSESSMENT REPORT' : (templateContent?.reportTitle || 'ASBESTOS ASSESSMENT REPORT');
+  const versionControlFilename = isResidential
+    ? `${assessmentData.projectId?.projectID || 'Unknown'}_Residential_Asbestos_Assessment_Report - ${assessmentSiteAddress} (${assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown'}).pdf`
+    : `${assessmentData.projectId?.projectID || 'Unknown'}_Asbestos_Assessment_Report - ${assessmentSiteAddress} (${assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown'}).pdf`;
 
   const populatedCover = coverTemplateWithUrl
     .replace(/\[REPORT_TITLE\]/g, assessmentReportTitle)
@@ -3137,12 +3181,12 @@ const generateAssessmentCoverVersionHTMLV3 = async (assessmentData) => {
     .replace(/\[BACKGROUND_IMAGE\]/g, `data:image/jpeg;base64,${backgroundBase64}`);
 
   const populatedVersionControl = versionControlTemplateWithUrl
-    .replace(/\[REPORT_TITLE\]/g, templateContent?.reportTitle || 'ASBESTOS ASSESSMENT REPORT')
+    .replace(/\[REPORT_TITLE\]/g, versionControlReportTitle)
     .replace(/\[SITE_ADDRESS\]/g, assessmentSiteAddress)
-    .replace(/\[CLIENT_NAME\]/g, assessmentClientName)
+    .replace(/\[CLIENT_NAME\]/g, assessmentData.projectId?.client?.name || assessmentClientName)
     .replace(/\[ASSESSMENT_DATE\]/g, assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown')
     .replace(/\[ASSESSOR_NAME\]/g, reportAuthorName)
-    .replace(/\[FILENAME\]/g, `${assessmentData.projectId?.projectID || 'Unknown'}_Asbestos_Assessment_Report - ${assessmentSiteAddress} (${assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown'}).pdf`)
+    .replace(/\[FILENAME\]/g, versionControlFilename)
     .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
     .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`)
     .replace(/\[FOOTER_TEXT\]/g, assessmentFooterText)
@@ -3156,16 +3200,16 @@ const generateAssessmentCoverVersionHTMLV3 = async (assessmentData) => {
  * V3 (experimental): Flow-based asbestos assessment body with running header/footer and auto pagination.
  * Keeps existing templates intact by not reusing the fixed-height "page" wrappers.
  */
-const generateAssessmentFlowHTMLV3 = async (assessmentData) => {
+const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = false) => {
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-  const templateType = 'asbestosAssessment';
+  const templateType = isResidential ? 'residentialAsbestosAssessment' : 'asbestosAssessment';
   const templateContent = await getTemplateByType(templateType);
 
   const logoPath = path.join(__dirname, '../assets/logo.png');
   const logoBase64 = fs.existsSync(logoPath) ? fs.readFileSync(logoPath).toString('base64') : '';
 
   const assessmentSiteAddress = assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site';
-  const assessmentFooterText = `Asbestos Assessment Report: ${assessmentSiteAddress}`;
+  const assessmentFooterText = isResidential ? `Residential Asbestos Assessment Report: ${assessmentSiteAddress}` : `Asbestos Assessment Report: ${assessmentSiteAddress}`;
   const assessmentJurisdiction = assessmentData.state === 'Commonwealth' ? 'ACT' : assessmentData.state;
 
   // Helpers (reuse existing behavior)
@@ -3335,11 +3379,17 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData) => {
     ? await replacePlaceholders(templateContent.standardSections.introductionContent, { ...assessmentData, jurisdiction: assessmentJurisdiction, selectedLegislation: templateContent?.selectedLegislation || [] })
     : 'Introduction content not found';
 
-  // Survey findings: use no-samples content when no items have sampleReference (no physical samples collected)
-  const hasSampledItemsFlow = assessmentItems.some((item) => (item.sampleReference || '').trim() !== '');
-  const surveyFindingsSourceFlow = hasSampledItemsFlow
+  // Background section (residential only): before Introduction
+  const backgroundContentRawFlow = templateContent?.standardSections?.backgroundContent;
+  const backgroundHtml = (isResidential && backgroundContentRawFlow)
+    ? String(await replacePlaceholders(backgroundContentRawFlow, { ...assessmentData, jurisdiction: assessmentJurisdiction, selectedLegislation: templateContent?.selectedLegislation || [] }) || '').replace(/\n/g, '<br />')
+    : '';
+
+  // Survey findings: use No Asbestos content when no asbestos items; otherwise use main survey findings content
+  const hasAsbestosItemsFlow = assessmentItems.some((item) => !hasNoAsbestosContentFlow(item));
+  const surveyFindingsSourceFlow = hasAsbestosItemsFlow
     ? (templateContent?.standardSections?.surveyFindingsContent || 'Survey findings content not found')
-    : (templateContent?.standardSections?.surveyFindingsContentNoSamples || "No physical samples were collected during this assessment. The assessment was conducted as a visual inspection only, with no materials sent for laboratory analysis.");
+    : (templateContent?.standardSections?.surveyFindingsContentNoSamples || "No asbestos-containing materials were identified during this assessment.");
   let surveyFindingsHtml = surveyFindingsSourceFlow !== 'Survey findings content not found'
     ? await replacePlaceholders(surveyFindingsSourceFlow, { ...assessmentData, jurisdiction: assessmentJurisdiction, selectedLegislation: templateContent?.selectedLegislation || [] })
     : surveyFindingsSourceFlow;
@@ -3408,7 +3458,14 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData) => {
     ? escapeHtml(jobSpecificExclusionsRaw).replace(/\n/g, '<br />')
     : '';
 
+  // Recommended Control Measures is rendered between Discussion and Conclusions and sign-off (see flow HTML)
+  const recommendedControlMeasuresContentFlow = templateContent?.standardSections?.recommendedControlMeasuresContent
+    ? await replacePlaceholders(templateContent.standardSections.recommendedControlMeasuresContent, { ...assessmentData, jurisdiction: assessmentJurisdiction, selectedLegislation: templateContent?.selectedLegislation || [] })
+    : '';
+  const recommendedControlMeasuresHtml = `<div class="section-header">${escapeHtml(templateContent?.standardSections?.recommendedControlMeasuresTitle || 'RECOMMENDED CONTROL MEASURES')}</div><div class="section-body">${recommendedControlMeasuresContentFlow || ''}</div>`;
+
   const additionalSections = [
+    { title: templateContent?.standardSections?.assessmentMethodologyTitle || 'ASSESSMENT METHODOLOGY', content: templateContent?.standardSections?.assessmentMethodologyContent ? await replacePlaceholders(templateContent.standardSections.assessmentMethodologyContent, { ...assessmentData, jurisdiction: assessmentJurisdiction, selectedLegislation: templateContent?.selectedLegislation || [] }) : '' },
     { title: templateContent?.standardSections?.riskAssessmentTitle || 'RISK ASSESSMENT', content: templateContent?.standardSections?.riskAssessmentContent ? await replacePlaceholders(templateContent.standardSections.riskAssessmentContent, { ...assessmentData, jurisdiction: assessmentJurisdiction, selectedLegislation: templateContent?.selectedLegislation || [] }) : '' },
     { title: templateContent?.standardSections?.controlMeasuresTitle || 'DETERMINING SUITABLE CONTROL MEASURES', content: templateContent?.standardSections?.controlMeasuresContent ? await replacePlaceholders(templateContent.standardSections.controlMeasuresContent, { ...assessmentData, jurisdiction: assessmentJurisdiction, selectedLegislation: templateContent?.selectedLegislation || [] }) : '' },
     { title: templateContent?.standardSections?.remediationRequirementsTitle || 'REQUIREMENTS FOR REMEDIATION/REMOVAL WORKS INVOLVING ACM', content: templateContent?.standardSections?.remediationRequirementsContent ? await replacePlaceholders(templateContent.standardSections.remediationRequirementsContent, { ...assessmentData, jurisdiction: assessmentJurisdiction, selectedLegislation: templateContent?.selectedLegislation || [] }) : '' },
@@ -3416,7 +3473,11 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData) => {
     { title: templateContent?.standardSections?.assessmentLimitationsTitle || 'ASSESSMENT LIMITATIONS/CAVEATS', content: templateContent?.standardSections?.assessmentLimitationsContent ? await replacePlaceholders(templateContent.standardSections.assessmentLimitationsContent, { ...assessmentData, jurisdiction: assessmentJurisdiction, selectedLegislation: templateContent?.selectedLegislation || [] }) : '' }
   ];
 
-  const bodySectionsHtml = additionalSections.map(s => `<div class="section-header">${escapeHtml(s.title)}</div><div class="section-body">${s.content || ''}</div>`).join('');
+  const bodySectionsHtml = additionalSections.map((s, i) => {
+    const sectionHtml = `<div class="section-header">${escapeHtml(s.title)}</div><div class="section-body">${s.content || ''}</div>`;
+    // Page break after DETERMINING SUITABLE CONTROL MEASURES (3rd section, index 2)
+    return i === 2 ? `${sectionHtml}<div class="page-break"></div>` : sectionHtml;
+  }).join('');
 
   const discussionSignOffContent = templateContent?.standardSections?.signOffContent
     ? await replacePlaceholders(templateContent.standardSections.signOffContent, { ...assessmentData, jurisdiction: assessmentJurisdiction, selectedLegislation: templateContent?.selectedLegislation || [] })
@@ -3426,6 +3487,39 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData) => {
     : '';
 
   // Appendix cover pages are generated as separate PDFs (no page number in footer) and merged after flow + fibre analysis
+
+  // Glossary: last page of flow (before first attachment cover), same header/footer and page number
+  let glossaryTableRows = '';
+  try {
+    const glossaryItems = await CustomDataFieldGroup.getFieldsByType('glossary');
+    const sorted = (glossaryItems || []).slice().sort((a, b) => {
+      const nameA = (a.name || a.text || '').trim().toLowerCase();
+      const nameB = (b.name || b.text || '').trim().toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+    glossaryTableRows = sorted.map((item) => {
+      const term = (item.name || item.text || '').trim();
+      const definition = (item.text || '').trim();
+      const termEscaped = escapeHtml(term);
+      const definitionEscaped = (definition || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br />');
+      return `<tr><td class="glossary-term">${termEscaped}</td><td class="glossary-definition">${definitionEscaped}</td></tr>`;
+    }).join('');
+  } catch (err) {
+    console.warn('[generateAssessmentFlowHTMLV3] Could not load glossary:', err.message);
+  }
+  const glossarySectionHtml = `
+        <div class="section-header">Glossary Of Terms Associated with Asbestos</div>
+        <table class="glossary-table">
+          <thead>
+            <tr>
+              <th class="glossary-term">Term</th>
+              <th class="glossary-definition">Definition</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${glossaryTableRows || '<tr><td colspan="2" class="glossary-definition">No glossary terms have been defined.</td></tr>'}
+          </tbody>
+        </table>`;
 
   // Flow HTML with running header/footer
   const html = `
@@ -3503,6 +3597,13 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData) => {
           .asbestos-content-asbestos { color: #c62828; font-weight: 700; }
           .asbestos-content-non-asbestos { color: #2e7d32; font-weight: 700; }
 
+          /* Glossary page: 2-column table (same header/footer as other flow pages) */
+          .glossary-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; color: #222; margin: 10px 0 0 0; }
+          .glossary-table th, .glossary-table td { border: 1.5px solid #888; padding: 8px 12px; text-align: left; vertical-align: top; line-height: 1.5; }
+          .glossary-table th { background: #f5f5f5; font-weight: 700; }
+          .glossary-table .glossary-term { width: 28%; font-weight: 600; }
+          .glossary-table .glossary-definition { width: 72%; }
+
           .page-break { page-break-before: always; break-before: page; height: 0; margin: 0; padding: 0; }
         </style>
       </head>
@@ -3530,26 +3631,33 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData) => {
           </div>
         </div>
 
+        ${backgroundHtml ? `<div class="section-header">${escapeHtml(templateContent?.standardSections?.backgroundTitle || 'BACKGROUND')}</div><div class="section-body">${backgroundHtml}</div>` : ''}
         <div class="section-header">${escapeHtml(templateContent?.standardSections?.introductionTitle || 'INTRODUCTION')}</div>
         <div class="section-body">${introductionHtml}</div>
 
-        <div class="section-header">${escapeHtml(templateContent?.standardSections?.surveyFindingsTitle || 'SURVEY FINDINGS')}</div>
+        <div class="section-header">${escapeHtml(templateContent?.standardSections?.surveyFindingsTitle || 'SUMMARY OF IDENTIFIED ACM')}</div>
         <div class="section-body">${surveyFindingsHtml}</div>
 
+        <div class="page-break"></div>
         <div class="section-header">Table 1: Assessment Register</div>
         ${sampleTablesHtml || '<div class="section-body">No items</div>'}
 
         <div class="page-break"></div>
         <div class="section-header">${escapeHtml(templateContent?.standardSections?.discussionTitle || 'DISCUSSION AND CONCLUSIONS')}</div>
         <div class="section-body">
-          <p style="margin: 0; padding-bottom: 8px;">The following is a summary of asbestos and non-asbestos materials identified during this assessment:</p>
+          ${isResidential
+            ? `${discussionConclusionsHtml ? `<div class="section-body discussion-conclusions-content" style="white-space: pre-wrap;">${discussionConclusionsHtml}</div>` : ''}${inspectionExclusionsHtml ? `<div style="margin-top: 12px; white-space: pre-wrap;">${inspectionExclusionsHtml}</div>` : ''}`
+            : `<p style="margin: 0; padding-bottom: 8px;">The following is a summary of asbestos and non-asbestos materials identified during this assessment:</p>
           <p style="margin: 0; padding-bottom: 4px; text-decoration: underline; font-weight: 600; font-size: 0.8rem;">Asbestos Items</p>
           ${asbestosItemsSectionFlow}
           <p style="margin: 0; padding-bottom: 4px; text-decoration: underline; font-weight: 600; font-size: 0.8rem;">Non-asbestos Items</p>
           ${nonAsbestosItemsSectionFlow}
           ${discussionConclusionsHtml ? `<div class="section-body discussion-conclusions-content" style="margin-top: 12px; white-space: pre-wrap;">${discussionConclusionsHtml}</div>` : ''}
-          ${inspectionExclusionsHtml ? `<div style="margin-top: 12px; white-space: pre-wrap;">${inspectionExclusionsHtml}</div>` : ''}
+          ${inspectionExclusionsHtml ? `<div style="margin-top: 12px; white-space: pre-wrap;">${inspectionExclusionsHtml}</div>` : ''}`}
         </div>
+
+        ${recommendedControlMeasuresHtml}
+
         <div class="section-body discussion-signoff">
           ${discussionSignOffContent || ''}
           ${discussionSignatureContent || ''}
@@ -3557,6 +3665,10 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData) => {
 
         <div class="page-break"></div>
         ${bodySectionsHtml}
+
+        <!-- Glossary of Terms (last page before first attachment cover; same header/footer and page number) -->
+        <div class="page-break"></div>
+        ${glossarySectionHtml}
       </body>
     </html>
   `;

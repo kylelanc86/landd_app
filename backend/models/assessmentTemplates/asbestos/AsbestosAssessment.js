@@ -140,6 +140,12 @@ AssessmentItemSchema.pre('validate', function(next) {
 const AsbestosAssessmentSchema = new mongoose.Schema({
   projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true },
   assessorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  // Distinguishes standard asbestos assessments from residential asbestos assessments (separate job lists and flows)
+  jobType: {
+    type: String,
+    enum: ['asbestos-assessment', 'residential-asbestos'],
+    default: 'asbestos-assessment',
+  },
   LAA: { type: String }, // Licensed Asbestos Assessor name
   state: { type: String, enum: ['ACT', 'NSW', 'Commonwealth'] }, // State (ACT, NSW or Commonwealth)
   secondaryHeader: { type: String }, // Optional secondary header beneath project site name on cover page

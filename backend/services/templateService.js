@@ -102,6 +102,8 @@ const getTemplateByType = async (templateType) => {
         title = "COMPLEX ASBESTOS REMOVAL CLEARANCE CERTIFICATE";
       } else if (templateType === "asbestosAssessment") {
         title = "ASBESTOS MATERIAL ASSESSMENT REPORT";
+      } else if (templateType === "residentialAsbestosAssessment") {
+        title = "RESIDENTIAL ASBESTOS MATERIAL ASSESSMENT REPORT";
       }
       
       // Create default template if it doesn't exist
@@ -113,12 +115,68 @@ const getTemplateByType = async (templateType) => {
           introductionTitle: "INTRODUCTION",
           introductionContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
           
-          surveyFindingsTitle: "SURVEY FINDINGS",
+          surveyFindingsTitle: "SUMMARY OF IDENTIFIED ACM",
           surveyFindingsContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
           surveyFindingsContentNoSamples: "[DYNAMIC_CONTENT_NOT_LOADED]",
           
           discussionTitle: "DISCUSSION AND CONCLUSIONS",
           discussionContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
+          
+          recommendedControlMeasuresTitle: "RECOMMENDED CONTROL MEASURES",
+          recommendedControlMeasuresContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
+          
+          assessmentMethodologyTitle: "ASSESSMENT METHODOLOGY",
+          assessmentMethodologyContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
+          
+          riskAssessmentTitle: "RISK ASSESSMENT",
+          riskAssessmentContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
+          
+          controlMeasuresTitle: "DETERMINING SUITABLE CONTROL MEASURES",
+          controlMeasuresContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
+          
+          remediationRequirementsTitle: "REQUIREMENTS FOR REMEDIATION/REMOVAL WORKS INVOLVING ACM",
+          remediationRequirementsContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
+          
+          legislationTitle: "LEGISLATION",
+          legislationContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
+          
+          assessmentLimitationsTitle: "ASSESSMENT LIMITATIONS/CAVEATS",
+          assessmentLimitationsContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
+          
+          signOffContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
+          
+          signaturePlaceholder: "[DYNAMIC_CONTENT_NOT_LOADED]",
+        };
+        
+        template = new ReportTemplate({
+          templateType,
+          createdBy,
+          reportHeaders: {
+            title: title,
+            subtitle: "Assessment Report"
+          },
+          standardSections
+        });
+      } else if (templateType === "residentialAsbestosAssessment") {
+        // Residential asbestos assessment: includes Background section, "Summary of Identified ACM" instead of Survey Findings
+        standardSections = {
+          backgroundTitle: "BACKGROUND",
+          backgroundContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
+          introductionTitle: "INTRODUCTION",
+          introductionContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
+          
+          surveyFindingsTitle: "SUMMARY OF IDENTIFIED ACM",
+          surveyFindingsContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
+          surveyFindingsContentNoSamples: "[DYNAMIC_CONTENT_NOT_LOADED]",
+          
+          discussionTitle: "DISCUSSION AND CONCLUSIONS",
+          discussionContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
+          
+          recommendedControlMeasuresTitle: "RECOMMENDED CONTROL MEASURES",
+          recommendedControlMeasuresContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
+          
+          assessmentMethodologyTitle: "ASSESSMENT METHODOLOGY",
+          assessmentMethodologyContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
           
           riskAssessmentTitle: "RISK ASSESSMENT",
           riskAssessmentContent: "[DYNAMIC_CONTENT_NOT_LOADED]",

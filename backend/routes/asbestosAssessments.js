@@ -7,9 +7,22 @@ const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 
 // GET /api/assessments - list all assessment jobs (populate project and assessor); excludes archived
+// Query param jobType: 'asbestos-assessment' | 'residential-asbestos' - when set, only jobs of that type are returned
 router.get('/', async (req, res) => {
   try {
-    const jobs = await AsbestosAssessment.find({ archived: { $ne: true } })
+    const filter = { archived: { $ne: true } };
+    const { jobType } = req.query;
+    if (jobType === 'residential-asbestos') {
+      filter.jobType = 'residential-asbestos';
+    } else if (jobType === 'asbestos-assessment') {
+      // Include docs with jobType 'asbestos-assessment' or missing (legacy)
+      filter.$or = [
+        { jobType: 'asbestos-assessment' },
+        { jobType: { $exists: false } },
+        { jobType: null },
+      ];
+    }
+    const jobs = await AsbestosAssessment.find(filter)
       .sort({ createdAt: -1 })
       .populate({
         path: "projectId",
@@ -33,14 +46,16 @@ router.post('/', async (req, res) => {
     if (!req.user || !req.user._id) {
       return res.status(401).json({ message: 'Not authenticated' });
     }
-    const { projectId, assessmentDate, LAA, state, secondaryHeader } = req.body;
+    const { projectId, assessmentDate, LAA, state, secondaryHeader, jobType } = req.body;
     if (!projectId || !assessmentDate) {
       return res.status(400).json({ message: 'projectId and assessmentDate are required' });
     }
+    const validJobType = jobType === 'residential-asbestos' ? 'residential-asbestos' : 'asbestos-assessment';
     const job = new AsbestosAssessment({
       projectId,
       assessorId: req.user._id,
       assessmentDate,
+      jobType: validJobType,
       LAA: LAA || null,
       state: state && ['ACT', 'NSW', 'Commonwealth'].includes(state) ? state : null,
       secondaryHeader: secondaryHeader || undefined,
@@ -222,6 +237,9 @@ router.get('/:id', async (req, res) => {
 // PUT /api/assessments/:id - update assessment job
 router.put('/:id', async (req, res) => {
   try {
+    const existingJob = await AsbestosAssessment.findById(req.params.id).select('jobType').lean();
+    if (!existingJob) return res.status(404).json({ message: 'Assessment job not found' });
+
     const { 
       projectId, 
       assessmentDate, 
@@ -264,8 +282,8 @@ router.put('/:id', async (req, res) => {
       updateData.status = status;
     }
     
-    // Include assessmentScope if provided
-    if (assessmentScope !== undefined) {
+    // Include assessmentScope if provided (not used for residential asbestos assessments)
+    if (assessmentScope !== undefined && existingJob.jobType !== 'residential-asbestos') {
       updateData.assessmentScope = assessmentScope;
     }
     
@@ -325,6 +343,11 @@ router.put('/:id', async (req, res) => {
       updateData.noSamplesCollected = !!noSamplesCollected;
     }
 
+    // Fetch existing doc to detect newly set authorisation (for requester notification email)
+    const existing = await AsbestosAssessment.findById(req.params.id)
+      .select('reportAuthorisedBy authorisationRequestedBy')
+      .lean();
+
     const job = await AsbestosAssessment.findByIdAndUpdate(
       req.params.id,
       updateData,
@@ -339,6 +362,61 @@ router.put('/:id', async (req, res) => {
     }).populate('assessorId');
     
     if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+
+    // Send notification email to the user who requested authorisation when report is newly authorised
+    const wasAlreadyAuthorised = !!(existing && (existing.reportAuthorisedBy || existing.reportApprovedBy));
+    const nowAuthorised = !!(job.reportAuthorisedBy || job.reportApprovedBy);
+    if (existing && !wasAlreadyAuthorised && nowAuthorised && job.authorisationRequestedBy) {
+      try {
+        const requester = await User.findById(job.authorisationRequestedBy)
+          .select('firstName lastName email');
+        if (requester && requester.email) {
+          const projectName = job.projectId?.name || 'Unknown Project';
+          const projectID = job.projectId?.projectID || 'N/A';
+          const approverName = job.reportAuthorisedBy || job.reportApprovedBy || 'Unknown';
+          const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+          const jobUrl = `${frontendUrl}/surveys/asbestos-assessment`;
+          await sendMail({
+            to: requester.email,
+            subject: `Report Authorised - ${projectID}: Asbestos Assessment / Fibre ID Report`,
+            text: `
+The Asbestos Assessment / Fibre ID report you requested for authorisation has been authorised.
+
+Project: ${projectName} (${projectID})
+Authorised by: ${approverName}
+
+View the report at: ${jobUrl}
+            `.trim(),
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+                <div style="margin-bottom: 30px;">
+                  <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
+                  <p style="color: #666; font-size: 16px; margin: 10px 0 0 0;">Environmental Services</p>
+                </div>
+                <div style="color: #333; line-height: 1.6;">
+                  <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Report Authorised</h2>
+                  <p>Hello ${requester.firstName},</p>
+                  <p>The Asbestos Assessment / Fibre ID report you requested for authorisation has been authorised:</p>
+                  <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
+                    <p style="margin: 5px 0;"><strong>Project:</strong> ${projectName}</p>
+                    <p style="margin: 5px 0;"><strong>Project ID:</strong> ${projectID}</p>
+                    <p style="margin: 5px 0;"><strong>Authorised by:</strong> ${approverName}</p>
+                  </div>
+                  <div style="text-align: center; margin: 30px 0;">
+                    <a href="${jobUrl}" style="background-color: rgb(25, 138, 44); color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">View Report</a>
+                  </div>
+                  <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;">
+                  <p style="color: #666; font-size: 12px;">This is an automated message, please do not reply to this email.</p>
+                </div>
+              </div>
+            `,
+          });
+        }
+      } catch (emailError) {
+        console.error('Error sending authorisation notification email:', emailError);
+      }
+    }
+
     res.json(job);
   } catch (err) {
     res.status(400).json({ message: 'Failed to update assessment job', error: err.message });
