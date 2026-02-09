@@ -2442,7 +2442,9 @@ const AsbestosRemovalJobDetails = () => {
                       onChange={(e) => {
                         const hour = e.target.value;
                         const minutes = clearanceForm.inspectionTime
-                          ? clearanceForm.inspectionTime.split(":")[1] || "00"
+                          ? clearanceForm.inspectionTime
+                              .split(":")[1]
+                              ?.split(" ")[0] || "00"
                           : "00";
                         const ampm = clearanceForm.inspectionTime
                           ? clearanceForm.inspectionTime.split(" ")[1] || "AM"
