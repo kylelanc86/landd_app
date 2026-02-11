@@ -46,7 +46,7 @@ const StaffMeetings = () => {
   const theme = useTheme();
   const { showSnackbar } = useSnackbar();
   const { currentUser } = useAuth();
-  const canDelete = currentUser?.role === "admin";
+  const canDelete = currentUser?.role === "admin" || currentUser?.role === "super_admin";
 
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);

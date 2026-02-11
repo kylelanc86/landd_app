@@ -205,9 +205,14 @@ const MonthlyTimesheet = () => {
         alignItems="center"
         mb="10px"
       >
-        <Typography variant="h5" component="h1" sx={{ mb: 0 }}>
-          Timesheets
-        </Typography>
+      <Typography
+        variant="h3"
+        component="h1"
+        marginTop="20px"
+        marginBottom="20px"
+      >
+        Timesheets
+      </Typography>
       </Box>
 
       <Paper

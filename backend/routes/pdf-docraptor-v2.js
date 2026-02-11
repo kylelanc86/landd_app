@@ -70,6 +70,18 @@ const escapeHtml = (value = "") =>
 /** HTML for a half line break in PDF (used in discussion/conclusions and job exclusions). */
 const halfLineBreakHtml = '<span style="display:block; height:0.5em;"></span>';
 
+/** Converts newline-separated text to justified paragraph HTML for PDF (Prince needs proper blocks for text-align: justify). */
+const toJustifiedParagraphsHtml = (text) => {
+  if (!text || !String(text).trim()) return '';
+  const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return String(text)
+    .split(/\n/)
+    .map((p) => p.trim())
+    .filter((p) => p)
+    .map((p) => `<p style="text-align: justify; margin: 0 0 0.5em 0; word-break: normal; overflow-wrap: break-word;">${esc(p)}</p>`)
+    .join('');
+};
+
 /** Converts 1–99 to words (e.g. 11 -> "Eleven"); returns String(n) for 0 or 100+. */
 const numberToWords = (n) => {
   const num = Number(n);
@@ -2220,9 +2232,11 @@ router.post('/generate-asbestos-assessment-v3', auth, async (req, res) => {
     if (idStr) {
       try {
         const doc = await AsbestosAssessment.findById(idStr)
-          .select('fibreAnalysisReport sitePlan sitePlanFile sitePlanLegend sitePlanLegendTitle sitePlanFigureTitle')
+          .select('state fibreAnalysisReport sitePlan sitePlanFile sitePlanLegend sitePlanLegendTitle sitePlanFigureTitle')
           .lean();
         if (doc) {
+          // Ensure state is set from DB for placeholder replacement (e.g. {10m2_RULE}, {STATE_SPECIFIC_REMOVAL_RECS})
+          if (doc.state != null) assessmentData.state = doc.state;
           if (doc.fibreAnalysisReport) {
             assessmentData.fibreAnalysisReport = doc.fibreAnalysisReport;
             console.log(`[${pdfId}] Loaded fibre analysis report from DB (length: ${doc.fibreAnalysisReport.length})`);
@@ -2300,7 +2314,7 @@ router.post('/generate-asbestos-assessment-v3', auth, async (req, res) => {
           const assessmentFooterText = isResidential
             ? `Residential Asbestos Assessment Report: ${assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site'}`
             : `Asbestos Assessment Report: ${assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site'}`;
-          const sitePlanFigureTitle = assessmentData.sitePlanFigureTitle || 'Asbestos Assessment Site Plan';
+          const sitePlanFigureTitle = assessmentData.sitePlanFigureTitle || 'Asbestos Survey Site Plan';
           const sitePlanLetter = hasFibreIdReport ? 'B' : 'A';
           const sitePlanFragment = generateSitePlanContentPage(assessmentDataTrimmed, sitePlanLetter, logoBase64, assessmentFooterText, 'sitePlanFile', 'SITE PLAN', sitePlanFigureTitle, 'sitePlanLegend', 'sitePlanLegendTitle');
           const sitePlanCss = `
@@ -2410,7 +2424,7 @@ const generateAssessmentHTML = async (assessmentData) => {
       ? new Date(assessmentData.reportAuthorisedAt).toLocaleDateString('en-GB')
       : (assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown');
 
-    const assessmentIntrusivenessLabel = assessmentData.intrusiveness === 'intrusive' ? 'Intrusive' : 'Non-intrusive';
+    const assessmentIntrusivenessLabel = assessmentData.intrusiveness === 'intrusive' || 'non-intrusive';
     // Populate cover template with data (REPORT_TITLE, SITE_ADDRESS, SECONDARY_HEADER, CLIENT_NAME, JOB_REFERENCE, ASSESSMENT_DATE, INTRUSIVENESS, no watermark/footer)
     const populatedCover = coverTemplateWithUrl
       .replace(/\[REPORT_TITLE\]/g, assessmentReportTitle)
@@ -2720,7 +2734,7 @@ const generateAssessmentHTML = async (assessmentData) => {
     const hasFibreIdReport = !!assessmentData.fibreAnalysisReport;
     const sitePlanAppendix = hasFibreIdReport ? 'Appendix B' : 'Appendix A';
     if (hasSitePlan) {
-      surveyFindingsContentPopulated += `\n\nA site plan for this assessment is presented in ${sitePlanAppendix} of this report.`;
+      surveyFindingsContentPopulated += `\n\nA site plan illustrating the locations of asbestos-containing materials for this assessment is presented in ${sitePlanAppendix} of this report.`;
     }
     // Ensure newlines render in HTML (replacePlaceholders may not convert \n)
     surveyFindingsContentPopulated = surveyFindingsContentPopulated.replace(/\n/g, '<br />');
@@ -2820,9 +2834,7 @@ const generateAssessmentHTML = async (assessmentData) => {
     discussionConclusionsRaw = discussionConclusionsRaw
       .replace(/\{ANALYSIS INCOMPLETE\}/g, analysisIncompleteReplacement)
       .replace(/\{ANALYSIS_INCOMPLETE\}/g, analysisIncompleteReplacement);
-    const discussionConclusionsHtml = discussionConclusionsRaw
-      ? discussionConclusionsRaw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, halfLineBreakHtml)
-      : '';
+    const discussionConclusionsHtml = toJustifiedParagraphsHtml(discussionConclusionsRaw);
 
     // Page numbers: cover=1, version=2, item1=3, then assessment register pages, then discussion, then optional RCM page, then additional 1 & 2
     const sampleRegisterPageCount = shouldMoveFirstItemToNewPage
@@ -2839,9 +2851,7 @@ const generateAssessmentHTML = async (assessmentData) => {
       : '';
 
     const jobSpecificExclusionsRawTemplate = (assessmentData.jobSpecificExclusions || '').trim();
-    const jobSpecificExclusionsHtmlTemplate = jobSpecificExclusionsRawTemplate
-      ? jobSpecificExclusionsRawTemplate.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, halfLineBreakHtml)
-      : '';
+    const jobSpecificExclusionsHtmlTemplate = toJustifiedParagraphsHtml(jobSpecificExclusionsRawTemplate);
 
     const populatedDiscussionConclusions = asbestosDiscussionConclusionsTemplateWithUrl
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
@@ -3056,7 +3066,8 @@ const generateAssessmentHTML = async (assessmentData) => {
       if (isSitePlanImage) {
         const trimmedSitePlan = await trimSitePlanImage(assessmentData.sitePlanFile);
         const assessmentDataTrimmed = { ...assessmentData, sitePlanFile: trimmedSitePlan };
-        const sitePlanContentPage = generateSitePlanContentPage(assessmentDataTrimmed, sitePlanAppendixLetterLegacy, logoBase64);
+        const sitePlanFigureTitle = assessmentData.sitePlanFigureTitle || 'Asbestos Survey Site Plan';
+        const sitePlanContentPage = generateSitePlanContentPage(assessmentDataTrimmed, sitePlanAppendixLetterLegacy, logoBase64, assessmentFooterText, 'sitePlanFile', 'SITE PLAN', sitePlanFigureTitle, 'sitePlanLegend', 'sitePlanLegendTitle');
         appendixContent += `
             <!-- Appendix ${sitePlanAppendixLetterLegacy} Site Plan Content Page -->
             ${sitePlanContentPage}
@@ -3208,7 +3219,7 @@ const generateAssessmentCoverVersionHTMLV3 = async (assessmentData, isResidentia
     ? `${assessmentData.projectId?.projectID || 'Unknown'}_Residential_Asbestos_Assessment_Report - ${assessmentSiteAddress} (${assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown'}).pdf`
     : `${assessmentData.projectId?.projectID || 'Unknown'}_Asbestos_Assessment_Report - ${assessmentSiteAddress} (${assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown'}).pdf`;
 
-  const assessmentIntrusivenessLabelV3 = assessmentData.intrusiveness === 'intrusive' ? 'Intrusive' : 'Non-intrusive';
+  const assessmentIntrusivenessLabelV3 = assessmentData.intrusiveness === 'intrusive' || 'non-intrusive';
   const populatedCover = coverTemplateWithUrl
     .replace(/\[REPORT_TITLE\]/g, assessmentReportTitle)
     .replace(/\[SITE_ADDRESS\]/g, assessmentSiteAddress)
@@ -3544,14 +3555,10 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
   discussionConclusionsRaw = discussionConclusionsRaw
     .replace(/\{ANALYSIS INCOMPLETE\}/g, analysisIncompleteReplacementFlow)
     .replace(/\{ANALYSIS_INCOMPLETE\}/g, analysisIncompleteReplacementFlow);
-  const discussionConclusionsHtml = discussionConclusionsRaw
-    ? escapeHtml(discussionConclusionsRaw).replace(/\n/g, halfLineBreakHtml)
-    : '';
+  const discussionConclusionsHtml = toJustifiedParagraphsHtml(discussionConclusionsRaw);
 
   const jobSpecificExclusionsRaw = (assessmentData.jobSpecificExclusions || '').trim();
-  const inspectionExclusionsHtml = jobSpecificExclusionsRaw
-    ? escapeHtml(jobSpecificExclusionsRaw).replace(/\n/g, halfLineBreakHtml)
-    : '';
+  const inspectionExclusionsHtml = toJustifiedParagraphsHtml(jobSpecificExclusionsRaw);
 
   // Recommended Control Measures is rendered between Discussion and Conclusions and sign-off (see flow HTML)
   const recommendedControlMeasuresContentFlow = templateContent?.standardSections?.recommendedControlMeasuresContent
@@ -3663,6 +3670,8 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
           .section-header { font-size: 0.9rem; font-weight: 700; text-transform: uppercase; margin: 10px 0 10px 0; letter-spacing: 0.01em; }
           .page-break + .section-header { margin-top: 0; } /* avoid starting too low at top of a new page */
           .section-body { font-size: 0.8rem; line-height: 1.5; text-align: justify; margin-bottom: 18px; }
+          .section-body.discussion-conclusions-content,
+          .section-body.discussion-conclusions-content p { word-break: normal !important; overflow-wrap: break-word !important; }
           .section-body.discussion-conclusions-content { text-align: justify !important; width: 100%; }
           .section-body br { line-height: 1.5; display: block; margin-bottom: 0.25em; }
           .section-body .paragraph { margin-bottom: 8px; }
@@ -3742,14 +3751,14 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
         <div class="section-header">${escapeHtml(templateContent?.standardSections?.discussionTitle || 'DISCUSSION AND CONCLUSIONS')}</div>
         <div class="section-body">
           ${isResidential
-            ? `${discussionConclusionsHtml ? `<div class="section-body discussion-conclusions-content" style="white-space: pre-wrap; text-align: justify !important; width: 100%;">${discussionConclusionsHtml}</div>` : ''}${inspectionExclusionsHtml ? `<div style="margin-top: 12px; white-space: pre-wrap; text-align: justify !important; width: 100%;">${inspectionExclusionsHtml}</div>` : ''}`
+            ? `${discussionConclusionsHtml ? `<div class="section-body discussion-conclusions-content" style="text-align: justify !important; width: 100%;">${discussionConclusionsHtml}</div>` : ''}${inspectionExclusionsHtml ? `<div class="section-body discussion-conclusions-content" style="margin-top: 12px; text-align: justify !important; width: 100%;">${inspectionExclusionsHtml}</div>` : ''}`
             : `<p style="margin: 0; padding-bottom: 8px;">The following is a summary of asbestos and non-asbestos materials identified during this assessment:</p>
           <p style="margin: 0; padding-bottom: 4px; text-decoration: underline; font-weight: 600; font-size: 0.8rem;">Asbestos Items</p>
           ${asbestosItemsSectionFlow}
           <p style="margin: 0; padding-bottom: 4px; text-decoration: underline; font-weight: 600; font-size: 0.8rem;">Non-asbestos Items</p>
           ${nonAsbestosItemsSectionFlow}
-          ${discussionConclusionsHtml ? `<div class="section-body discussion-conclusions-content" style="margin-top: 12px; white-space: pre-wrap; text-align: justify !important; width: 100%;">${discussionConclusionsHtml}</div>` : ''}
-          ${inspectionExclusionsHtml ? `<div style="margin-top: 12px; white-space: pre-wrap; text-align: justify !important; width: 100%;">${inspectionExclusionsHtml}</div>` : ''}`}
+          ${discussionConclusionsHtml ? `<div class="section-body discussion-conclusions-content" style="margin-top: 12px; text-align: justify !important; width: 100%;">${discussionConclusionsHtml}</div>` : ''}
+          ${inspectionExclusionsHtml ? `<div class="section-body discussion-conclusions-content" style="margin-top: 12px; text-align: justify !important; width: 100%;">${inspectionExclusionsHtml}</div>` : ''}`}
         </div>
 
         ${recommendedControlMeasuresHtml}

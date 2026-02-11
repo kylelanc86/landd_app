@@ -172,7 +172,9 @@ const Records = () => {
   useEffect(() => {
     const urlView = searchParams.get("view");
     const isAdminOrManager =
-      currentUser?.role === "admin" || currentUser?.role === "manager";
+      currentUser?.role === "admin" ||
+      currentUser?.role === "super_admin" ||
+      currentUser?.role === "manager";
     const hasOnlyCalibrationsApproval =
       currentUser?.labApprovals?.calibrations === true && !isAdminOrManager;
 
@@ -328,12 +330,15 @@ const Records = () => {
   const availableRecordModules = recordModules.filter((module) => {
     // Check if user is admin or manager - they can see all modules
     const isAdminOrManager =
-      currentUser?.role === "admin" || currentUser?.role === "manager";
+      currentUser?.role === "admin" ||
+      currentUser?.role === "super_admin" ||
+      currentUser?.role === "manager";
 
     // If user only has calibrations approval (not admin/manager), hide general records
     const hasOnlyCalibrationsApproval =
       currentUser?.labApprovals?.calibrations === true &&
       currentUser?.role !== "admin" &&
+      currentUser?.role !== "super_admin" &&
       currentUser?.role !== "manager";
 
     if (module.id === "general") {

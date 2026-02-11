@@ -219,8 +219,8 @@ const MobileDrawer = ({ open, onClose }) => {
 
             <PermissionGate requiredPermissions={["timesheets.view"]}>
               <MenuItem
-                title="Timesheets"
-                to="/timesheets/monthly"
+                title="Daily Timesheet"
+                to="/timesheets"
                 icon={<AccessTimeIcon />}
               />
 

@@ -58,6 +58,7 @@ const PERMISSIONS = {
 
 // Define role-based permissions
 const ROLE_PERMISSIONS = {
+  super_admin: Object.keys(PERMISSIONS), // Super admins have all permissions (same as admin)
   admin: Object.keys(PERMISSIONS), // Admins have all permissions including admin.*
   manager: [
     'projects.view',

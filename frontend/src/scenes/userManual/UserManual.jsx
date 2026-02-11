@@ -25,7 +25,9 @@ const UserManual = () => {
         // Check if user is admin or manager
         const isAdminOrManager =
           currentUser &&
-          (currentUser.role === "admin" || currentUser.role === "manager");
+          (currentUser.role === "admin" ||
+            currentUser.role === "super_admin" ||
+            currentUser.role === "manager");
 
         if (!isAdminOrManager) {
           // Remove sections 7 and 8 for non-admin/manager users

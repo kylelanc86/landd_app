@@ -80,12 +80,23 @@ const Users = () => {
   }, [showInactive]);
 
   const confirmStatusChange = async () => {
-    const userToDeactivate = users.find((u) => u._id === statusChangeId);
-    if (!statusChangeType && userToDeactivate.role === "admin") {
+    const userToUpdate = users.find((u) => u._id === statusChangeId);
+    if (!statusChangeType && userToUpdate?.role === "admin") {
       const activeAdmins = users.filter(
         (u) => u.isActive && u.role === "admin"
       );
       if (activeAdmins.length <= 1) {
+        setStatusDialogOpen(false);
+        setStatusChangeId(null);
+        setStatusChangeType(null);
+        return;
+      }
+    }
+    if (!statusChangeType && userToUpdate?.role === "super_admin") {
+      const activeSuperAdmins = users.filter(
+        (u) => u.isActive && u.role === "super_admin"
+      );
+      if (activeSuperAdmins.length <= 1) {
         setStatusDialogOpen(false);
         setStatusChangeId(null);
         setStatusChangeType(null);
@@ -117,7 +128,7 @@ const Users = () => {
 
   const handleStatusChange = useCallback(
     (userId, newStatus) => {
-      // Check if trying to deactivate the last admin
+      // Check if trying to deactivate the last admin or last super_admin
       if (!newStatus) {
         const userToDeactivate = users.find((u) => u._id === userId);
         if (userToDeactivate?.role === "admin") {
@@ -125,6 +136,17 @@ const Users = () => {
             (u) => u.isActive && u.role === "admin"
           );
           if (activeAdmins.length <= 1) {
+            setStatusDialogOpen(true);
+            setStatusChangeId(userId);
+            setStatusChangeType(newStatus);
+            return;
+          }
+        }
+        if (userToDeactivate?.role === "super_admin") {
+          const activeSuperAdmins = users.filter(
+            (u) => u.isActive && u.role === "super_admin"
+          );
+          if (activeSuperAdmins.length <= 1) {
             setStatusDialogOpen(true);
             setStatusChangeId(userId);
             setStatusChangeType(newStatus);
@@ -167,11 +189,17 @@ const Users = () => {
         minWidth: 120,
         renderCell: (params) => {
           const role = params.row.role || "employee";
-          const formattedRole = role.charAt(0).toUpperCase() + role.slice(1);
+          const formattedRole =
+            role === "super_admin"
+              ? "Super Admin"
+              : role.charAt(0).toUpperCase() + role.slice(1);
 
           // Define colors for different user levels
           let roleColor;
           switch (role.toLowerCase()) {
+            case "super_admin":
+              roleColor = "#6a1b9a"; // Purple
+              break;
             case "admin":
               roleColor = "#d32f2f"; // Red
               break;
@@ -242,24 +270,40 @@ const Users = () => {
         headerName: "Actions",
         flex: 1,
         minWidth: 150,
-        renderCell: (params) => (
-          <Box>
-            {/* Only show edit button for admin users */}
-            {currentUser.role === "admin" && (
-              <IconButton onClick={() => handleEditUser(params.row)}>
-                <EditIcon />
-              </IconButton>
-            )}
-            <IconButton
-              onClick={() =>
-                handleStatusChange(params.row._id, !params.row.isActive)
-              }
-              title={params.row.isActive ? "Deactivate User" : "Activate User"}
-            >
-              {params.row.isActive ? <DeleteIcon /> : <CheckCircleIcon />}
-            </IconButton>
-          </Box>
-        ),
+        renderCell: (params) => {
+          const isTargetSuperAdmin = params.row.role === "super_admin";
+          const canChangeStatus =
+            !isTargetSuperAdmin || currentUser.role === "super_admin";
+          return (
+            <Box>
+              {/* Show edit button for admin and super_admin users */}
+              {(currentUser.role === "admin" ||
+                currentUser.role === "super_admin") && (
+                <IconButton onClick={() => handleEditUser(params.row)}>
+                  <EditIcon />
+                </IconButton>
+              )}
+              {canChangeStatus && (
+                <IconButton
+                  onClick={() =>
+                    handleStatusChange(params.row._id, !params.row.isActive)
+                  }
+                  title={
+                    params.row.isActive
+                      ? "Deactivate User"
+                      : "Activate User"
+                  }
+                >
+                  {params.row.isActive ? (
+                    <DeleteIcon />
+                  ) : (
+                    <CheckCircleIcon />
+                  )}
+                </IconButton>
+              )}
+            </Box>
+          );
+        },
         sortable: false,
         filterable: false,
       },
@@ -292,8 +336,9 @@ const Users = () => {
               Timesheet Review
             </Button>
           )}
-          {/* Only show Add User button for admin users */}
-          {currentUser.role === "admin" && (
+          {/* Show Add User button for admin and super_admin users */}
+          {(currentUser.role === "admin" ||
+            currentUser.role === "super_admin") && (
             <Button
               variant="contained"
               color="secondary"
@@ -436,9 +481,14 @@ const Users = () => {
             {statusChangeType
               ? "Are you sure you want to restore this user? They will regain access to the system."
               : users.find((u) => u._id === statusChangeId)?.role === "admin" &&
-                users.filter((u) => u.isActive && u.role === "admin").length <=
-                  1
+                users.filter((u) => u.isActive && u.role === "admin").length <= 1
               ? "Cannot deactivate the last active admin user. Please ensure another admin user is active before deactivating this user."
+              : users.find((u) => u._id === statusChangeId)?.role ===
+                  "super_admin" &&
+                users.filter(
+                  (u) => u.isActive && u.role === "super_admin"
+                ).length <= 1
+              ? "Cannot deactivate the last active super admin user. There must always be at least one super admin."
               : "Are you sure you want to deactivate this user? They will lose access to the system but can be restored later."}
           </Typography>
         </DialogContent>
@@ -456,8 +506,13 @@ const Users = () => {
             Cancel
           </Button>
           {!(
-            users.find((u) => u._id === statusChangeId)?.role === "admin" &&
-            users.filter((u) => u.isActive && u.role === "admin").length <= 1
+            (users.find((u) => u._id === statusChangeId)?.role === "admin" &&
+              users.filter((u) => u.isActive && u.role === "admin").length <=
+                1) ||
+            (users.find((u) => u._id === statusChangeId)?.role ===
+              "super_admin" &&
+              users.filter((u) => u.isActive && u.role === "super_admin")
+                .length <= 1)
           ) && (
             <Button
               onClick={confirmStatusChange}

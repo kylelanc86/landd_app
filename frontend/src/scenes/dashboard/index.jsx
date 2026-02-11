@@ -814,16 +814,12 @@ const Dashboard = () => {
     setWidgetDialogOpen(false);
   };
 
-  // Always display exactly 4 widgets in 1 row
+  // Widget grid: 2x2 on mobile/tablet, single row on desktop
   const getOptimalColumns = () => {
-    if (isExtraSmall) {
-      return 1; // Single column on very small screens
-    } else if (isMobile) {
-      return 1; // Single column on mobile
-    } else if (isTablet) {
-      return 2; // 2 columns on tablet for 4 widgets (2 rows of 2)
+    if (isExtraSmall || isMobile || isTablet) {
+      return 2; // 2x2 grid on mobile and tablet
     } else {
-      return 4; // Always 4 columns on desktop for single row
+      return 4; // Single row on desktop
     }
   };
 
@@ -853,6 +849,7 @@ const Dashboard = () => {
             setWidgetDialogOpen(true);
           }}
           sx={{
+            display: { xs: "none", sm: "inline-flex" },
             backgroundColor: theme.palette.primary.main,
             "&:hover": { backgroundColor: theme.palette.primary.dark },
           }}
@@ -868,14 +865,13 @@ const Dashboard = () => {
             {(provided) => (
               <Box
                 display="grid"
-                gridTemplateColumns={`repeat(${optimalColumns}, 1fr)`}
-                gap={isExtraSmall ? "8px" : isMobile ? "12px" : "20px"}
                 ref={provided.innerRef}
                 {...provided.droppableProps}
                 sx={{
                   width: "100%",
                   minWidth: 0,
-                  // Single row layout for 4 widgets
+                  gridTemplateColumns: "repeat(4, 1fr)",
+                  gap: "20px",
                   gridTemplateRows: "1fr",
                   gridAutoFlow: "row",
                   // Ensure grid items can shrink below their content size
@@ -900,21 +896,21 @@ const Dashboard = () => {
                         : "160px",
                     width: "100%",
                   },
-                  // Handle very small screens
+                  // Handle very small screens - 2x2 grid
                   ...(isExtraSmall && {
-                    gridTemplateColumns: "1fr",
-                    gap: "6px",
+                    gridTemplateColumns: "repeat(2, 1fr)",
+                    gap: "8px",
                   }),
-                  // Handle mobile screens
+                  // Handle mobile screens - 2x2 grid
                   ...(isMobile &&
                     !isExtraSmall && {
-                      gridTemplateColumns: "1fr",
-                      gap: "10px",
+                      gridTemplateColumns: "repeat(2, 1fr)",
+                      gap: "12px",
                     }),
-                  // Handle tablet screens
+                  // Handle tablet screens - 2x2 grid
                   ...(isTablet &&
                     !isMobile && {
-                      gridTemplateColumns: "repeat(2, 1fr)", // 2x2 grid on tablet
+                      gridTemplateColumns: "repeat(2, 1fr)",
                       gap: "16px",
                     }),
                   // Ensure smooth transitions
@@ -922,26 +918,26 @@ const Dashboard = () => {
                   // Force wrapping when space is limited
                   overflowWrap: "break-word",
                   wordWrap: "break-word",
-                  // Handle window resize smoothly - single row layout
-                  "@media (max-width: 480px)": {
-                    gridTemplateColumns: "1fr",
-                    gap: "6px",
-                  },
-                  "@media (max-width: 600px)": {
-                    gridTemplateColumns: "1fr",
-                    gap: "8px",
-                  },
-                  "@media (max-width: 900px)": {
-                    gridTemplateColumns: "repeat(2, 1fr)", // 2x2 grid on medium screens
-                    gap: "12px",
+                  // Breakpoints: desktop-first order so narrower viewports override (last match wins)
+                  "@media (max-width: 1400px)": {
+                    gridTemplateColumns: "repeat(4, 1fr)",
+                    gap: "20px",
                   },
                   "@media (max-width: 1200px)": {
-                    gridTemplateColumns: "repeat(3, 1fr)", // 3 columns on smaller desktop
+                    gridTemplateColumns: "repeat(4, 1fr)",
                     gap: "16px",
                   },
-                  "@media (max-width: 1400px)": {
-                    gridTemplateColumns: "repeat(4, 1fr)", // 4 columns on larger desktop
-                    gap: "20px",
+                  "@media (max-width: 900px)": {
+                    gridTemplateColumns: "repeat(2, 1fr)",
+                    gap: "16px",
+                  },
+                  "@media (max-width: 600px)": {
+                    gridTemplateColumns: "repeat(2, 1fr)",
+                    gap: "12px",
+                  },
+                  "@media (max-width: 480px)": {
+                    gridTemplateColumns: "repeat(2, 1fr)",
+                    gap: "8px",
                   },
                 }}
               >
@@ -1249,8 +1245,68 @@ const Dashboard = () => {
         </DragDropContext>
       </Box>
 
-      {/* Allocated Jobs Table - Lazy loaded to prioritize widget rendering */}
-      <Box mt="40px">
+      {/* Mobile-only quick navigation buttons */}
+      <Box
+        sx={{
+          display: { xs: "flex", sm: "none" },
+          flexDirection: "column",
+          gap: 2,
+          mt: 3,
+          px: 0,
+        }}
+      >
+        <Button
+          variant="contained"
+          fullWidth
+          size="large"
+          onClick={() => navigate("/projects")}
+          sx={{
+            py: 2,
+            fontSize: "1.1rem",
+            fontWeight: 700,
+            textTransform: "none",
+            borderRadius: 2,
+            boxShadow: 2,
+          }}
+        >
+          PROJECTS
+        </Button>
+        <Button
+          variant="contained"
+          fullWidth
+          size="large"
+          onClick={() => navigate("/asbestos-removal")}
+          sx={{
+            py: 2,
+            fontSize: "1.1rem",
+            fontWeight: 700,
+            textTransform: "none",
+            borderRadius: 2,
+            boxShadow: 2,
+          }}
+        >
+          AIR MON & CLEARANCES
+        </Button>
+        <Button
+          variant="contained"
+          fullWidth
+          size="large"
+          onClick={() => navigate("/surveys")}
+          sx={{
+            py: 2,
+            fontSize: "1.1rem",
+            fontWeight: 700,
+            textTransform: "none",
+            borderRadius: 2,
+            boxShadow: 2,
+          }}
+        >
+          SURVEYS
+        </Button>
+      </Box>
+
+      {/* Allocated Jobs Table - Lazy loaded to prioritize widget rendering; hidden on mobile */}
+      <Box mt="40px" sx={{ display: { xs: "none", sm: "block" } }}>
         <Suspense
           fallback={
             <Box
@@ -1291,7 +1347,7 @@ const Dashboard = () => {
                 // Filter calibrations widget based on permissions
                 if (item.id === "calibrations") {
                   // Only show for admin level users, or users with calibrations approval, or users with lab signatory approval
-                  const isAdmin = currentUser?.role === "admin";
+                  const isAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
                   const hasCalibrationsApproval =
                     currentUser?.labApprovals?.calibrations === true;
                   const hasLabSignatoryApproval =

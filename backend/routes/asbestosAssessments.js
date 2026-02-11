@@ -434,7 +434,7 @@ router.patch('/:id/archive', auth, async (req, res) => {
   try {
     const user = req.user;
     if (!user) return res.status(401).json({ message: 'Not authenticated' });
-    const canComplete = user.role === 'admin' || user.role === 'manager' || user.canSetJobComplete === true;
+    const canComplete = user.role === 'admin' || user.role === 'super_admin' || user.role === 'manager' || user.canSetJobComplete === true;
     if (!canComplete) {
       return res.status(403).json({
         message: 'You do not have permission to complete asbestos assessments. Admin, manager, or Can Set Job Complete approval required.',

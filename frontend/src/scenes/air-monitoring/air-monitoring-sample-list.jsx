@@ -29,6 +29,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Collapse,
+  useMediaQuery,
 } from "@mui/material";
 import { useParams, useNavigate } from "react-router-dom";
 import AddIcon from "@mui/icons-material/Add";
@@ -37,6 +39,9 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import MicIcon from "@mui/icons-material/Mic";
 import DownloadIcon from "@mui/icons-material/Download";
 import MapIcon from "@mui/icons-material/Map";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import DescriptionIcon from "@mui/icons-material/Description";
 import { sampleService, shiftService } from "../../services/api";
 import asbestosRemovalJobService from "../../services/asbestosRemovalJobService";
 import { formatDate, formatTime } from "../../utils/dateUtils";
@@ -74,6 +79,11 @@ const SampleList = () => {
   const [submittedBySignature, setSubmittedBySignature] = useState("");
   const [sitePlanDialogOpen, setSitePlanDialogOpen] = useState(false);
   const [sitePlanData, setSitePlanData] = useState(null);
+  const [descriptionSectionExpanded, setDescriptionSectionExpanded] =
+    useState(true);
+  const [descriptionModalOpen, setDescriptionModalOpen] = useState(false);
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const showDescriptionButton = useMediaQuery(theme.breakpoints.down("md"));
   const { showSnackbar } = useSnackbar();
 
   // Check if report is authorized
@@ -650,9 +660,11 @@ const SampleList = () => {
         descriptionOfWorks,
       });
       setDescSaveStatus("Saved");
+      return true;
     } catch (err) {
       console.error("Error saving description of works:", err);
       setDescSaveStatus("Error");
+      return false;
     }
   };
 
@@ -780,12 +792,8 @@ const SampleList = () => {
           }}
           sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
         >
-          Asbestos Removal Job Details
+          Job Details
         </Link>
-        <Typography color="text.primary">
-          {job?.projectId?.projectID ? `${job.projectId.projectID}: ` : ""}
-          {job?.projectName || job?.name || "Loading..."}
-        </Typography>
       </Breadcrumbs>
 
       {/* Authorization Warning */}
@@ -800,6 +808,7 @@ const SampleList = () => {
       <Typography
         variant="h4"
         sx={{
+          fontSize: { xs: "1.1rem", md: "2.125rem" },
           color:
             theme.palette.mode === "dark"
               ? "#fff"
@@ -812,11 +821,31 @@ const SampleList = () => {
         {" - "}
         {shift?.name ? `${formatDate(shift.date)}` : "Loading..."}
       </Typography>
-      {/* Description of Works Field */}
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h6" sx={{ mb: 1 }}>
-          Description of Works
-        </Typography>
+      {/* Description of Works Field - collapsible; hidden on mobile/tablet (use modal button instead) */}
+      <Box sx={{ mb: 3, display: { xs: "none", md: "block" } }}>
+        <Box
+          onClick={() => setDescriptionSectionExpanded((prev) => !prev)}
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            cursor: "pointer",
+            mb: 1,
+            py: 0.5,
+            "&:hover": { bgcolor: "action.hover" },
+            borderRadius: 1,
+          }}
+        >
+          <Typography variant="h6">Description of Works</Typography>
+          <IconButton size="small" aria-label={descriptionSectionExpanded ? "Collapse" : "Expand"}>
+            {descriptionSectionExpanded ? (
+              <ExpandLessIcon />
+            ) : (
+              <ExpandMoreIcon />
+            )}
+          </IconButton>
+        </Box>
+        <Collapse in={descriptionSectionExpanded}>
         <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
           <TextField
             sx={{ flex: 1 }}
@@ -916,6 +945,7 @@ const SampleList = () => {
             </Typography>
           )}
         </Box>
+        </Collapse>
       </Box>
       <Stack
         direction={{ xs: "column", sm: "row" }}
@@ -939,6 +969,24 @@ const SampleList = () => {
           >
             Add Sample
           </Button>
+          {showDescriptionButton && (
+            <Button
+              variant="outlined"
+              startIcon={<DescriptionIcon />}
+              onClick={() => setDescriptionModalOpen(true)}
+              disabled={isReportAuthorized}
+              sx={{
+                borderColor: theme.palette.primary.main,
+                color: theme.palette.primary.main,
+                "&:hover": {
+                  borderColor: theme.palette.primary.dark,
+                  backgroundColor: theme.palette.primary.light,
+                },
+              }}
+            >
+              Description of Works
+            </Button>
+          )}
           <Button
             variant="outlined"
             startIcon={<MapIcon />}
@@ -1268,6 +1316,119 @@ const SampleList = () => {
             color="primary"
           >
             Go to Description Field
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Mobile: Description of Works Modal */}
+      <Dialog
+        open={descriptionModalOpen}
+        onClose={() => setDescriptionModalOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Description of Works</DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 1 }}>
+            <TextField
+              fullWidth
+              multiline
+              minRows={3}
+              maxRows={8}
+              value={descriptionOfWorks}
+              onChange={handleDescriptionChange}
+              placeholder="Enter a description of works for this shift..."
+              required
+              error={!descriptionOfWorks}
+              helperText={
+                !descriptionOfWorks ? "Description of works is required" : ""
+              }
+              disabled={isReportAuthorized}
+              InputProps={{
+                endAdornment: !isReportAuthorized ? (
+                  <InputAdornment position="end">
+                    <IconButton
+                      onClick={isDictating ? stopDictation : startDictation}
+                      color={isDictating ? "error" : "primary"}
+                      title={isDictating ? "Stop Dictation" : "Start Dictation"}
+                      sx={{
+                        backgroundColor: isDictating
+                          ? theme.palette.error.light
+                          : "transparent",
+                        "&:hover": {
+                          backgroundColor: isDictating
+                            ? theme.palette.error.main
+                            : theme.palette.action.hover,
+                        },
+                      }}
+                    >
+                      <MicIcon />
+                    </IconButton>
+                  </InputAdornment>
+                ) : undefined,
+              }}
+            />
+            {isDictating && (
+              <Box sx={{ mt: 1, display: "flex", alignItems: "center", gap: 1 }}>
+                <Box
+                  sx={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    backgroundColor: "error.main",
+                    animation: "pulse 1.5s ease-in-out infinite",
+                    "@keyframes pulse": {
+                      "0%": { opacity: 1 },
+                      "50%": { opacity: 0.5 },
+                      "100%": { opacity: 1 },
+                    },
+                  }}
+                />
+                <Typography variant="caption" color="text.secondary">
+                  Dictating... Speak clearly into your microphone
+                </Typography>
+              </Box>
+            )}
+            {dictationError && (
+              <Typography
+                variant="caption"
+                color="error.main"
+                sx={{ mt: 1, display: "block" }}
+              >
+                {dictationError}
+              </Typography>
+            )}
+            <Box sx={{ mt: 1, display: "flex", alignItems: "center", gap: 2 }}>
+              {descSaveStatus === "Saved" && (
+                <Typography variant="caption" color="success.main">
+                  Description saved successfully
+                </Typography>
+              )}
+              {descSaveStatus === "Error" && (
+                <Typography variant="caption" color="error.main">
+                  Error saving description
+                </Typography>
+              )}
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDescriptionModalOpen(false)}>
+            Close
+          </Button>
+          <Button
+            variant="contained"
+            onClick={async () => {
+              const ok = await saveDescriptionOfWorks();
+              if (ok) setDescriptionModalOpen(false);
+            }}
+            disabled={!descriptionOfWorks.trim() || isReportAuthorized}
+            sx={{
+              backgroundColor: theme.palette.primary.main,
+              "&:hover": { backgroundColor: theme.palette.primary.dark },
+            }}
+          >
+            Save Description
           </Button>
         </DialogActions>
       </Dialog>

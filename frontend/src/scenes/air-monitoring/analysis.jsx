@@ -2486,7 +2486,7 @@ const Analysis = () => {
               </>
             )}
             {shiftStatus === "analysis_complete" &&
-              currentUser?.role === "admin" && (
+              (currentUser?.role === "admin" || currentUser?.role === "super_admin") && (
                 <Button
                   variant="contained"
                   startIcon={<RefreshIcon />}

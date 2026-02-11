@@ -32,8 +32,9 @@ export const usePermissions = () => {
       // Get user's role
       role: currentUser.role || 'employee',
       
-      // Check if user is admin
-      isAdmin: currentUser.role === 'admin',
+      // Check if user is admin or super_admin (both have full admin capabilities)
+      isAdmin: currentUser.role === 'admin' || currentUser.role === 'super_admin',
+      isSuperAdmin: currentUser.role === 'super_admin',
       
       // Check if user is manager
       isManager: currentUser.role === 'manager',

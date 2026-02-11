@@ -59,7 +59,7 @@ const Incidents = () => {
   const theme = useTheme();
   const { showSnackbar } = useSnackbar();
   const { currentUser } = useAuth();
-  const isAdmin = currentUser?.role === "admin";
+  const isAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
 
   const [users, setUsers] = useState([]);
   const [records, setRecords] = useState([]);

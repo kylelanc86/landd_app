@@ -118,6 +118,12 @@ router.get('/:id', auth, async (req, res) => {
 router.post('/', auth, async (req, res) => {
   try {
     const { firstName, lastName, email, role, phone, licences, signature, workingHours, labApprovals, canSetJobComplete, labSignatory, reportProofer } = req.body;
+    const requesterRole = req.user.role;
+
+    // Only super_admin can create a user with role super_admin; admins cannot set anyone as super_admin
+    if (role === 'super_admin' && requesterRole !== 'super_admin') {
+      return res.status(403).json({ message: 'Only a super admin can create a super admin user.' });
+    }
 
     // Check if user already exists
     let user = await User.findOne({ email });
@@ -221,12 +227,61 @@ router.post('/', auth, async (req, res) => {
 router.put('/:id', auth, async (req, res) => {
   try {
     const { firstName, lastName, email, role, phone, isActive, licences, signature, chargeOutRate, workingHours, labApprovals, canSetJobComplete, labSignatory, reportProofer } = req.body;
-    const user = await User.findById(req.params.id);
-    
-    if (!user) {
+    const targetUser = await User.findById(req.params.id);
+    const requesterId = req.user._id.toString();
+    const targetId = req.params.id;
+    const isRequesterSuperAdmin = req.user.role === 'super_admin';
+    const isTargetSuperAdmin = targetUser?.role === 'super_admin';
+    const isSelf = requesterId === targetId;
+
+    if (!targetUser) {
       return res.status(404).json({ message: 'User not found' });
     }
 
+    // Admins cannot set themselves or anyone else as super_admin; only super_admin can assign super_admin role
+    if (role === 'super_admin') {
+      if (!isRequesterSuperAdmin) {
+        return res.status(403).json({ message: 'Only a super admin can assign the super admin role.' });
+      }
+      if (isSelf) {
+        return res.status(403).json({ message: 'You cannot set yourself as super admin.' });
+      }
+    }
+
+    // Non-super-admins cannot modify a super_admin's protected fields (role, status, name, email, phone)
+    if (isTargetSuperAdmin && !isRequesterSuperAdmin) {
+      // Apply only non-protected updates; leave role, isActive, firstName, lastName, email, phone unchanged
+      if (licences !== undefined) targetUser.licences = licences;
+      if (signature !== undefined) targetUser.signature = signature;
+      if (chargeOutRate !== undefined) targetUser.chargeOutRate = parseFloat(chargeOutRate) || 0;
+      if (workingHours !== undefined) targetUser.workingHours = workingHours;
+      if (labApprovals !== undefined) targetUser.labApprovals = labApprovals;
+      if (canSetJobComplete !== undefined) targetUser.canSetJobComplete = canSetJobComplete;
+      if (labSignatory !== undefined) targetUser.labSignatory = labSignatory;
+      if (reportProofer !== undefined) targetUser.reportProofer = reportProofer;
+      await targetUser.save();
+      const userResponse = targetUser.toObject();
+      delete userResponse.password;
+      return res.json(userResponse);
+    }
+
+    // When changing a super_admin's role or deactivating, ensure at least one active super_admin remains
+    if (isRequesterSuperAdmin && isTargetSuperAdmin) {
+      if (role && role !== 'super_admin') {
+        const activeSuperAdmins = await User.countDocuments({ role: 'super_admin', isActive: true, _id: { $ne: targetId } });
+        if (activeSuperAdmins < 1) {
+          return res.status(400).json({ message: 'There must always be at least one active super admin. Promote another user to super admin first.' });
+        }
+      }
+      if (typeof isActive === 'boolean' && !isActive) {
+        const activeSuperAdmins = await User.countDocuments({ role: 'super_admin', isActive: true, _id: { $ne: targetId } });
+        if (activeSuperAdmins < 1) {
+          return res.status(400).json({ message: 'There must always be at least one active super admin. You cannot deactivate the last super admin.' });
+        }
+      }
+    }
+
+    const user = targetUser;
     // Update fields
     if (firstName) user.firstName = firstName;
     if (lastName) user.lastName = lastName;
@@ -256,12 +311,28 @@ router.put('/:id', auth, async (req, res) => {
   }
 });
 
-// Delete user
+// Delete user (deactivate)
 router.delete('/:id', auth, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
+    }
+
+    const isRequesterSuperAdmin = req.user.role === 'super_admin';
+    const isTargetSuperAdmin = user.role === 'super_admin';
+
+    // Only a super_admin can deactivate another super_admin
+    if (isTargetSuperAdmin && !isRequesterSuperAdmin) {
+      return res.status(403).json({ message: 'Only a super admin can deactivate a super admin user.' });
+    }
+
+    // There must always be at least one active super_admin
+    if (isTargetSuperAdmin) {
+      const activeSuperAdmins = await User.countDocuments({ role: 'super_admin', isActive: true, _id: { $ne: user._id } });
+      if (activeSuperAdmins < 1) {
+        return res.status(400).json({ message: 'There must always be at least one active super admin. You cannot deactivate the last super admin.' });
+      }
     }
 
     // Instead of deleting, set isActive to false

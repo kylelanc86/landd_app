@@ -629,8 +629,8 @@ const replacePlaceholders = async (content, data) => {
     '[RISK_ASSESSMENT_TABLE]': generateRiskAssessmentTable(),
     '{STATE}': data.state || '',
     '[STATE]': data.state || '',
-    '{INTRUSIVENESS}': (data.intrusiveness === 'intrusive' ? 'Intrusive' : 'Non-intrusive'),
-    '[INTRUSIVENESS]': (data.intrusiveness === 'intrusive' ? 'Intrusive' : 'Non-intrusive'),
+    '{INTRUSIVENESS}': (data.intrusiveness === 'intrusive' || 'non-intrusive'),
+    '[INTRUSIVENESS]': (data.intrusiveness === 'intrusive' || 'non-intrusive'),
     '{REGULATOR}': (() => {
       const state = data.state;
       if (state === 'ACT') return 'Worksafe ACT';
@@ -660,6 +660,20 @@ const replacePlaceholders = async (content, data) => {
       }
       if (state === 'NSW') {
         return 'All asbestos removal must be undertaken as per the Work Health and Safety: How to Safely Remove Asbestos Code of Practice (2022).';
+      }
+      return '';
+    })(),
+    '{10m2_RULE}': (() => {
+      const state = data.state || (data.jurisdiction && data.jurisdiction !== 'ACT' ? data.jurisdiction : undefined);
+      if (state === 'NSW') {
+        return 'In NSW, under the Work Health and Safety Regulations, an employer or self-employed person can conduct the removal of up to 10 square metres of non-friable ACM. Such works must still abide by the requirements set out in Code of Practice - How to safely remove asbestos.';
+      }
+      return '';
+    })(),
+    '[10m2_RULE]': (() => {
+      const state = data.state || (data.jurisdiction && data.jurisdiction !== 'ACT' ? data.jurisdiction : undefined);
+      if (state === 'NSW') {
+        return 'In NSW, under the Work Health and Safety Regulations, an employer or self-employed person can conduct the removal of up to 10 square metres of non-friable ACM. Such works must still abide by the requirements set out in Code of Practice - How to safely remove asbestos.';
       }
       return '';
     })(),

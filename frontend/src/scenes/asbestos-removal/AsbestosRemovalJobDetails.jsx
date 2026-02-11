@@ -94,7 +94,6 @@ const AsbestosRemovalJobDetails = () => {
     // Debug logging disabled
   }, []);
 
-
   const [job, setJob] = useState(null);
   const [airMonitoringShifts, setAirMonitoringShifts] = useState([]);
   const [clearances, setClearances] = useState([]);
@@ -119,7 +118,7 @@ const AsbestosRemovalJobDetails = () => {
   const { showSnackbar } = useSnackbar();
   const [reportViewedShiftIds, setReportViewedShiftIds] = useState(new Set());
   const [reportViewedClearanceIds, setReportViewedClearanceIds] = useState(
-    new Set()
+    new Set(),
   );
   const [sendingAuthorisationRequests, setSendingAuthorisationRequests] =
     useState({});
@@ -260,7 +259,7 @@ const AsbestosRemovalJobDetails = () => {
           : [];
         const shiftsPayloadSize = JSON.stringify(shiftsPayload).length;
         const shiftsPayloadDuration = Math.round(
-          getTimestamp() - shiftsPayloadStart
+          getTimestamp() - shiftsPayloadStart,
         );
         logTiming("shifts payload extracted", {
           shiftCount: shiftsPayload.length,
@@ -273,7 +272,7 @@ const AsbestosRemovalJobDetails = () => {
 
         if (Array.isArray(jobPayload.sampleNumbers)) {
           const sampleNumbersSize = JSON.stringify(
-            jobPayload.sampleNumbers
+            jobPayload.sampleNumbers,
           ).length;
           logTiming("sample numbers array found", {
             sampleNumberEntries: jobPayload.sampleNumbers.length,
@@ -290,9 +289,9 @@ const AsbestosRemovalJobDetails = () => {
                   entry &&
                   entry.shiftId &&
                   Array.isArray(entry.sampleNumbers) &&
-                  entry.sampleNumbers.length
+                  entry.sampleNumbers.length,
               )
-              .map((entry) => [entry.shiftId, entry.sampleNumbers])
+              .map((entry) => [entry.shiftId, entry.sampleNumbers]),
           );
           const mapDuration = Math.round(getTimestamp() - mapStart);
           logTiming("sample number map created", {
@@ -308,7 +307,7 @@ const AsbestosRemovalJobDetails = () => {
                     ...shift,
                     sampleNumbers: sampleNumberMap.get(shift._id),
                   }
-                : shift
+                : shift,
             );
             const enrichDuration = Math.round(getTimestamp() - enrichStart);
             logTiming("sample numbers hydrated", {
@@ -365,7 +364,6 @@ const AsbestosRemovalJobDetails = () => {
             const sortedFields = Object.entries(fieldSizes)
               .sort(([, a], [, b]) => b.sizeBytes - a.sizeBytes)
               .slice(0, 10); // Top 10 largest fields
-
           }
 
           // Sort clearances by clearanceDate (newest to oldest)
@@ -381,7 +379,7 @@ const AsbestosRemovalJobDetails = () => {
           setClearances(sortedClearances);
           setClearancesLoaded(true); // Mark as loaded when fetched via fetchJobDetails
           const clearancesSetDuration = Math.round(
-            getTimestamp() - clearancesStart
+            getTimestamp() - clearancesStart,
           );
           logTiming(`clearances set (${clearancesPayload.length})`, {
             setStateDurationMs: clearancesSetDuration,
@@ -401,8 +399,8 @@ const AsbestosRemovalJobDetails = () => {
           clearanceCount: excludeClearances
             ? 0
             : Array.isArray(jobPayload.clearances)
-            ? jobPayload.clearances.length
-            : 0,
+              ? jobPayload.clearances.length
+              : 0,
         });
 
         // Performance summary - identify bottlenecks (only if clearances were included)
@@ -413,11 +411,11 @@ const AsbestosRemovalJobDetails = () => {
           const clearancesSize = JSON.stringify(clearancesPayload).length;
           const totalDataSize = responseDataSize;
           const clearancesPercentage = Math.round(
-            (clearancesSize / totalDataSize) * 100
+            (clearancesSize / totalDataSize) * 100,
           );
           const jobPercentage = Math.round((jobDataSize / totalDataSize) * 100);
           const shiftsPercentage = Math.round(
-            (shiftsPayloadSize / totalDataSize) * 100
+            (shiftsPayloadSize / totalDataSize) * 100,
           );
         }
       } catch (err) {
@@ -439,7 +437,7 @@ const AsbestosRemovalJobDetails = () => {
       }
       finishTiming();
     },
-    [jobId, logDebug]
+    [jobId, logDebug],
   );
 
   const fetchClearances = useCallback(async () => {
@@ -525,7 +523,7 @@ const AsbestosRemovalJobDetails = () => {
     try {
       const requestStart = getTimestamp();
       const data = await customDataFieldGroupService.getFieldsByType(
-        "asbestos_removalist"
+        "asbestos_removalist",
       );
       const requestDuration = Math.round(getTimestamp() - requestStart);
       const dataSize = JSON.stringify(data || []).length;
@@ -538,7 +536,7 @@ const AsbestosRemovalJobDetails = () => {
 
       const sortStart = getTimestamp();
       const sortedData = (data || []).sort((a, b) =>
-        (a.text || "").localeCompare(b.text || "")
+        (a.text || "").localeCompare(b.text || ""),
       );
       const sortDuration = Math.round(getTimestamp() - sortStart);
       logDebug("fetchAsbestosRemovalists - sorting complete", {
@@ -651,7 +649,7 @@ const AsbestosRemovalJobDetails = () => {
         }
       });
       const fetchJobDetailsCallDuration = Math.round(
-        getTimestamp() - fetchStart
+        getTimestamp() - fetchStart,
       );
       logDebug("jobId effect - fetchJobDetails called (clearances excluded)", {
         callDurationMs: fetchJobDetailsCallDuration,
@@ -717,21 +715,21 @@ const AsbestosRemovalJobDetails = () => {
     if (pendingClearanceEdit && asbestosAssessors.length > 0) {
       const clearance = pendingClearanceEdit;
       setPendingClearanceEdit(null); // Clear pending
-      
+
       setEditingClearance(clearance);
       const clearanceType = clearance.clearanceType || "Non-friable";
-      
+
       // Find the matching LAA value from the assessors list
       // This ensures the value format matches exactly what the Select expects
       const storedLAA = clearance.LAA || "";
       const matchingAssessor = asbestosAssessors.find(
         (assessor) =>
-          `${assessor.firstName} ${assessor.lastName}` === storedLAA
+          `${assessor.firstName} ${assessor.lastName}` === storedLAA,
       );
       const laaValue = matchingAssessor
         ? `${matchingAssessor.firstName} ${matchingAssessor.lastName}`
         : storedLAA; // Fallback to stored value if no exact match found
-      
+
       setClearanceForm({
         projectId: clearance.projectId._id || clearance.projectId,
         clearanceDate: clearance.clearanceDate
@@ -743,12 +741,13 @@ const AsbestosRemovalJobDetails = () => {
         LAA: laaValue,
         jurisdiction: clearance.jurisdiction || "ACT",
         secondaryHeader: clearance.secondaryHeader || "",
-        vehicleEquipmentDescription: clearance.vehicleEquipmentDescription || "",
+        vehicleEquipmentDescription:
+          clearance.vehicleEquipmentDescription || "",
         notes: clearance.notes || "",
         useComplexTemplate: clearance.useComplexTemplate || false,
         jobSpecificExclusions: clearance.jobSpecificExclusions || "",
       });
-      
+
       // Now open the dialog - assessors are loaded and form is set
       setClearanceDialogOpen(true);
     }
@@ -796,7 +795,7 @@ const AsbestosRemovalJobDetails = () => {
       status
         .split("_")
         .map(
-          (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+          (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase(),
         )
         .join(" ")
     );
@@ -847,7 +846,7 @@ const AsbestosRemovalJobDetails = () => {
   const allShiftsCompleteAndAuthorised =
     airMonitoringShifts.length > 0 &&
     airMonitoringShifts.every(
-      (shift) => shift.status === "shift_complete" && shift.reportApprovedBy
+      (shift) => shift.status === "shift_complete" && shift.reportApprovedBy,
     );
 
   // Check if all clearances are complete AND authorised
@@ -855,7 +854,7 @@ const AsbestosRemovalJobDetails = () => {
     clearances.length > 0 &&
     clearances.every(
       (clearance) =>
-        clearance.status === "complete" && clearance.reportApprovedBy
+        clearance.status === "complete" && clearance.reportApprovedBy,
     );
 
   // Job can only be completed if:
@@ -883,11 +882,11 @@ const AsbestosRemovalJobDetails = () => {
       let jobResponse;
       if (latestShift.jobModel === "AsbestosRemovalJob") {
         jobResponse = await asbestosRemovalJobService.getById(
-          latestShift.job?._id || latestShift.job
+          latestShift.job?._id || latestShift.job,
         );
       } else {
         jobResponse = await jobService.getById(
-          latestShift.job?._id || latestShift.job
+          latestShift.job?._id || latestShift.job,
         );
       }
       const samplesResponse = await sampleService.getByShift(latestShift._id);
@@ -901,7 +900,7 @@ const AsbestosRemovalJobDetails = () => {
             return completeSample.data;
           }
           return sample;
-        })
+        }),
       );
 
       // Ensure project and client are fully populated
@@ -914,7 +913,6 @@ const AsbestosRemovalJobDetails = () => {
         const clientResponse = await clientService.getById(project.client);
         project.client = clientResponse.data;
       }
-
 
       generateShiftReport({
         shift: latestShift,
@@ -967,7 +965,7 @@ const AsbestosRemovalJobDetails = () => {
         let jobResponse;
         if (currentShift.data.jobModel === "AsbestosRemovalJob") {
           jobResponse = await asbestosRemovalJobService.getById(
-            shift.job?._id || shift.job
+            shift.job?._id || shift.job,
           );
         } else {
           jobResponse = await jobService.getById(shift.job?._id || shift.job);
@@ -983,7 +981,7 @@ const AsbestosRemovalJobDetails = () => {
               return completeSample.data;
             }
             return sample;
-          })
+          }),
         );
 
         // Ensure project and client are fully populated
@@ -1013,7 +1011,7 @@ const AsbestosRemovalJobDetails = () => {
 
         showSnackbar(
           "Report authorised and downloaded successfully.",
-          "success"
+          "success",
         );
 
         // Refresh the shifts data
@@ -1022,7 +1020,7 @@ const AsbestosRemovalJobDetails = () => {
         console.error("Error generating authorised report:", reportError);
         showSnackbar(
           "Report authorised but failed to generate download.",
-          "warning"
+          "warning",
         );
       }
     } catch (error) {
@@ -1049,14 +1047,14 @@ const AsbestosRemovalJobDetails = () => {
           `Authorisation request emails sent successfully to ${
             response.data?.recipients?.length || 0
           } signatory user(s)`,
-        "success"
+        "success",
       );
     } catch (error) {
       console.error("Error sending authorisation request emails:", error);
       showSnackbar(
         error.response?.data?.message ||
           "Failed to send authorisation request emails. Please try again.",
-        "error"
+        "error",
       );
     } finally {
       setSendingAuthorisationRequests((prev) => ({
@@ -1241,7 +1239,7 @@ const AsbestosRemovalJobDetails = () => {
     if (shift.reportApprovedBy) {
       showSnackbar(
         "Cannot access samples while report is authorized. Please reset the shift status to access samples.",
-        "warning"
+        "warning",
       );
       return;
     }
@@ -1262,7 +1260,7 @@ const AsbestosRemovalJobDetails = () => {
         `/air-monitoring-shifts/${shift._id}/chain-of-custody`,
         {
           responseType: "blob",
-        }
+        },
       );
 
       // Create a blob URL from the response
@@ -1294,14 +1292,14 @@ const AsbestosRemovalJobDetails = () => {
 
       // Get the full clearance data with populated project
       const fullClearance = await asbestosClearanceService.getById(
-        clearance._id
+        clearance._id,
       );
 
       // Use the new HTML template-based PDF generation
       const fileName = await generateHTMLTemplatePDF(
         "asbestos-clearance", // template type
         fullClearance, // clearance data
-        { openInNewTab: true } // open in new tab instead of downloading
+        { openInNewTab: true }, // open in new tab instead of downloading
       );
 
       showSnackbar("PDF opened in new tab", "success");
@@ -1325,20 +1323,20 @@ const AsbestosRemovalJobDetails = () => {
 
       // Get the full clearance data with populated project
       const fullClearance = await asbestosClearanceService.getById(
-        clearance._id
+        clearance._id,
       );
 
       // Use the new HTML template-based PDF generation
       const fileName = await generateHTMLTemplatePDF(
         "asbestos-clearance", // template type
-        fullClearance // clearance data
+        fullClearance, // clearance data
       );
 
       showSnackbar(
         `PDF generated successfully! Check your downloads folder for: ${
           fileName.filename || fileName
         }`,
-        "success"
+        "success",
       );
     } catch (err) {
       console.error("Error generating PDF:", err);
@@ -1378,7 +1376,7 @@ const AsbestosRemovalJobDetails = () => {
                 reportApprovedBy: updatedClearance.reportApprovedBy,
                 reportIssueDate: updatedClearance.reportIssueDate,
               }
-            : c
+            : c,
         );
         return updated;
       });
@@ -1386,19 +1384,19 @@ const AsbestosRemovalJobDetails = () => {
       // Generate and download the authorised report
       try {
         const fullClearance = await asbestosClearanceService.getById(
-          clearance._id
+          clearance._id,
         );
 
         await generateHTMLTemplatePDF("asbestos-clearance", fullClearance);
         showSnackbar(
           "Report authorised and downloaded successfully.",
-          "success"
+          "success",
         );
       } catch (reportError) {
         console.error("Error generating authorised report:", reportError);
         showSnackbar(
           "Report authorised but failed to generate download.",
-          "warning"
+          "warning",
         );
       }
 
@@ -1411,7 +1409,7 @@ const AsbestosRemovalJobDetails = () => {
       // in case the merge didn't work properly
       setClearances((prevClearances) => {
         const refreshedClearance = prevClearances.find(
-          (c) => c._id === clearance._id
+          (c) => c._id === clearance._id,
         );
         if (
           refreshedClearance &&
@@ -1425,7 +1423,7 @@ const AsbestosRemovalJobDetails = () => {
                   reportApprovedBy: updatedClearance.reportApprovedBy,
                   reportIssueDate: updatedClearance.reportIssueDate,
                 }
-              : c
+              : c,
           );
         }
         return prevClearances;
@@ -1435,7 +1433,7 @@ const AsbestosRemovalJobDetails = () => {
       showSnackbar(
         error.response?.data?.message ||
           "Failed to authorise report. Please try again.",
-        "error"
+        "error",
       );
     } finally {
       // Clear loading state only after everything is complete
@@ -1460,7 +1458,7 @@ const AsbestosRemovalJobDetails = () => {
       }));
 
       const response = await asbestosClearanceService.sendForAuthorisation(
-        clearance._id
+        clearance._id,
       );
 
       showSnackbar(
@@ -1468,14 +1466,14 @@ const AsbestosRemovalJobDetails = () => {
           `Authorisation request emails sent successfully to ${
             response?.recipients?.length || 0
           } report proofer user(s)`,
-        "success"
+        "success",
       );
     } catch (error) {
       console.error("Error sending authorisation request emails:", error);
       showSnackbar(
         error.response?.data?.message ||
           "Failed to send authorisation request emails. Please try again.",
-        "error"
+        "error",
       );
     } finally {
       setSendingClearanceAuthorisationRequests((prev) => ({
@@ -1489,13 +1487,10 @@ const AsbestosRemovalJobDetails = () => {
     event.stopPropagation();
     // Store the clearance to edit - we'll set up the form once assessors are loaded
     setPendingClearanceEdit(clearance);
-    
+
     // Lazy load removalists and assessors only when needed
     // Await these to ensure options are available before opening modal
-    await Promise.all([
-      fetchAsbestosAssessors(),
-      fetchAsbestosRemovalists(),
-    ]);
+    await Promise.all([fetchAsbestosAssessors(), fetchAsbestosRemovalists()]);
   };
 
   const handleDeleteClearance = (clearance, event) => {
@@ -1555,7 +1550,7 @@ const AsbestosRemovalJobDetails = () => {
       console.error("Error reopening shift:", error);
       showSnackbar(
         "Failed to reopen shift. Only admins can reopen shifts.",
-        "error"
+        "error",
       );
     }
   };
@@ -1622,7 +1617,7 @@ const AsbestosRemovalJobDetails = () => {
       if (editingClearance) {
         response = await asbestosClearanceService.update(
           editingClearance._id,
-          newClearanceData
+          newClearanceData,
         );
       } else {
         response = await asbestosClearanceService.create(newClearanceData);
@@ -1640,7 +1635,7 @@ const AsbestosRemovalJobDetails = () => {
           err.message ||
           (editingClearance
             ? "Failed to update clearance"
-            : "Failed to create clearance")
+            : "Failed to create clearance"),
       );
     } finally {
       setCreating(false);
@@ -1695,12 +1690,12 @@ const AsbestosRemovalJobDetails = () => {
     const hasAdminPermission = hasPermission(currentUser, "admin.view");
     const hasEditPermission = hasPermission(currentUser, "jobs.edit");
     const permissionCheckDuration = Math.round(
-      getTimestamp() - permissionCheckStart
+      getTimestamp() - permissionCheckStart,
     );
   }
 
   return (
-    <Box m="20px">
+    <Box sx={{ m: { xs: 1, sm: 1.5, md: 2.5 } }}>
       {/* PDF Loading Overlay */}
       <PDFLoadingOverlay
         open={generatingPDF}
@@ -1708,7 +1703,7 @@ const AsbestosRemovalJobDetails = () => {
       />
 
       {/* Breadcrumbs */}
-      <Breadcrumbs sx={{ marginBottom: 3 }}>
+      <Breadcrumbs sx={{ marginBottom: { xs: 2, md: 3 } }}>
         <Link
           component="button"
           variant="body1"
@@ -1718,28 +1713,45 @@ const AsbestosRemovalJobDetails = () => {
           <ArrowBackIcon sx={{ mr: 1 }} />
           Asbestos Removal Jobs
         </Link>
-        <Typography color="text.primary">
-          {job?.projectId?.projectID || "Loading..."}:{" "}
-          {job?.projectName || "Loading..."}
-        </Typography>
       </Breadcrumbs>
 
       {/* Job Header */}
-      <Box mb={3}>
+      <Box sx={{ mb: { xs: 2, md: 3 } }}>
         <Box
           display="flex"
           justifyContent="space-between"
           alignItems="flex-start"
         >
           <Box>
-            <Typography variant="h4" component="h1" gutterBottom>
+            <Typography
+              variant="h4"
+              component="h1"
+              gutterBottom
+              sx={{
+                display: { xs: "none", md: "block" },
+                fontSize: { xs: "1.25rem", md: "2.125rem" },
+                fontWeight: 600,
+              }}
+            >
               Asbestos Removal Job Details
             </Typography>
-            <Typography variant="h5" color="text.secondary">
+            <Typography
+              variant="h5"
+              color="text.secondary"
+              sx={{
+                fontSize: { xs: "0.95rem", md: "1.5rem" },
+              }}
+            >
               Project: {job?.projectId?.projectID || "Loading..."} -{" "}
               {job?.projectName || "Loading..."}
             </Typography>
-            <Typography variant="body1" color="text.secondary">
+            <Typography
+              variant="body1"
+              color="text.secondary"
+              sx={{
+                fontSize: { xs: "0.8125rem", md: "1rem" },
+              }}
+            >
               Asbestos Removalist: {job?.asbestosRemovalist || "Loading..."}
             </Typography>
           </Box>
@@ -1842,7 +1854,11 @@ const AsbestosRemovalJobDetails = () => {
         {/* Air Monitoring Tab */}
         {activeTab === 0 && (
           <Box p={3}>
-            <Typography variant="h6" gutterBottom>
+            <Typography
+              variant="h6"
+              gutterBottom
+              sx={{ display: { xs: "none", md: "block" } }}
+            >
               Air Monitoring Shifts
             </Typography>
             {airMonitoringShifts.length === 0 ? (
@@ -1985,7 +2001,7 @@ const AsbestosRemovalJobDetails = () => {
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     navigate(
-                                      `/air-monitoring/shift/${shift._id}/analysis`
+                                      `/air-monitoring/shift/${shift._id}/analysis`,
                                     );
                                   }}
                                   sx={{
@@ -2030,22 +2046,22 @@ const AsbestosRemovalJobDetails = () => {
                                   const conditions = {
                                     notApproved: !shift.reportApprovedBy,
                                     reportViewed: reportViewedShiftIds.has(
-                                      shift._id
+                                      shift._id,
                                     ),
                                     hasAdminPermission: hasPermission(
                                       currentUser,
-                                      "admin.view"
+                                      "admin.view",
                                     ),
                                     hasEditPermission: hasPermission(
                                       currentUser,
-                                      "jobs.edit"
+                                      "jobs.edit",
                                     ),
                                     isReportProofer: Boolean(
-                                      currentUser?.reportProofer
+                                      currentUser?.reportProofer,
                                     ),
                                   };
                                   const permissionCheckDuration = Math.round(
-                                    getTimestamp() - permissionCheckStart
+                                    getTimestamp() - permissionCheckStart,
                                   );
 
                                   const baseVisible =
@@ -2061,7 +2077,6 @@ const AsbestosRemovalJobDetails = () => {
                                       !conditions.isReportProofer &&
                                       conditions.hasEditPermission,
                                   };
-
 
                                   return (
                                     <>
@@ -2100,7 +2115,7 @@ const AsbestosRemovalJobDetails = () => {
                                           disabled={Boolean(
                                             sendingAuthorisationRequests[
                                               shift._id
-                                            ]
+                                            ],
                                           )}
                                         >
                                           {sendingAuthorisationRequests[
@@ -2142,7 +2157,11 @@ const AsbestosRemovalJobDetails = () => {
         {/* Clearances Tab */}
         {activeTab === 1 && clearancesLoaded && (
           <Box p={3}>
-            <Typography variant="h6" gutterBottom>
+            <Typography
+              variant="h6"
+              gutterBottom
+              sx={{ display: { xs: "none", md: "block" } }}
+            >
               Clearances
             </Typography>
             {clearances.length === 0 ? (
@@ -2293,13 +2312,13 @@ const AsbestosRemovalJobDetails = () => {
                                     View Report
                                   </Button>
                                   {reportViewedClearanceIds.has(
-                                    clearance._id
+                                    clearance._id,
                                   ) && (
                                     <>
                                       {currentUser?.reportProofer &&
                                         hasPermission(
                                           currentUser,
-                                          "admin.view"
+                                          "admin.view",
                                         ) &&
                                         !clearance.reportApprovedBy && (
                                           <Button
@@ -2309,7 +2328,7 @@ const AsbestosRemovalJobDetails = () => {
                                             onClick={(e) =>
                                               handleAuthoriseClearanceReport(
                                                 clearance,
-                                                e
+                                                e,
                                               )
                                             }
                                             disabled={
@@ -2353,11 +2372,11 @@ const AsbestosRemovalJobDetails = () => {
                                       {(!currentUser?.reportProofer ||
                                         !hasPermission(
                                           currentUser,
-                                          "admin.view"
+                                          "admin.view",
                                         )) &&
                                         hasPermission(
                                           currentUser,
-                                          "asbestos.edit"
+                                          "asbestos.edit",
                                         ) && (
                                           <Button
                                             variant="outlined"
@@ -2367,13 +2386,13 @@ const AsbestosRemovalJobDetails = () => {
                                             onClick={(e) =>
                                               handleSendClearanceForAuthorisation(
                                                 clearance,
-                                                e
+                                                e,
                                               )
                                             }
                                             disabled={Boolean(
                                               sendingClearanceAuthorisationRequests[
                                                 clearance._id
-                                              ]
+                                              ],
                                             )}
                                             sx={{ mr: 1 }}
                                           >
@@ -2463,7 +2482,7 @@ const AsbestosRemovalJobDetails = () => {
                           >
                             {hour}
                           </MenuItem>
-                        )
+                        ),
                       )}
                     </Select>
                   </FormControl>
@@ -2494,7 +2513,7 @@ const AsbestosRemovalJobDetails = () => {
                       label="Minutes"
                     >
                       {Array.from({ length: 12 }, (_, i) =>
-                        (i * 5).toString().padStart(2, "0")
+                        (i * 5).toString().padStart(2, "0"),
                       ).map((minute) => (
                         <MenuItem key={minute} value={minute}>
                           {minute}
@@ -2607,15 +2626,14 @@ const AsbestosRemovalJobDetails = () => {
                     key={`laa-select-${asbestosAssessors.length}-${clearanceForm.LAA}`}
                   >
                     {asbestosAssessors.length === 0 ? (
-                      <MenuItem value="" disabled>Loading assessors...</MenuItem>
+                      <MenuItem value="" disabled>
+                        Loading assessors...
+                      </MenuItem>
                     ) : (
                       asbestosAssessors.map((assessor) => {
                         const assessorValue = `${assessor.firstName} ${assessor.lastName}`;
                         return (
-                          <MenuItem
-                            key={assessor._id}
-                            value={assessorValue}
-                          >
+                          <MenuItem key={assessor._id} value={assessorValue}>
                             {assessor.firstName} {assessor.lastName}
                           </MenuItem>
                         );
@@ -2746,8 +2764,8 @@ const AsbestosRemovalJobDetails = () => {
                   ? "Updating..."
                   : "Creating..."
                 : editingClearance
-                ? "Update Clearance"
-                : "Create Clearance"}
+                  ? "Update Clearance"
+                  : "Create Clearance"}
             </Button>
           </DialogActions>
         </form>
@@ -2875,8 +2893,8 @@ const AsbestosRemovalJobDetails = () => {
                 ? "Updating..."
                 : "Creating..."
               : editingShift
-              ? "Update Shift"
-              : "Add Shift"}
+                ? "Update Shift"
+                : "Add Shift"}
           </Button>
           <Button
             onClick={handleCloseShiftDialog}
@@ -3036,7 +3054,7 @@ const AsbestosRemovalJobDetails = () => {
                     <strong>Clearance Date:</strong>{" "}
                     {itemToDelete.clearanceDate
                       ? new Date(itemToDelete.clearanceDate).toLocaleDateString(
-                          "en-AU"
+                          "en-AU",
                         )
                       : "Not specified"}
                   </Typography>

@@ -167,7 +167,7 @@ const ProjectReports = () => {
 
   // Get auth context for admin check
   const { currentUser } = useAuth();
-  const isAdmin = currentUser?.role === "admin";
+  const isAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
 
   // Debug logging for admin check
   console.log("ProjectReports - currentUser:", currentUser);

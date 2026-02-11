@@ -509,6 +509,7 @@ const ResidentialAsbestosAssessment = () => {
 
   const canCompleteAssessment =
     currentUser?.role === "admin" ||
+    currentUser?.role === "super_admin" ||
     currentUser?.role === "manager" ||
     currentUser?.canSetJobComplete === true;
 

@@ -374,6 +374,11 @@ const SurveyReportTemplates = () => {
       name: "LEGISLATION",
       description: "Selected legislation items (formatted as bullet points)",
     },
+    {
+      name: "10m2_RULE",
+      description:
+        "NSW only: text about removal of up to 10m² of non-friable ACM under WHS Regulations (empty when state is not NSW)",
+    },
   ];
 
   // Available formatting placeholders

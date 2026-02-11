@@ -31,6 +31,7 @@ const Topbar = () => {
   // Detect tablet and mobile screens - show hamburger menu
   // iPads in landscape can be up to ~1366px wide (iPad Pro 12.9"), so we use 1280px breakpoint
   const isMobileOrTablet = useMediaQuery("(max-width: 1280px)");
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm")); // true below 600px
 
   // Check if sidebar is collapsed
   useEffect(() => {
@@ -133,19 +134,26 @@ const Topbar = () => {
               sx={{
                 color: "#FFF",
                 fontWeight: 600,
-                fontSize: "1rem",
+                fontSize: isMobile ? "0.9rem" : "1rem",
                 letterSpacing: "0.5px",
                 whiteSpace: "nowrap",
               }}
             >
-              LANCASTER & DICKENSON CONSULTING
+              {isMobile ? "L&D CONSULTING" : "LANCASTER & DICKENSON CONSULTING"}
             </Typography>
           )}
         </Box>
 
         {/* User info on the right */}
         <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2, mr: 2 }}>
+          <Box
+            sx={{
+              display: { xs: "none", sm: "flex" },
+              alignItems: "center",
+              gap: 2,
+              mr: 2,
+            }}
+          >
             <Typography
               variant="subtitle1"
               sx={{
@@ -163,19 +171,31 @@ const Topbar = () => {
                 fontStyle: "bold",
                 color: "black",
                 textTransform: "capitalize",
+                display: { xs: "none", sm: "block" },
               }}
             >
-              {currentUser ? currentUser.role : "Guest"}
+              {currentUser
+                ? currentUser.role === "super_admin"
+                  ? "Super Admin"
+                  : currentUser.role
+                : "Guest"}
             </Typography>
           </Box>
           <Divider
             orientation="vertical"
             flexItem
-            sx={{ mx: 2, borderColor: "rgba(255,255,255,0.3)" }}
+            sx={{
+              mx: 2,
+              borderColor: "rgba(255,255,255,0.3)",
+              display: { xs: "none", sm: "block" },
+            }}
           />
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
             <Tooltip title="Refresh">
-              <IconButton onClick={handleRefresh} sx={{ color: "#FFF" }}>
+              <IconButton
+                onClick={handleRefresh}
+                sx={{ color: "#FFF", display: { xs: "none", sm: "inline-flex" } }}
+              >
                 <RefreshIcon />
               </IconButton>
             </Tooltip>

@@ -81,6 +81,7 @@ export const PERMISSIONS = {
 
 // Define role-based permissions
 export const ROLE_PERMISSIONS = {
+  super_admin: Object.keys(PERMISSIONS), // Super admins have same as admin
   admin: Object.keys(PERMISSIONS), // Admins have all restricted permissions
   manager: [
     'projects.view',

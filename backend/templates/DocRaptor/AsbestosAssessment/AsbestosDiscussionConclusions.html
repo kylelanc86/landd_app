@@ -229,8 +229,16 @@
         color: #222;
         line-height: 1;
       }
+      /* Override global * { word-break: keep-all } which can prevent Prince from justifying text */
+      .discussion-conclusions-page .discussion-conclusions-content,
+      .discussion-conclusions-page .discussion-conclusions-content *,
+      .discussion-conclusions-page .paragraph.job-specific-exclusions,
+      .discussion-conclusions-page .paragraph.job-specific-exclusions * {
+        word-break: normal !important;
+        overflow-wrap: break-word !important;
+      }
       .discussion-conclusions-page .discussion-conclusions-content {
-        white-space: pre-wrap;
+        white-space: normal;
         text-align: justify !important;
         width: 100%;
         display: block;
@@ -238,6 +246,7 @@
       .discussion-conclusions-page .paragraph.job-specific-exclusions {
         text-align: justify !important;
         width: 100%;
+        white-space: normal;
       }
 
       .discussion-conclusions-page .subsection-header-underline {
@@ -329,10 +338,10 @@
         [ASBESTOS_ITEMS_SECTION]
         <div class="subsection-header-underline">Non-asbestos Items</div>
         [NON_ASBESTOS_ITEMS_SECTION]
-        <div class="paragraph discussion-conclusions-content">
+        <div class="paragraph discussion-conclusions-content" style="text-align: justify !important; text-justify: inter-word;">
           [DISCUSSION_CONCLUSIONS_CONTENT]
         </div>
-        <div class="paragraph job-specific-exclusions" style="margin-top: 12px">
+        <div class="paragraph job-specific-exclusions" style="margin-top: 12px; text-align: justify !important; text-justify: inter-word;">
           [JOB_SPECIFIC_EXCLUSIONS]
         </div>
         <div class="signoff">[SIGN_OFF_CONTENT]</div>

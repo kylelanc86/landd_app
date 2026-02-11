@@ -26,6 +26,7 @@ import {
   MenuItem,
   Autocomplete,
   Container,
+  useMediaQuery,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import CloseIcon from "@mui/icons-material/Close";
@@ -105,6 +106,10 @@ const AsbestosRemoval = () => {
   const colors = tokens;
   const navigate = useNavigate();
   const { currentUser } = useAuth();
+
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+  const isPortrait = useMediaQuery("(orientation: portrait)");
+  const showPortraitColumnsOnly = isMobile && isPortrait;
 
   const [asbestosRemovalJobs, setAsbestosRemovalJobs] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -597,22 +602,28 @@ const AsbestosRemoval = () => {
               <Table stickyHeader>
                 <TableHead>
                   <TableRow>
-                    <TableCell sx={{ fontWeight: "bold", minWidth: "120px" }}>
+                    <TableCell sx={{ fontWeight: "bold", minWidth: showPortraitColumnsOnly ? "80px" : "120px" }}>
                       Project ID
                     </TableCell>
-                    <TableCell sx={{ fontWeight: "bold", minWidth: "240px" }}>
+                    <TableCell sx={{ fontWeight: "bold", minWidth: showPortraitColumnsOnly ? "140px" : "240px" }}>
                       Site Name (Project)
                     </TableCell>
-                    <TableCell sx={{ fontWeight: "bold", minWidth: "120px" }}>
-                      Asbestos Removalist
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: "bold", minWidth: "140px" }}>
-                      Status
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: "bold", minWidth: "100px" }}>
-                      Job Type
-                    </TableCell>
-                    {hasPermission(currentUser, "asbestos.delete") && (
+                    {!showPortraitColumnsOnly && (
+                      <>
+                        <TableCell sx={{ fontWeight: "bold", minWidth: "120px" }}>
+                          Asbestos Removalist
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: "bold", minWidth: "140px" }}>
+                          Status
+                        </TableCell>
+                      </>
+                    )}
+                    {!isMobile && (
+                      <TableCell sx={{ fontWeight: "bold", minWidth: "100px" }}>
+                        Job Type
+                      </TableCell>
+                    )}
+                    {!isMobile && hasPermission(currentUser, "asbestos.delete") && (
                       <TableCell
                         sx={{ fontWeight: "bold", width: "120px" }}
                         align="center"
@@ -643,32 +654,38 @@ const AsbestosRemoval = () => {
                           {job.projectName}
                         </Typography>
                       </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                          {job.asbestosRemovalist}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={formatStatusLabel(job.status)}
-                          size="small"
-                          sx={{
-                            backgroundColor: getStatusColor(job.status),
-                            color: "white",
-                          }}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={job.jobTypeLabel}
-                          size="small"
-                          sx={{
-                            backgroundColor: getJobTypeColor(job.jobTypeRaw),
-                            color: "white",
-                          }}
-                        />
-                      </TableCell>
-                      {hasPermission(currentUser, "asbestos.delete") && (
+                      {!showPortraitColumnsOnly && (
+                        <>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {job.asbestosRemovalist}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={formatStatusLabel(job.status)}
+                              size="small"
+                              sx={{
+                                backgroundColor: getStatusColor(job.status),
+                                color: "white",
+                              }}
+                            />
+                          </TableCell>
+                        </>
+                      )}
+                      {!isMobile && (
+                        <TableCell>
+                          <Chip
+                            label={job.jobTypeLabel}
+                            size="small"
+                            sx={{
+                              backgroundColor: getJobTypeColor(job.jobTypeRaw),
+                              color: "white",
+                            }}
+                          />
+                        </TableCell>
+                      )}
+                      {!isMobile && hasPermission(currentUser, "asbestos.delete") && (
                         <TableCell align="center">
                           <Tooltip title="Delete Job">
                             <IconButton

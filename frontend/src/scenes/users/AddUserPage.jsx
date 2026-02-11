@@ -30,7 +30,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import RemoveIcon from "@mui/icons-material/Remove";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import { USER_LEVELS } from "../../data/userData";
+import { USER_LEVELS, SUPER_ADMIN_ONLY_LEVELS } from "../../data/userData";
 import { userService } from "../../services/api";
 import { useNavigate } from "react-router-dom";
 import { hasPermission } from "../../config/permissions";
@@ -350,6 +350,12 @@ const AddUserPage = () => {
     );
   }
 
+  const isSuperAdmin = currentUser?.role === "super_admin";
+  const roleOptions = USER_LEVELS.filter((level) => {
+    if (SUPER_ADMIN_ONLY_LEVELS.includes(level)) return isSuperAdmin;
+    return true;
+  });
+
   const daysOfWeek = [
     { key: "monday", label: "Monday" },
     { key: "tuesday", label: "Tuesday" },
@@ -428,11 +434,15 @@ const AddUserPage = () => {
                 name="role"
                 value={form.role}
                 onChange={handleChange}
-                disabled={currentUser.role !== "admin"}
+                disabled={
+                  currentUser.role !== "admin" && currentUser.role !== "super_admin"
+                }
               >
-                {USER_LEVELS.map((level) => (
+                {roleOptions.map((level) => (
                   <MenuItem key={level} value={level}>
-                    {level.charAt(0).toUpperCase() + level.slice(1)}
+                    {level === "super_admin"
+                      ? "Super Admin"
+                      : level.charAt(0).toUpperCase() + level.slice(1)}
                   </MenuItem>
                 ))}
               </Select>

@@ -1,4 +1,7 @@
-export const USER_LEVELS = ["admin", "manager", "employee"];
+export const USER_LEVELS = ["super_admin", "admin", "manager", "employee"];
+
+// User levels that only super_admin can assign (e.g. in Add/Edit user)
+export const SUPER_ADMIN_ONLY_LEVELS = ["super_admin"];
 
 export const fakeUsers = [
   {

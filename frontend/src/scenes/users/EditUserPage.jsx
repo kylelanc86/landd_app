@@ -30,7 +30,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import RemoveIcon from "@mui/icons-material/Remove";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import { USER_LEVELS } from "../../data/userData";
+import { USER_LEVELS, SUPER_ADMIN_ONLY_LEVELS } from "../../data/userData";
 import { userService } from "../../services/api";
 import { useParams, useNavigate } from "react-router-dom";
 import { hasPermission } from "../../config/permissions";
@@ -464,6 +464,19 @@ const EditUserPage = () => {
     );
   }
 
+  const isSuperAdmin = currentUser?.role === "super_admin";
+  const isEditingSuperAdmin = form.role === "super_admin";
+  const isEditingSelf = currentUser?.id === userId || currentUser?._id === userId;
+  const canEditProtectedFields =
+    !isEditingSuperAdmin || isSuperAdmin;
+  const roleOptions = USER_LEVELS.filter((level) => {
+    if (SUPER_ADMIN_ONLY_LEVELS.includes(level))
+      return (isSuperAdmin && !isEditingSelf) || isEditingSuperAdmin;
+    return true;
+  });
+  const canEditRole =
+    (currentUser?.role === "admin" || isSuperAdmin) && canEditProtectedFields;
+
   const daysOfWeek = [
     { key: "monday", label: "Monday" },
     { key: "tuesday", label: "Tuesday" },
@@ -516,6 +529,7 @@ const EditUserPage = () => {
               value={form.firstName}
               onChange={handleChange}
               required
+              disabled={!canEditProtectedFields}
               sx={{ flex: 1 }}
             />
             <TextField
@@ -524,6 +538,7 @@ const EditUserPage = () => {
               value={form.lastName}
               onChange={handleChange}
               required
+              disabled={!canEditProtectedFields}
               sx={{ flex: 1 }}
             />
           </Stack>
@@ -536,6 +551,7 @@ const EditUserPage = () => {
               value={form.email}
               onChange={handleChange}
               required
+              disabled={!canEditProtectedFields}
               sx={{ flex: 1 }}
             />
             <TextField
@@ -543,6 +559,7 @@ const EditUserPage = () => {
               name="phone"
               value={form.phone || ""}
               onChange={handleChange}
+              disabled={!canEditProtectedFields}
               sx={{ flex: 1 }}
             />
           </Stack>
@@ -565,11 +582,13 @@ const EditUserPage = () => {
                 name="role"
                 value={form.role}
                 onChange={handleChange}
-                disabled={currentUser.role !== "admin"}
+                disabled={!canEditRole}
               >
-                {USER_LEVELS.map((level) => (
+                {roleOptions.map((level) => (
                   <MenuItem key={level} value={level}>
-                    {level.charAt(0).toUpperCase() + level.slice(1)}
+                    {level === "super_admin"
+                      ? "Super Admin"
+                      : level.charAt(0).toUpperCase() + level.slice(1)}
                   </MenuItem>
                 ))}
               </Select>
@@ -582,6 +601,7 @@ const EditUserPage = () => {
                     setForm({ ...form, isActive: e.target.checked })
                   }
                   color="primary"
+                  disabled={!canEditProtectedFields}
                 />
               }
               label="Active"
@@ -768,7 +788,7 @@ const EditUserPage = () => {
           </Box>
 
           {/* Job Complete Permission Section - Only for Employee users */}
-          {currentUser.role === "admin" && form.role === "employee" && (
+          {(currentUser.role === "admin" || isSuperAdmin) && form.role === "employee" && (
             <Box sx={{ mt: 3 }}>
               <Typography variant="h6" sx={{ mb: 2 }}>
                 Project Status Permissions
