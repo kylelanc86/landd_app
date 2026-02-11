@@ -149,6 +149,7 @@ const SampleSummary = React.memo(
     onOpenFibreCountModal,
     onOpenCommentModal,
     isLast,
+    optionalFibreCountReadOnly,
   }) => {
     const theme = useTheme();
 
@@ -254,74 +255,81 @@ const SampleSummary = React.memo(
             </Box>
           </Box>
 
-          {sample.status !== "failed" && (
-            <Stack
-              direction={{ xs: "column", sm: "row" }}
-              spacing={3}
-              sx={{ mb: 2 }}
-            >
-              <FormControl component="fieldset">
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                  Edges/Distribution
-                </Typography>
-                <RadioGroup
-                  row
-                  value={analysis.edgesDistribution || ""}
-                  onChange={(e) =>
-                    onAnalysisChange(
-                      sample._id,
-                      "edgesDistribution",
-                      e.target.value
-                    )
-                  }
-                  disabled={isReadOnly}
-                >
-                  <FormControlLabel
-                    value="pass"
-                    control={<Radio size="small" />}
-                    label="Pass"
-                  />
-                  <FormControlLabel
-                    value="fail"
-                    control={<Radio size="small" />}
-                    label={<span style={{ color: "red" }}>Fail</span>}
-                  />
-                </RadioGroup>
-              </FormControl>
-              <FormControl component="fieldset">
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                  Background Dust
-                </Typography>
-                <RadioGroup
-                  row
-                  value={analysis.backgroundDust || ""}
-                  onChange={(e) =>
-                    onAnalysisChange(sample._id, "backgroundDust", e.target.value)
-                  }
-                  disabled={isReadOnly}
-                >
-                  <FormControlLabel
-                    value="low"
-                    control={<Radio size="small" />}
-                    label="Low"
-                  />
-                  <FormControlLabel
-                    value="medium"
-                    control={<Radio size="small" />}
-                    label="Medium"
-                  />
-                  <FormControlLabel
-                    value="high"
-                    control={<Radio size="small" />}
-                    label="High"
-                  />
-                  <FormControlLabel
-                    value="fail"
-                    control={<Radio size="small" />}
-                    label={<span style={{ color: "red" }}>Fail</span>}
-                  />
-                </RadioGroup>
-              </FormControl>
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            spacing={3}
+            sx={{ mb: 2 }}
+          >
+            <FormControl component="fieldset">
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Edges/Distribution
+              </Typography>
+              <RadioGroup
+                row
+                value={analysis.edgesDistribution || ""}
+                onChange={(e) =>
+                  onAnalysisChange(
+                    sample._id,
+                    "edgesDistribution",
+                    e.target.value
+                  )
+                }
+                disabled={
+                  sample.status === "failed"
+                    ? optionalFibreCountReadOnly
+                    : isReadOnly
+                }
+              >
+                <FormControlLabel
+                  value="pass"
+                  control={<Radio size="small" />}
+                  label="Pass"
+                />
+                <FormControlLabel
+                  value="fail"
+                  control={<Radio size="small" />}
+                  label={<span style={{ color: "red" }}>Fail</span>}
+                />
+              </RadioGroup>
+            </FormControl>
+            <FormControl component="fieldset">
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Background Dust
+              </Typography>
+              <RadioGroup
+                row
+                value={analysis.backgroundDust || ""}
+                onChange={(e) =>
+                  onAnalysisChange(sample._id, "backgroundDust", e.target.value)
+                }
+                disabled={
+                  sample.status === "failed"
+                    ? optionalFibreCountReadOnly
+                    : isReadOnly
+                }
+              >
+                <FormControlLabel
+                  value="low"
+                  control={<Radio size="small" />}
+                  label="Low"
+                />
+                <FormControlLabel
+                  value="medium"
+                  control={<Radio size="small" />}
+                  label="Medium"
+                />
+                <FormControlLabel
+                  value="high"
+                  control={<Radio size="small" />}
+                  label="High"
+                />
+                <FormControlLabel
+                  value="fail"
+                  control={<Radio size="small" />}
+                  label={<span style={{ color: "red" }}>Fail</span>}
+                />
+              </RadioGroup>
+            </FormControl>
             <Box
               sx={{
                 display: "flex",
@@ -331,31 +339,45 @@ const SampleSummary = React.memo(
                 minWidth: 0,
               }}
             >
-              {analysis?.edgesDistribution && analysis?.backgroundDust && (
+              {sample.status === "failed" ? (
                 <Button
-                  variant="contained"
+                  variant="outlined"
                   size="small"
                   onClick={() => onOpenFibreCountModal(sample._id)}
-                  disabled={isReadOnly || isFilterUncountable(sample._id)}
-                  sx={{
-                    backgroundColor: isSampleAnalysed(sample._id)
-                      ? "success.main"
-                      : "grey.500",
-                    "&:hover": {
-                      backgroundColor: isSampleAnalysed(sample._id)
-                        ? "success.dark"
-                        : "grey.600",
-                    },
-                  }}
+                  disabled={optionalFibreCountReadOnly}
+                  sx={{ textTransform: "none" }}
                 >
-                  {isSampleAnalysed(sample._id)
-                    ? "Edit Fibre Counts"
-                    : "Enter Fibre Counts"}
+                  {isComplete
+                    ? "Edit Optional Fibre Count"
+                    : "Optional Fibre Count"}
                 </Button>
+              ) : (
+                analysis?.edgesDistribution &&
+                analysis?.backgroundDust && (
+                  <Button
+                    variant="contained"
+                    size="small"
+                    onClick={() => onOpenFibreCountModal(sample._id)}
+                    disabled={isReadOnly || isFilterUncountable(sample._id)}
+                    sx={{
+                      backgroundColor: isSampleAnalysed(sample._id)
+                        ? "success.main"
+                        : "grey.500",
+                      "&:hover": {
+                        backgroundColor: isSampleAnalysed(sample._id)
+                          ? "success.dark"
+                          : "grey.600",
+                      },
+                    }}
+                  >
+                    {isSampleAnalysed(sample._id)
+                      ? "Edit Fibre Counts"
+                      : "Enter Fibre Counts"}
+                  </Button>
+                )
               )}
             </Box>
           </Stack>
-          )}
 
           {/* Comment Display */}
           {analysis?.comment && (
@@ -414,12 +436,11 @@ const SampleSummary = React.memo(
                     Actual Concentration
                   </Typography>
                   <Typography variant="h6">
-                    {analysis.uncountableDueToDust
+                    {sample.status === "failed"
                       ? "N/A"
-                      : calculateConcentration(sample._id) || "N/A"}{" "}
-                    {!analysis.uncountableDueToDust &&
-                      calculateConcentration(sample._id) &&
-                      "fibres/mL"}
+                      : analysis.uncountableDueToDust
+                      ? "N/A"
+                      : `${calculateConcentration(sample._id) || "N/A"}${calculateConcentration(sample._id) ? " fibres/mL" : ""}`}
                   </Typography>
                 </Box>
                 <Box sx={{ textAlign: "center" }}>
@@ -427,10 +448,9 @@ const SampleSummary = React.memo(
                     Reported Concentration
                   </Typography>
                   <Typography variant="h6">
-                    {getReportedConcentration(sample._id) || "N/A"}{" "}
-                    {!analysis.uncountableDueToDust &&
-                      getReportedConcentration(sample._id) !== "UDD" &&
-                      "fibres/mL"}
+                    {sample.status === "failed"
+                      ? "N/A"
+                      : `${getReportedConcentration(sample._id) || "N/A"}${getReportedConcentration(sample._id) && getReportedConcentration(sample._id) !== "UDD" ? " fibres/mL" : ""}`}
                   </Typography>
                 </Box>
               </Stack>
@@ -1682,6 +1702,12 @@ const Analysis = () => {
   };
 
   const getReportedConcentration = (sampleId) => {
+    const sample = samples.find((s) => s._id === sampleId);
+    // Failed samples (like field blanks) do not have a fibre concentration
+    if (sample?.status === "failed") {
+      return "N/A";
+    }
+
     const analysis = sampleAnalyses[sampleId];
 
     // Check for uncountable due to dust first
@@ -2182,6 +2208,7 @@ const Analysis = () => {
             getReportedConcentration={getReportedConcentration}
             inputRefs={inputRefs}
             isReadOnly={shiftStatus === "analysis_complete" || sample.status === "failed"}
+            optionalFibreCountReadOnly={shiftStatus === "analysis_complete"}
             onOpenFibreCountModal={handleOpenFibreCountModal}
             onOpenCommentModal={handleOpenCommentModal}
           />
@@ -2233,6 +2260,7 @@ const Analysis = () => {
                 getReportedConcentration={getReportedConcentration}
                 inputRefs={inputRefs}
                 isReadOnly={shiftStatus === "analysis_complete" || sample.status === "failed"}
+                optionalFibreCountReadOnly={shiftStatus === "analysis_complete"}
                 onOpenFibreCountModal={handleOpenFibreCountModal}
                 onOpenCommentModal={handleOpenCommentModal}
                 isLast={true}
