@@ -100,6 +100,12 @@ const formatSampleLocation = (sample) => {
   return location;
 };
 
+// Format fibre count for PDF so decimals (e.g. 2.5 for half fibres) display correctly; pass as string so pdfmake doesn't drop decimals
+const formatFibreCountForPdf = (value) => {
+  if (value == null || value === '') return '-';
+  return String(value);
+};
+
 // Add this helper function at the top of the file
 const formatReportedConcentration = (sample) => {
   if (!sample.analysis) return '-';
@@ -644,7 +650,7 @@ pdfMake.fonts = {
                       { text: sample.fullSampleID || sample.sampleID || 'N/A', style: 'tableContent' },
                       { text: formatSampleLocation(sample), style: 'tableContent' },
                       { text: fieldCountText, style: 'tableContent' },
-                      { text: fibreCountText, style: 'tableContent' }
+                      { text: formatFibreCountForPdf(fibreCountText), style: 'tableContent' }
                     ];
                   } else {
                     const uncountableDueToDust = sample.analysis?.uncountableDueToDust === true || sample.analysis?.uncountableDueToDust === 'true';
@@ -668,7 +674,7 @@ pdfMake.fonts = {
                         style: 'tableContent'
                       },
                       { text: fieldCountText, style: 'tableContent' },
-                      { text: fibreCountText, style: 'tableContent' },
+                      { text: formatFibreCountForPdf(fibreCountText), style: 'tableContent' },
                       { 
                         text: formatReportedConcentration(sample),
                         style: 'tableContent',

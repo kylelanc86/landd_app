@@ -78,6 +78,9 @@ router.patch('/:id', auth, checkPermission(['projects.edit']), async (req, res) 
     if (req.body.analysedBy !== undefined) {
       record.analysedBy = req.body.analysedBy;
     }
+    if (req.body.reportViewedAt !== undefined) {
+      record.reportViewedAt = req.body.reportViewedAt;
+    }
 
     const updatedRecord = await record.save();
     res.json(updatedRecord);

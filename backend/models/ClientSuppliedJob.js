@@ -59,6 +59,10 @@ const clientSuppliedJobSchema = new mongoose.Schema({
     type: String,
     required: false
   },
+  reportViewedAt: {
+    type: Date,
+    required: false
+  },
   revision: {
     type: Number,
     default: 0

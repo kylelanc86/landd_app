@@ -274,11 +274,17 @@ const IndoorAirQuality = () => {
         reportIssueDate: fullRecord.reportIssueDate || null,
       });
 
-      // Mark report as viewed if not approved
       if (!fullRecord.reportApprovedBy) {
         setReportViewedRecordIds((prev) =>
           new Set(prev).add(record._id || record.id),
         );
+        try {
+          await iaqRecordService.update(record._id || record.id, {
+            reportViewedAt: new Date().toISOString(),
+          });
+        } catch (e) {
+          console.warn("Failed to persist report viewed:", e);
+        }
       }
 
       if (fullRecord.reportApprovedBy) {
@@ -588,9 +594,11 @@ const IndoorAirQuality = () => {
                             {(() => {
                               const conditions = {
                                 notApproved: !record.reportApprovedBy,
-                                reportViewed: reportViewedRecordIds.has(
-                                  record._id || record.id,
-                                ),
+                                reportViewed:
+                                  reportViewedRecordIds.has(
+                                    record._id || record.id,
+                                  ) || !!record.reportViewedAt,
+                                alreadySentForAuthorisation: !!record.authorisationRequestedBy,
                                 hasAdminPermission: hasPermission(
                                   currentUser,
                                   "admin.view",
@@ -655,7 +663,7 @@ const IndoorAirQuality = () => {
                                     <Button
                                       variant="outlined"
                                       size="small"
-                                      color="primary"
+                                      color={conditions.alreadySentForAuthorisation ? "inherit" : "primary"}
                                       startIcon={<MailIcon />}
                                       onClick={(e) => {
                                         e.stopPropagation();
@@ -666,11 +674,18 @@ const IndoorAirQuality = () => {
                                           record._id || record.id
                                         ]
                                       }
+                                      sx={
+                                        conditions.alreadySentForAuthorisation
+                                          ? { color: "text.secondary", borderColor: "grey.400" }
+                                          : undefined
+                                      }
                                     >
                                       {sendingAuthorisationRequests[
                                         record._id || record.id
                                       ]
                                         ? "Sending..."
+                                        : conditions.alreadySentForAuthorisation
+                                        ? "Re-send for Authorisation"
                                         : "Send for Authorisation"}
                                     </Button>
                                   )}

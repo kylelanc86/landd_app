@@ -785,10 +785,6 @@ const SampleList = () => {
         >
           Asbestos Removal Job Details
         </Link>
-        <Typography color="text.primary">
-          {job?.projectId?.projectID ? `${job.projectId.projectID}: ` : ""}
-          {job?.projectName || job?.name || "Loading..."}
-        </Typography>
       </Breadcrumbs>
 
       {/* Authorization Warning */}

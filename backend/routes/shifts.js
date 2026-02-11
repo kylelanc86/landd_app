@@ -224,6 +224,7 @@ router.patch('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports
       'status',
       'reportApprovedBy',
       'reportIssueDate',
+      'reportViewedAt',
       'analysedBy',
       'analysisDate',
       'samplesReceivedDate',

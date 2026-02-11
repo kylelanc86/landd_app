@@ -31,6 +31,7 @@ import {
   RadioGroup,
   FormControlLabel,
   Chip,
+  FormHelperText,
 } from "@mui/material";
 import CommentIcon from "@mui/icons-material/Comment";
 import { useParams, useNavigate } from "react-router-dom";
@@ -520,6 +521,7 @@ const Analysis = () => {
   const [commentModalOpen, setCommentModalOpen] = useState(false);
   const [activeCommentSampleId, setActiveCommentSampleId] = useState(null);
   const [commentText, setCommentText] = useState("");
+  const [analystError, setAnalystError] = useState("");
 
   // Unsaved changes detection
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -1823,6 +1825,12 @@ const Analysis = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setAnalystError("");
+    if (!analysedBy?.trim()) {
+      setAnalystError("Analyst is required");
+      showSnackbar("Please select an analyst before finalising the analysis.", "error");
+      return;
+    }
     try {
       console.log("Starting analysis submission...");
       console.log("Analysis Details:", analysisDetails);
@@ -2337,12 +2345,15 @@ const Analysis = () => {
         alignItems="center"
         mb={3}
       >
-        <FormControl fullWidth sx={{ maxWidth: 300 }}>
+        <FormControl fullWidth sx={{ maxWidth: 300 }} required error={!!analystError}>
           <InputLabel>Analyst</InputLabel>
           <Select
             value={analysedBy}
             label="Analyst"
-            onChange={(e) => setAnalysedBy(e.target.value)}
+            onChange={(e) => {
+              setAnalysedBy(e.target.value);
+              setAnalystError("");
+            }}
             disabled={shiftStatus === "analysis_complete"}
           >
             {users.map((user) => (
@@ -2354,6 +2365,9 @@ const Analysis = () => {
               </MenuItem>
             ))}
           </Select>
+          {analystError && (
+            <FormHelperText>{analystError}</FormHelperText>
+          )}
         </FormControl>
       </Stack>
 

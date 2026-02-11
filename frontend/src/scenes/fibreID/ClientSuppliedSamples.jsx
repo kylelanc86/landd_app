@@ -522,12 +522,6 @@ const ClientSuppliedSamples = () => {
             <ArrowBackIcon sx={{ mr: 1 }} />
             Client Supplied Jobs
           </Link>
-          <Typography
-            variant="body1"
-            sx={{ display: "flex", alignItems: "center" }}
-          >
-            Sample Items
-          </Typography>
         </Breadcrumbs>
 
         {/* Header */}

@@ -928,6 +928,13 @@ const AsbestosRemovalJobDetails = () => {
           : null,
       });
       setReportViewedShiftIds((prev) => new Set(prev).add(shift._id));
+      try {
+        await shiftService.update(shift._id, {
+          reportViewedAt: new Date().toISOString(),
+        });
+      } catch (e) {
+        console.warn("Failed to persist report viewed:", e);
+      }
     } catch (err) {
       console.error("Error generating report:", err);
       showSnackbar("Failed to generate report.", "error");
@@ -1309,8 +1316,12 @@ const AsbestosRemovalJobDetails = () => {
 
       showSnackbar("PDF opened in new tab", "success");
 
-      // Mark report as viewed
       setReportViewedClearanceIds((prev) => new Set(prev).add(clearance._id));
+      try {
+        await asbestosClearanceService.markReportViewed(clearance._id);
+      } catch (e) {
+        console.warn("Failed to persist report viewed:", e);
+      }
     } catch (err) {
       console.error("Error generating PDF:", err);
       showSnackbar("Failed to generate PDF", "error");
@@ -1718,10 +1729,6 @@ const AsbestosRemovalJobDetails = () => {
           <ArrowBackIcon sx={{ mr: 1 }} />
           Asbestos Removal Jobs
         </Link>
-        <Typography color="text.primary">
-          {job?.projectId?.projectID || "Loading..."}:{" "}
-          {job?.projectName || "Loading..."}
-        </Typography>
       </Breadcrumbs>
 
       {/* Job Header */}
@@ -2029,9 +2036,10 @@ const AsbestosRemovalJobDetails = () => {
                                   const permissionCheckStart = getTimestamp();
                                   const conditions = {
                                     notApproved: !shift.reportApprovedBy,
-                                    reportViewed: reportViewedShiftIds.has(
-                                      shift._id,
-                                    ),
+                                    reportViewed:
+                                      reportViewedShiftIds.has(shift._id) ||
+                                      !!shift.reportViewedAt,
+                                    alreadySentForAuthorisation: !!shift.authorisationRequestedBy,
                                     hasAdminPermission: hasPermission(
                                       currentUser,
                                       "admin.view",
@@ -2090,7 +2098,7 @@ const AsbestosRemovalJobDetails = () => {
                                         <Button
                                           variant="outlined"
                                           size="small"
-                                          color="primary"
+                                          color={conditions.alreadySentForAuthorisation ? "inherit" : "primary"}
                                           startIcon={<MailIcon />}
                                           onClick={(e) => {
                                             e.stopPropagation();
@@ -2101,11 +2109,18 @@ const AsbestosRemovalJobDetails = () => {
                                               shift._id
                                             ],
                                           )}
+                                          sx={
+                                            conditions.alreadySentForAuthorisation
+                                              ? { color: "text.secondary", borderColor: "grey.400" }
+                                              : undefined
+                                          }
                                         >
                                           {sendingAuthorisationRequests[
                                             shift._id
                                           ]
                                             ? "Sending..."
+                                            : conditions.alreadySentForAuthorisation
+                                            ? "Re-send for Authorisation"
                                             : "Send for Authorisation"}
                                         </Button>
                                       )}
@@ -2291,9 +2306,10 @@ const AsbestosRemovalJobDetails = () => {
                                   >
                                     View Report
                                   </Button>
-                                  {reportViewedClearanceIds.has(
+                                  {(reportViewedClearanceIds.has(
                                     clearance._id,
-                                  ) && (
+                                  ) ||
+                                    !!clearance.reportViewedAt) && (
                                     <>
                                       {currentUser?.reportProofer &&
                                         hasPermission(
@@ -2361,7 +2377,7 @@ const AsbestosRemovalJobDetails = () => {
                                           <Button
                                             variant="outlined"
                                             size="small"
-                                            color="primary"
+                                            color={clearance.authorisationRequestedBy ? "inherit" : "primary"}
                                             startIcon={<MailIcon />}
                                             onClick={(e) =>
                                               handleSendClearanceForAuthorisation(
@@ -2374,12 +2390,18 @@ const AsbestosRemovalJobDetails = () => {
                                                 clearance._id
                                               ],
                                             )}
-                                            sx={{ mr: 1 }}
+                                            sx={
+                                              clearance.authorisationRequestedBy
+                                                ? { mr: 1, color: "text.secondary", borderColor: "grey.400" }
+                                                : { mr: 1 }
+                                            }
                                           >
                                             {sendingClearanceAuthorisationRequests[
                                               clearance._id
                                             ]
                                               ? "Sending..."
+                                              : clearance.authorisationRequestedBy
+                                              ? "Re-send for Authorisation"
                                               : "Send for Authorisation"}
                                           </Button>
                                         )}

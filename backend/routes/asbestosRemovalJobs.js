@@ -194,7 +194,7 @@ router.get(
         const clearancesStart = performance.now();
         // Fetch clearances - fields needed for table and edit form, but exclude large fields
         clearances = await AsbestosClearance.find({ projectId })
-          .select("_id projectId clearanceDate clearanceType status inspectionTime asbestosRemovalist LAA jurisdiction secondaryHeader vehicleEquipmentDescription notes useComplexTemplate jobSpecificExclusions")
+          .select("_id projectId clearanceDate clearanceType status inspectionTime asbestosRemovalist LAA jurisdiction secondaryHeader vehicleEquipmentDescription notes useComplexTemplate jobSpecificExclusions reportApprovedBy reportIssueDate reportViewedAt authorisationRequestedBy")
           .populate({
             path: "projectId",
             select: "projectID name",
@@ -226,7 +226,7 @@ router.get(
       // Only select fields needed for list view - no need to populate supervisor/sampler for table display
       const shiftDocs = shiftJobIds.length
         ? await Shift.find({ job: { $in: shiftJobIds } })
-            .select("_id job date status jobModel reportApprovedBy reportIssueDate")
+            .select("_id job date status jobModel reportApprovedBy reportIssueDate reportViewedAt authorisationRequestedBy")
             .lean()
         : [];
       metrics.timings.shifts = `${(

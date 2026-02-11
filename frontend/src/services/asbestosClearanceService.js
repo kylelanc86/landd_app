@@ -39,6 +39,14 @@ const asbestosClearanceService = {
     return response.data;
   },
 
+  // Mark report as viewed (persists so Send/Authorise buttons stay visible after leaving page)
+  markReportViewed: async (id) => {
+    const response = await axios.patch(`${API_BASE_URL}/${id}`, {
+      reportViewedAt: new Date().toISOString(),
+    });
+    return response.data;
+  },
+
   // Get statistics
   getStats: async () => {
     const response = await axios.get(`${API_BASE_URL}/stats/overview`);

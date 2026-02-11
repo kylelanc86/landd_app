@@ -159,14 +159,14 @@ router.patch('/:id', auth, checkPermission(['jobs.edit']), async (req, res) => {
             }
 
             // Convert fibresCounted and fieldsCounted to numbers, but preserve '-' if uncountableDueToDust is true
+            // fibresCounted can be decimal (e.g. 2.5 for half fibres); fieldsCounted is integer
             if (req.body.analysis.uncountableDueToDust === true) {
               // When uncountableDueToDust is true, keep '-' as a string (will be stored in DB)
-              // MongoDB will store '-' as a string, which is fine for display purposes
-              req.body.analysis.fibresCounted = req.body.analysis.fibresCounted === '-' ? '-' : (parseInt(req.body.analysis.fibresCounted) || 0);
+              req.body.analysis.fibresCounted = req.body.analysis.fibresCounted === '-' ? '-' : (parseFloat(req.body.analysis.fibresCounted) || 0);
               req.body.analysis.fieldsCounted = req.body.analysis.fieldsCounted === '-' ? '-' : (parseInt(req.body.analysis.fieldsCounted) || 0);
             } else {
-              // Convert to numbers for normal samples
-              req.body.analysis.fibresCounted = parseInt(req.body.analysis.fibresCounted) || 0;
+              // Convert to numbers for normal samples (fibresCounted allows decimals for half-fibre counts)
+              req.body.analysis.fibresCounted = parseFloat(req.body.analysis.fibresCounted) || 0;
               req.body.analysis.fieldsCounted = parseInt(req.body.analysis.fieldsCounted) || 0;
             }
 

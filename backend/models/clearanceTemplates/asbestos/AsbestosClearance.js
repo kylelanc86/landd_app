@@ -188,6 +188,10 @@ const asbestosClearanceSchema = new mongoose.Schema(
       type: String,
       required: false,
     },
+    reportViewedAt: {
+      type: Date,
+      required: false,
+    },
     sequenceNumber: {
       type: Number,
       required: false,

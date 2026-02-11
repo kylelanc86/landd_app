@@ -236,6 +236,7 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
       revision,
       revisionReasons,
       vehicleEquipmentDescription,
+      reportViewedAt,
     } = req.body;
 
     const clearance = await AsbestosClearance.findById(req.params.id);
@@ -295,6 +296,9 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
     if (revisionReasons !== undefined) {
       clearance.revisionReasons = revisionReasons;
     }
+    if (reportViewedAt !== undefined) {
+      clearance.reportViewedAt = reportViewedAt;
+    }
 
     const updatedClearance = await clearance.save();
     
@@ -337,6 +341,28 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
     res.json(populatedClearance);
   } catch (error) {
     console.error("Error updating asbestos clearance:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// PATCH clearance - report viewed (persist so Send/Authorise buttons stay visible)
+router.patch("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
+  try {
+    const { reportViewedAt } = req.body;
+    if (reportViewedAt === undefined) {
+      return res.status(400).json({ message: "reportViewedAt is required" });
+    }
+    const clearance = await AsbestosClearance.findByIdAndUpdate(
+      req.params.id,
+      { reportViewedAt: reportViewedAt ? new Date(reportViewedAt) : null },
+      { new: true }
+    );
+    if (!clearance) {
+      return res.status(404).json({ message: "Asbestos clearance not found" });
+    }
+    res.json(clearance);
+  } catch (error) {
+    console.error("Error updating clearance reportViewedAt:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
