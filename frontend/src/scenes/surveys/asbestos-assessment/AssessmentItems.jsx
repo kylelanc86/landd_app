@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useSnackbar } from "../../../context/SnackbarContext";
 import {
   Box,
@@ -1506,6 +1507,7 @@ const AssessmentItems = () => {
       setPanY(0);
       setLastPinchDistance(null);
       setLastPanPoint(null);
+      setPhotoGalleryDialogOpen(false); // Hide manage-photos modal so camera is on top
       setCameraDialogOpen(true);
     } catch (error) {
       console.error("Error accessing camera:", error);
@@ -1729,6 +1731,7 @@ const AssessmentItems = () => {
     setPanY(0);
     setLastPinchDistance(null);
     setLastPanPoint(null);
+    setPhotoGalleryDialogOpen(true); // Re-open manage-photos modal when camera closes
     try {
       document.exitFullscreen?.();
     } catch {
@@ -3802,100 +3805,104 @@ const AssessmentItems = () => {
           </DialogActions>
         </Dialog>
 
-        {/* Camera: full-viewport overlay + Fullscreen API for max visible area on mobile */}
-        {cameraDialogOpen && (
-          <Box
-            sx={{
-              position: "fixed",
-              inset: 0,
-              zIndex: 1300,
-              display: "flex",
-              flexDirection: "column",
-              height: "100dvh",
-              maxHeight: "-webkit-fill-available",
-              backgroundColor: "#000",
-              paddingTop: "env(safe-area-inset-top)",
-              paddingBottom: "env(safe-area-inset-bottom)",
-              paddingLeft: "env(safe-area-inset-left)",
-              paddingRight: "env(safe-area-inset-right)",
-            }}
-          >
-            {/* Video fills remaining space */}
-            <Box
-              ref={videoContainerRef}
-              sx={{
-                flex: 1,
-                minHeight: 0,
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                overflow: "hidden",
-                position: "relative",
-                touchAction: "none",
-              }}
-              onTouchStart={handleTouchStart}
-              onTouchMove={handleTouchMove}
-              onTouchEnd={handleTouchEnd}
-            >
-              {stream ? (
-                <video
-                  ref={(ref) => {
-                    setVideoRef(ref);
-                    if (ref && stream) {
-                      ref.srcObject = stream;
-                    }
-                  }}
-                  autoPlay
-                  playsInline
-                  muted
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "cover",
-                    transform: `scale(${zoom}) translate(${panX}px, ${panY}px)`,
-                    transformOrigin: "center center",
-                    transition: zoom === 1 ? "transform 0.1s" : "none",
-                  }}
-                />
-              ) : (
-                <Box
-                  sx={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: 2,
-                    color: "white",
-                  }}
-                >
-                  <CircularProgress color="inherit" />
-                  <Typography variant="body1">Starting camera...</Typography>
-                </Box>
-              )}
-            </Box>
-            {/* Minimal bottom bar: hint + actions */}
+        {/* Camera: portaled full-viewport overlay above app bar and modals */}
+        {cameraDialogOpen &&
+          typeof document !== "undefined" &&
+          createPortal(
             <Box
               sx={{
-                flexShrink: 0,
-                px: 2,
-                py: 1.5,
-                bgcolor: "background.paper",
-                borderTop: 1,
-                borderColor: "divider",
+                position: "fixed",
+                inset: 0,
+                zIndex: 9999,
                 display: "flex",
                 flexDirection: "column",
-                gap: 1,
-                alignItems: "center",
+                height: "100dvh",
+                maxHeight: "-webkit-fill-available",
+                backgroundColor: "#000",
+                paddingTop: "env(safe-area-inset-top)",
+                paddingBottom: "env(safe-area-inset-bottom)",
+                paddingLeft: "env(safe-area-inset-left)",
+                paddingRight: "env(safe-area-inset-right)",
               }}
             >
-              <Typography variant="caption" color="text.secondary" sx={{ textAlign: "center" }}>
-                Pinch to zoom, double-tap to reset · Tap Capture when ready
-              </Typography>
-              <Box sx={{ display: "flex", gap: 2 }}>
+              {/* Video fills space; bottom bar is transparent overlay */}
+              <Box
+                ref={videoContainerRef}
+                sx={{
+                  flex: 1,
+                  minHeight: 0,
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  overflow: "hidden",
+                  position: "relative",
+                  touchAction: "none",
+                }}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+              >
+                {stream ? (
+                  <video
+                    ref={(ref) => {
+                      setVideoRef(ref);
+                      if (ref && stream) {
+                        ref.srcObject = stream;
+                      }
+                    }}
+                    autoPlay
+                    playsInline
+                    muted
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                      transform: `scale(${zoom}) translate(${panX}px, ${panY}px)`,
+                      transformOrigin: "center center",
+                      transition: zoom === 1 ? "transform 0.1s" : "none",
+                    }}
+                  />
+                ) : (
+                  <Box
+                    sx={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: 2,
+                      color: "white",
+                    }}
+                  >
+                    <CircularProgress color="inherit" />
+                    <Typography variant="body1">Starting camera...</Typography>
+                  </Box>
+                )}
+              </Box>
+              {/* Transparent bottom bar: only Cancel + Capture */}
+              <Box
+                sx={{
+                  flexShrink: 0,
+                  px: 2,
+                  py: 1,
+                  backgroundColor: "transparent",
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  gap: 2,
+                }}
+              >
                 <Button
                   onClick={handleCloseCamera}
                   variant="outlined"
                   size="medium"
-                  sx={{ borderRadius: 2, textTransform: "none", fontWeight: 500 }}
+                  sx={{
+                    borderRadius: 2,
+                    textTransform: "none",
+                    fontWeight: 500,
+                    bgcolor: "rgba(0,0,0,0.3)",
+                    color: "white",
+                    borderColor: "rgba(255,255,255,0.5)",
+                    "&:hover": { bgcolor: "rgba(0,0,0,0.5)", borderColor: "rgba(255,255,255,0.8)" },
+                  }}
                 >
                   Cancel
                 </Button>
@@ -3911,9 +3918,9 @@ const AssessmentItems = () => {
                   Capture Photo
                 </Button>
               </Box>
-            </Box>
-          </Box>
-        )}
+            </Box>,
+            document.body
+          )}
 
         {!isResidential && (
           <>
