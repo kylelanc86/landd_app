@@ -189,7 +189,7 @@ const AsbestosRemoval = () => {
         console.log("[Asbestos Removal] Fetching asbestos removal jobs...");
 
         const jobsResponse = await asbestosRemovalJobService.getAll({
-          excludeStatus: "completed,cancelled",
+          excludeStatus: "completed,cancelled,archived",
           limit: 1000,
           minimal: true,
         });
@@ -320,7 +320,7 @@ const AsbestosRemoval = () => {
       const response = await projectService.getAll({
         limit: 1000,
         status:
-          "Assigned,In progress,Samples submitted,Lab Analysis Complete,Report sent for review,Ready for invoicing,Invoice sent, Quote sent",
+          "Assigned,In progress,Samples submitted,Lab Analysis Completed,Report sent for review,Ready for invoicing,Invoice sent, Quote sent",
       });
 
       if (response && response.data) {

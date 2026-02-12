@@ -264,7 +264,7 @@ const AsbestosAssessment = () => {
       const response = await projectService.getAll({
         limit: 1000,
         status:
-          "Assigned,In progress,Samples submitted,Lab Analysis Complete,Report sent for review,Ready for invoicing,Invoice sent, Quote sent",
+          "Assigned,In progress,Samples submitted,Lab Analysis Completed,Report sent for review,Ready for invoicing,Invoice sent, Quote sent",
       });
 
       if (response && response.data) {

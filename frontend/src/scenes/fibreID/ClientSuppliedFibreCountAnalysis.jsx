@@ -794,9 +794,13 @@ const ClientSuppliedFibreCountAnalysis = () => {
         return;
 
       const currentPath = window.location.pathname;
-      const basePath = currentPath.startsWith("/client-supplied")
-        ? "/client-supplied"
-        : "/fibre-id/client-supplied";
+      const basePath = currentPath.startsWith("/laboratory-services/ld-supplied")
+        ? "/laboratory-services/ld-supplied"
+        : currentPath.startsWith("/fibre-id/ld-supplied")
+          ? "/fibre-id/ld-supplied"
+          : currentPath.startsWith("/client-supplied")
+            ? "/client-supplied"
+            : "/fibre-id/client-supplied";
 
       if (href.startsWith("/") && !href.startsWith(basePath)) {
         e.preventDefault();
@@ -1444,11 +1448,17 @@ const ClientSuppliedFibreCountAnalysis = () => {
       });
 
       showSnackbar("Analysis saved successfully", "success");
-      // Navigate back to client supplied jobs page
-      const basePath = location.pathname.startsWith("/client-supplied")
-        ? "/client-supplied"
-        : "/fibre-id/client-supplied";
-      navigate(basePath);
+      if (
+        location.pathname.startsWith("/laboratory-services/ld-supplied") ||
+        location.pathname.startsWith("/fibre-id/ld-supplied")
+      ) {
+        navigate("/laboratory-services/ld-supplied");
+      } else {
+        const basePath = location.pathname.startsWith("/client-supplied")
+          ? "/client-supplied"
+          : "/fibre-id/client-supplied";
+        navigate(basePath);
+      }
     } catch (error) {
       console.error("Error saving progress data:", error);
       showSnackbar("Failed to save analysis", "error");
@@ -1508,11 +1518,17 @@ const ClientSuppliedFibreCountAnalysis = () => {
 
       showSnackbar("Analysis finalized successfully", "success");
 
-      // Navigate back to client supplied jobs page
-      const basePath = location.pathname.startsWith("/client-supplied")
-        ? "/client-supplied"
-        : "/fibre-id/client-supplied";
-      navigate(basePath);
+      if (
+        location.pathname.startsWith("/laboratory-services/ld-supplied") ||
+        location.pathname.startsWith("/fibre-id/ld-supplied")
+      ) {
+        navigate("/laboratory-services/ld-supplied");
+      } else {
+        const basePath = location.pathname.startsWith("/client-supplied")
+          ? "/client-supplied"
+          : "/fibre-id/client-supplied";
+        navigate(basePath);
+      }
     } catch (error) {
       console.error("Error finalizing analysis:", error);
       setError("Failed to finalize analysis. Please try again.");
@@ -1583,6 +1599,14 @@ const ClientSuppliedFibreCountAnalysis = () => {
   }
 
   const getBackPath = () => {
+    if (
+      location.pathname.startsWith("/laboratory-services/ld-supplied") ||
+      location.pathname.startsWith("/fibre-id/ld-supplied")
+    ) {
+      return jobId
+        ? `/laboratory-services/ld-supplied/${jobId}/samples`
+        : "/laboratory-services/ld-supplied";
+    }
     const basePath = location.pathname.startsWith("/client-supplied")
       ? "/client-supplied"
       : "/fibre-id/client-supplied";

@@ -53,7 +53,7 @@ const projectSchema = new mongoose.Schema(
         "Assigned",
         "In progress",
         "Samples submitted",
-        "Lab Analysis Complete",
+        "Lab Analysis Completed",
         "Report sent for review",
         "Ready for invoicing",
         "Invoice sent",

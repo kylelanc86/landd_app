@@ -21,7 +21,6 @@ import Invoices from "./scenes/invoices";
 import Login from "./scenes/login";
 import ResetPassword from "./scenes/login/ResetPassword";
 import SetupPassword from "./scenes/auth/SetupPassword";
-import AirMonitoring from "./scenes/air-monitoring";
 import ProjectInformation from "./scenes/projects/ProjectInformation";
 import Timesheets from "./scenes/timesheets";
 import TimesheetReview from "./scenes/timesheets/review";
@@ -121,8 +120,6 @@ const MouldValidation = lazy(
 
 // New dashboard components
 const SurveysDashboard = lazy(() => import("./scenes/surveys"));
-const LaboratoryDashboard = lazy(() => import("./scenes/laboratory"));
-
 // New landing page components
 const Reports = lazy(() => import("./scenes/reports"));
 const Records = lazy(() => import("./scenes/records"));
@@ -233,13 +230,7 @@ function App() {
                               />
                               <Route
                                 path="/air-monitoring"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["jobs.view"]}
-                                  >
-                                    <AirMonitoring />
-                                  </PermissionRoute>
-                                }
+                                element={<Navigate to="/asbestos-removal" replace />}
                               />
                               <Route
                                 path="/air-monitoring/shift/:shiftId/samples"
@@ -864,6 +855,20 @@ function App() {
                                   }
                                 />
                               )}
+                              {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
+                                <Route
+                                  path="/fibre-id/ld-supplied/:jobId/samples"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["clientSup.view"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <ClientSuppliedSamples />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                              )}
                               {(isFeatureEnabled("ADVANCED.FIBRE_ID") ||
                                 isFeatureEnabled(
                                   "ADVANCED.ASBESTOS_REMOVAL",
@@ -918,6 +923,34 @@ function App() {
                               {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
                                 <Route
                                   path="/fibre-id/client-supplied/:jobId/analysis"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["clientSup.view"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <ClientSuppliedFibreCountAnalysis />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                              )}
+                              {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
+                                <Route
+                                  path="/fibre-id/ld-supplied/:jobId/sample/:sampleIndex/analysis"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["clientSup.view"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <ClientSuppliedFibreIDAnalysis />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                              )}
+                              {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
+                                <Route
+                                  path="/fibre-id/ld-supplied/:jobId/analysis"
                                   element={
                                     <PermissionRoute
                                       requiredPermissions={["clientSup.view"]}
@@ -1051,18 +1084,6 @@ function App() {
                                 }
                               />
                               <Route
-                                path="/laboratory"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["clientSup.view"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <LaboratoryDashboard />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
                                 path="/laboratory-services"
                                 element={
                                   <PermissionRoute
@@ -1081,6 +1102,42 @@ function App() {
                                     requiredPermissions={["clientSup.view"]}
                                   >
                                     <LDsuppliedJobs />
+                                  </PermissionRoute>
+                                }
+                              />
+                              <Route
+                                path="/laboratory-services/ld-supplied/:jobId/samples"
+                                element={
+                                  <PermissionRoute
+                                    requiredPermissions={["clientSup.view"]}
+                                  >
+                                    <Suspense fallback={<LoadingSpinner />}>
+                                      <ClientSuppliedSamples />
+                                    </Suspense>
+                                  </PermissionRoute>
+                                }
+                              />
+                              <Route
+                                path="/laboratory-services/ld-supplied/:jobId/sample/:sampleIndex/analysis"
+                                element={
+                                  <PermissionRoute
+                                    requiredPermissions={["clientSup.view"]}
+                                  >
+                                    <Suspense fallback={<LoadingSpinner />}>
+                                      <ClientSuppliedFibreIDAnalysis />
+                                    </Suspense>
+                                  </PermissionRoute>
+                                }
+                              />
+                              <Route
+                                path="/laboratory-services/ld-supplied/:jobId/analysis"
+                                element={
+                                  <PermissionRoute
+                                    requiredPermissions={["clientSup.view"]}
+                                  >
+                                    <Suspense fallback={<LoadingSpinner />}>
+                                      <ClientSuppliedFibreCountAnalysis />
+                                    </Suspense>
                                   </PermissionRoute>
                                 }
                               />

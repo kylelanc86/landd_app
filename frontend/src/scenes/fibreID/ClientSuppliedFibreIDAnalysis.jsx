@@ -279,30 +279,42 @@ const ClientSuppliedFibreIDAnalysis = () => {
     }
   };
 
+  const getBasePath = () =>
+    location.pathname.startsWith("/laboratory-services/ld-supplied")
+      ? "/laboratory-services/ld-supplied"
+      : location.pathname.startsWith("/fibre-id/ld-supplied")
+        ? "/fibre-id/ld-supplied"
+        : location.pathname.startsWith("/client-supplied")
+          ? "/client-supplied"
+          : "/fibre-id/client-supplied";
+
   const handleBackToSamples = () => {
     if (hasUnsavedChanges) {
-      const basePath = location.pathname.startsWith("/client-supplied")
-        ? "/client-supplied"
-        : "/fibre-id/client-supplied";
-      setPendingNavigation(`${basePath}/${jobId}/samples`);
+      setPendingNavigation(`${getBasePath()}/${jobId}/samples`);
       setUnsavedChangesDialogOpen(true);
     } else {
-      const basePath = location.pathname.startsWith("/client-supplied")
-        ? "/client-supplied"
-        : "/fibre-id/client-supplied";
-      navigate(`${basePath}/${jobId}/samples`);
+      navigate(`${getBasePath()}/${jobId}/samples`);
     }
   };
 
   const handleBackToHome = () => {
     if (hasUnsavedChanges) {
-      const targetPath = location.pathname.startsWith("/client-supplied")
-        ? "/client-supplied"
-        : "/fibre-id";
+      const targetPath =
+        location.pathname.startsWith("/laboratory-services/ld-supplied") ||
+        location.pathname.startsWith("/fibre-id/ld-supplied")
+          ? "/laboratory-services/ld-supplied"
+          : location.pathname.startsWith("/client-supplied")
+            ? "/client-supplied"
+            : "/fibre-id";
       setPendingNavigation(targetPath);
       setUnsavedChangesDialogOpen(true);
     } else {
-      if (location.pathname.startsWith("/client-supplied")) {
+      if (
+        location.pathname.startsWith("/laboratory-services/ld-supplied") ||
+        location.pathname.startsWith("/fibre-id/ld-supplied")
+      ) {
+        navigate("/laboratory-services/ld-supplied");
+      } else if (location.pathname.startsWith("/client-supplied")) {
         navigate("/client-supplied");
       } else {
         navigate("/fibre-id");
@@ -657,11 +669,14 @@ const ClientSuppliedFibreIDAnalysis = () => {
       setHasUnsavedChanges(false);
 
       // Navigate back to samples page
-      navigate(
-        location.pathname.startsWith("/client-supplied")
-          ? `/client-supplied`
-          : `/fibre-id/client-supplied`
-      );
+      const basePath = location.pathname.startsWith("/laboratory-services/ld-supplied")
+        ? "/laboratory-services/ld-supplied"
+        : location.pathname.startsWith("/fibre-id/ld-supplied")
+          ? "/fibre-id/ld-supplied"
+          : location.pathname.startsWith("/client-supplied")
+            ? "/client-supplied"
+            : "/fibre-id/client-supplied";
+      navigate(`${basePath}/${jobId}/samples`);
     } catch (error) {
       console.error("Error finalising analysis:", error);
       console.error("Error details:", error.response?.data);
@@ -1156,9 +1171,13 @@ const ClientSuppliedFibreIDAnalysis = () => {
         return;
 
       const currentPath = window.location.pathname;
-      const basePath = currentPath.startsWith("/client-supplied")
-        ? "/client-supplied"
-        : "/fibre-id/client-supplied";
+      const basePath = currentPath.startsWith("/laboratory-services/ld-supplied")
+        ? "/laboratory-services/ld-supplied"
+        : currentPath.startsWith("/fibre-id/ld-supplied")
+          ? "/fibre-id/ld-supplied"
+          : currentPath.startsWith("/client-supplied")
+            ? "/client-supplied"
+            : "/fibre-id/client-supplied";
 
       if (href.startsWith("/") && !href.startsWith(basePath)) {
         e.preventDefault();
@@ -1271,7 +1290,12 @@ const ClientSuppliedFibreIDAnalysis = () => {
           <Button
             variant="outlined"
             onClick={() => {
-              if (location.pathname.startsWith("/client-supplied")) {
+              if (
+                location.pathname.startsWith("/laboratory-services/ld-supplied") ||
+                location.pathname.startsWith("/fibre-id/ld-supplied")
+              ) {
+                navigate("/laboratory-services/ld-supplied");
+              } else if (location.pathname.startsWith("/client-supplied")) {
                 navigate("/client-supplied");
               } else {
                 navigate("/fibre-id");
@@ -1409,11 +1433,13 @@ const ClientSuppliedFibreIDAnalysis = () => {
                 value={parseInt(sampleIndex) || 0}
                 onChange={(e) => {
                   const newIndex = e.target.value;
-                  const basePath = location.pathname.startsWith(
-                    "/client-supplied"
-                  )
-                    ? "/client-supplied"
-                    : "/fibre-id/client-supplied";
+                  const basePath = location.pathname.startsWith("/laboratory-services/ld-supplied")
+                    ? "/laboratory-services/ld-supplied"
+                    : location.pathname.startsWith("/fibre-id/ld-supplied")
+                      ? "/fibre-id/ld-supplied"
+                      : location.pathname.startsWith("/client-supplied")
+                        ? "/client-supplied"
+                        : "/fibre-id/client-supplied";
                   navigate(`${basePath}/${jobId}/sample/${newIndex}/analysis`);
                 }}
                 label="Select Sample"

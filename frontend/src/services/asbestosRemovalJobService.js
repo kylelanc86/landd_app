@@ -9,7 +9,23 @@ const asbestosRemovalJobService = {
   getById: (id) => axiosInstance.get(`/asbestos-removal-jobs/${id}`),
   getDetails: (id, params = {}) => axiosInstance.get(`/asbestos-removal-jobs/${id}/details`, { params }),
   getClearances: (id) => axiosInstance.get(`/asbestos-removal-jobs/${id}/clearances`),
-  
+  getArchivedData: (projectId) =>
+    axiosInstance.get("/asbestos-removal-jobs/archived-data", {
+      params: projectId ? { projectId } : {},
+    }),
+
+  exportArchivedShiftCSV: (shiftId) =>
+    axiosInstance.get(
+      `/asbestos-removal-jobs/archived-data/shift/${shiftId}/export-csv`,
+      { responseType: "blob" }
+    ),
+
+  exportArchivedClearanceCSV: (clearanceId) =>
+    axiosInstance.get(
+      `/asbestos-removal-jobs/archived-data/clearance/${clearanceId}/export-csv`,
+      { responseType: "blob" }
+    ),
+
   create: (data) => axiosInstance.post("/asbestos-removal-jobs", data),
   
   update: (id, data) => axiosInstance.put(`/asbestos-removal-jobs/${id}`, data),

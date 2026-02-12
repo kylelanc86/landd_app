@@ -12,8 +12,6 @@ import {
   Construction as AsbestosRemovalIcon,
   Science as FibreIcon,
 } from "@mui/icons-material";
-import { tokens } from "../../theme/tokens";
-
 const categories = [
   {
     id: "asbestos-assessment",

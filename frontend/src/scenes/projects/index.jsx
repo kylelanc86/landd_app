@@ -173,6 +173,10 @@ const Projects = ({ initialFilters = {} }) => {
   const isTablet = useMediaQuery("(min-width: 600px) and (max-width: 1024px)");
   // Detect desktop and tablet (>= 600px) for showing Details button
   const isDesktopOrTablet = useMediaQuery("(min-width: 600px)");
+  // Hide categories, columns and export on mobile/narrow (e.g. landscape) for a cleaner UI
+  const isMobileOrNarrow = useMediaQuery("(max-width: 960px)");
+  // Stack search above status filter on portrait mobile (e.g. width < 600px)
+  const isPortraitMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [projects, setProjects] = useState([]);
   const [statusCounts, setStatusCounts] = useState({});
   const [loading, setLoading] = useState(true);
@@ -273,6 +277,32 @@ const Projects = ({ initialFilters = {} }) => {
     () => columnVisibilityModel,
     [columnVisibilityModel]
   );
+
+  // Effective visibility: portrait = only projectID and project (actions hidden, row tap opens details); landscape mobile = hide users
+  const effectiveColumnVisibilityModel = useMemo(() => {
+    if (isPortraitMobile) {
+      return {
+        projectID: true,
+        name: true,
+        d_Date: false,
+        status: false,
+        department: false,
+        workOrder: false,
+        users: false,
+        createdAt: false,
+        updatedAt: false,
+        actions: false,
+      };
+    }
+    if (isMobileOrNarrow) {
+      return { ...columnVisibilityModel, users: false };
+    }
+    return columnVisibilityModel;
+  }, [
+    isPortraitMobile,
+    isMobileOrNarrow,
+    columnVisibilityModel,
+  ]);
   const [selectedDepartment, setSelectedDepartment] = useState(() => {
     // Load selected department from filters
     const savedFilters = localStorage.getItem("projects-filters");
@@ -1545,8 +1575,8 @@ const Projects = ({ initialFilters = {} }) => {
       {
         field: "name",
         headerName: "Project",
-        width: isTablet ? 280 : 350,
-        minWidth: isTablet ? 160 : 220,
+        width: isPortraitMobile ? 245 : isTablet ? 280 : 350,
+        minWidth: isPortraitMobile ? 154 : isTablet ? 160 : 220,
         maxWidth: 800,
         sortable: true,
         renderCell: ({ row }) => {
@@ -1797,8 +1827,8 @@ const Projects = ({ initialFilters = {} }) => {
         sortable: false,
         renderCell: (params) => (
           <Box sx={{ display: "flex", gap: 1 }}>
-            {/* Project Details button */}
-            {isDesktopOrTablet ? (
+            {/* Project Details button - icon only on phone (including landscape) to save space */}
+            {isDesktopOrTablet && !isMobileOrNarrow ? (
               <Button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -1879,6 +1909,8 @@ const Projects = ({ initialFilters = {} }) => {
       handleStatusClick,
       isTablet,
       isDesktopOrTablet,
+      isMobileOrNarrow,
+      isPortraitMobile,
     ]
   );
 
@@ -1912,7 +1944,14 @@ const Projects = ({ initialFilters = {} }) => {
   }
 
   return (
-    <Box m="5px 0px 20px 20px">
+    <Box
+      sx={{
+        mt: "5px",
+        mr: 0,
+        mb: "20px",
+        ml: isPortraitMobile ? "7px" : "20px",
+      }}
+    >
       <Typography
         variant="h3"
         component="h1"
@@ -1975,9 +2014,9 @@ const Projects = ({ initialFilters = {} }) => {
           justifyContent="space-between"
         >
           <Stack
-            direction="row"
+            direction={isPortraitMobile ? "column" : "row"}
             spacing={2}
-            alignItems="center"
+            alignItems={isPortraitMobile ? "stretch" : "center"}
             sx={{ flex: 1 }}
           >
             {/* Search Input */}
@@ -1985,7 +2024,7 @@ const Projects = ({ initialFilters = {} }) => {
               label="Search Projects"
               variant="outlined"
               size="small"
-              sx={{ flex: 1 }}
+              sx={{ flex: 1, minWidth: isPortraitMobile ? 0 : undefined }}
               placeholder="Enter search term"
               value={filters.searchTerm}
               onChange={handleSearchChange}
@@ -2022,14 +2061,22 @@ const Projects = ({ initialFilters = {} }) => {
               }}
             />
 
-            <FormControl size="small" sx={{ minWidth: 200 }}>
+            <FormControl size="small" sx={{ minWidth: 200, width: isPortraitMobile ? "100%" : undefined }}>
               <InputLabel>Status</InputLabel>
               <Select
                 value={filters.statusFilter}
                 label="Status"
                 onChange={(e) => handleFilterChange("status", e.target.value)}
+                MenuProps={{
+                  PaperProps: {
+                    sx: isPortraitMobile
+                      ? { "& .MuiMenuItem-root": { minHeight: 36, padding: "6px 16px" }, "& .MuiList-root": { paddingTop: 4, paddingBottom: 4 } }
+                      : undefined,
+                  },
+                  MenuListProps: isPortraitMobile ? { dense: true } : undefined,
+                }}
               >
-                <MenuItem value="all" sx={{ fontSize: "0.88rem" }}>
+                <MenuItem value="all" sx={{ fontSize: "0.88rem", ...(isPortraitMobile && { py: 0.5, minHeight: 36 }) }}>
                   <Box
                     sx={{
                       display: "flex",
@@ -2067,7 +2114,7 @@ const Projects = ({ initialFilters = {} }) => {
                     </Box>
                   </Box>
                 </MenuItem>
-                <MenuItem value="all_active" sx={{ fontSize: "0.88rem" }}>
+                <MenuItem value="all_active" sx={{ fontSize: "0.88rem", ...(isPortraitMobile && { py: 0.5, minHeight: 36 }) }}>
                   <Box
                     sx={{
                       display: "flex",
@@ -2104,15 +2151,15 @@ const Projects = ({ initialFilters = {} }) => {
                     </Box>
                   </Box>
                 </MenuItem>
-                <Divider />
-                <MenuItem disabled></MenuItem>
+                <Divider sx={isPortraitMobile ? { my: 0.5 } : undefined} />
+                <MenuItem disabled sx={isPortraitMobile ? { minHeight: 0, height: 0, py: 0, my: 0, overflow: "hidden", lineHeight: 0 } : undefined}></MenuItem>
                 {activeStatuses.map((status) => {
                   const count = statusCounts[status] || 0;
                   return (
                     <MenuItem
                       key={status}
                       value={status}
-                      sx={{ fontSize: "0.88rem" }}
+                      sx={{ fontSize: "0.88rem", ...(isPortraitMobile && { py: 0.5, minHeight: 36 }) }}
                     >
                       <Box
                         sx={{
@@ -2152,8 +2199,8 @@ const Projects = ({ initialFilters = {} }) => {
                     </MenuItem>
                   );
                 })}
-                <Divider />
-                <MenuItem disabled></MenuItem>
+                <Divider sx={isPortraitMobile ? { my: 0.5 } : undefined} />
+                <MenuItem disabled sx={isPortraitMobile ? { minHeight: 0, height: 0, py: 0, my: 0, overflow: "hidden", lineHeight: 0 } : undefined}></MenuItem>
                 {/* Add Cancelled and Job Complete filters - check both active and inactive statuses */}
                 {[...activeStatuses, ...inactiveStatuses]
                   .filter(
@@ -2168,7 +2215,7 @@ const Projects = ({ initialFilters = {} }) => {
                       <MenuItem
                         key={status}
                         value={status}
-                        sx={{ fontSize: "0.88rem" }}
+                        sx={{ fontSize: "0.88rem", ...(isPortraitMobile && { py: 0.5, minHeight: 36 }) }}
                       >
                         <Box
                           sx={{
@@ -2212,48 +2259,52 @@ const Projects = ({ initialFilters = {} }) => {
               </Select>
             </FormControl>
 
-            {/* Column Visibility Button */}
+            {/* Column Visibility Button - hidden on mobile/narrow for cleaner layout */}
+            {!isMobileOrNarrow && (
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<ViewColumnIcon />}
+                onClick={handleColumnVisibilityClick}
+                sx={{
+                  height: 40, // Match the height of other components
+                  minWidth: 140,
+                  color: theme.palette.primary.main,
+                  borderColor: theme.palette.primary.main,
+                  "&:hover": {
+                    backgroundColor: theme.palette.primary.main,
+                    color: "white",
+                    borderColor: theme.palette.primary.main,
+                  },
+                }}
+              >
+                Columns
+              </Button>
+            )}
+          </Stack>
+
+          {/* Export Button - hidden on mobile/narrow for cleaner layout */}
+          {!isMobileOrNarrow && (
             <Button
               variant="outlined"
               size="small"
-              startIcon={<ViewColumnIcon />}
-              onClick={handleColumnVisibilityClick}
+              startIcon={<FileDownloadIcon />}
+              onClick={handleExportClick}
               sx={{
                 height: 40, // Match the height of other components
                 minWidth: 140,
-                color: theme.palette.primary.main,
-                borderColor: theme.palette.primary.main,
+                backgroundColor: "#2e7d32",
+                color: "white",
+                borderColor: "#2e7d32",
                 "&:hover": {
-                  backgroundColor: theme.palette.primary.main,
-                  color: "white",
-                  borderColor: theme.palette.primary.main,
+                  backgroundColor: "#1b5e20",
+                  borderColor: "#1b5e20",
                 },
               }}
             >
-              Columns
+              Export to CSV
             </Button>
-          </Stack>
-
-          {/* Export Button */}
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<FileDownloadIcon />}
-            onClick={handleExportClick}
-            sx={{
-              height: 40, // Match the height of other components
-              minWidth: 140,
-              backgroundColor: "#2e7d32",
-              color: "white",
-              borderColor: "#2e7d32",
-              "&:hover": {
-                backgroundColor: "#1b5e20",
-                borderColor: "#1b5e20",
-              },
-            }}
-          >
-            Export to CSV
-          </Button>
+          )}
         </Stack>
       </Box>
       {/* Column Visibility Dropdown */}
@@ -2307,9 +2358,9 @@ const Projects = ({ initialFilters = {} }) => {
           </List>
         </Box>
       </Popover>
-      {/* Department Filter Buttons */}
+      {/* Department Filter Buttons - hidden on mobile/narrow for cleaner layout */}
       <Box
-        display="flex"
+        display={isMobileOrNarrow ? "none" : "flex"}
         justifyContent="flex-start"
         alignItems="center"
         gap={1}
@@ -2466,11 +2517,13 @@ const Projects = ({ initialFilters = {} }) => {
           error={error}
           // checkboxSelection
           onRowClick={(params) =>
-            navigate(`/reports/project/${params.row._id}`, {
-              state: { from: "projects" },
-            })
+            isMobileOrNarrow
+              ? navigate(`/projects/${params.row._id}`)
+              : navigate(`/reports/project/${params.row._id}`, {
+                  state: { from: "projects" },
+                })
           }
-          columnVisibilityModel={memoizedColumnVisibilityModel}
+          columnVisibilityModel={effectiveColumnVisibilityModel}
           onColumnVisibilityModelChange={handleColumnVisibilityModelChange}
           columnWidthModel={columnWidthModel}
           onColumnWidthChange={handleColumnWidthChange}

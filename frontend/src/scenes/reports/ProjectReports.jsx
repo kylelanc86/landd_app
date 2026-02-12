@@ -31,6 +31,7 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import DownloadIcon from "@mui/icons-material/Download";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import ArchiveIcon from "@mui/icons-material/Archive";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import EditIcon from "@mui/icons-material/Edit";
 import SaveIcon from "@mui/icons-material/Save";
@@ -38,6 +39,7 @@ import CancelIcon from "@mui/icons-material/Cancel";
 import UploadIcon from "@mui/icons-material/Upload";
 import ReportCategories from "./ReportCategories";
 import ReportsList from "./ReportsList";
+import ArchivedDataDialog from "./ArchivedDataDialog";
 import { useNavigate } from "react-router-dom";
 import {
   projectService,
@@ -95,6 +97,9 @@ const ProjectReports = () => {
   const [cocDialogOpen, setCocDialogOpen] = useState(false);
   const [cocFullScreenOpen, setCocFullScreenOpen] = useState(false);
   const [selectedCOC, setSelectedCOC] = useState(null);
+
+  // Archived data dialog state
+  const [archivedDialogOpen, setArchivedDialogOpen] = useState(false);
 
   const { showSnackbar } = useSnackbar();
 
@@ -2149,6 +2154,13 @@ const ProjectReports = () => {
           <Box sx={{ display: "flex", gap: 2, ml: 2 }}>
             <Button
               variant="outlined"
+              startIcon={<ArchiveIcon />}
+              onClick={() => setArchivedDialogOpen(true)}
+            >
+              Deleted / Archived Data
+            </Button>
+            <Button
+              variant="outlined"
               startIcon={<UploadIcon />}
               onClick={() => setUploadDialogOpen(true)}
             >
@@ -2292,6 +2304,13 @@ const ProjectReports = () => {
           />
         </>
       )}
+
+      {/* Archived Data Dialog */}
+      <ArchivedDataDialog
+        open={archivedDialogOpen}
+        onClose={() => setArchivedDialogOpen(false)}
+        projectId={projectId}
+      />
 
       {/* Project Log Modal */}
       {logModalOpen && (

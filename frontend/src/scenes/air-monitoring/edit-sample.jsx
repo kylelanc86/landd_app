@@ -532,12 +532,13 @@ const EditSample = () => {
           }
         }
 
-        // Only check isFieldBlank flag, not location, to avoid false positives
-        // If location is "Field blank" but isFieldBlank is false, it's not a field blank
-        const isFieldBlankSample = !!sampleData.isFieldBlank;
+        // Derive field blank from stored flag or location so the checkbox is retained when editing
+        const isFieldBlankSample =
+          !!sampleData.isFieldBlank ||
+          sampleData.location === FIELD_BLANK_LOCATION;
         const isNegAirSample =
           !isFieldBlankSample &&
-          (sampleData.isNegAirExhaust ||
+          (!!sampleData.isNegAirExhaust ||
             sampleData.location === NEG_AIR_EXHAUST_LOCATION);
 
         // Normalize type: if type is "-" but it's not a field blank, set to "Background"
@@ -1707,6 +1708,9 @@ const EditSample = () => {
                         : "")
                     }
                   />
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: -0.5, mb: 1 }}>
+                    *If pump has failed, set final flowrate to 0L/min
+                  </Typography>
                   <TextField
                     name="averageFlowrate"
                     label="Average Flowrate"

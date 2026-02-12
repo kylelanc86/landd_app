@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const Sample = require('../models/Sample');
-const AirMonitoringJob = require('../models/Job');
 const AsbestosRemovalJob = require('../models/AsbestosRemovalJob');
 const Project = require('../models/Project');
 const auth = require('../middleware/auth');

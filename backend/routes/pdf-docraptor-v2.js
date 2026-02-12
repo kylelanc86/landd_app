@@ -2404,7 +2404,9 @@ const generateAssessmentHTML = async (assessmentData) => {
     const watermarkPath = path.join(__dirname, '../assets/logo_small hi-res.png');
     const watermarkBase64 = fs.existsSync(watermarkPath) ? fs.readFileSync(watermarkPath).toString('base64') : '';
     
-    const backgroundPath = path.join(__dirname, '../assets/clearance_front - Copy.jpg');
+    // Different cover background per assessment type: asbestos (commercial) = ma.jpg, residential = res.jpg
+    const assessmentCoverImage = isResidential ? 'res.jpg' : 'ma.jpg';
+    const backgroundPath = path.join(__dirname, '../../frontend/public/images', assessmentCoverImage);
     const backgroundBase64 = fs.existsSync(backgroundPath) ? fs.readFileSync(backgroundPath).toString('base64') : '';
 
     // Use residential template when isResidential (has Background section and "Summary of Identified ACM")
@@ -3197,7 +3199,9 @@ const generateAssessmentCoverVersionHTMLV3 = async (assessmentData, isResidentia
   const watermarkPath = path.join(__dirname, '../assets/logo_small hi-res.png');
   const watermarkBase64 = fs.existsSync(watermarkPath) ? fs.readFileSync(watermarkPath).toString('base64') : '';
 
-  const backgroundPath = path.join(__dirname, '../assets/clearance_front - Copy.jpg');
+  // Different cover background per assessment type: asbestos (commercial) = ma.jpg, residential = res.jpg
+  const assessmentCoverImage = isResidential ? 'res.jpg' : 'ma.jpg';
+  const backgroundPath = path.join(__dirname, '../../frontend/public/images', assessmentCoverImage);
   const backgroundBase64 = fs.existsSync(backgroundPath) ? fs.readFileSync(backgroundPath).toString('base64') : '';
 
   const templateType = isResidential ? 'residentialAsbestosAssessment' : 'asbestosAssessment';

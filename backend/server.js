@@ -7,7 +7,6 @@ const connectDB = require('./config/db');
 const authRoutes = require('./routes/auth');
 const projectRoutes = require('./routes/projects');
 const clientRoutes = require('./routes/clients');
-const jobRoutes = require('./routes/jobs');
 const sampleRoutes = require('./routes/samples');
 const invoiceRoutes = require('./routes/invoices');
 const usersRouter = require('./routes/users');
@@ -158,7 +157,6 @@ connectDB()
     // Initialize dashboard stats
     try {
       // Ensure all models are loaded first
-      require('./models/Job');
       require('./models/Invoice');
       require('./models/DashboardStats');
       
@@ -197,8 +195,6 @@ connectDB()
     app.use('/api/clients', requireAuth, checkTokenBlacklist, clientRoutes);
     app.use('/clients', requireAuth, checkTokenBlacklist, clientRoutes);
     
-    app.use('/api/air-monitoring-jobs', requireAuth, checkTokenBlacklist, jobRoutes);
-    app.use('/air-monitoring-jobs', requireAuth, checkTokenBlacklist, jobRoutes);
     
     app.use('/api/samples', requireAuth, checkTokenBlacklist, sampleRoutes);
     app.use('/samples', requireAuth, checkTokenBlacklist, sampleRoutes);

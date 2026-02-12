@@ -237,7 +237,7 @@ const AirMonitoring = () => {
       const response = await projectService.getAll({
         limit: 1000, // Set a high limit to get all projects
         status:
-          "Assigned,In progress,Samples submitted,Lab Analysis Complete,Report sent for review,Ready for invoicing,Invoice sent, Quote sent", // Include all active statuses
+          "Assigned,In progress,Samples submitted,Lab Analysis Completed,Report sent for review,Ready for invoicing,Invoice sent, Quote sent", // Include all active statuses
       });
       // Ensure we always set an array, even if the response structure is different
       if (response && response.data) {

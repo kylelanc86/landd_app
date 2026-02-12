@@ -8,11 +8,19 @@ const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 
 // GET /api/client-supplied-jobs - get all client supplied jobs (excludes archived by default)
+// Query: supplyType=client | ld — when 'ld', return only L&D supplied (standalone) jobs; when 'client' or omitted, return only client supplied jobs
 router.get('/', auth, checkPermission('clientSup.view'), async (req, res) => {
   try {
     // Filter out archived jobs by default
     const filter = { archived: { $ne: true } };
-    
+    const supplyType = req.query.supplyType;
+    if (supplyType === 'ld') {
+      filter.supplyType = 'ld';
+    } else {
+      // client or omitted: exclude LD jobs so client supplied list is unchanged
+      filter.supplyType = { $ne: 'ld' };
+    }
+
     const jobs = await ClientSuppliedJob.find(filter)
       .populate({
         path: 'projectId',
@@ -90,7 +98,7 @@ router.get('/:id', auth, checkPermission('clientSup.view'), async (req, res) => 
 // POST /api/client-supplied-jobs - create new job
 router.post('/', auth, checkPermission('clientSup.create'), async (req, res) => {
   try {
-    const { projectId, jobType, sampleReceiptDate, sampleCount, turnaroundTime, analysisDueDate } = req.body;
+    const { projectId, jobType, sampleReceiptDate, sampleCount, turnaroundTime, analysisDueDate, supplyType } = req.body;
     
     console.log('Creating client supplied job with data:', { projectId, jobType, sampleReceiptDate, sampleCount, turnaroundTime, analysisDueDate });
     
@@ -166,6 +174,11 @@ router.post('/', auth, checkPermission('clientSup.create'), async (req, res) => 
       if (!isNaN(dueDate.getTime())) {
         jobData.analysisDueDate = dueDate;
       }
+    }
+
+    // L&D supplied jobs (standalone, no asbestos/residential link)
+    if (supplyType === 'ld') {
+      jobData.supplyType = 'ld';
     }
     
     console.log('Creating job with data:', jobData);

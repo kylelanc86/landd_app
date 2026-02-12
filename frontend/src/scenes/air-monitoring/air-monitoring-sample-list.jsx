@@ -153,17 +153,8 @@ const SampleList = () => {
             asbestosRemovalJobService
               .getById(jobId)
               .then((response) => setJob(response.data))
-              .catch(async (error) => {
-                // Try to fetch as air monitoring job as fallback
-                try {
-                  const { jobService } = await import("../../services/api");
-                  const airMonitoringJobResponse = await jobService.getById(
-                    jobId
-                  );
-                  setJob(airMonitoringJobResponse.data);
-                } catch (airMonitoringError) {
-                  // Silently fail - job data is not critical for page load
-                }
+              .catch(() => {
+                // Silently fail - job data is not critical for page load
               })
           );
         }

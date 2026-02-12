@@ -183,32 +183,20 @@ const ProjectLogModal = ({ open, onClose, project }) => {
         // This ensures we get ALL shifts regardless of status (unlike the filtered endpoint)
         (async () => {
           try {
-            // Import services - shiftService and jobService are named exports
-            const { shiftService, jobService } = await import(
-              "../../services/api"
-            );
+            const { shiftService } = await import("../../services/api");
             const { default: asbestosRemovalJobService } = await import(
               "../../services/asbestosRemovalJobService"
             );
 
-            // Get all jobs for this project (both regular and asbestos removal jobs)
-            const [regularJobsRes, asbestosJobsRes] = await Promise.all([
-              // Regular air monitoring jobs
-              jobService
-                .getAll({ projectId: project._id })
-                .then((res) => res.data || [])
-                .catch(() => []),
-              // Asbestos removal jobs (all statuses, not just completed)
-              asbestosRemovalJobService
-                .getAll({ projectId: project._id })
-                .then((res) => {
-                  // Handle different response structures
-                  return res.jobs || res.data || [];
-                })
-                .catch(() => []),
-            ]);
+            // Get all asbestos removal jobs for this project
+            const asbestosJobsRes = await asbestosRemovalJobService
+              .getAll({ projectId: project._id })
+              .then((res) => {
+                return res.jobs || res.data || [];
+              })
+              .catch(() => []);
 
-            const allJobs = [...regularJobsRes, ...asbestosJobsRes];
+            const allJobs = Array.isArray(asbestosJobsRes) ? asbestosJobsRes : [];
 
             console.log(
               `Found ${allJobs.length} jobs for project ${project._id}`
@@ -236,7 +224,7 @@ const ProjectLogModal = ({ open, onClose, project }) => {
                   reportApprovedBy: shift.reportApprovedBy,
                   reportIssueDate: shift.reportIssueDate,
                   revision: shift.revision || 0,
-                  jobName: job.name || job.jobID,
+                  jobName: job.projectName || job.name || "Asbestos Removal Job",
                   jobId: job._id,
                   projectId: project._id,
                   projectName: project.name,

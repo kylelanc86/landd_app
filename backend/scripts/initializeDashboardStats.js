@@ -2,7 +2,6 @@ const mongoose = require('mongoose');
 require('dotenv').config();
 
 // Import models in correct order to avoid schema registration issues
-const Job = require('../models/Job');
 const Invoice = require('../models/Invoice');
 const DashboardStats = require('../models/DashboardStats');
 
@@ -16,11 +15,6 @@ async function initializeDashboardStats() {
     
     // First, let's see what collections exist and what they contain
     console.log('=== INVESTIGATING PROJECT DATA STRUCTURE ===');
-    
-    // Check Job collection (air_monitoring_jobs)
-    const allJobs = await Job.find({}).select('status name projectId');
-    console.log('Jobs collection count:', allJobs.length);
-    console.log('Job statuses:', [...new Set(allJobs.map(j => j.status))]);
     
     // Check Project collection
     const Project = require('../models/Project');

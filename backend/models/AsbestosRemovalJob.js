@@ -39,7 +39,7 @@ const asbestosRemovalJobSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["in_progress", "completed", "cancelled"],
+      enum: ["in_progress", "completed", "cancelled", "archived"],
       default: "in_progress",
     },
     createdBy: {

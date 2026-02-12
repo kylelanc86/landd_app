@@ -20,6 +20,11 @@ const clientSuppliedJobSchema = new mongoose.Schema({
     enum: ['Fibre ID', 'Fibre Count'],
     default: 'Fibre ID'
   },
+  supplyType: {
+    type: String,
+    enum: ['client', 'ld'],
+    default: 'client'
+  },
   analyst: {
     type: String,
     trim: true

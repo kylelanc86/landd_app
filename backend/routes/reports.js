@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const Project = require('../models/Project');
-const AirMonitoringJob = require('../models/Job');
+const AsbestosRemovalJob = require('../models/AsbestosRemovalJob');
 const Shift = require('../models/Shift');
 const Sample = require('../models/Sample');
 const Invoice = require('../models/Invoice');
@@ -34,25 +34,32 @@ router.get('/asbestos-assessment/:projectId', auth, checkPermission(['projects.v
   }
 });
 
-// Get Air Monitoring Reports
+// Get Air Monitoring Reports (from asbestos removal jobs)
 router.get('/air-monitoring/:projectId', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
-    const jobs = await AirMonitoringJob.find({ projectId: req.params.projectId })
-      .populate('projectId');
+    const jobs = await AsbestosRemovalJob.find({ projectId: req.params.projectId })
+      .populate('projectId', 'projectID name');
 
     const reports = [];
     for (const job of jobs) {
-      const shifts = await Shift.find({ job: job._id });
+      const shifts = await Shift.find({
+        job: job._id,
+        $or: [
+          { jobModel: 'AsbestosRemovalJob' },
+          { jobModel: { $exists: false } },
+          { jobModel: null },
+        ],
+      });
       for (const shift of shifts) {
         if (shift.status === 'analysis_complete' || shift.status === 'shift_complete') {
           reports.push({
             id: shift._id,
             date: shift.date,
             type: 'air_monitoring',
-            reference: job.projectId.projectID,
-            description: job.descriptionOfWorks || 'Air Monitoring Report',
+            reference: job.projectId?.projectID || 'Unknown',
+            description: shift.descriptionOfWorks || 'Air Monitoring Report',
             status: shift.status,
-            jobName: job.name,
+            jobName: job.projectName || 'Asbestos Removal Job',
             shiftName: shift.name
           });
         }

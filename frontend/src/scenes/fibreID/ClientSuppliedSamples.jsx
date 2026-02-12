@@ -73,9 +73,13 @@ const ClientSuppliedSamples = () => {
     } else if (jobId === "[object Object]") {
       setLoading(false);
       // Redirect back to the jobs list if we have an invalid jobId
-      const basePath = location.pathname.startsWith("/client-supplied")
-        ? "/client-supplied"
-        : "/fibre-id/client-supplied";
+      const basePath = location.pathname.startsWith("/laboratory-services/ld-supplied")
+        ? "/laboratory-services/ld-supplied"
+        : location.pathname.startsWith("/fibre-id/ld-supplied")
+          ? "/fibre-id/ld-supplied"
+          : location.pathname.startsWith("/client-supplied")
+            ? "/client-supplied"
+            : "/fibre-id/client-supplied";
       navigate(basePath);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -141,7 +145,13 @@ const ClientSuppliedSamples = () => {
   });
 
   const handleBackToJobs = () => {
-    // Use the appropriate route based on current location
+    if (
+      location.pathname.startsWith("/laboratory-services/ld-supplied") ||
+      location.pathname.startsWith("/fibre-id/ld-supplied")
+    ) {
+      navigate("/laboratory-services/ld-supplied");
+      return;
+    }
     const basePath = location.pathname.startsWith("/client-supplied")
       ? "/client-supplied"
       : "/fibre-id/client-supplied";
@@ -520,14 +530,12 @@ const ClientSuppliedSamples = () => {
             sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
           >
             <ArrowBackIcon sx={{ mr: 1 }} />
-            Client Supplied Jobs
+            {location.pathname.startsWith("/laboratory-services/ld-supplied") ||
+            location.pathname.startsWith("/fibre-id/ld-supplied")
+              ? "L&D Supplied Jobs"
+              : "Client Supplied Jobs"}
           </Link>
-          <Typography
-            variant="body1"
-            sx={{ display: "flex", alignItems: "center" }}
-          >
-            Sample Items
-          </Typography>
+
         </Breadcrumbs>
 
         {/* Header */}
@@ -572,9 +580,15 @@ const ClientSuppliedSamples = () => {
                 disabled={uploadingCOC}
               >
                 {job?.chainOfCustody
-                  ? "View/Edit COC"
+                  ? location.pathname.startsWith("/laboratory-services/ld-supplied") ||
+                    location.pathname.startsWith("/fibre-id/ld-supplied")
+                    ? "View/Edit COC/Site sheets"
+                    : "View/Edit COC"
                   : uploadingCOC
                   ? "Uploading..."
+                  : location.pathname.startsWith("/laboratory-services/ld-supplied") ||
+                    location.pathname.startsWith("/fibre-id/ld-supplied")
+                  ? "Upload COC/Site sheets"
                   : "Upload COC"}
               </Button>
 
@@ -622,7 +636,10 @@ const ClientSuppliedSamples = () => {
                     Lab Reference
                   </TableCell>
                   <TableCell sx={{ fontWeight: "bold" }}>
-                    Client Reference
+                    {location.pathname.startsWith("/laboratory-services/ld-supplied") ||
+                    location.pathname.startsWith("/fibre-id/ld-supplied")
+                      ? "L&D Sample Reference"
+                      : "Client Reference"}
                   </TableCell>
                   {job.jobType !== "Fibre ID" && (
                     <TableCell sx={{ fontWeight: "bold" }}>
@@ -686,11 +703,13 @@ const ClientSuppliedSamples = () => {
               variant="contained"
               size="large"
               onClick={() => {
-                const basePath = location.pathname.startsWith(
-                  "/client-supplied"
-                )
-                  ? "/client-supplied"
-                  : "/fibre-id/client-supplied";
+                const basePath = location.pathname.startsWith("/laboratory-services/ld-supplied")
+                  ? "/laboratory-services/ld-supplied"
+                  : location.pathname.startsWith("/fibre-id/ld-supplied")
+                    ? "/fibre-id/ld-supplied"
+                    : location.pathname.startsWith("/client-supplied")
+                      ? "/client-supplied"
+                      : "/fibre-id/client-supplied";
 
                 // For Fibre ID jobs, navigate to first sample's analysis page
                 // For Fibre Count jobs, navigate to bulk analysis page
@@ -767,7 +786,12 @@ const ClientSuppliedSamples = () => {
                 alignItems: "center",
               }}
             >
-              <Typography variant="h6">Chain of Custody</Typography>
+              <Typography variant="h6">
+                {location.pathname.startsWith("/laboratory-services/ld-supplied") ||
+                location.pathname.startsWith("/fibre-id/ld-supplied")
+                  ? "Chain of Custody/Sample Sheets"
+                  : "Chain of Custody"}
+              </Typography>
               <MuiIconButton onClick={() => setCocDialogOpen(false)}>
                 <CloseIcon />
               </MuiIconButton>
@@ -777,6 +801,9 @@ const ClientSuppliedSamples = () => {
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
               {job?.chainOfCustody
                 ? `File: ${job.chainOfCustody.fileName}`
+                : location.pathname.startsWith("/laboratory-services/ld-supplied") ||
+                  location.pathname.startsWith("/fibre-id/ld-supplied")
+                ? "No Chain of Custody/Sample Sheets file uploaded yet."
                 : "No Chain of Custody file uploaded yet."}
               <br />
               {job?.chainOfCustody?.uploadedAt &&
@@ -1022,7 +1049,10 @@ const ClientSuppliedSamples = () => {
                       L&D Lab Reference
                     </TableCell>
                     <TableCell sx={{ fontWeight: "bold" }}>
-                      Client Reference
+                      {location.pathname.startsWith("/laboratory-services/ld-supplied") ||
+                      location.pathname.startsWith("/fibre-id/ld-supplied")
+                        ? "L&D Sample Reference"
+                        : "Client Reference"}
                     </TableCell>
                     {job.jobType !== "Fibre ID" && (
                       <TableCell sx={{ fontWeight: "bold" }}>
@@ -1066,7 +1096,12 @@ const ClientSuppliedSamples = () => {
                               e.target.value
                             )
                           }
-                          placeholder="Enter client reference"
+                          placeholder={
+                            location.pathname.startsWith("/laboratory-services/ld-supplied") ||
+                            location.pathname.startsWith("/fibre-id/ld-supplied")
+                              ? "Enter L&D sample reference"
+                              : "Enter client reference"
+                          }
                         />
                       </TableCell>
                       {job.jobType !== "Fibre ID" && (

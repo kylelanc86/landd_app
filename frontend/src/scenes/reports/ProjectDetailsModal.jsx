@@ -25,9 +25,9 @@ import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { format } from "date-fns";
 import {
   timesheetService,
-  jobService,
   clientSuppliedJobsService,
 } from "../../services/api";
+import asbestosRemovalJobService from "../../services/asbestosRemovalJobService";
 
 // Helper function to calculate hours between two time strings (HH:mm format)
 const calculateHours = (startTime, endTime) => {
@@ -74,23 +74,24 @@ const ProjectDetailsModal = ({ open, onClose, project }) => {
         }
       );
 
-      // Load jobs - get all types of jobs for this project
-      const [airMonitoringJobs, clientSuppliedJobs] = await Promise.all([
-        jobService.getAll(),
+      // Load jobs - asbestos removal jobs and client supplied jobs for this project
+      const [asbestosJobsRes, clientSuppliedJobs] = await Promise.all([
+        asbestosRemovalJobService.getAll({ projectId: project._id }),
         clientSuppliedJobsService.getByProject(project._id),
       ]);
 
-      // Filter air monitoring jobs for this project
-      const airMonitoringProjectJobs =
-        airMonitoringJobs.data?.filter(
-          (job) =>
-            job.projectId === project._id || job.projectId?._id === project._id
-        ) || [];
+      const asbestosJobs = asbestosJobsRes?.jobs || asbestosJobsRes?.data || [];
+      const clientJobs = clientSuppliedJobs.data || [];
 
-      // Combine all job types
+      // Combine all job types (add type for handleCompleteJob)
       const projectJobs = [
-        ...airMonitoringProjectJobs,
-        ...(clientSuppliedJobs.data || []),
+        ...(Array.isArray(asbestosJobs) ? asbestosJobs : []).map((j) => ({
+          ...j,
+          type: "asbestos_removal",
+          jobID: j.projectId?.projectID || j.projectID,
+          name: j.projectName || "Asbestos Removal Job",
+        })),
+        ...clientJobs.map((j) => ({ ...j, type: "client_supplied" })),
       ];
 
       setTimesheets(timesheetResponse.data || []);
@@ -113,8 +114,8 @@ const ProjectDetailsModal = ({ open, onClose, project }) => {
 
     setUpdatingJob(job._id);
     try {
-      if (job.type === "air_monitoring") {
-        await jobService.update(job._id, { ...job, status: "complete" });
+      if (job.type === "asbestos_removal") {
+        await asbestosRemovalJobService.update(job._id, { status: "completed" });
       } else if (job.type === "client_supplied") {
         await clientSuppliedJobsService.update(job._id, {
           ...job,

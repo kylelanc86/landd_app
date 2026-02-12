@@ -34,19 +34,18 @@ router.get('/', auth, checkPermission(['jobs.view']), async (req, res) => {
 // Get shifts by job ID
 router.get('/job/:jobId', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
-    // Check if the job exists in either AirMonitoringJob or AsbestosRemovalJob
-    const airMonitoringJob = await mongoose.model('AirMonitoringJob').findById(req.params.jobId);
-    const asbestosRemovalJob = await mongoose.model('AsbestosRemovalJob').findById(req.params.jobId);
-    
-    if (!airMonitoringJob && !asbestosRemovalJob) {
+    const AsbestosRemovalJob = require('../models/AsbestosRemovalJob');
+    const job = await AsbestosRemovalJob.findById(req.params.jobId);
+
+    if (!job) {
       return res.status(404).json({ message: 'Job not found' });
     }
 
-    // Fetch the shifts for this job
+    // Fetch the shifts for this asbestos removal job
     const shifts = await Shift.find({ job: req.params.jobId })
       .populate({
         path: 'job',
-        select: 'jobID name projectId status asbestosRemovalist description projectName client',
+        select: 'projectId projectName client asbestosRemovalist status',
         populate: {
           path: 'projectId',
           select: 'projectID name'
@@ -255,7 +254,7 @@ router.patch('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports
     
     // Ensure jobModel is set (for existing shifts that might not have it)
     if (!shift.jobModel) {
-      shift.jobModel = "AsbestosRemovalJob"; // Default to AsbestosRemovalJob since we're phasing out AirMonitoringJob
+      shift.jobModel = "AsbestosRemovalJob";
     }
     
     try {

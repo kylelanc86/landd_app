@@ -857,10 +857,6 @@ router.get('/:id/dependencies', auth, checkPermission(['projects.delete']), asyn
     const Invoice = require('../models/Invoice');
     const linkedInvoices = await Invoice.find({ projectId: req.params.id });
     
-    // Check for linked jobs
-    const Job = require('../models/Job');
-    const linkedJobs = await Job.find({ projectId: req.params.id });
-   
     // Check for linked asbestos removal jobs
     const AsbestosRemovalJob = require('../models/AsbestosRemovalJob');
     const linkedAsbestosRemovalJobs = await AsbestosRemovalJob.find({ projectId: req.params.id });
@@ -888,7 +884,6 @@ router.get('/:id/dependencies', auth, checkPermission(['projects.delete']), asyn
     // Build dependency summary
     const dependencies = [];
     if (linkedInvoices.length > 0) dependencies.push(`${linkedInvoices.length} invoice(s)`);
-    if (linkedJobs.length > 0) dependencies.push(`${linkedJobs.length} job(s)`);
     if (linkedAsbestosRemovalJobs.length > 0) dependencies.push(`${linkedAsbestosRemovalJobs.length} asbestos removal job(s)`);
     if (linkedClientSuppliedJobs.length > 0) dependencies.push(`${linkedClientSuppliedJobs.length} client supplied job(s)`);
     if (linkedTimesheets.length > 0) dependencies.push(`${linkedTimesheets.length} timesheet(s)`);
@@ -900,7 +895,6 @@ router.get('/:id/dependencies', auth, checkPermission(['projects.delete']), asyn
       canDelete: dependencies.length === 0,
       dependencies: {
         invoices: linkedInvoices.length,
-        jobs: linkedJobs.length,
         asbestosRemovalJobs: linkedAsbestosRemovalJobs.length,
         clientSuppliedJobs: linkedClientSuppliedJobs.length,
         timesheets: linkedTimesheets.length,
@@ -932,10 +926,6 @@ router.delete('/:id', auth, checkPermission(['projects.delete']), async (req, re
      const Invoice = require('../models/Invoice');
      const linkedInvoices = await Invoice.find({ projectId: req.params.id });
      
-     // Check for linked jobs
-     const Job = require('../models/Job');
-     const linkedJobs = await Job.find({ projectId: req.params.id });
-    
     // Check for linked asbestos removal jobs
     const AsbestosRemovalJob = require('../models/AsbestosRemovalJob');
     const linkedAsbestosRemovalJobs = await AsbestosRemovalJob.find({ projectId: req.params.id });
@@ -963,7 +953,6 @@ router.delete('/:id', auth, checkPermission(['projects.delete']), async (req, re
     // Build dependency summary
     const dependencies = [];
     if (linkedInvoices.length > 0) dependencies.push(`${linkedInvoices.length} invoice(s)`);
-    if (linkedJobs.length > 0) dependencies.push(`${linkedJobs.length} job(s)`);
     if (linkedAsbestosRemovalJobs.length > 0) dependencies.push(`${linkedAsbestosRemovalJobs.length} asbestos removal job(s)`);
     if (linkedClientSuppliedJobs.length > 0) dependencies.push(`${linkedClientSuppliedJobs.length} client supplied job(s)`);
     if (linkedTimesheets.length > 0) dependencies.push(`${linkedTimesheets.length} timesheet(s)`);
@@ -976,7 +965,6 @@ router.delete('/:id', auth, checkPermission(['projects.delete']), async (req, re
         message: `Cannot delete project. It has linked records: ${dependencies.join(', ')}. Please remove or reassign these records before deleting the project.`,
         dependencies: {
           invoices: linkedInvoices.length,
-          jobs: linkedJobs.length,
           asbestosRemovalJobs: linkedAsbestosRemovalJobs.length,
           clientSuppliedJobs: linkedClientSuppliedJobs.length,
           timesheets: linkedTimesheets.length,
@@ -1244,7 +1232,7 @@ router.get('/with-reports-or-jobs/ids', auth, checkPermission(['projects.view'])
 
     // Use parallel queries for better performance
     const promises = [];
-    const Job = require('../models/Job');
+    const AsbestosRemovalJob = require('../models/AsbestosRemovalJob');
     const Shift = require('../models/Shift');
 
     // Helper function to add project ID with reason
@@ -1258,23 +1246,7 @@ router.get('/with-reports-or-jobs/ids', auth, checkPermission(['projects.view'])
       projectIdReasons.get(id).add(reason);
     };
 
-    // 1. Active air monitoring jobs (status "in_progress")
-    promises.push(
-      Job.find({ status: 'in_progress' })
-        .select('projectId')
-        .lean()
-        .then((jobs) => {
-          const count = jobs.length;
-          jobs.forEach((job) => {
-            addProjectId(job.projectId, 'active_air_monitoring_jobs');
-          });
-        })
-        .catch((err) => {
-          console.error('Error fetching active air monitoring jobs:', err);
-        })
-    );
-
-    // 2. Air monitoring jobs with shifts that have reports (analysis_complete or shift_complete)
+    // 1. Asbestos removal jobs with shifts that have reports (analysis_complete or shift_complete)
     promises.push(
       (async () => {
         try {
@@ -1288,8 +1260,8 @@ router.get('/with-reports-or-jobs/ids', auth, checkPermission(['projects.view'])
           const jobIds = [...new Set(shiftsWithReports.map(s => s.job?.toString()).filter(Boolean))];
           
           if (jobIds.length > 0) {
-            // Then get projectIds from those jobs
-            const jobs = await Job.find({ _id: { $in: jobIds } })
+            // Then get projectIds from those jobs (all shifts reference AsbestosRemovalJob)
+            const jobs = await AsbestosRemovalJob.find({ _id: { $in: jobIds } })
               .select('projectId')
               .lean();
             

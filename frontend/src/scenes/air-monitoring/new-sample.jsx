@@ -1908,6 +1908,9 @@ const NewSample = () => {
                         : "")
                     }
                   />
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: -0.5, mb: 1 }}>
+                    *If pump has failed, set final flowrate to 0L/min
+                  </Typography>
                   <TextField
                     name="averageFlowrate"
                     label="Average Flowrate"

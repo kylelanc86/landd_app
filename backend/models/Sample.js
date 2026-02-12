@@ -13,7 +13,8 @@ const sampleSchema = new mongoose.Schema({
   },
   jobModel: {
     type: String,
-    enum: ['AirMonitoringJob', 'AsbestosRemovalJob'],
+    enum: ['AsbestosRemovalJob'],
+    default: 'AsbestosRemovalJob',
     required: true
   },
   sampleNumber: {

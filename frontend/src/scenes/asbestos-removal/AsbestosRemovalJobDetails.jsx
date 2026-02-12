@@ -51,7 +51,6 @@ import MailIcon from "@mui/icons-material/Mail";
 import { tokens } from "../../theme/tokens";
 import api from "../../services/api";
 import {
-  jobService,
   shiftService,
   sampleService,
   projectService,
@@ -878,17 +877,10 @@ const AsbestosRemovalJobDetails = () => {
       const shiftResponse = await shiftService.getById(shift._id);
       const latestShift = shiftResponse.data;
 
-      // Fetch job and samples for this shift - use correct service based on jobModel
-      let jobResponse;
-      if (latestShift.jobModel === "AsbestosRemovalJob") {
-        jobResponse = await asbestosRemovalJobService.getById(
-          latestShift.job?._id || latestShift.job,
-        );
-      } else {
-        jobResponse = await jobService.getById(
-          latestShift.job?._id || latestShift.job,
-        );
-      }
+      // Fetch job and samples for this shift
+      const jobResponse = await asbestosRemovalJobService.getById(
+        latestShift.job?._id || latestShift.job,
+      );
       const samplesResponse = await sampleService.getByShift(latestShift._id);
 
       // Ensure we have the complete sample data including analysis
@@ -961,15 +953,10 @@ const AsbestosRemovalJobDetails = () => {
 
       // Generate and download the report
       try {
-        // Fetch job and samples for this shift - use correct service based on jobModel
-        let jobResponse;
-        if (currentShift.data.jobModel === "AsbestosRemovalJob") {
-          jobResponse = await asbestosRemovalJobService.getById(
-            shift.job?._id || shift.job,
-          );
-        } else {
-          jobResponse = await jobService.getById(shift.job?._id || shift.job);
-        }
+        // Fetch job and samples for this shift
+        const jobResponse = await asbestosRemovalJobService.getById(
+          shift.job?._id || shift.job,
+        );
         const samplesResponse = await sampleService.getByShift(shift._id);
 
         // Ensure we have the complete sample data including analysis

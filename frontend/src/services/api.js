@@ -270,23 +270,6 @@ export const projectService = {
   getProjectsByIds: (projectIds) => api.post('/projects/by-ids', { projectIds }),
 };
 
-// Job service
-export const jobService = {
-  getAll: (params = {}) => {
-    const queryParams = new URLSearchParams();
-    if (params.status) queryParams.append('status', params.status);
-    if (params.excludeStatus) queryParams.append('excludeStatus', params.excludeStatus);
-    if (params.minimal) queryParams.append('minimal', params.minimal);
-    if (params.projectId) queryParams.append('projectId', params.projectId);
-    const queryString = queryParams.toString();
-    return api.get(`/air-monitoring-jobs${queryString ? `?${queryString}` : ''}`);
-  },
-  getById: (id) => api.get(`/air-monitoring-jobs/${id}`),
-  create: (data) => api.post('/air-monitoring-jobs', data),
-  update: (id, data) => api.patch(`/air-monitoring-jobs/${id}`, data),
-  delete: (id) => api.delete(`/air-monitoring-jobs/${id}`)
-};
-
 // Sample service
 export const sampleService = {
   getAll: () => api.get('/samples'),
@@ -499,6 +482,7 @@ export const clientSuppliedJobsService = {
     const queryParams = new URLSearchParams();
     if (params.projectId) queryParams.append('projectId', params.projectId);
     if (params.status) queryParams.append('status', params.status);
+    if (params.supplyType) queryParams.append('supplyType', params.supplyType);
     if (params.sortBy) queryParams.append('sortBy', params.sortBy);
     if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
     return api.get(`/client-supplied-jobs?${queryParams.toString()}`);
