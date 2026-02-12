@@ -137,6 +137,13 @@ const ClearanceItems = () => {
   const [lastPanPoint, setLastPanPoint] = useState(null);
   const [lastTapTime, setLastTapTime] = useState(0);
   const videoContainerRef = useRef(null);
+  const zoomWrapperRef = useRef(null);
+  const zoomPanRef = useRef({ zoom: 1, panX: 0, panY: 0 });
+
+  // Keep zoomPanRef in sync with state (after touchEnd or double-tap)
+  useEffect(() => {
+    zoomPanRef.current = { zoom, panX, panY };
+  }, [zoom, panX, panY]);
 
   // Track first tap for tablet two-tap behavior
   const [firstTapFields, setFirstTapFields] = useState({
@@ -1140,29 +1147,31 @@ const ClearanceItems = () => {
   // Handle touch start for pinch zoom
   const handleTouchStart = (e) => {
     if (e.touches.length === 2) {
-      // Two fingers - pinch zoom
+      zoomPanRef.current = { zoom, panX, panY };
       const distance = getDistance(e.touches[0], e.touches[1]);
       setLastPinchDistance(distance);
       const center = getCenter(e.touches[0], e.touches[1]);
       setLastPanPoint(center);
     } else if (e.touches.length === 1) {
-      // Single finger - check for double tap to reset zoom
       const currentTime = new Date().getTime();
       const timeSinceLastTap = currentTime - lastTapTime;
 
       if (timeSinceLastTap < 300 && timeSinceLastTap > 0) {
-        // Double tap detected - reset zoom
         setZoom(1);
         setPanX(0);
         setPanY(0);
         setLastTapTime(0);
+        zoomPanRef.current = { zoom: 1, panX: 0, panY: 0 };
+        if (zoomWrapperRef.current) {
+          zoomWrapperRef.current.style.transform = "scale(1) translate(0px, 0px)";
+        }
         return;
       }
 
       setLastTapTime(currentTime);
 
       if (zoom > 1) {
-        // Single finger - pan when zoomed, prepare for pan
+        zoomPanRef.current = { zoom, panX, panY };
         setLastPanPoint({
           x: e.touches[0].clientX,
           y: e.touches[0].clientY,
@@ -1171,68 +1180,49 @@ const ClearanceItems = () => {
     }
   };
 
-  // Handle touch move for pinch zoom and pan
+  // Handle touch move for pinch zoom and pan (ref-based for live zoom, no re-renders)
   const handleTouchMove = (e) => {
-    e.preventDefault(); // Prevent scrolling while zooming/panning
+    e.preventDefault();
 
     if (e.touches.length === 2) {
-      // Two fingers - pinch zoom
       const distance = getDistance(e.touches[0], e.touches[1]);
       const center = getCenter(e.touches[0], e.touches[1]);
 
-      if (lastPinchDistance !== null && videoContainerRef.current) {
+      if (lastPinchDistance !== null && videoContainerRef.current && zoomWrapperRef.current) {
         const scale = distance / lastPinchDistance;
-        const newZoom = Math.max(1, Math.min(5, zoom * scale)); // Limit zoom between 1x and 5x
-
+        const { zoom: curZoom, panX: curPanX, panY: curPanY } = zoomPanRef.current;
+        const newZoom = Math.max(1, Math.min(5, curZoom * scale));
         const container = videoContainerRef.current;
         const rect = container.getBoundingClientRect();
         const containerCenterX = rect.width / 2;
         const containerCenterY = rect.height / 2;
-
-        // Calculate the pinch center relative to container
         const pinchCenterX = center.x - rect.left - containerCenterX;
         const pinchCenterY = center.y - rect.top - containerCenterY;
-
-        // Adjust pan to keep the pinch center point stable
-        // When zooming, we need to adjust pan to maintain the pinch point
-        const zoomChange = newZoom / zoom;
-        setZoom(newZoom);
-        setPanX((prevPanX) => {
-          // Adjust pan to keep pinch center stable
-          const newPanX =
-            prevPanX - (pinchCenterX * (zoomChange - 1)) / newZoom;
-          // Limit pan based on zoom level (can pan more when more zoomed)
-          const maxPan = (newZoom - 1) * 50;
-          return Math.max(-maxPan, Math.min(maxPan, newPanX));
-        });
-        setPanY((prevPanY) => {
-          const newPanY =
-            prevPanY - (pinchCenterY * (zoomChange - 1)) / newZoom;
-          const maxPan = (newZoom - 1) * 50;
-          return Math.max(-maxPan, Math.min(maxPan, newPanY));
-        });
-
+        const zoomChange = newZoom / curZoom;
+        const newPanX = curPanX - (pinchCenterX * (zoomChange - 1)) / newZoom;
+        const newPanY = curPanY - (pinchCenterY * (zoomChange - 1)) / newZoom;
+        const maxPan = (newZoom - 1) * 50;
+        const clampedPanX = Math.max(-maxPan, Math.min(maxPan, newPanX));
+        const clampedPanY = Math.max(-maxPan, Math.min(maxPan, newPanY));
+        zoomPanRef.current = { zoom: newZoom, panX: clampedPanX, panY: clampedPanY };
+        zoomWrapperRef.current.style.transform = `scale(${newZoom}) translate(${clampedPanX}px, ${clampedPanY}px)`;
         setLastPinchDistance(distance);
         setLastPanPoint(center);
       } else {
         setLastPinchDistance(distance);
         setLastPanPoint(center);
       }
-    } else if (e.touches.length === 1 && zoom > 1 && lastPanPoint) {
-      // Single finger - pan when zoomed
-      const deltaX = (e.touches[0].clientX - lastPanPoint.x) / zoom;
-      const deltaY = (e.touches[0].clientY - lastPanPoint.y) / zoom;
-
-      const maxPan = (zoom - 1) * 50;
-      setPanX((prevPanX) => {
-        const newPanX = prevPanX + deltaX;
-        return Math.max(-maxPan, Math.min(maxPan, newPanX));
-      });
-      setPanY((prevPanY) => {
-        const newPanY = prevPanY + deltaY;
-        return Math.max(-maxPan, Math.min(maxPan, newPanY));
-      });
-
+    } else if (e.touches.length === 1 && lastPanPoint && zoomPanRef.current.zoom > 1) {
+      const curZoom = zoomPanRef.current.zoom;
+      const deltaX = (e.touches[0].clientX - lastPanPoint.x) / curZoom;
+      const deltaY = (e.touches[0].clientY - lastPanPoint.y) / curZoom;
+      const maxPan = (curZoom - 1) * 50;
+      const newPanX = Math.max(-maxPan, Math.min(maxPan, zoomPanRef.current.panX + deltaX));
+      const newPanY = Math.max(-maxPan, Math.min(maxPan, zoomPanRef.current.panY + deltaY));
+      zoomPanRef.current = { ...zoomPanRef.current, panX: newPanX, panY: newPanY };
+      if (zoomWrapperRef.current) {
+        zoomWrapperRef.current.style.transform = `scale(${zoomPanRef.current.zoom}) translate(${newPanX}px, ${newPanY}px)`;
+      }
       setLastPanPoint({
         x: e.touches[0].clientX,
         y: e.touches[0].clientY,
@@ -1240,12 +1230,16 @@ const ClearanceItems = () => {
     }
   };
 
-  // Handle touch end
+  // Handle touch end - sync ref back to state
   const handleTouchEnd = (e) => {
     if (e.touches.length < 2) {
       setLastPinchDistance(null);
     }
     if (e.touches.length === 0) {
+      const { zoom: z, panX: px, panY: py } = zoomPanRef.current;
+      setZoom(z);
+      setPanX(px);
+      setPanY(py);
       setLastPanPoint(null);
     }
   };
@@ -3838,7 +3832,7 @@ const ClearanceItems = () => {
           </DialogActions>
         </Dialog>
 
-        {/* Camera: portaled full-viewport overlay above app bar and modals */}
+        {/* Camera: portaled full-viewport overlay; buttons on right */}
         {cameraDialogOpen &&
           typeof document !== "undefined" &&
           createPortal(
@@ -3847,8 +3841,6 @@ const ClearanceItems = () => {
                 position: "fixed",
                 inset: 0,
                 zIndex: 9999,
-                display: "flex",
-                flexDirection: "column",
                 height: "100dvh",
                 maxHeight: "-webkit-fill-available",
                 backgroundColor: "#000",
@@ -3856,19 +3848,16 @@ const ClearanceItems = () => {
                 paddingBottom: "env(safe-area-inset-bottom)",
                 paddingLeft: "env(safe-area-inset-left)",
                 paddingRight: "env(safe-area-inset-right)",
+                overflow: "hidden",
               }}
             >
-              {/* Video fills space; bottom bar is transparent overlay */}
+              {/* Video fills entire area */}
               <Box
                 ref={videoContainerRef}
                 sx={{
-                  flex: 1,
-                  minHeight: 0,
-                  display: "flex",
-                  justifyContent: "center",
-                  alignItems: "center",
+                  position: "absolute",
+                  inset: 0,
                   overflow: "hidden",
-                  position: "relative",
                   touchAction: "none",
                 }}
                 onTouchStart={handleTouchStart}
@@ -3876,31 +3865,45 @@ const ClearanceItems = () => {
                 onTouchEnd={handleTouchEnd}
               >
                 {stream ? (
-                  <video
-                    ref={(ref) => {
-                      setVideoRef(ref);
-                      if (ref && stream) {
-                        ref.srcObject = stream;
-                      }
-                    }}
-                    autoPlay
-                    playsInline
-                    muted
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "cover",
-                      transform: `scale(${zoom}) translate(${panX}px, ${panY}px)`,
+                  <Box
+                    ref={zoomWrapperRef}
+                    sx={{
+                      position: "absolute",
+                      inset: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
                       transformOrigin: "center center",
-                      transition: zoom === 1 ? "transform 0.1s" : "none",
+                      willChange: "transform",
+                      transform: `scale(${zoom}) translate(${panX}px, ${panY}px)`,
                     }}
-                  />
+                  >
+                    <video
+                      ref={(ref) => {
+                        setVideoRef(ref);
+                        if (ref && stream) {
+                          ref.srcObject = stream;
+                        }
+                      }}
+                      autoPlay
+                      playsInline
+                      muted
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                      }}
+                    />
+                  </Box>
                 ) : (
                   <Box
                     sx={{
+                      position: "absolute",
+                      inset: 0,
                       display: "flex",
                       flexDirection: "column",
                       alignItems: "center",
+                      justifyContent: "center",
                       gap: 2,
                       color: "white",
                     }}
@@ -3910,17 +3913,18 @@ const ClearanceItems = () => {
                   </Box>
                 )}
               </Box>
-              {/* Transparent bottom bar: only Cancel + Capture */}
+              {/* Buttons overlay on the right */}
               <Box
                 sx={{
-                  flexShrink: 0,
-                  px: 2,
-                  py: 1,
-                  backgroundColor: "transparent",
+                  position: "absolute",
+                  right: "env(safe-area-inset-right)",
+                  top: "50%",
+                  transform: "translateY(-50%)",
                   display: "flex",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  gap: 2,
+                  flexDirection: "column",
+                  gap: 1.5,
+                  padding: 1,
+                  pointerEvents: "auto",
                 }}
               >
                 <Button
@@ -3931,10 +3935,10 @@ const ClearanceItems = () => {
                     borderRadius: 2,
                     textTransform: "none",
                     fontWeight: 500,
-                    bgcolor: "rgba(0,0,0,0.3)",
+                    bgcolor: "rgba(0,0,0,0.4)",
                     color: "white",
-                    borderColor: "rgba(255,255,255,0.5)",
-                    "&:hover": { bgcolor: "rgba(0,0,0,0.5)", borderColor: "rgba(255,255,255,0.8)" },
+                    borderColor: "rgba(255,255,255,0.6)",
+                    "&:hover": { bgcolor: "rgba(0,0,0,0.6)", borderColor: "rgba(255,255,255,0.9)" },
                   }}
                 >
                   Cancel
@@ -3948,7 +3952,7 @@ const ClearanceItems = () => {
                   disabled={!stream}
                   sx={{ borderRadius: 2, textTransform: "none", fontWeight: 500 }}
                 >
-                  Capture Photo
+                  Capture
                 </Button>
               </Box>
             </Box>,
