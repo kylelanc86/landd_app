@@ -6,6 +6,7 @@ const checkPermission = require("../middleware/checkPermission");
 const {
   syncClearanceForProject,
 } = require("../services/asbestosRemovalJobSyncService");
+const { getLegislationForReportTemplate } = require("../services/templateService");
 
 // Get all asbestos clearances with filtering and pagination
 router.get("/", auth, checkPermission("asbestos.view"), async (req, res) => {
@@ -151,6 +152,22 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
       }
     }
 
+    // Legislation snapshot at job creation (state-specific from report template)
+    let legislation = [];
+    try {
+      const templateType =
+        clearanceType === "Friable"
+          ? "asbestosClearanceFriable"
+          : clearanceType === "Friable (Non-Friable Conditions)"
+            ? "asbestosClearanceFriableNonFriableConditions"
+            : clearanceType === "Vehicle/Equipment"
+              ? "asbestosClearanceVehicle"
+              : "asbestosClearanceNonFriable";
+      legislation = await getLegislationForReportTemplate(templateType, jurisdiction || "ACT");
+    } catch (err) {
+      console.error("Error fetching legislation for clearance:", err);
+    }
+
     const clearance = new AsbestosClearance({
       projectId,
       ...(asbestosRemovalJobId && { asbestosRemovalJobId }),
@@ -159,6 +176,7 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
       status: status || "in progress",
       clearanceType,
       jurisdiction: jurisdiction || "ACT",
+      legislation,
       secondaryHeader: secondaryHeader || "",
       LAA,
       asbestosRemovalist,

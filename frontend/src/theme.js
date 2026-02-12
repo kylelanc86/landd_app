@@ -51,6 +51,12 @@ export const themeSettings = (mode) => {
         primary: "#000000",
         secondary: tokens.neutral[600],
       },
+      success: {
+        main: tokens.primary[500],
+        light: tokens.primary[400],
+        dark: tokens.primary[600],
+        contrastText: "#FFFFFF",
+      },
       grey: tokens.grey,
     },
     typography: {

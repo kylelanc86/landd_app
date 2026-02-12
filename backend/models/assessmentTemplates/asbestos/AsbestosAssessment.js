@@ -199,6 +199,13 @@ const AsbestosAssessmentSchema = new mongoose.Schema({
   authorisationRequestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // User who requested authorisation (send-for-authorisation)
   archived: { type: Boolean, default: false }, // When true, job is removed from the assessment table (completed)
   revision: { type: Number, default: 0 }, // Report revision number
+  // Legislation snapshot at job creation (state-specific, from report template); used for {LEGISLATION} in PDFs
+  legislation: [{
+    _id: String,
+    text: String,
+    legislationTitle: String,
+    jurisdiction: String,
+  }],
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });

@@ -898,8 +898,30 @@ const replacePlaceholders = async (content, data) => {
   return result;
 };
 
+/**
+ * Get legislation array for a job from the report template, filtered by jurisdiction.
+ * Used when creating clearance/assessment jobs to snapshot legislation at job creation time.
+ * @param {string} templateType - Report template type (e.g. asbestosClearanceFriable, asbestosAssessment)
+ * @param {string} jurisdiction - ACT or NSW (for assessment, use state; Commonwealth is treated as ACT)
+ * @returns {Promise<Array>} Copy of selectedLegislation filtered by jurisdiction (plain objects for storage on job)
+ */
+const getLegislationForReportTemplate = async (templateType, jurisdiction) => {
+  const template = await getTemplateByType(templateType);
+  const selected = template?.selectedLegislation;
+  if (!selected || !Array.isArray(selected) || selected.length === 0) return [];
+  const filterJurisdiction = jurisdiction === 'Commonwealth' ? 'ACT' : (jurisdiction || 'ACT');
+  const filtered = selected.filter((item) => (item.jurisdiction || 'ACT') === filterJurisdiction);
+  return filtered.map((item) => ({
+    _id: item._id,
+    text: item.text,
+    legislationTitle: item.legislationTitle,
+    jurisdiction: item.jurisdiction,
+  }));
+};
+
 module.exports = {
   getTemplateByType,
   replacePlaceholders,
-  clearUserLookupCache
+  clearUserLookupCache,
+  getLegislationForReportTemplate,
 }; 

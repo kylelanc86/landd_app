@@ -528,7 +528,7 @@ const LDsuppliedAnalysisPage = () => {
     ];
 
     if (uniqueResults.length === 0) {
-      return "Analysis Incomplete";
+      return "**Analysis Incomplete**";
     }
 
     return uniqueResults.join(", ");

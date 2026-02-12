@@ -67,6 +67,25 @@ const escapeHtml = (value = "") =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
+/**
+ * Resolves template's selectedLegislation snapshot against current legislation from the DB,
+ * so PDFs show the latest titles/text after legislation custom data fields are edited.
+ * @param {Array} templateSelectedLegislation - Template's stored selectedLegislation array
+ * @returns {Promise<Array>} Resolved list (current legislation where found, else stored snapshot)
+ */
+async function resolveSelectedLegislation(templateSelectedLegislation) {
+  if (!templateSelectedLegislation || !Array.isArray(templateSelectedLegislation) || templateSelectedLegislation.length === 0) {
+    return [];
+  }
+  const currentLegislation = await CustomDataFieldGroup.getFieldsByType('legislation');
+  const idToCurrent = new Map(currentLegislation.map((item) => [String(item._id), item]));
+  return templateSelectedLegislation.map((stored) => {
+    const current = idToCurrent.get(String(stored._id));
+    if (current) return current;
+    return stored;
+  });
+}
+
 /** HTML for a half line break in PDF (used in discussion/conclusions and job exclusions). */
 const halfLineBreakHtml = '<span style="display:block; height:0.5em;"></span>';
 
@@ -96,7 +115,7 @@ const numberToWords = (n) => {
 
 /** Format asbestos count for discussion/conclusions: "Eleven (11)" or "Analysis incomplete". */
 const formatAsbestosCountForPdf = (asbestosCount, analysisComplete) => {
-  if (asbestosCount > 0 && !analysisComplete) return 'Analysis incomplete';
+  if (asbestosCount > 0 && !analysisComplete) return '**Analysis incomplete**';
   return numberToWords(asbestosCount) + ' (' + asbestosCount + ')';
 };
 
@@ -661,10 +680,14 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
     };
 
     // Prepare template content placeholders first (async operations)
-    // Merge clearance data with template's selectedLegislation for placeholder replacement
+    // Use job's legislation snapshot (at creation time); fall back to resolved template for existing jobs without it
+    const resolvedLegislation = await resolveSelectedLegislation(templateContent?.selectedLegislation);
+    const selectedLegislation = (clearanceData.legislation && clearanceData.legislation.length > 0)
+      ? clearanceData.legislation
+      : resolvedLegislation;
     const templateData = {
       ...clearanceData,
-      selectedLegislation: templateContent?.selectedLegislation || []
+      selectedLegislation
     };
     
     const inspectionDetailsContent = templateContent ? await replacePlaceholders(templateContent.standardSections.inspectionDetailsContent, templateData) : 'Inspection details content not found';
@@ -2412,7 +2435,11 @@ const generateAssessmentHTML = async (assessmentData) => {
     // Use residential template when isResidential (has Background section and "Summary of Identified ACM")
     const templateType = isResidential ? 'residentialAsbestosAssessment' : 'asbestosAssessment';
     const templateContent = await getTemplateByType(templateType);
-    
+    const resolvedLegislation = await resolveSelectedLegislation(templateContent?.selectedLegislation);
+    // Use job's legislation snapshot (at creation time); fall back to resolved template for existing jobs without it
+    const selectedLegislation = (assessmentData.legislation && assessmentData.legislation.length > 0)
+      ? assessmentData.legislation
+      : resolvedLegislation;
 
     // Assessment cover/version control: match clearance structure (REPORT_TITLE, FOOTER_TEXT, etc.)
     const assessmentSiteAddress = assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site';
@@ -2730,7 +2757,7 @@ const generateAssessmentHTML = async (assessmentData) => {
       ? (templateContent?.standardSections?.surveyFindingsContent || 'Survey findings content not found')
       : (templateContent?.standardSections?.surveyFindingsContentNoSamples || "No asbestos-containing materials were identified during this assessment.");
     let surveyFindingsContentPopulated = surveyFindingsSource !== 'Survey findings content not found'
-      ? await replacePlaceholders(surveyFindingsSource, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] })
+      ? await replacePlaceholders(surveyFindingsSource, { ...assessmentData, selectedLegislation })
       : surveyFindingsSource;
     const hasSitePlan = !!(assessmentData.sitePlan && assessmentData.sitePlanFile);
     const hasFibreIdReport = !!assessmentData.fibreAnalysisReport;
@@ -2746,7 +2773,7 @@ const generateAssessmentHTML = async (assessmentData) => {
     const backgroundContentRaw = templateContent?.standardSections?.backgroundContent;
     if (isResidential && backgroundContentRaw) {
       const bgTitle = templateContent?.standardSections?.backgroundTitle || 'BACKGROUND';
-      const bgContent = await replacePlaceholders(backgroundContentRaw, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] });
+      const bgContent = await replacePlaceholders(backgroundContentRaw, { ...assessmentData, selectedLegislation });
       const bgContentHtml = String(bgContent || '').replace(/\n/g, '<br />');
       backgroundSectionHtmlResolved = `<div class="section-header first-section">${bgTitle}</div><div class="paragraph">${bgContentHtml}</div>`;
     }
@@ -2759,7 +2786,7 @@ const generateAssessmentHTML = async (assessmentData) => {
       .replace(/\[PAGE_NUMBER\]/g, '1')
       .replace(/\[BACKGROUND_SECTION\]/g, backgroundSectionHtmlResolved)
       .replace(/\[INTRODUCTION_TITLE\]/g, templateContent?.standardSections?.introductionTitle || 'INTRODUCTION')
-      .replace(/\[INTRODUCTION_CONTENT\]/g, templateContent?.standardSections?.introductionContent ? await replacePlaceholders(templateContent.standardSections.introductionContent, { ...assessmentData, selectedLegislation: templateContent?.selectedLegislation || [] }) : 'Introduction content not found')
+      .replace(/\[INTRODUCTION_CONTENT\]/g, templateContent?.standardSections?.introductionContent ? await replacePlaceholders(templateContent.standardSections.introductionContent, { ...assessmentData, selectedLegislation }) : 'Introduction content not found')
       .replace(/\[SURVEY_FINDINGS_TITLE\]/g, templateContent?.standardSections?.surveyFindingsTitle || 'SUMMARY OF IDENTIFIED ACM')
       .replace(/\[SURVEY_FINDINGS_CONTENT\]/g, surveyFindingsContentPopulated)
       .replace(/\[SAMPLE_REGISTER_ITEMS\]/g, shouldMoveFirstItemToNewPage ? '' : firstSampleTable); // Conditionally include the first sample table
@@ -2844,7 +2871,7 @@ const generateAssessmentHTML = async (assessmentData) => {
       : Math.ceil(Math.max(0, (assessmentItems.length || 1) - 1) / 2);
     const discussionPageNum = 4 + sampleRegisterPageCount;
 
-    const templateData = { ...assessmentData, identifiedAsbestosItems: asbestosItemsSection, selectedLegislation: templateContent?.selectedLegislation || [] };
+    const templateData = { ...assessmentData, identifiedAsbestosItems: asbestosItemsSection, selectedLegislation };
     const discussionSignOffContent = templateContent?.standardSections?.signOffContent
       ? await replacePlaceholders(templateContent.standardSections.signOffContent, templateData)
       : '';
@@ -3259,6 +3286,11 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const templateType = isResidential ? 'residentialAsbestosAssessment' : 'asbestosAssessment';
   const templateContent = await getTemplateByType(templateType);
+  const resolvedLegislation = await resolveSelectedLegislation(templateContent?.selectedLegislation);
+  // Use job's legislation snapshot (at creation time); fall back to resolved template for existing jobs without it
+  const selectedLegislation = (assessmentData.legislation && assessmentData.legislation.length > 0)
+    ? assessmentData.legislation
+    : resolvedLegislation;
 
   const logoPath = path.join(__dirname, '../assets/logo.png');
   const logoBase64 = fs.existsSync(logoPath) ? fs.readFileSync(logoPath).toString('base64') : '';
@@ -3502,7 +3534,7 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
     : '<p style="margin: 0 0 12px 0;">No non-asbestos items were identified during the assessment.</p>';
 
   // Data for replacePlaceholders (includes identified asbestos list so {IDENTIFIED_ASBESTOS_ITEMS} resolves correctly)
-  const flowTemplateData = { ...assessmentData, identifiedAsbestosItems: asbestosItemsSectionFlow, jurisdiction: assessmentJurisdiction, selectedLegislation: templateContent?.selectedLegislation || [] };
+  const flowTemplateData = { ...assessmentData, identifiedAsbestosItems: asbestosItemsSectionFlow, jurisdiction: assessmentJurisdiction, selectedLegislation };
 
   const introductionHtml = templateContent?.standardSections?.introductionContent
     ? await replacePlaceholders(templateContent.standardSections.introductionContent, flowTemplateData)

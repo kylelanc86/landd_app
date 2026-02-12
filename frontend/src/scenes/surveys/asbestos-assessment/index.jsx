@@ -330,7 +330,9 @@ const AsbestosAssessment = () => {
       switch (normalizedStatus) {
         case "completed":
         case "complete":
-          return theme.palette.success.main;
+        case "sample_analysis_complete":
+        case "analysis_complete":
+          return theme.palette.success?.main ?? "#2e7d32";
         case "in_progress":
           return theme.palette.warning.main;
         case "active":
@@ -340,7 +342,6 @@ const AsbestosAssessment = () => {
         case "site_works_complete":
           return theme.palette.info.main;
         case "samples_with_lab":
-        case "sample_analysis_complete":
         case "report_ready_for_review":
           return theme.palette.info.main;
         default:
@@ -363,6 +364,7 @@ const AsbestosAssessment = () => {
       active: "Active",
       "samples-with-lab": "Samples With Lab",
       "sample-analysis-complete": "Analysis Complete",
+      "analysis-complete": "Analysis Complete",
       "report-ready-for-review": "Report Ready For Review",
     };
 
@@ -526,11 +528,6 @@ const AsbestosAssessment = () => {
       return "Analysis complete";
     }
     return "Samples in lab";
-  };
-
-  const getLabStatusColor = (job) => {
-    const label = getLabStatusLabel(job);
-    return label === "Analysis complete" ? "success" : "primary";
   };
 
   const formatTimeUntilDue = (dueDate) => {
@@ -1071,8 +1068,13 @@ const AsbestosAssessment = () => {
                               <Chip
                                 label={getLabStatusLabel(job)}
                                 size="small"
-                                color={getLabStatusColor(job)}
-                                sx={{ color: "white" }}
+                                sx={{
+                                  color: "white",
+                                  backgroundColor:
+                                    getLabStatusLabel(job) === "Analysis complete"
+                                      ? theme.palette.success?.main ?? "#2e7d32"
+                                      : theme.palette.primary.main,
+                                }}
                               />
                             )}
                         </Box>

@@ -1951,6 +1951,13 @@ const ProjectInformation = () => {
                   InputLabelProps={{
                     shrink: true,
                   }}
+                  InputProps={{
+                    sx: {
+                      "& input": {
+                        textAlign: "left",
+                      },
+                    },
+                  }}
                 />
               </Grid>
 

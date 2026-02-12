@@ -194,6 +194,13 @@ const asbestosClearanceSchema = new mongoose.Schema(
       min: 1,
       max: 5,
     },
+    // Legislation snapshot at job creation (state-specific, from report template); used for {LEGISLATION} in PDFs
+    legislation: [{
+      _id: String,
+      text: String,
+      legislationTitle: String,
+      jurisdiction: String,
+    }],
   },
   {
     timestamps: true,

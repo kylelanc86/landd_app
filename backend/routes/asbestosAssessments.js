@@ -5,6 +5,7 @@ const User = require('../models/User');
 const { sendMail } = require('../services/mailer');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
+const { getLegislationForReportTemplate } = require('../services/templateService');
 
 // GET /api/assessments - list all assessment jobs (populate project and assessor); excludes archived
 // Query param jobType: 'asbestos-assessment' | 'residential-asbestos' - when set, only jobs of that type are returned
@@ -52,15 +53,27 @@ router.post('/', async (req, res) => {
     }
     const validJobType = jobType === 'residential-asbestos' ? 'residential-asbestos' : 'asbestos-assessment';
     const validIntrusiveness = intrusiveness === 'intrusive' ? 'intrusive' : 'non-intrusive';
+    const validState = state && ['ACT', 'NSW', 'Commonwealth'].includes(state) ? state : null;
+
+    // Legislation snapshot at job creation (state-specific from report template)
+    let legislation = [];
+    try {
+      const templateType = validJobType === 'residential-asbestos' ? 'residentialAsbestosAssessment' : 'asbestosAssessment';
+      legislation = await getLegislationForReportTemplate(templateType, validState || 'ACT');
+    } catch (err) {
+      console.error('Error fetching legislation for assessment:', err);
+    }
+
     const job = new AsbestosAssessment({
       projectId,
       assessorId: req.user._id,
       assessmentDate,
       jobType: validJobType,
       LAA: LAA || null,
-      state: state && ['ACT', 'NSW', 'Commonwealth'].includes(state) ? state : null,
+      state: validState,
       secondaryHeader: secondaryHeader || undefined,
       intrusiveness: validIntrusiveness,
+      legislation,
     });
     await job.save();
     const populatedJob = await AsbestosAssessment.findById(job._id)

@@ -144,7 +144,7 @@ const numberToWords = (n) => {
 
 /** Format asbestos count for discussion/conclusions: "Eleven (11)" or "Analysis incomplete". */
 const formatAsbestosCountForDisplay = (asbestosCount, analysisComplete) => {
-  if (asbestosCount > 0 && !analysisComplete) return "Analysis incomplete";
+  if (asbestosCount > 0 && !analysisComplete) return "**Analysis incomplete**";
   return `${numberToWords(asbestosCount)} (${asbestosCount})`;
 };
 
@@ -1474,6 +1474,12 @@ const AssessmentItems = () => {
     }
 
     try {
+      // Request fullscreen immediately (within user gesture) to hide URL bar on mobile
+      try {
+        document.documentElement.requestFullscreen?.();
+      } catch {
+        // Fullscreen not supported or denied; continue with overlay only
+      }
       let mediaStream;
       try {
         mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -1723,6 +1729,11 @@ const AssessmentItems = () => {
     setPanY(0);
     setLastPinchDistance(null);
     setLastPanPoint(null);
+    try {
+      document.exitFullscreen?.();
+    } catch {
+      // Ignore if not in fullscreen
+    }
   };
 
   const handleAddPhotoToItem = async (photoData) => {
@@ -3791,58 +3802,33 @@ const AssessmentItems = () => {
           </DialogActions>
         </Dialog>
 
-        {/* Camera Dialog */}
-        <Dialog
-          open={cameraDialogOpen}
-          onClose={handleCloseCamera}
-          maxWidth="sm"
-          fullWidth
-          PaperProps={{
-            sx: {
-              borderRadius: 3,
-              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
-            },
-          }}
-        >
-          <DialogTitle
+        {/* Camera: full-viewport overlay + Fullscreen API for max visible area on mobile */}
+        {cameraDialogOpen && (
+          <Box
             sx={{
-              pb: 2,
-              px: 3,
-              pt: 3,
-              border: "none",
+              position: "fixed",
+              inset: 0,
+              zIndex: 1300,
               display: "flex",
-              alignItems: "center",
-              gap: 2,
+              flexDirection: "column",
+              height: "100dvh",
+              maxHeight: "-webkit-fill-available",
+              backgroundColor: "#000",
+              paddingTop: "env(safe-area-inset-top)",
+              paddingBottom: "env(safe-area-inset-bottom)",
+              paddingLeft: "env(safe-area-inset-left)",
+              paddingRight: "env(safe-area-inset-right)",
             }}
           >
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 40,
-                height: 40,
-                borderRadius: "50%",
-                bgcolor: "primary.main",
-                color: "white",
-              }}
-            >
-              <PhotoCameraIcon sx={{ fontSize: 20 }} />
-            </Box>
-            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
-              Take Photo
-            </Typography>
-          </DialogTitle>
-          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+            {/* Video fills remaining space */}
             <Box
               ref={videoContainerRef}
               sx={{
+                flex: 1,
+                minHeight: 0,
                 display: "flex",
                 justifyContent: "center",
                 alignItems: "center",
-                minHeight: "300px",
-                backgroundColor: "#000",
-                borderRadius: 2,
                 overflow: "hidden",
                 position: "relative",
                 touchAction: "none",
@@ -3886,45 +3872,48 @@ const AssessmentItems = () => {
                 </Box>
               )}
             </Box>
-            <Typography
-              variant="body2"
-              color="text.secondary"
-              sx={{ mt: 2, textAlign: "center" }}
-            >
-              Position the item within the frame and click "Capture" to take the
-              photo. Pinch to zoom (up to 5x) or double-tap to reset zoom.
-            </Typography>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
-            <Button
-              onClick={handleCloseCamera}
-              variant="outlined"
+            {/* Minimal bottom bar: hint + actions */}
+            <Box
               sx={{
-                minWidth: 100,
-                borderRadius: 2,
-                textTransform: "none",
-                fontWeight: 500,
+                flexShrink: 0,
+                px: 2,
+                py: 1.5,
+                bgcolor: "background.paper",
+                borderTop: 1,
+                borderColor: "divider",
+                display: "flex",
+                flexDirection: "column",
+                gap: 1,
+                alignItems: "center",
               }}
             >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCapturePhoto}
-              variant="contained"
-              color="primary"
-              startIcon={<PhotoCameraIcon />}
-              disabled={!stream}
-              sx={{
-                minWidth: 120,
-                borderRadius: 2,
-                textTransform: "none",
-                fontWeight: 500,
-              }}
-            >
-              Capture Photo
-            </Button>
-          </DialogActions>
-        </Dialog>
+              <Typography variant="caption" color="text.secondary" sx={{ textAlign: "center" }}>
+                Pinch to zoom, double-tap to reset · Tap Capture when ready
+              </Typography>
+              <Box sx={{ display: "flex", gap: 2 }}>
+                <Button
+                  onClick={handleCloseCamera}
+                  variant="outlined"
+                  size="medium"
+                  sx={{ borderRadius: 2, textTransform: "none", fontWeight: 500 }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCapturePhoto}
+                  variant="contained"
+                  color="primary"
+                  size="medium"
+                  startIcon={<PhotoCameraIcon />}
+                  disabled={!stream}
+                  sx={{ borderRadius: 2, textTransform: "none", fontWeight: 500 }}
+                >
+                  Capture Photo
+                </Button>
+              </Box>
+            </Box>
+          </Box>
+        )}
 
         {!isResidential && (
           <>
