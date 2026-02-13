@@ -67,7 +67,7 @@ import customDataFieldGroupService from "../../../services/customDataFieldGroupS
 import {
   compressImage,
   needsCompression,
-  saveFileToDevice,
+  saveFileToDevice, // eslint-disable-line no-unused-vars -- used when save-to-device is re-enabled
 } from "../../../utils/imageCompression";
 
 /**
@@ -97,16 +97,33 @@ const getEffectiveAsbestosDisplayForItem = (item, items) => {
   const findSampled = (ref) => {
     const r = String(ref || "").trim();
     if (!r) return null;
-    return (items || []).find((i) => (i.sampleReference || "").trim() === r) || null;
+    return (
+      (items || []).find((i) => (i.sampleReference || "").trim() === r) || null
+    );
   };
   const sampled = findSampled(item.sampleReference);
   const source = sampled && sampled !== item ? sampled : item;
-  const raw = (source.analysisData?.finalResult || source.asbestosContent || item.asbestosContent || "").trim();
+  const raw = (
+    source.analysisData?.finalResult ||
+    source.asbestosContent ||
+    item.asbestosContent ||
+    ""
+  ).trim();
   if (!raw) return "No Asbestos Detected";
   if (/^no asbestos detected$/i.test(raw)) return "No Asbestos Detected";
-  if (/Visually Assessed as Non-Asbestos/i.test(raw) || /Visually Assessed as Non-ACM/i.test(raw)) return "Visually Assessed as Non-Asbestos";
-  if (raw === "Visually Assessed as Asbestos") return "Visually Assessed as Asbestos";
-  if (/chrysotile|amosite|crocidolite|umf|unidentified\s+mineral\s+fibre/i.test(raw)) return raw;
+  if (
+    /Visually Assessed as Non-Asbestos/i.test(raw) ||
+    /Visually Assessed as Non-ACM/i.test(raw)
+  )
+    return "Visually Assessed as Non-Asbestos";
+  if (raw === "Visually Assessed as Asbestos")
+    return "Visually Assessed as Asbestos";
+  if (
+    /chrysotile|amosite|crocidolite|umf|unidentified\s+mineral\s+fibre/i.test(
+      raw,
+    )
+  )
+    return raw;
   if (/trace.*detected/i.test(raw)) return raw;
   return "No Asbestos Detected";
 };
@@ -135,8 +152,40 @@ const DEFAULT_JOB_SPECIFIC_EXCLUSIONS_NON_INTRUSIVE_RESIDENTIAL =
 const numberToWords = (n) => {
   const num = Number(n);
   if (num <= 0 || num >= 100) return String(n);
-  const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
-  const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+  const ones = [
+    "",
+    "One",
+    "Two",
+    "Three",
+    "Four",
+    "Five",
+    "Six",
+    "Seven",
+    "Eight",
+    "Nine",
+    "Ten",
+    "Eleven",
+    "Twelve",
+    "Thirteen",
+    "Fourteen",
+    "Fifteen",
+    "Sixteen",
+    "Seventeen",
+    "Eighteen",
+    "Nineteen",
+  ];
+  const tens = [
+    "",
+    "",
+    "Twenty",
+    "Thirty",
+    "Forty",
+    "Fifty",
+    "Sixty",
+    "Seventy",
+    "Eighty",
+    "Ninety",
+  ];
   if (num < 20) return ones[num];
   const t = Math.floor(num / 10);
   const o = num % 10;
@@ -156,23 +205,36 @@ const formatAsbestosCountForDisplay = (asbestosCount, analysisComplete) => {
  */
 const getDefaultDiscussionConclusions = (assessment, isResidential = false) => {
   const items = assessment?.items || [];
-  const siteName = assessment?.projectId?.name || assessment?.siteName || "Unknown Site";
+  const siteName =
+    assessment?.projectId?.name || assessment?.siteName || "Unknown Site";
   const asbestosCount = items.filter((item) => {
     const display = getEffectiveAsbestosDisplayForItem(item, items);
-    return display !== "No Asbestos Detected" && display !== "Visually Assessed as Non-Asbestos";
+    return (
+      display !== "No Asbestos Detected" &&
+      display !== "Visually Assessed as Non-Asbestos"
+    );
   }).length;
   let baseText;
   if (asbestosCount === 0) {
     baseText = `No asbestos containing materials were identified during the assessment conducted at ${siteName}.`;
   } else {
     const hasSampledItemsRequiringAnalysis = items.some(
-      (i) => (i.sampleReference || "").trim() && !isVisuallyAssessedContent(i.asbestosContent),
+      (i) =>
+        (i.sampleReference || "").trim() &&
+        !isVisuallyAssessedContent(i.asbestosContent),
     );
     const firstSampledPerRef = hasSampledItemsRequiringAnalysis
       ? items.filter((item, index) => {
-          if (!(item.sampleReference || "").trim() || isVisuallyAssessedContent(item.asbestosContent)) return false;
+          if (
+            !(item.sampleReference || "").trim() ||
+            isVisuallyAssessedContent(item.asbestosContent)
+          )
+            return false;
           const ref = (item.sampleReference || "").trim();
-          return index === items.findIndex((i) => (i.sampleReference || "").trim() === ref);
+          return (
+            index ===
+            items.findIndex((i) => (i.sampleReference || "").trim() === ref)
+          );
         })
       : [];
     const analysisComplete =
@@ -180,12 +242,20 @@ const getDefaultDiscussionConclusions = (assessment, isResidential = false) => {
       !hasSampledItemsRequiringAnalysis ||
       firstSampledPerRef.every((i) => i.analysisData?.isAnalysed === true);
     const asbestosCountDisplay =
-      asbestosCount > 0 && !analysisComplete ? "{ANALYSIS INCOMPLETE}" : formatAsbestosCountForDisplay(asbestosCount, analysisComplete);
+      asbestosCount > 0 && !analysisComplete
+        ? "{ANALYSIS INCOMPLETE}"
+        : formatAsbestosCountForDisplay(asbestosCount, analysisComplete);
     baseText = `${asbestosCountDisplay} asbestos items were identified during the assessment of ${siteName}.`;
   }
   if (asbestosCount > 0) {
     if (isResidential) {
-      return baseText + "\n\n" + RESIDENTIAL_CEILING_SUBFLOOR_TEXT + "\n\n" + ACM_REMOVAL_SENTENCE;
+      return (
+        baseText +
+        "\n\n" +
+        RESIDENTIAL_CEILING_SUBFLOOR_TEXT +
+        "\n\n" +
+        ACM_REMOVAL_SENTENCE
+      );
     }
     return baseText + "\n\n" + ACM_REMOVAL_SENTENCE;
   }
@@ -200,28 +270,43 @@ const getDefaultDiscussionConclusions = (assessment, isResidential = false) => {
  * shows the asbestos count when analysis is complete, or "Analysis incomplete" when not.
  */
 const resolveAnalysisIncompleteForDisplay = (text, assessment) => {
-  if (!text || (typeof text !== "string")) return text;
+  if (!text || typeof text !== "string") return text;
   if (!text.includes("ANALYSIS") || !text.includes("INCOMPLETE")) return text;
   const items = assessment?.items || [];
   const asbestosCount = items.filter((item) => {
     const display = getEffectiveAsbestosDisplayForItem(item, items);
-    return display !== "No Asbestos Detected" && display !== "Visually Assessed as Non-Asbestos";
+    return (
+      display !== "No Asbestos Detected" &&
+      display !== "Visually Assessed as Non-Asbestos"
+    );
   }).length;
   const hasSampledItemsRequiringAnalysis = items.some(
-    (i) => (i.sampleReference || "").trim() && !isVisuallyAssessedContent(i.asbestosContent),
+    (i) =>
+      (i.sampleReference || "").trim() &&
+      !isVisuallyAssessedContent(i.asbestosContent),
   );
   const firstSampledPerRef = hasSampledItemsRequiringAnalysis
     ? items.filter((item, index) => {
-        if (!(item.sampleReference || "").trim() || isVisuallyAssessedContent(item.asbestosContent)) return false;
+        if (
+          !(item.sampleReference || "").trim() ||
+          isVisuallyAssessedContent(item.asbestosContent)
+        )
+          return false;
         const ref = (item.sampleReference || "").trim();
-        return index === items.findIndex((i) => (i.sampleReference || "").trim() === ref);
+        return (
+          index ===
+          items.findIndex((i) => (i.sampleReference || "").trim() === ref)
+        );
       })
     : [];
   const analysisComplete =
     assessment?.status === "sample-analysis-complete" ||
     !hasSampledItemsRequiringAnalysis ||
     firstSampledPerRef.every((i) => i.analysisData?.isAnalysed === true);
-  const replacement = formatAsbestosCountForDisplay(asbestosCount, analysisComplete);
+  const replacement = formatAsbestosCountForDisplay(
+    asbestosCount,
+    analysisComplete,
+  );
   return text
     .replace(/\{ANALYSIS INCOMPLETE\}/g, replacement)
     .replace(/\{ANALYSIS_INCOMPLETE\}/g, replacement);
@@ -1564,7 +1649,8 @@ const AssessmentItems = () => {
         setLastTapTime(0);
         zoomPanRef.current = { zoom: 1, panX: 0, panY: 0 };
         if (zoomWrapperRef.current) {
-          zoomWrapperRef.current.style.transform = "scale(1) translate(0px, 0px)";
+          zoomWrapperRef.current.style.transform =
+            "scale(1) translate(0px, 0px)";
         }
         return;
       }
@@ -1584,9 +1670,17 @@ const AssessmentItems = () => {
     if (e.touches.length === 2) {
       const distance = getDistance(e.touches[0], e.touches[1]);
       const center = getCenter(e.touches[0], e.touches[1]);
-      if (lastPinchDistance !== null && videoContainerRef.current && zoomWrapperRef.current) {
+      if (
+        lastPinchDistance !== null &&
+        videoContainerRef.current &&
+        zoomWrapperRef.current
+      ) {
         const scale = distance / lastPinchDistance;
-        const { zoom: curZoom, panX: curPanX, panY: curPanY } = zoomPanRef.current;
+        const {
+          zoom: curZoom,
+          panX: curPanX,
+          panY: curPanY,
+        } = zoomPanRef.current;
         const newZoom = Math.max(1, Math.min(5, curZoom * scale));
         const container = videoContainerRef.current;
         const rect = container.getBoundingClientRect();
@@ -1595,14 +1689,16 @@ const AssessmentItems = () => {
         const pinchCenterX = center.x - rect.left - containerCenterX;
         const pinchCenterY = center.y - rect.top - containerCenterY;
         const zoomChange = newZoom / curZoom;
-        const newPanX =
-          curPanX - (pinchCenterX * (zoomChange - 1)) / newZoom;
-        const newPanY =
-          curPanY - (pinchCenterY * (zoomChange - 1)) / newZoom;
+        const newPanX = curPanX - (pinchCenterX * (zoomChange - 1)) / newZoom;
+        const newPanY = curPanY - (pinchCenterY * (zoomChange - 1)) / newZoom;
         const maxPan = (newZoom - 1) * 50;
         const clampedPanX = Math.max(-maxPan, Math.min(maxPan, newPanX));
         const clampedPanY = Math.max(-maxPan, Math.min(maxPan, newPanY));
-        zoomPanRef.current = { zoom: newZoom, panX: clampedPanX, panY: clampedPanY };
+        zoomPanRef.current = {
+          zoom: newZoom,
+          panX: clampedPanX,
+          panY: clampedPanY,
+        };
         zoomWrapperRef.current.style.transform = `scale(${newZoom}) translate(${clampedPanX}px, ${clampedPanY}px)`;
         setLastPinchDistance(distance);
         setLastPanPoint(center);
@@ -1610,14 +1706,28 @@ const AssessmentItems = () => {
         setLastPinchDistance(distance);
         setLastPanPoint(center);
       }
-    } else if (e.touches.length === 1 && lastPanPoint && zoomPanRef.current.zoom > 1) {
+    } else if (
+      e.touches.length === 1 &&
+      lastPanPoint &&
+      zoomPanRef.current.zoom > 1
+    ) {
       const curZoom = zoomPanRef.current.zoom;
       const deltaX = (e.touches[0].clientX - lastPanPoint.x) / curZoom;
       const deltaY = (e.touches[0].clientY - lastPanPoint.y) / curZoom;
       const maxPan = (curZoom - 1) * 50;
-      const newPanX = Math.max(-maxPan, Math.min(maxPan, zoomPanRef.current.panX + deltaX));
-      const newPanY = Math.max(-maxPan, Math.min(maxPan, zoomPanRef.current.panY + deltaY));
-      zoomPanRef.current = { ...zoomPanRef.current, panX: newPanX, panY: newPanY };
+      const newPanX = Math.max(
+        -maxPan,
+        Math.min(maxPan, zoomPanRef.current.panX + deltaX),
+      );
+      const newPanY = Math.max(
+        -maxPan,
+        Math.min(maxPan, zoomPanRef.current.panY + deltaY),
+      );
+      zoomPanRef.current = {
+        ...zoomPanRef.current,
+        panX: newPanX,
+        panY: newPanY,
+      };
       if (zoomWrapperRef.current) {
         zoomWrapperRef.current.style.transform = `scale(${zoomPanRef.current.zoom}) translate(${newPanX}px, ${newPanY}px)`;
       }
@@ -1707,19 +1817,21 @@ const AssessmentItems = () => {
       canvas.toBlob(
         async (blob) => {
           if (blob) {
+            // eslint-disable-next-line no-unused-vars -- used when save-to-device block is re-enabled
             const fullQualityFile = new File([blob], filename, {
               type: "image/jpeg",
             });
-            try {
-              const projectFolderName = getProjectFolderName();
-              await saveFileToDevice(fullQualityFile, filename, {
-                projectId: projectFolderName
-                  ? `${projectFolderName} - Photos`
-                  : "assessment-photos",
-              });
-            } catch (error) {
-              console.error("Error saving photo to device:", error);
-            }
+            // Temporarily disabled - save photo to device (re-enable when ready)
+            // try {
+            //   const projectFolderName = getProjectFolderName();
+            //   await saveFileToDevice(fullQualityFile, filename, {
+            //     projectId: projectFolderName
+            //       ? `${projectFolderName} - Photos`
+            //       : "assessment-photos",
+            //   });
+            // } catch (error) {
+            //   console.error("Error saving photo to device:", error);
+            // }
             const uploadFile = new File([blob], "camera-photo.jpg", {
               type: "image/jpeg",
             });
@@ -2080,18 +2192,18 @@ const AssessmentItems = () => {
               Site Name: {assessment.projectId?.name || "N/A"}
             </Typography>
             <Typography variant="h6" color="text.secondary">
-              Date of Assessment: {assessment?.assessmentDate
-              ? new Date(assessment.assessmentDate).toLocaleDateString(
-                  "en-GB",
-                  {
-                    day: "2-digit",
-                    month: "2-digit",
-                    year: "2-digit",
-                  },
-                )
-              : "Unknown Date"}
-
-          </Typography>
+              Date of Assessment:{" "}
+              {assessment?.assessmentDate
+                ? new Date(assessment.assessmentDate).toLocaleDateString(
+                    "en-GB",
+                    {
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "2-digit",
+                    },
+                  )
+                : "Unknown Date"}
+            </Typography>
           </Box>
         )}
 
@@ -2138,7 +2250,9 @@ const AssessmentItems = () => {
             {(!assessment?.assessmentScope ||
               !Array.isArray(assessment.assessmentScope) ||
               assessment.assessmentScope.length === 0 ||
-              !assessment.assessmentScope.some((item) => item.trim() !== "")) && (
+              !assessment.assessmentScope.some(
+                (item) => item.trim() !== "",
+              )) && (
               <Typography
                 variant="body2"
                 color="#de0a26"
@@ -3924,7 +4038,10 @@ const AssessmentItems = () => {
                     bgcolor: "rgba(0,0,0,0.4)",
                     color: "white",
                     borderColor: "rgba(255,255,255,0.6)",
-                    "&:hover": { bgcolor: "rgba(0,0,0,0.6)", borderColor: "rgba(255,255,255,0.9)" },
+                    "&:hover": {
+                      bgcolor: "rgba(0,0,0,0.6)",
+                      borderColor: "rgba(255,255,255,0.9)",
+                    },
                   }}
                 >
                   Cancel
@@ -3936,13 +4053,17 @@ const AssessmentItems = () => {
                   size="medium"
                   startIcon={<PhotoCameraIcon />}
                   disabled={!stream}
-                  sx={{ borderRadius: 2, textTransform: "none", fontWeight: 500 }}
+                  sx={{
+                    borderRadius: 2,
+                    textTransform: "none",
+                    fontWeight: 500,
+                  }}
                 >
                   Capture
                 </Button>
               </Box>
             </Box>,
-            document.body
+            document.body,
           )}
 
         {!isResidential && (
@@ -3987,14 +4108,22 @@ const AssessmentItems = () => {
                     S
                   </Typography>
                 </Box>
-                <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+                <Typography
+                  variant="h5"
+                  component="div"
+                  sx={{ fontWeight: 600 }}
+                >
                   Scope of Assessment
                 </Typography>
               </DialogTitle>
               <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                  Enter the scope items for this assessment. These will be displayed
-                  as bullet points in the report.
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mb: 3 }}
+                >
+                  Enter the scope items for this assessment. These will be
+                  displayed as bullet points in the report.
                 </Typography>
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
                   {scopeItems.map((item, index) => (
@@ -4046,7 +4175,9 @@ const AssessmentItems = () => {
                   Add Scope Item
                 </Button>
               </DialogContent>
-              <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+              <DialogActions
+                sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}
+              >
                 <Button
                   onClick={() => setScopeDialogOpen(false)}
                   variant="outlined"
@@ -4072,7 +4203,10 @@ const AssessmentItems = () => {
 
                     // Validate that at least the first item is filled
                     if (!scopeItems[0] || scopeItems[0].trim() === "") {
-                      showSnackbar("At least one scope item is required", "error");
+                      showSnackbar(
+                        "At least one scope item is required",
+                        "error",
+                      );
                       return;
                     }
 
@@ -4082,7 +4216,10 @@ const AssessmentItems = () => {
                       .filter((item) => item !== "");
 
                     if (filteredItems.length === 0) {
-                      showSnackbar("At least one scope item is required", "error");
+                      showSnackbar(
+                        "At least one scope item is required",
+                        "error",
+                      );
                       return;
                     }
 
@@ -4102,7 +4239,10 @@ const AssessmentItems = () => {
                       await fetchData();
                     } catch (err) {
                       console.error("Error saving scope:", err);
-                      showSnackbar("Failed to save scope of assessment", "error");
+                      showSnackbar(
+                        "Failed to save scope of assessment",
+                        "error",
+                      );
                     }
                   }}
                   variant="contained"
@@ -4221,9 +4361,10 @@ const AssessmentItems = () => {
                 value={
                   (assessment?.jobSpecificExclusions ?? "")?.trim()
                     ? assessment.jobSpecificExclusions
-                    : isResidential && assessment?.intrusiveness === "non-intrusive"
+                    : isResidential &&
+                        assessment?.intrusiveness === "non-intrusive"
                       ? DEFAULT_JOB_SPECIFIC_EXCLUSIONS_NON_INTRUSIVE_RESIDENTIAL
-                      : assessment?.jobSpecificExclusions ?? ""
+                      : (assessment?.jobSpecificExclusions ?? "")
                 }
                 onChange={(e) => {
                   // Update local state for the text field
@@ -4338,7 +4479,8 @@ const AssessmentItems = () => {
                   setSavingExclusions(true);
                   const exclusionsToSave =
                     (assessment?.jobSpecificExclusions ?? "")?.trim() ||
-                    (isResidential && assessment?.intrusiveness === "non-intrusive"
+                    (isResidential &&
+                    assessment?.intrusiveness === "non-intrusive"
                       ? DEFAULT_JOB_SPECIFIC_EXCLUSIONS_NON_INTRUSIVE_RESIDENTIAL
                       : "");
                   await asbestosAssessmentService.update(id, {
@@ -4428,7 +4570,6 @@ const AssessmentItems = () => {
             <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
               Discussion/Conclusions
             </Typography>
-
           </DialogTitle>
           <DialogContent
             sx={{
@@ -4565,7 +4706,9 @@ const AssessmentItems = () => {
               )}
             </Box>
           </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none", flexShrink: 0 }}>
+          <DialogActions
+            sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none", flexShrink: 0 }}
+          >
             <Button
               onClick={() => setDiscussionModalOpen(false)}
               variant="outlined"
@@ -4585,7 +4728,10 @@ const AssessmentItems = () => {
                   const rawContent =
                     (assessment?.discussionConclusions || "").trim() ||
                     getDefaultDiscussionConclusions(assessment, isResidential);
-                  const valueToSave = resolveAnalysisIncompleteForDisplay(rawContent, assessment);
+                  const valueToSave = resolveAnalysisIncompleteForDisplay(
+                    rawContent,
+                    assessment,
+                  );
                   await asbestosAssessmentService.update(id, {
                     projectId:
                       assessment?.projectId?._id || assessment?.projectId,

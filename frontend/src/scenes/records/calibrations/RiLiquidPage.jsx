@@ -45,7 +45,7 @@ const RiLiquidPage = () => {
 
   const [calibrations, setCalibrations] = useState([]);
   const [loading, setLoading] = useState(true);
-  
+
   // Dialog and form state
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -54,7 +54,7 @@ const RiLiquidPage = () => {
   const [techniciansLoading, setTechniciansLoading] = useState(false);
   const [formError, setFormError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
-  
+
   const [formData, setFormData] = useState({
     bottleId: "",
     date: formatDateForInput(new Date()),
@@ -77,7 +77,7 @@ const RiLiquidPage = () => {
   useEffect(() => {
     if (addDialogOpen && currentUser && technicians.length > 0) {
       const currentUserInList = technicians.find(
-        (tech) => tech._id === currentUser._id
+        (tech) => tech._id === currentUser._id,
       );
       if (currentUserInList) {
         setFormData((prev) => ({
@@ -91,21 +91,21 @@ const RiLiquidPage = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      
+
       // Fetch all RI Liquid calibrations
       const response = await riLiquidCalibrationService.getAll({
         limit: 1000,
-        sortBy: 'date',
-        sortOrder: 'desc'
+        sortBy: "date",
+        sortOrder: "desc",
       });
-      
+
       const calibrationData = response.data || [];
-      
+
       // Transform data for display
       const transformedCalibrations = calibrationData.map((cal) => ({
         id: cal._id,
         _id: cal._id,
-        bottleId: cal.bottleId || '',
+        bottleId: cal.bottleId || "",
         date: cal.date,
         refractiveIndex: cal.refractiveIndex,
         asbestosTypeVerified: cal.asbestosTypeVerified,
@@ -151,21 +151,22 @@ const RiLiquidPage = () => {
       setTechniciansLoading(true);
       const response = await userService.getAll();
       const allUsers = response.data || response || [];
-      
+
       // Filter users who have signatory=true OR calibration approval=true
       const technicianUsers = allUsers.filter(
         (user) =>
           user.isActive &&
-          (user.labSignatory === true || user.labApprovals?.calibrations === true)
+          (user.labSignatory === true ||
+            user.labApprovals?.calibrations === true),
       );
-      
+
       // Sort alphabetically by name
       const sortedUsers = technicianUsers.sort((a, b) => {
         const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
         const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
         return nameA.localeCompare(nameB);
       });
-      
+
       setTechnicians(sortedUsers);
     } catch (error) {
       console.error("Error fetching technicians:", error);
@@ -178,20 +179,21 @@ const RiLiquidPage = () => {
   // Auto-calculate status based on refractive index and asbestos type
   const calculateStatus = (refractiveIndex, asbestosType) => {
     if (!refractiveIndex || !asbestosType) return "Pass";
-    
+
     const passCombinations = [
-      { refractiveIndex: 1.55, asbestosType: 'Chrysotile' },
-      { refractiveIndex: 1.67, asbestosType: 'Amosite' },
-      { refractiveIndex: 1.70, asbestosType: 'Crocidolite' }
+      { refractiveIndex: 1.55, asbestosType: "Chrysotile" },
+      { refractiveIndex: 1.67, asbestosType: "Amosite" },
+      { refractiveIndex: 1.7, asbestosType: "Crocidolite" },
     ];
-    
+
     const refractiveIndexValue = parseFloat(refractiveIndex);
-    const isPass = passCombinations.some(combo => 
-      Math.abs(refractiveIndexValue - combo.refractiveIndex) < 0.001 && 
-      asbestosType === combo.asbestosType
+    const isPass = passCombinations.some(
+      (combo) =>
+        Math.abs(refractiveIndexValue - combo.refractiveIndex) < 0.001 &&
+        asbestosType === combo.asbestosType,
     );
-    
-    return isPass ? 'Pass' : 'Fail';
+
+    return isPass ? "Pass" : "Fail";
   };
 
   const handleAdd = () => {
@@ -273,10 +275,13 @@ const RiLiquidPage = () => {
 
     try {
       setSubmitting(true);
-      
+
       // Auto-calculate status
-      const calculatedStatus = calculateStatus(formData.refractiveIndex, formData.asbestosTypeVerified);
-      
+      const calculatedStatus = calculateStatus(
+        formData.refractiveIndex,
+        formData.asbestosTypeVerified,
+      );
+
       const calibrationData = {
         equipmentId: formData.bottleId.trim(),
         date: formData.date,
@@ -286,12 +291,15 @@ const RiLiquidPage = () => {
         batchNumber: formData.batchNumber.trim(),
         status: calculatedStatus,
         technicianId: formData.technicianId,
-        notes: formData.notes || '',
+        notes: formData.notes || "",
       };
-      
+
       if (editingCalibrationId) {
         // Update existing calibration
-        await riLiquidCalibrationService.update(editingCalibrationId, calibrationData);
+        await riLiquidCalibrationService.update(
+          editingCalibrationId,
+          calibrationData,
+        );
       } else {
         // Create new calibration record
         // Note: This creates a NEW record in the database. If a bottle already has
@@ -300,14 +308,17 @@ const RiLiquidPage = () => {
         // while the history page shows all records.
         await riLiquidCalibrationService.create(calibrationData);
       }
-      
+
       handleDialogClose();
       // Refresh data to show updated table (new record will appear in history,
       // and main table will update to show most recent calibration per bottle)
       fetchData();
     } catch (error) {
       console.error("Error submitting calibration:", error);
-      const errorMessage = error.response?.data?.message || error.message || "Failed to save calibration";
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to save calibration";
       setFormError(errorMessage);
     } finally {
       setSubmitting(false);
@@ -318,22 +329,27 @@ const RiLiquidPage = () => {
     try {
       // Fetch the calibration record
       const calibration = await riLiquidCalibrationService.getById(id);
-      
+
       // Handle calibratedBy - it might be an object with _id or just an _id string
       let technicianId = "";
       if (calibration.calibratedBy) {
-        if (typeof calibration.calibratedBy === 'object' && calibration.calibratedBy._id) {
+        if (
+          typeof calibration.calibratedBy === "object" &&
+          calibration.calibratedBy._id
+        ) {
           technicianId = calibration.calibratedBy._id;
-        } else if (typeof calibration.calibratedBy === 'string') {
+        } else if (typeof calibration.calibratedBy === "string") {
           technicianId = calibration.calibratedBy;
         }
       }
-      
+
       // Populate form with existing data
       setFormData({
         bottleId: calibration.bottleId || "",
         date: formatDateForInput(new Date(calibration.date)),
-        dateOpened: calibration.dateOpened ? formatDateForInput(new Date(calibration.dateOpened)) : formatDateForInput(new Date()),
+        dateOpened: calibration.dateOpened
+          ? formatDateForInput(new Date(calibration.dateOpened))
+          : formatDateForInput(new Date()),
         technicianId: technicianId,
         refractiveIndex: calibration.refractiveIndex?.toString() || "",
         asbestosTypeVerified: calibration.asbestosTypeVerified || "",
@@ -341,41 +357,61 @@ const RiLiquidPage = () => {
         status: calibration.status || "Pass",
         notes: calibration.notes || "",
       });
-      
+
       setEditingCalibrationId(id);
       setFormError(null);
       setEditDialogOpen(true);
     } catch (error) {
       console.error("Error fetching calibration for edit:", error);
-      alert(error.response?.data?.message || error.message || "Failed to load calibration data");
+      alert(
+        error.response?.data?.message ||
+          error.message ||
+          "Failed to load calibration data",
+      );
     }
   };
 
   const handleMarkAsEmpty = async (bottleId) => {
-    if (!window.confirm(`Are you sure you want to mark bottle "${bottleId}" as empty? This will remove it from the active bottles table.`)) {
+    if (
+      !window.confirm(
+        `Are you sure you want to mark bottle "${bottleId}" as empty? This will remove it from the active bottles table.`,
+      )
+    ) {
       return;
     }
-    
+
     try {
       await riLiquidCalibrationService.markBottleAsEmpty(bottleId);
       fetchData();
     } catch (error) {
       console.error("Error marking bottle as empty:", error);
-      alert(error.response?.data?.message || error.message || "Failed to mark bottle as empty");
+      alert(
+        error.response?.data?.message ||
+          error.message ||
+          "Failed to mark bottle as empty",
+      );
     }
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this calibration record?")) {
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this calibration record?",
+      )
+    ) {
       return;
     }
-    
+
     try {
       await riLiquidCalibrationService.delete(id);
       fetchData();
     } catch (error) {
       console.error("Error deleting calibration:", error);
-      alert(error.response?.data?.message || error.message || "Failed to delete calibration");
+      alert(
+        error.response?.data?.message ||
+          error.message ||
+          "Failed to delete calibration",
+      );
     }
   };
 
@@ -400,20 +436,31 @@ const RiLiquidPage = () => {
         </Typography>
       </Box>
 
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb="20px">
+      <Box
+        display="flex"
+        justifyContent="space-between"
+        alignItems="center"
+        mb="20px"
+      >
         <Typography variant="h5" component="h2">
           Active RI Liquid Bottles
         </Typography>
         <Box display="flex" gap={2}>
-          <Button 
-            variant="outlined" 
+          <Button
+            variant="outlined"
             color="primary"
-            startIcon={<HistoryIcon />} 
-            onClick={() => navigate("/records/laboratory/calibrations/ri-liquid/history")}
+            startIcon={<HistoryIcon />}
+            onClick={() =>
+              navigate("/records/laboratory/calibrations/ri-liquid/history")
+            }
           >
             Historical Records
           </Button>
-          <Button variant="contained" startIcon={<AddIcon />} onClick={handleAdd}>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={handleAdd}
+          >
             Add Calibration
           </Button>
         </Box>
@@ -450,7 +497,9 @@ const RiLiquidPage = () => {
                     <TableRow key={calibration.id || calibration._id}>
                       <TableCell>{calibration.bottleId}</TableCell>
                       <TableCell>
-                        {calibration.dateOpened ? formatDate(calibration.dateOpened) : "-"}
+                        {calibration.dateOpened
+                          ? formatDate(calibration.dateOpened)
+                          : "-"}
                       </TableCell>
                       <TableCell>
                         <Box
@@ -490,7 +539,9 @@ const RiLiquidPage = () => {
                           <EditIcon />
                         </IconButton>
                         <IconButton
-                          onClick={() => handleMarkAsEmpty(calibration.bottleId)}
+                          onClick={() =>
+                            handleMarkAsEmpty(calibration.bottleId)
+                          }
                           size="small"
                           title="Mark Bottle as Empty"
                           sx={{ color: theme.palette.warning.main }}
@@ -528,7 +579,9 @@ const RiLiquidPage = () => {
             alignItems="center"
           >
             <Typography variant="h6">
-              {editingCalibrationId ? "Edit Calibration" : "Add New Calibration"}
+              {editingCalibrationId
+                ? "Edit Calibration"
+                : "Add New Calibration"}
             </Typography>
             <IconButton onClick={handleDialogClose} disabled={submitting}>
               <CloseIcon />
@@ -538,7 +591,11 @@ const RiLiquidPage = () => {
         <Box component="form" onSubmit={handleSubmit}>
           <DialogContent>
             {formError && (
-              <Alert severity="error" sx={{ mb: 2 }} onClose={() => setFormError(null)}>
+              <Alert
+                severity="error"
+                sx={{ mb: 2 }}
+                onClose={() => setFormError(null)}
+              >
                 {formError}
               </Alert>
             )}
@@ -556,7 +613,12 @@ const RiLiquidPage = () => {
               />
 
               <Box>
-                <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                <Box
+                  display="flex"
+                  justifyContent="space-between"
+                  alignItems="center"
+                  mb={1}
+                >
                   <TextField
                     fullWidth
                     label="Calibration Date"
@@ -616,11 +678,14 @@ const RiLiquidPage = () => {
                   value={formData.refractiveIndex}
                   onChange={(e) => {
                     const newRefractiveIndex = e.target.value;
-                    const newStatus = calculateStatus(newRefractiveIndex, formData.asbestosTypeVerified);
-                    setFormData({ 
-                      ...formData, 
+                    const newStatus = calculateStatus(
+                      newRefractiveIndex,
+                      formData.asbestosTypeVerified,
+                    );
+                    setFormData({
+                      ...formData,
                       refractiveIndex: newRefractiveIndex,
-                      status: newStatus
+                      status: newStatus,
                     });
                   }}
                   label="Refractive Index"
@@ -641,11 +706,14 @@ const RiLiquidPage = () => {
                   value={formData.asbestosTypeVerified}
                   onChange={(e) => {
                     const newAsbestosType = e.target.value;
-                    const newStatus = calculateStatus(formData.refractiveIndex, newAsbestosType);
-                    setFormData({ 
-                      ...formData, 
+                    const newStatus = calculateStatus(
+                      formData.refractiveIndex,
+                      newAsbestosType,
+                    );
+                    setFormData({
+                      ...formData,
                       asbestosTypeVerified: newAsbestosType,
-                      status: newStatus
+                      status: newStatus,
                     });
                   }}
                   label="Asbestos Type Verified"
@@ -661,7 +729,12 @@ const RiLiquidPage = () => {
               </FormControl>
 
               <Box>
-                <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                <Box
+                  display="flex"
+                  justifyContent="space-between"
+                  alignItems="center"
+                  mb={1}
+                >
                   <TextField
                     fullWidth
                     label="Date Opened"
@@ -709,21 +782,27 @@ const RiLiquidPage = () => {
                   value={formData.status}
                   label="Status"
                   disabled={true}
-                  sx={{ 
-                    '& .MuiSelect-select': { 
-                      backgroundColor: formData.status === 'Pass' 
-                        ? theme.palette.success.light 
-                        : theme.palette.error.light,
-                      color: 'white',
-                      fontWeight: 'bold'
-                    }
+                  sx={{
+                    "& .MuiSelect-select": {
+                      backgroundColor:
+                        formData.status === "Pass"
+                          ? theme.palette.success.light
+                          : theme.palette.error.light,
+                      color: "white",
+                      fontWeight: "bold",
+                    },
                   }}
                 >
                   <MenuItem value="Pass">Pass</MenuItem>
                   <MenuItem value="Fail">Fail</MenuItem>
                 </Select>
-                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
-                  Status is automatically calculated based on Refractive Index and Asbestos Type
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ mt: 0.5 }}
+                >
+                  Status is automatically calculated based on Refractive Index
+                  and Asbestos Type
                 </Typography>
               </FormControl>
 
@@ -748,7 +827,9 @@ const RiLiquidPage = () => {
               type="submit"
               variant="contained"
               disabled={submitting}
-              startIcon={submitting ? null : editingCalibrationId ? null : <AddIcon />}
+              startIcon={
+                submitting ? null : editingCalibrationId ? null : <AddIcon />
+              }
             >
               {submitting ? (
                 <Box display="flex" alignItems="center" gap={1}>

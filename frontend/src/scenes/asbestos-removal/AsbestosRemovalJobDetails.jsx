@@ -1682,7 +1682,12 @@ const AsbestosRemovalJobDetails = () => {
   }
 
   return (
-    <Box sx={{ m: { xs: 1, sm: 1.5, md: 2.5 } }}>
+    <Box
+      sx={{
+        m: { xs: 1, sm: 1.5, md: 2.5 },
+        mx: { xs: 0.34, sm: 0.51, md: 2.5 },
+      }}
+    >
       {/* PDF Loading Overlay */}
       <PDFLoadingOverlay
         open={generatingPDF}
@@ -1749,6 +1754,7 @@ const AsbestosRemovalJobDetails = () => {
               onClick={handleCompleteJob}
               disabled={!canCompleteJob}
               sx={{
+                display: { xs: "none", sm: "inline-flex" },
                 backgroundColor: canCompleteJob
                   ? theme.palette.success.main
                   : theme.palette.grey[400],
@@ -1776,6 +1782,85 @@ const AsbestosRemovalJobDetails = () => {
         </Box>
       </Box>
 
+      {/* Mobile: Complete Job + Add button row (above tabs) */}
+      {job && (
+        <Box
+          sx={{
+            display: { xs: "flex", sm: "none" },
+            gap: 2,
+            mb: 2,
+            flexWrap: "wrap",
+          }}
+        >
+          {hasShiftsOrClearances && (
+            <Button
+              variant="contained"
+              color="success"
+              onClick={handleCompleteJob}
+              disabled={!canCompleteJob}
+              sx={{
+                flex: 1,
+                minWidth: 140,
+                backgroundColor: canCompleteJob
+                  ? theme.palette.success.main
+                  : theme.palette.grey[400],
+                color: canCompleteJob
+                  ? theme.palette.common.white
+                  : theme.palette.grey[600],
+                fontSize: "14px",
+                fontWeight: "bold",
+                "&:hover": {
+                  backgroundColor: canCompleteJob
+                    ? theme.palette.success.dark
+                    : theme.palette.grey[400],
+                },
+                "&:disabled": {
+                  backgroundColor: theme.palette.grey[400],
+                  color: theme.palette.grey[600],
+                },
+              }}
+            >
+              Complete Job
+            </Button>
+          )}
+          {activeTab === 0 ? (
+            <Button
+              variant="contained"
+              onClick={handleCreateAirMonitoringShift}
+              disabled={creating}
+              sx={{
+                flex: 1,
+                minWidth: 140,
+                backgroundColor: colors.primary[700],
+                color: colors.grey[100],
+                "&:hover": {
+                  backgroundColor: colors.primary[800],
+                },
+              }}
+            >
+              {creating ? "Creating..." : "Add Shift"}
+            </Button>
+          ) : clearancesLoaded ? (
+            <Button
+              variant="contained"
+              onClick={handleCreateClearance}
+              disabled={creating}
+              sx={{
+                flex: 1,
+                minWidth: 140,
+                backgroundColor: colors.secondary[600],
+                color: colors.grey[100],
+                "&:hover": {
+                  backgroundColor: colors.secondary[700],
+                },
+              }}
+            >
+              {creating ? "Creating..." : "Add Clearance"}
+            </Button>
+          ) : null}
+        </Box>
+      )}
+
       {/* Tabs for Air Monitoring and Clearances */}
       <Paper sx={{ width: "100%" }}>
         <Box
@@ -1787,9 +1872,16 @@ const AsbestosRemovalJobDetails = () => {
             justifyContent: "space-between",
           }}
         >
-          <Tabs value={activeTab} onChange={handleTabChange}>
+          <Tabs
+            value={activeTab}
+            onChange={handleTabChange}
+            sx={{
+              "& .MuiTab-root": { fontSize: "1em" },
+              "& .MuiTab-iconWrapper": { display: { xs: "none", sm: "flex" } },
+            }}
+          >
             <Tab
-              label={`Air Monitoring Shifts (${airMonitoringShifts.length})`}
+              label={`Air Mon Shifts (${airMonitoringShifts.length})`}
               icon={<MonitorIcon />}
               iconPosition="start"
             />
@@ -1801,7 +1893,7 @@ const AsbestosRemovalJobDetails = () => {
               />
             )}
           </Tabs>
-          <Box sx={{ pr: 2 }}>
+          <Box sx={{ pr: 2, display: { xs: "none", sm: "block" } }}>
             {activeTab === 0 ? (
               <Button
                 variant="contained"
@@ -1816,7 +1908,7 @@ const AsbestosRemovalJobDetails = () => {
                   },
                 }}
               >
-                {creating ? "Creating..." : "Add Air Monitoring Shift"}
+                {creating ? "Creating..." : "Add Shift"}
               </Button>
             ) : clearancesLoaded ? (
               <Button
@@ -1865,10 +1957,22 @@ const AsbestosRemovalJobDetails = () => {
                       <TableCell sx={{ color: "white", fontWeight: "bold" }}>
                         Status
                       </TableCell>
-                      <TableCell sx={{ color: "white", fontWeight: "bold" }}>
+                      <TableCell
+                        sx={{
+                          color: "white",
+                          fontWeight: "bold",
+                          display: { xs: "none", md: "table-cell" },
+                        }}
+                      >
                         Sample Numbers
                       </TableCell>
-                      <TableCell sx={{ color: "white", fontWeight: "bold" }}>
+                      <TableCell
+                        sx={{
+                          color: "white",
+                          fontWeight: "bold",
+                          display: { xs: "none", md: "table-cell" },
+                        }}
+                      >
                         Actions
                       </TableCell>
                     </TableRow>
@@ -1908,12 +2012,16 @@ const AsbestosRemovalJobDetails = () => {
                             </Typography>
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell
+                          sx={{ display: { xs: "none", md: "table-cell" } }}
+                        >
                           {shift.sampleNumbers && shift.sampleNumbers.length > 0
                             ? shift.sampleNumbers.join(", ")
                             : "-"}
                         </TableCell>
-                        <TableCell>
+                        <TableCell
+                          sx={{ display: { xs: "none", md: "table-cell" } }}
+                        >
                           <Box
                             display="flex"
                             alignItems="center"
@@ -2163,15 +2271,27 @@ const AsbestosRemovalJobDetails = () => {
                       sx={{ backgroundColor: theme.palette.primary.dark }}
                     >
                       <TableCell sx={{ color: "white", fontWeight: "bold" }}>
-                        Clearance Date
+                        Date
                       </TableCell>
                       <TableCell sx={{ color: "white", fontWeight: "bold" }}>
-                        Clearance Type
+                        Type
                       </TableCell>
-                      <TableCell sx={{ color: "white", fontWeight: "bold" }}>
+                      <TableCell
+                        sx={{
+                          color: "white",
+                          fontWeight: "bold",
+                          display: { xs: "none", md: "table-cell" },
+                        }}
+                      >
                         Status
                       </TableCell>
-                      <TableCell sx={{ color: "white", fontWeight: "bold" }}>
+                      <TableCell
+                        sx={{
+                          color: "white",
+                          fontWeight: "bold",
+                          display: { xs: "none", md: "table-cell" },
+                        }}
+                      >
                         Actions
                       </TableCell>
                     </TableRow>
@@ -2192,7 +2312,9 @@ const AsbestosRemovalJobDetails = () => {
                         <TableCell>
                           {clearance.clearanceType || "N/A"}
                         </TableCell>
-                        <TableCell>
+                        <TableCell
+                          sx={{ display: { xs: "none", md: "table-cell" } }}
+                        >
                           <Chip
                             label={formatStatusLabel(clearance.status)}
                             size="small"
@@ -2216,7 +2338,9 @@ const AsbestosRemovalJobDetails = () => {
                             </Typography>
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell
+                          sx={{ display: { xs: "none", md: "table-cell" } }}
+                        >
                           <IconButton
                             size="small"
                             onClick={(e) => handleEditClearance(clearance, e)}

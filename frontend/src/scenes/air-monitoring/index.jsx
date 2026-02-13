@@ -103,7 +103,7 @@ const AirMonitoring = () => {
   const fetchAsbestosRemovalists = async () => {
     try {
       const data = await customDataFieldService.getByType(
-        "asbestos_removalist"
+        "asbestos_removalist",
       );
       setAsbestosRemovalists(data || []);
     } catch (error) {
@@ -156,15 +156,15 @@ const AirMonitoring = () => {
                 // Determine overall shift status
                 const allShiftsCompleted = shifts.every(
                   (shift) =>
-                    shift.status === "shift_complete" || shift.reportApprovedBy
+                    shift.status === "shift_complete" || shift.reportApprovedBy,
                 );
                 const hasAnalysisComplete = shifts.some(
-                  (shift) => shift.status === "analysis_complete"
+                  (shift) => shift.status === "analysis_complete",
                 );
                 const hasSamplingComplete = shifts.some(
                   (shift) =>
                     shift.status === "sampling_complete" ||
-                    shift.status === "samples_submitted_to_lab"
+                    shift.status === "samples_submitted_to_lab",
                 );
 
                 // Debug logging for status determination
@@ -205,7 +205,7 @@ const AirMonitoring = () => {
               shiftStatus,
               shiftCount: shifts.length,
             };
-          })
+          }),
         );
 
         console.log("Final processed jobs:", processedJobs);
@@ -398,7 +398,7 @@ const AirMonitoring = () => {
   const handleSaveEdit = (e) => {
     e.preventDefault();
     const updatedJobs = jobs.map((j) =>
-      j.id === editId ? { ...editForm, id: editId } : j
+      j.id === editId ? { ...editForm, id: editId } : j,
     );
     setJobs(updatedJobs);
     localStorage.setItem(JOBS_KEY, JSON.stringify(updatedJobs));
@@ -522,8 +522,8 @@ const AirMonitoring = () => {
         // Update local state
         setJobs(
           jobs.map((job) =>
-            job._id === selectedJob._id ? { ...job, status: newStatus } : job
-          )
+            job._id === selectedJob._id ? { ...job, status: newStatus } : job,
+          ),
         );
       }
     } catch (err) {

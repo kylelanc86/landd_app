@@ -59,7 +59,8 @@ const Incidents = () => {
   const theme = useTheme();
   const { showSnackbar } = useSnackbar();
   const { currentUser } = useAuth();
-  const isAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
+  const isAdmin =
+    currentUser?.role === "admin" || currentUser?.role === "super_admin";
 
   const [users, setUsers] = useState([]);
   const [records, setRecords] = useState([]);
@@ -72,7 +73,9 @@ const Incidents = () => {
   // Sign-off modal
   const [signOffModalOpen, setSignOffModalOpen] = useState(false);
   const [recordForSignOff, setRecordForSignOff] = useState(null);
-  const [signOffDate, setSignOffDate] = useState(formatDateForInput(new Date()));
+  const [signOffDate, setSignOffDate] = useState(
+    formatDateForInput(new Date()),
+  );
   const [signOffEvidence, setSignOffEvidence] = useState("");
   const [signOffEvidenceFile, setSignOffEvidenceFile] = useState(null);
   const [signOffErrors, setSignOffErrors] = useState({});
@@ -133,7 +136,10 @@ const Incidents = () => {
     if (!reportedBy && !reportedByInput) return null;
     const opt = userOptions.find((o) => o.id === reportedBy);
     if (opt) return opt;
-    return { id: reportedBy || reportedByInput, label: reportedBy || reportedByInput };
+    return {
+      id: reportedBy || reportedByInput,
+      label: reportedBy || reportedByInput,
+    };
   };
 
   const handleOpenAddModal = () => {
@@ -186,15 +192,25 @@ const Incidents = () => {
     if (!date) errors.date = "Date is required";
     const dateObj = new Date(date);
     if (date && isNaN(dateObj.getTime())) errors.date = "Invalid date";
-    if (!reportedBy?.trim() && !reportedByInput?.trim()) errors.reportedBy = "Reported by is required";
-    if (!nature?.trim()) errors.nature = recordType === TYPE_INCIDENT ? "Nature of Incident is required" : "Nature of Non-conformance is required";
+    if (!reportedBy?.trim() && !reportedByInput?.trim())
+      errors.reportedBy = "Reported by is required";
+    if (!nature?.trim())
+      errors.nature =
+        recordType === TYPE_INCIDENT
+          ? "Nature of Incident is required"
+          : "Nature of Non-conformance is required";
     if (!description?.trim()) errors.description = "Description is required";
     if (!category) errors.category = "Category is required";
-    if (!correctiveActionRequired) errors.correctiveActionRequired = "Corrective Action Required is required";
+    if (!correctiveActionRequired)
+      errors.correctiveActionRequired =
+        "Corrective Action Required is required";
     if (correctiveActionRequired === "yes") {
-      if (!correctiveAction?.trim()) errors.correctiveAction = "Corrective Action is required";
-      if (!personResponsible) errors.personResponsible = "Person Responsible is required";
-      if (!correctiveActionDue) errors.correctiveActionDue = "Corrective Action due is required";
+      if (!correctiveAction?.trim())
+        errors.correctiveAction = "Corrective Action is required";
+      if (!personResponsible)
+        errors.personResponsible = "Person Responsible is required";
+      if (!correctiveActionDue)
+        errors.correctiveActionDue = "Corrective Action due is required";
       if (correctiveActionDue) {
         const d = new Date(correctiveActionDue);
         if (isNaN(d.getTime())) errors.correctiveActionDue = "Invalid date";
@@ -217,16 +233,22 @@ const Incidents = () => {
     if (!validateForm()) return;
     setSubmitting(true);
     try {
-      const reportedByValue = reportedBy && userOptions.some((o) => o.id === reportedBy) ? reportedBy : (reportedByInput || reportedBy);
+      const reportedByValue =
+        reportedBy && userOptions.some((o) => o.id === reportedBy)
+          ? reportedBy
+          : reportedByInput || reportedBy;
       const attachmentsWithData = await Promise.all(
         attachments.map(async (a) => ({
           name: a.name,
           fileData: a.file ? await readFileAsDataURL(a.file) : null,
-        }))
+        })),
       );
       const record = {
         type: recordType,
-        ref: recordType === TYPE_INCIDENT ? `${PREFIX_IN}${refSuffix.trim()}` : `${PREFIX_NC}${refSuffix.trim()}`,
+        ref:
+          recordType === TYPE_INCIDENT
+            ? `${PREFIX_IN}${refSuffix.trim()}`
+            : `${PREFIX_NC}${refSuffix.trim()}`,
         date,
         reportedBy: reportedByValue,
         nature: nature.trim(),
@@ -242,29 +264,47 @@ const Incidents = () => {
       }
       const response = await incidentService.create(record);
       setRecords((prev) => [response.data, ...prev]);
-      showSnackbar(recordType === TYPE_INCIDENT ? "Incident added" : "Non-conformance added", "success");
+      showSnackbar(
+        recordType === TYPE_INCIDENT
+          ? "Incident added"
+          : "Non-conformance added",
+        "success",
+      );
       handleCloseModal();
     } catch (err) {
-      showSnackbar(err.response?.data?.message || "Failed to add record", "error");
+      showSnackbar(
+        err.response?.data?.message || "Failed to add record",
+        "error",
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
   const nonConformances = useMemo(
-    () => records.filter((r) => r.type === TYPE_NON_CONFORMANCE).sort((a, b) => new Date(b.date) - new Date(a.date)),
-    [records]
+    () =>
+      records
+        .filter((r) => r.type === TYPE_NON_CONFORMANCE)
+        .sort((a, b) => new Date(b.date) - new Date(a.date)),
+    [records],
   );
   const incidents = useMemo(
-    () => records.filter((r) => r.type === TYPE_INCIDENT).sort((a, b) => new Date(b.date) - new Date(a.date)),
-    [records]
+    () =>
+      records
+        .filter((r) => r.type === TYPE_INCIDENT)
+        .sort((a, b) => new Date(b.date) - new Date(a.date)),
+    [records],
   );
 
   const getReportedByDisplay = (record) => {
     if (!record.reportedBy) return "—";
-    const id = typeof record.reportedBy === "object" ? record.reportedBy?._id : record.reportedBy;
+    const id =
+      typeof record.reportedBy === "object"
+        ? record.reportedBy?._id
+        : record.reportedBy;
     const user = users.find((u) => u._id === id);
-    if (user) return `${user.firstName || ""} ${user.lastName || ""}`.trim() || "—";
+    if (user)
+      return `${user.firstName || ""} ${user.lastName || ""}`.trim() || "—";
     return typeof record.reportedBy === "string" ? record.reportedBy : "—";
   };
 
@@ -287,7 +327,8 @@ const Incidents = () => {
 
   const validateSignOff = () => {
     const errors = {};
-    if (!signOffEvidence?.trim()) errors.signOffEvidence = "Evidence is required";
+    if (!signOffEvidence?.trim())
+      errors.signOffEvidence = "Evidence is required";
     setSignOffErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -298,18 +339,30 @@ const Incidents = () => {
     try {
       const signOffPayload = {
         signedOffBy: currentUser?._id,
-        signedOffByName: currentUser ? `${currentUser.firstName || ""} ${currentUser.lastName || ""}`.trim() : "",
+        signedOffByName: currentUser
+          ? `${currentUser.firstName || ""} ${currentUser.lastName || ""}`.trim()
+          : "",
         signedOffAt: signOffDate,
         signOffEvidence: signOffEvidence.trim(),
         signOffEvidenceFileName: signOffEvidenceFile?.name || null,
-        signOffEvidenceFileData: signOffEvidenceFile ? await readFileAsDataURL(signOffEvidenceFile) : null,
+        signOffEvidenceFileData: signOffEvidenceFile
+          ? await readFileAsDataURL(signOffEvidenceFile)
+          : null,
       };
-      const response = await incidentService.signOff(recordForSignOff._id, signOffPayload);
-      setRecords((prev) => prev.map((r) => (r._id === recordForSignOff._id ? response.data : r)));
+      const response = await incidentService.signOff(
+        recordForSignOff._id,
+        signOffPayload,
+      );
+      setRecords((prev) =>
+        prev.map((r) => (r._id === recordForSignOff._id ? response.data : r)),
+      );
       handleCloseSignOffModal();
       showSnackbar("Sign-off recorded", "success");
     } catch (err) {
-      showSnackbar(err.response?.data?.message || "Failed to record sign-off", "error");
+      showSnackbar(
+        err.response?.data?.message || "Failed to record sign-off",
+        "error",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -322,20 +375,43 @@ const Incidents = () => {
   };
 
   const prefix = recordType === TYPE_INCIDENT ? PREFIX_IN : PREFIX_NC;
-  const natureLabel = recordType === TYPE_INCIDENT ? "Nature of Incident" : "Nature of Non-conformance";
-  const refLabel = recordType === TYPE_INCIDENT ? "Non-conformance Ref (LD-IN)" : "Non-conformance Ref (LD-NC)";
+  const natureLabel =
+    recordType === TYPE_INCIDENT
+      ? "Nature of Incident"
+      : "Nature of Non-conformance";
+  const refLabel =
+    recordType === TYPE_INCIDENT
+      ? "Non-conformance Ref (LD-IN)"
+      : "Non-conformance Ref (LD-NC)";
 
   if (loading) {
     return (
-      <Box m="20px" sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: 200 }}>
-        <Typography color="text.secondary">Loading incidents &amp; non-conformances…</Typography>
+      <Box
+        m="20px"
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          minHeight: 200,
+        }}
+      >
+        <Typography color="text.secondary">
+          Loading incidents &amp; non-conformances…
+        </Typography>
       </Box>
     );
   }
 
   return (
     <Box m="20px">
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          mb: 2,
+        }}
+      >
         <Typography variant="h4" component="h1" gutterBottom>
           INCIDENTS & NON-CONFORMANCES
         </Typography>
@@ -362,11 +438,29 @@ const Incidents = () => {
         </Breadcrumbs>
 
         <Paper sx={{ p: 0, mt: 2 }}>
-          <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ borderBottom: 1, borderColor: "divider", px: 2 }}>
-            <Tab label={`Non-conformances (${nonConformances.length})`} id="incidents-tab-0" aria-controls="incidents-tabpanel-0" />
-            <Tab label={`Incidents (${incidents.length})`} id="incidents-tab-1" aria-controls="incidents-tabpanel-1" />
+          <Tabs
+            value={activeTab}
+            onChange={(_, v) => setActiveTab(v)}
+            sx={{ borderBottom: 1, borderColor: "divider", px: 2 }}
+          >
+            <Tab
+              label={`Non-conformances (${nonConformances.length})`}
+              id="incidents-tab-0"
+              aria-controls="incidents-tabpanel-0"
+            />
+            <Tab
+              label={`Incidents (${incidents.length})`}
+              id="incidents-tab-1"
+              aria-controls="incidents-tabpanel-1"
+            />
           </Tabs>
-          <Box role="tabpanel" hidden={activeTab !== 0} id="incidents-tabpanel-0" aria-labelledby="incidents-tab-0" sx={{ p: 3 }}>
+          <Box
+            role="tabpanel"
+            hidden={activeTab !== 0}
+            id="incidents-tabpanel-0"
+            aria-labelledby="incidents-tab-0"
+            sx={{ p: 3 }}
+          >
             {activeTab === 0 && (
               <>
                 <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
@@ -374,21 +468,56 @@ const Incidents = () => {
                 </Typography>
                 {nonConformances.length === 0 ? (
                   <Typography variant="body1" color="text.secondary">
-                    No non-conformances yet. Use &quot;Add Incident / Non-Conformance&quot; to add one.
+                    No non-conformances yet. Use &quot;Add Incident /
+                    Non-Conformance&quot; to add one.
                   </Typography>
                 ) : (
                   <TableContainer>
                     <Table>
                       <TableHead>
-                        <TableRow sx={{ backgroundColor: theme.palette.primary.main }}>
-                          <TableCell sx={{ color: "white", fontWeight: "bold" }}>Ref</TableCell>
-                          <TableCell sx={{ color: "white", fontWeight: "bold" }}>Date</TableCell>
-                          <TableCell sx={{ color: "white", fontWeight: "bold" }}>Reported by</TableCell>
-                          <TableCell sx={{ color: "white", fontWeight: "bold" }}>Nature</TableCell>
-                          <TableCell sx={{ color: "white", fontWeight: "bold" }}>Category</TableCell>
-                          <TableCell sx={{ color: "white", fontWeight: "bold" }}>Corrective action</TableCell>
+                        <TableRow
+                          sx={{ backgroundColor: theme.palette.primary.main }}
+                        >
+                          <TableCell
+                            sx={{ color: "white", fontWeight: "bold" }}
+                          >
+                            Ref
+                          </TableCell>
+                          <TableCell
+                            sx={{ color: "white", fontWeight: "bold" }}
+                          >
+                            Date
+                          </TableCell>
+                          <TableCell
+                            sx={{ color: "white", fontWeight: "bold" }}
+                          >
+                            Reported by
+                          </TableCell>
+                          <TableCell
+                            sx={{ color: "white", fontWeight: "bold" }}
+                          >
+                            Nature
+                          </TableCell>
+                          <TableCell
+                            sx={{ color: "white", fontWeight: "bold" }}
+                          >
+                            Category
+                          </TableCell>
+                          <TableCell
+                            sx={{ color: "white", fontWeight: "bold" }}
+                          >
+                            Corrective action
+                          </TableCell>
                           {isAdmin && (
-                            <TableCell sx={{ color: "white", fontWeight: "bold", width: 120 }}>Actions</TableCell>
+                            <TableCell
+                              sx={{
+                                color: "white",
+                                fontWeight: "bold",
+                                width: 120,
+                              }}
+                            >
+                              Actions
+                            </TableCell>
                           )}
                         </TableRow>
                       </TableHead>
@@ -400,11 +529,16 @@ const Incidents = () => {
                             <TableCell>{getReportedByDisplay(r)}</TableCell>
                             <TableCell>{r.nature}</TableCell>
                             <TableCell>{r.category}</TableCell>
-                            <TableCell>{r.correctiveActionRequired ? "Yes" : "No"}</TableCell>
+                            <TableCell>
+                              {r.correctiveActionRequired ? "Yes" : "No"}
+                            </TableCell>
                             {isAdmin && (
                               <TableCell>
                                 {r.signedOffAt ? (
-                                  <Typography variant="body2" color="text.secondary">
+                                  <Typography
+                                    variant="body2"
+                                    color="text.secondary"
+                                  >
                                     Signed off {formatDateFull(r.signedOffAt)}
                                   </Typography>
                                 ) : (
@@ -428,7 +562,13 @@ const Incidents = () => {
               </>
             )}
           </Box>
-          <Box role="tabpanel" hidden={activeTab !== 1} id="incidents-tabpanel-1" aria-labelledby="incidents-tab-1" sx={{ p: 3 }}>
+          <Box
+            role="tabpanel"
+            hidden={activeTab !== 1}
+            id="incidents-tabpanel-1"
+            aria-labelledby="incidents-tab-1"
+            sx={{ p: 3 }}
+          >
             {activeTab === 1 && (
               <>
                 <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
@@ -436,21 +576,56 @@ const Incidents = () => {
                 </Typography>
                 {incidents.length === 0 ? (
                   <Typography variant="body1" color="text.secondary">
-                    No incidents yet. Use &quot;Add Incident / Non-Conformance&quot; to add one.
+                    No incidents yet. Use &quot;Add Incident /
+                    Non-Conformance&quot; to add one.
                   </Typography>
                 ) : (
                   <TableContainer>
                     <Table>
                       <TableHead>
-                        <TableRow sx={{ backgroundColor: theme.palette.primary.main }}>
-                          <TableCell sx={{ color: "white", fontWeight: "bold" }}>Ref</TableCell>
-                          <TableCell sx={{ color: "white", fontWeight: "bold" }}>Date</TableCell>
-                          <TableCell sx={{ color: "white", fontWeight: "bold" }}>Reported by</TableCell>
-                          <TableCell sx={{ color: "white", fontWeight: "bold" }}>Nature</TableCell>
-                          <TableCell sx={{ color: "white", fontWeight: "bold" }}>Category</TableCell>
-                          <TableCell sx={{ color: "white", fontWeight: "bold" }}>Corrective action</TableCell>
+                        <TableRow
+                          sx={{ backgroundColor: theme.palette.primary.main }}
+                        >
+                          <TableCell
+                            sx={{ color: "white", fontWeight: "bold" }}
+                          >
+                            Ref
+                          </TableCell>
+                          <TableCell
+                            sx={{ color: "white", fontWeight: "bold" }}
+                          >
+                            Date
+                          </TableCell>
+                          <TableCell
+                            sx={{ color: "white", fontWeight: "bold" }}
+                          >
+                            Reported by
+                          </TableCell>
+                          <TableCell
+                            sx={{ color: "white", fontWeight: "bold" }}
+                          >
+                            Nature
+                          </TableCell>
+                          <TableCell
+                            sx={{ color: "white", fontWeight: "bold" }}
+                          >
+                            Category
+                          </TableCell>
+                          <TableCell
+                            sx={{ color: "white", fontWeight: "bold" }}
+                          >
+                            Corrective action
+                          </TableCell>
                           {isAdmin && (
-                            <TableCell sx={{ color: "white", fontWeight: "bold", width: 120 }}>Actions</TableCell>
+                            <TableCell
+                              sx={{
+                                color: "white",
+                                fontWeight: "bold",
+                                width: 120,
+                              }}
+                            >
+                              Actions
+                            </TableCell>
                           )}
                         </TableRow>
                       </TableHead>
@@ -462,11 +637,16 @@ const Incidents = () => {
                             <TableCell>{getReportedByDisplay(r)}</TableCell>
                             <TableCell>{r.nature}</TableCell>
                             <TableCell>{r.category}</TableCell>
-                            <TableCell>{r.correctiveActionRequired ? "Yes" : "No"}</TableCell>
+                            <TableCell>
+                              {r.correctiveActionRequired ? "Yes" : "No"}
+                            </TableCell>
                             {isAdmin && (
                               <TableCell>
                                 {r.signedOffAt ? (
-                                  <Typography variant="body2" color="text.secondary">
+                                  <Typography
+                                    variant="body2"
+                                    color="text.secondary"
+                                  >
                                     Signed off {formatDateFull(r.signedOffAt)}
                                   </Typography>
                                 ) : (
@@ -494,9 +674,18 @@ const Incidents = () => {
       </Box>
 
       {/* Add Incident / Non-Conformance Modal */}
-      <Dialog open={modalOpen} onClose={handleCloseModal} maxWidth="sm" fullWidth>
+      <Dialog
+        open={modalOpen}
+        onClose={handleCloseModal}
+        maxWidth="sm"
+        fullWidth
+      >
         <DialogTitle>
-          <Box display="flex" justifyContent="space-between" alignItems="center">
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+          >
             <Typography variant="h6">Add Incident / Non-Conformance</Typography>
             <IconButton onClick={handleCloseModal} size="small">
               <CloseIcon />
@@ -515,8 +704,16 @@ const Incidents = () => {
                   setFormErrors((prev) => ({ ...prev, nature: null }));
                 }}
               >
-                <FormControlLabel value={TYPE_NON_CONFORMANCE} control={<Radio />} label="Non-conformance" />
-                <FormControlLabel value={TYPE_INCIDENT} control={<Radio />} label="Incident" />
+                <FormControlLabel
+                  value={TYPE_NON_CONFORMANCE}
+                  control={<Radio />}
+                  label="Non-conformance"
+                />
+                <FormControlLabel
+                  value={TYPE_INCIDENT}
+                  control={<Radio />}
+                  label="Incident"
+                />
               </RadioGroup>
             </FormControl>
 
@@ -528,7 +725,9 @@ const Incidents = () => {
                 setRefSuffix(e.target.value);
                 setFormErrors((prev) => ({ ...prev, refSuffix: null }));
               }}
-              placeholder={recordType === TYPE_INCIDENT ? "e.g. 001" : "e.g. 001"}
+              placeholder={
+                recordType === TYPE_INCIDENT ? "e.g. 001" : "e.g. 001"
+              }
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">{prefix}</InputAdornment>
@@ -585,7 +784,9 @@ const Incidents = () => {
                 }
                 setFormErrors((prev) => ({ ...prev, reportedBy: null }));
               }}
-              getOptionLabel={(option) => (typeof option === "string" ? option : option?.label ?? "")}
+              getOptionLabel={(option) =>
+                typeof option === "string" ? option : (option?.label ?? "")
+              }
               renderOption={(props, option) => (
                 <li {...props} key={option.id}>
                   {option.label}
@@ -628,60 +829,111 @@ const Incidents = () => {
             />
 
             <FormControl fullWidth error={!!formErrors.category}>
-              <InputLabel>{(recordType === TYPE_INCIDENT ? "Incident" : "Non-conformance") + " Category *"}</InputLabel>
+              <InputLabel>
+                {(recordType === TYPE_INCIDENT
+                  ? "Incident"
+                  : "Non-conformance") + " Category *"}
+              </InputLabel>
               <Select
                 value={category}
-                label={(recordType === TYPE_INCIDENT ? "Incident" : "Non-conformance") + " Category *"}
+                label={
+                  (recordType === TYPE_INCIDENT
+                    ? "Incident"
+                    : "Non-conformance") + " Category *"
+                }
                 onChange={(e) => {
                   const newCategory = e.target.value;
                   setCategory(newCategory);
                   setFormErrors((prev) => ({ ...prev, category: null }));
                   if (newCategory === "Medium" || newCategory === "High") {
                     setCorrectiveActionRequired("yes");
-                    setFormErrors((prev) => ({ ...prev, correctiveActionRequired: null }));
+                    setFormErrors((prev) => ({
+                      ...prev,
+                      correctiveActionRequired: null,
+                    }));
                   }
                 }}
               >
-                <MenuItem value=""><em>Select</em></MenuItem>
+                <MenuItem value="">
+                  <em>Select</em>
+                </MenuItem>
                 {CATEGORY_OPTIONS.map((c) => (
-                  <MenuItem key={c} value={c}>{c}</MenuItem>
+                  <MenuItem key={c} value={c}>
+                    {c}
+                  </MenuItem>
                 ))}
               </Select>
-              {formErrors.category && <FormHelperText>{formErrors.category}</FormHelperText>}
+              {formErrors.category && (
+                <FormHelperText>{formErrors.category}</FormHelperText>
+              )}
             </FormControl>
 
-            <FormControl component="fieldset" error={!!formErrors.correctiveActionRequired}>
-              <FormLabel component="legend">Corrective Action Required *</FormLabel>
+            <FormControl
+              component="fieldset"
+              error={!!formErrors.correctiveActionRequired}
+            >
+              <FormLabel component="legend">
+                Corrective Action Required *
+              </FormLabel>
               {(category === "Medium" || category === "High") && (
-                <FormHelperText sx={{ mb: 0.5 }}>Required for Medium and High category.</FormHelperText>
+                <FormHelperText sx={{ mb: 0.5 }}>
+                  Required for Medium and High category.
+                </FormHelperText>
               )}
               <RadioGroup
                 row
-                value={category === "Medium" || category === "High" ? "yes" : correctiveActionRequired}
+                value={
+                  category === "Medium" || category === "High"
+                    ? "yes"
+                    : correctiveActionRequired
+                }
                 onChange={(e) => {
                   if (category === "Medium" || category === "High") return;
                   setCorrectiveActionRequired(e.target.value);
-                  setFormErrors((prev) => ({ ...prev, correctiveActionRequired: null, correctiveAction: null, personResponsible: null, correctiveActionDue: null }));
+                  setFormErrors((prev) => ({
+                    ...prev,
+                    correctiveActionRequired: null,
+                    correctiveAction: null,
+                    personResponsible: null,
+                    correctiveActionDue: null,
+                  }));
                 }}
               >
-                <FormControlLabel value="yes" control={<Radio />} label="Yes" disabled={category === "Medium" || category === "High"} />
-                <FormControlLabel value="no" control={<Radio />} label="No" disabled={category === "Medium" || category === "High"} />
+                <FormControlLabel
+                  value="yes"
+                  control={<Radio />}
+                  label="Yes"
+                  disabled={category === "Medium" || category === "High"}
+                />
+                <FormControlLabel
+                  value="no"
+                  control={<Radio />}
+                  label="No"
+                  disabled={category === "Medium" || category === "High"}
+                />
               </RadioGroup>
               {formErrors.correctiveActionRequired && (
-                <FormHelperText>{formErrors.correctiveActionRequired}</FormHelperText>
+                <FormHelperText>
+                  {formErrors.correctiveActionRequired}
+                </FormHelperText>
               )}
             </FormControl>
 
             {correctiveActionRequired === "yes" && (
               <Box sx={{ pl: 2, borderLeft: 2, borderColor: "divider" }}>
-                <Typography variant="subtitle2" sx={{ mb: 1.5 }}>Corrective Actions</Typography>
+                <Typography variant="subtitle2" sx={{ mb: 1.5 }}>
+                  Corrective Actions
+                </Typography>
                 <TextField
                   fullWidth
                   label="Corrective Action *"
                   value={correctiveAction}
                   onChange={(e) => {
                     setCorrectiveAction(e.target.value);
-                    setFormErrors((prev) => ({ ...prev, correctiveAction: null }));
+                    setFormErrors((prev) => ({
+                      ...prev,
+                      correctiveAction: null,
+                    }));
                   }}
                   multiline
                   rows={2}
@@ -689,24 +941,37 @@ const Incidents = () => {
                   helperText={formErrors.correctiveAction}
                   sx={{ mb: 2 }}
                 />
-                <FormControl fullWidth error={!!formErrors.personResponsible} sx={{ mb: 2 }}>
+                <FormControl
+                  fullWidth
+                  error={!!formErrors.personResponsible}
+                  sx={{ mb: 2 }}
+                >
                   <InputLabel>Person Responsible *</InputLabel>
                   <Select
                     value={personResponsible}
                     label="Person Responsible *"
                     onChange={(e) => {
                       setPersonResponsible(e.target.value);
-                      setFormErrors((prev) => ({ ...prev, personResponsible: null }));
+                      setFormErrors((prev) => ({
+                        ...prev,
+                        personResponsible: null,
+                      }));
                     }}
                   >
-                    <MenuItem value=""><em>Select</em></MenuItem>
+                    <MenuItem value="">
+                      <em>Select</em>
+                    </MenuItem>
                     {users.map((u) => (
                       <MenuItem key={u._id} value={u._id}>
                         {u.firstName} {u.lastName}
                       </MenuItem>
                     ))}
                   </Select>
-                  {formErrors.personResponsible && <FormHelperText>{formErrors.personResponsible}</FormHelperText>}
+                  {formErrors.personResponsible && (
+                    <FormHelperText>
+                      {formErrors.personResponsible}
+                    </FormHelperText>
+                  )}
                 </FormControl>
                 <TextField
                   fullWidth
@@ -715,23 +980,58 @@ const Incidents = () => {
                   value={correctiveActionDue}
                   onChange={(e) => {
                     setCorrectiveActionDue(e.target.value);
-                    setFormErrors((prev) => ({ ...prev, correctiveActionDue: null }));
+                    setFormErrors((prev) => ({
+                      ...prev,
+                      correctiveActionDue: null,
+                    }));
                   }}
                   InputLabelProps={{ shrink: true }}
                   error={!!formErrors.correctiveActionDue}
                   helperText={formErrors.correctiveActionDue}
                   sx={{ mb: 2 }}
                 />
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Attachments</Typography>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-                  <Button variant="outlined" component="label" startIcon={<UploadFileIcon />} size="small">
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mb: 1 }}
+                >
+                  Attachments
+                </Typography>
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <Button
+                    variant="outlined"
+                    component="label"
+                    startIcon={<UploadFileIcon />}
+                    size="small"
+                  >
                     Upload
-                    <input type="file" hidden multiple onChange={handleFileChange} />
+                    <input
+                      type="file"
+                      hidden
+                      multiple
+                      onChange={handleFileChange}
+                    />
                   </Button>
                   {attachments.map((a, i) => (
-                    <Box key={i} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                      <Typography variant="body2" noWrap sx={{ maxWidth: 120 }}>{a.name}</Typography>
-                      <IconButton size="small" onClick={() => handleRemoveAttachment(i)} sx={{ color: theme.palette.error.main }}>
+                    <Box
+                      key={i}
+                      sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
+                    >
+                      <Typography variant="body2" noWrap sx={{ maxWidth: 120 }}>
+                        {a.name}
+                      </Typography>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleRemoveAttachment(i)}
+                        sx={{ color: theme.palette.error.main }}
+                      >
                         <CloseIcon fontSize="small" />
                       </IconButton>
                     </Box>
@@ -742,16 +1042,48 @@ const Incidents = () => {
 
             {correctiveActionRequired !== "yes" && (
               <>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Attachments</Typography>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-                  <Button variant="outlined" component="label" startIcon={<UploadFileIcon />} size="small">
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mb: 0.5 }}
+                >
+                  Attachments
+                </Typography>
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <Button
+                    variant="outlined"
+                    component="label"
+                    startIcon={<UploadFileIcon />}
+                    size="small"
+                  >
                     Upload
-                    <input type="file" hidden multiple onChange={handleFileChange} />
+                    <input
+                      type="file"
+                      hidden
+                      multiple
+                      onChange={handleFileChange}
+                    />
                   </Button>
                   {attachments.map((a, i) => (
-                    <Box key={i} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                      <Typography variant="body2" noWrap sx={{ maxWidth: 120 }}>{a.name}</Typography>
-                      <IconButton size="small" onClick={() => handleRemoveAttachment(i)} sx={{ color: theme.palette.error.main }}>
+                    <Box
+                      key={i}
+                      sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
+                    >
+                      <Typography variant="body2" noWrap sx={{ maxWidth: 120 }}>
+                        {a.name}
+                      </Typography>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleRemoveAttachment(i)}
+                        sx={{ color: theme.palette.error.main }}
+                      >
                         <CloseIcon fontSize="small" />
                       </IconButton>
                     </Box>
@@ -762,19 +1094,39 @@ const Incidents = () => {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseModal} disabled={submitting}>Cancel</Button>
-          <Button onClick={handleSubmit} variant="contained" color="primary" disabled={submitting}>
+          <Button onClick={handleCloseModal} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            variant="contained"
+            color="primary"
+            disabled={submitting}
+          >
             {submitting ? "Adding…" : "Add"}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Sign-off verification modal */}
-      <Dialog open={signOffModalOpen} onClose={handleCloseSignOffModal} maxWidth="sm" fullWidth>
+      <Dialog
+        open={signOffModalOpen}
+        onClose={handleCloseSignOffModal}
+        maxWidth="sm"
+        fullWidth
+      >
         <DialogTitle>
-          <Box display="flex" justifyContent="space-between" alignItems="center">
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+          >
             <Typography variant="h6">
-              Sign off {recordForSignOff?.type === TYPE_INCIDENT ? "Incident" : "Non-conformance"} — {recordForSignOff?.ref}
+              Sign off{" "}
+              {recordForSignOff?.type === TYPE_INCIDENT
+                ? "Incident"
+                : "Non-conformance"}{" "}
+              — {recordForSignOff?.ref}
             </Typography>
             <IconButton onClick={handleCloseSignOffModal} size="small">
               <CloseIcon />
@@ -783,7 +1135,9 @@ const Incidents = () => {
         </DialogTitle>
         <DialogContent>
           {recordForSignOff && (
-            <Box sx={{ mt: 1, display: "flex", flexDirection: "column", gap: 2 }}>
+            <Box
+              sx={{ mt: 1, display: "flex", flexDirection: "column", gap: 2 }}
+            >
               <Typography variant="body1">
                 You are signing off as{" "}
                 <strong>
@@ -815,7 +1169,10 @@ const Incidents = () => {
                 value={signOffEvidence}
                 onChange={(e) => {
                   setSignOffEvidence(e.target.value);
-                  setSignOffErrors((prev) => ({ ...prev, signOffEvidence: null }));
+                  setSignOffErrors((prev) => ({
+                    ...prev,
+                    signOffEvidence: null,
+                  }));
                 }}
                 multiline
                 rows={3}
@@ -824,16 +1181,39 @@ const Incidents = () => {
                 helperText={signOffErrors.signOffEvidence}
               />
               <Box>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mb: 1 }}
+                >
                   Evidence attachment (optional)
                 </Typography>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-                  <Button variant="outlined" component="label" startIcon={<UploadFileIcon />} size="small">
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <Button
+                    variant="outlined"
+                    component="label"
+                    startIcon={<UploadFileIcon />}
+                    size="small"
+                  >
                     {signOffEvidenceFile ? "Change file" : "Upload"}
-                    <input type="file" hidden onChange={handleSignOffEvidenceFileChange} />
+                    <input
+                      type="file"
+                      hidden
+                      onChange={handleSignOffEvidenceFileChange}
+                    />
                   </Button>
                   {signOffEvidenceFile && (
-                    <Typography variant="body2" sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                    <Typography
+                      variant="body2"
+                      sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
+                    >
                       {signOffEvidenceFile.name}
                       <IconButton
                         size="small"
@@ -850,8 +1230,15 @@ const Incidents = () => {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseSignOffModal} disabled={submitting}>Cancel</Button>
-          <Button onClick={handleConfirmSignOff} variant="contained" color="primary" disabled={submitting}>
+          <Button onClick={handleCloseSignOffModal} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmSignOff}
+            variant="contained"
+            color="primary"
+            disabled={submitting}
+          >
             {submitting ? "Saving…" : "Confirm sign-off"}
           </Button>
         </DialogActions>

@@ -92,7 +92,7 @@ const ArchivedData = () => {
 
       // Filter for archived/inactive clients
       const archivedClients = allClients.filter(
-        (client) => client.isActive === false
+        (client) => client.isActive === false,
       );
       console.log("Archived clients found:", archivedClients.length);
       setClients(archivedClients);
@@ -149,7 +149,7 @@ const ArchivedData = () => {
     (client) =>
       client.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       client.contact1Name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      client.contact1Email?.toLowerCase().includes(searchTerm.toLowerCase())
+      client.contact1Email?.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   const renderClientsTable = () => (

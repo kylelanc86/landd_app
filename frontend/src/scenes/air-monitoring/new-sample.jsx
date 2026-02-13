@@ -1429,51 +1429,61 @@ const NewSample = () => {
         </Typography>
       )}
 
-      <Box component="form" noValidate>
-        <Stack spacing={3} sx={{ maxWidth: 600 }}>
-          <FormControl fullWidth required error={!!fieldErrors.sampler}>
-            <InputLabel>Sampler</InputLabel>
-            <Select
-              name="sampler"
-              value={form.sampler}
-              onChange={handleChange}
-              label="Sampler"
-              required
-            >
-              {asbestosAssessors.map((assessor) => (
-                <MenuItem key={assessor._id} value={assessor._id}>
-                  {assessor.firstName} {assessor.lastName}
-                </MenuItem>
-              ))}
-            </Select>
-            {fieldErrors.sampler && (
-              <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
-                {fieldErrors.sampler}
-              </Typography>
+      <Box
+        component="form"
+        noValidate
+        sx={{
+          "& .MuiInputBase-input": { fontSize: "0.8em" },
+          "& .MuiInputLabel-root": { fontSize: "0.8em" },
+          "& .MuiFormControlLabel-label": { fontSize: "0.8em" },
+        }}
+      >
+        <Stack spacing={2.25} sx={{ maxWidth: { xs: 600, sm: 960 } }}>
+          <Box sx={{ display: "flex", gap: 1.5, flexDirection: { xs: "column", sm: "row" }, alignItems: { sm: "flex-start" }, flexWrap: "wrap" }}>
+            {!isSimplifiedSample && (
+            <Box sx={{ display: "flex", gap: 1.5, flex: { xs: "none", sm: "1 1 0" }, minWidth: 0, flexWrap: { xs: "nowrap", sm: "wrap" }, "& > *": { flex: { xs: "1 1 0", sm: "1 1 140px" }, minWidth: 0 } }}>
+              <FormControl fullWidth size="small" required error={!!fieldErrors.sampler} sx={{ minWidth: 0 }}>
+                <InputLabel>Sampler</InputLabel>
+                <Select
+                  name="sampler"
+                  value={form.sampler}
+                  onChange={handleChange}
+                  label="Sampler"
+                  required
+                >
+                  {asbestosAssessors.map((assessor) => (
+                    <MenuItem key={assessor._id} value={assessor._id}>
+                      {assessor.firstName} {assessor.lastName}
+                    </MenuItem>
+                  ))}
+                </Select>
+                {fieldErrors.sampler && (
+                  <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
+                    {fieldErrors.sampler}
+                  </Typography>
+                )}
+              </FormControl>
+              <TextField
+                size="small"
+                name="sampleNumber"
+                label="Sample Number"
+                value={form.sampleNumber}
+                onChange={handleChange}
+                required
+                fullWidth
+                disabled
+                error={!!fieldErrors.sampleNumber}
+                helperText={
+                  fieldErrors.sampleNumber
+                    ? fieldErrors.sampleNumber
+                    : projectID
+                    ? `Full Sample ID will be: ${projectID}-${form.sampleNumber || "XXX"}`
+                    : "Loading job details..."
+                }
+              />
+            </Box>
             )}
-          </FormControl>
-          <Box>
-            <TextField
-              name="sampleNumber"
-              label="Sample Number"
-              value={form.sampleNumber}
-              onChange={handleChange}
-              required
-              fullWidth
-              disabled
-              error={!!fieldErrors.sampleNumber}
-              helperText={
-                fieldErrors.sampleNumber
-                  ? fieldErrors.sampleNumber
-                  : projectID
-                  ? `Full Sample ID will be: ${projectID}-${
-                      form.sampleNumber || "XXX"
-                    }`
-                  : "Loading job details..."
-              }
-            />
-          </Box>
-          <Box sx={{ display: "flex", gap: 2 }}>
+            <Box sx={{ display: "flex", gap: 2, mt: { xs: -1, sm: 0 }, flex: { sm: "0 0 auto" } }}>
             <FormControlLabel
               control={
                 <Checkbox
@@ -1494,10 +1504,12 @@ const NewSample = () => {
               }
               label="Neg Air Exhaust"
             />
+            </Box>
           </Box>
           {!isSimplifiedSample && (
             <>
-              <FormControl fullWidth required error={!!fieldErrors.type}>
+              <Box sx={{ display: "flex", gap: 1.5, flexDirection: { xs: "column", sm: "row" }, flexWrap: "wrap", "& > *": { flex: { sm: "1 1 0" }, minWidth: 0 } }}>
+              <FormControl fullWidth size="small" required error={!!fieldErrors.type} sx={{ minWidth: 0 }}>
                 <InputLabel>Type</InputLabel>
                 <Select
                   name="type"
@@ -1516,6 +1528,7 @@ const NewSample = () => {
                 )}
               </FormControl>
               <TextField
+                size="small"
                 name="location"
                 label="Location"
                 autoComplete="off"
@@ -1526,103 +1539,111 @@ const NewSample = () => {
                 error={!!fieldErrors.location}
                 helperText={fieldErrors.location}
               />
+              </Box>
             </>
           )}
           {isSimplifiedSample && (
-            <TextField
-              name="location"
-              label="Location"
-              autoComplete="off"
-              value={
-                form.isFieldBlank ? FIELD_BLANK_LOCATION : form.location || ""
-              }
-              onChange={handleChange}
-              disabled={form.isFieldBlank}
-              required
-              fullWidth
-              error={!!fieldErrors.location}
-              helperText={fieldErrors.location}
-            />
+            <>
+              <Box sx={{ display: "flex", gap: 1.5, flexDirection: { xs: "column", sm: "row" }, flexWrap: "wrap", "& > *": { flex: { sm: "1 1 0" }, minWidth: 0 } }}>
+              <TextField
+                size="small"
+                name="location"
+                label="Location"
+                autoComplete="off"
+                value={
+                  form.isFieldBlank ? FIELD_BLANK_LOCATION : form.location || ""
+                }
+                onChange={handleChange}
+                disabled={form.isFieldBlank}
+                required
+                fullWidth
+                error={!!fieldErrors.location}
+                helperText={fieldErrors.location}
+              />
+              <TextField
+                size="small"
+                name="cowlNo"
+                label="Cowl No."
+                value={form.cowlNo || ""}
+                onChange={handleChange}
+                required
+                fullWidth
+                error={!!fieldErrors.cowlNo}
+                helperText={fieldErrors.cowlNo}
+                autoComplete="off"
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">C</InputAdornment>
+                  ),
+                }}
+              />
+              </Box>
+            </>
           )}
           {!isSimplifiedSample && (
             <>
-              <FormControl fullWidth required error={!!fieldErrors.pumpNo}>
-                <InputLabel>Pump No.</InputLabel>
-                <Select
-                  name="pumpNo"
-                  value={form.pumpNo}
-                  onChange={handleChange}
-                  label="Pump No."
-                  required
-                  disabled={!airPumpsLoaded}
-                >
-                  <MenuItem value="">
-                    <em>
-                      {!airPumpsLoaded
-                        ? "Loading pumps..."
-                        : airPumps.length > 0
-                        ? "Select a pump"
-                        : "No active air pumps available"}
-                    </em>
-                  </MenuItem>
-                  {airPumps.length > 0 ? (
-                    airPumps.map((pump) => (
-                      <MenuItem key={pump._id} value={pump.equipmentReference}>
-                        {pump.equipmentReference}
-                        {pump.brandModel ? ` - ${pump.brandModel}` : ""}
-                      </MenuItem>
-                    ))
-                  ) : airPumpsLoaded ? (
-                    <MenuItem disabled value="">
-                      No active air pumps available
+              <Box sx={{ display: "flex", gap: 1.5, flexWrap: { xs: "wrap", sm: "nowrap" }, "& > *": { flex: { xs: "1 1 calc(50% - 6px)", sm: "1 1 0" }, minWidth: 0 } }}>
+                <FormControl fullWidth size="small" required error={!!fieldErrors.pumpNo} sx={{ minWidth: 0 }}>
+                  <InputLabel>Pump No.</InputLabel>
+                  <Select
+                    name="pumpNo"
+                    value={form.pumpNo}
+                    onChange={handleChange}
+                    label="Pump No."
+                    required
+                    disabled={!airPumpsLoaded}
+                  >
+                    <MenuItem value="">
+                      <em>
+                        {!airPumpsLoaded
+                          ? "Loading pumps..."
+                          : airPumps.length > 0
+                          ? "Select a pump"
+                          : "No active air pumps available"}
+                      </em>
                     </MenuItem>
-                  ) : null}
-                </Select>
-                {fieldErrors.pumpNo && (
-                  <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
-                    {fieldErrors.pumpNo}
-                  </Typography>
-                )}
-              </FormControl>
-              <FormControl fullWidth>
-                <InputLabel>Filter Size</InputLabel>
-                <Select
-                  name="filterSize"
-                  value={form.filterSize}
-                  onChange={handleChange}
-                  label="Filter Size"
-                  disabled={!form.pumpNo}
-                >
-                  <MenuItem value="25mm">25mm</MenuItem>
-                  {hasOnePointFiveFlowrate && (
-                    <MenuItem value="13mm">13mm</MenuItem>
+                    {airPumps.length > 0 ? (
+                      airPumps.map((pump) => (
+                        <MenuItem key={pump._id} value={pump.equipmentReference}>
+                          {pump.equipmentReference}
+                        </MenuItem>
+                      ))
+                    ) : airPumpsLoaded ? (
+                      <MenuItem disabled value="">
+                        No active air pumps available
+                      </MenuItem>
+                    ) : null}
+                  </Select>
+                  {fieldErrors.pumpNo && (
+                    <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
+                      {fieldErrors.pumpNo}
+                    </Typography>
                   )}
-                </Select>
-              </FormControl>
-            </>
-          )}
-          <TextField
-            name="cowlNo"
-            label="Cowl No."
-            value={form.cowlNo || ""}
-            onChange={handleChange}
-            required
-            fullWidth
-            error={!!fieldErrors.cowlNo}
-            helperText={fieldErrors.cowlNo}
-            autoComplete="off"
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">C</InputAdornment>
-              ),
-            }}
-          />
-          {!isSimplifiedSample && (
-            <FormControl
-              fullWidth
-              required={!isSimplifiedSample}
-              error={!!fieldErrors.flowmeter}
-            >
+                </FormControl>
+                <TextField
+                  size="small"
+                  name="cowlNo"
+                  label="Cowl No."
+                  value={form.cowlNo || ""}
+                  onChange={handleChange}
+                  required
+                  fullWidth
+                  error={!!fieldErrors.cowlNo}
+                  helperText={fieldErrors.cowlNo}
+                  autoComplete="off"
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">C</InputAdornment>
+                    ),
+                  }}
+                />
+                <FormControl
+                  fullWidth
+                  size="small"
+                  required={!isSimplifiedSample}
+                  error={!!fieldErrors.flowmeter}
+                  sx={{ minWidth: 0 }}
+                >
               <InputLabel>Flowmeter</InputLabel>
               <Select
                 name="flowmeter"
@@ -1655,10 +1676,23 @@ const NewSample = () => {
                   {fieldErrors.flowmeter}
                 </Typography>
               )}
-            </FormControl>
-          )}
-          {!isSimplifiedSample && (
-            <>
+                </FormControl>
+                <FormControl fullWidth size="small" sx={{ minWidth: 0 }}>
+                  <InputLabel>Filter Size</InputLabel>
+                  <Select
+                    name="filterSize"
+                    value={form.filterSize}
+                    onChange={handleChange}
+                    label="Filter Size"
+                    disabled={!form.pumpNo}
+                  >
+                    <MenuItem value="25mm">25mm</MenuItem>
+                    {hasOnePointFiveFlowrate && (
+                      <MenuItem value="13mm">13mm</MenuItem>
+                    )}
+                  </Select>
+                </FormControl>
+              </Box>
               <Typography
                 variant="h6"
                 sx={{
@@ -1670,74 +1704,70 @@ const NewSample = () => {
               >
                 Air-monitor Setup
               </Typography>
-              <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-                <FormControl
-                  required
-                  sx={{ minWidth: 100 }}
-                  error={!!fieldErrors.startTime}
-                >
-                  <InputLabel>Hour</InputLabel>
-                  <Select
-                    value={parseTime(form.startTime, "startTime").hour}
-                    onChange={(e) =>
-                      handleTimeChange("startTime", "hour", e.target.value)
-                    }
-                    label="Hour"
+              <Box sx={{ display: "flex", gap: 1, flexDirection: { xs: "column", sm: "row" }, flexWrap: "wrap", alignItems: { sm: "flex-start" } }}>
+                <Box sx={{ display: "flex", gap: 1, alignItems: "center", flex: { sm: "0 0 auto" } }}>
+                  <FormControl
+                    required
+                    size="small"
+                    sx={{ minWidth: 100 }}
+                    error={!!fieldErrors.startTime}
                   >
-                    <MenuItem value="-">-</MenuItem>
-                    {Array.from({ length: 24 }, (_, i) =>
-                      i.toString().padStart(2, "0")
-                    ).map((hour) => (
-                      <MenuItem key={hour} value={hour}>
-                        {hour}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <FormControl
-                  required
-                  sx={{ minWidth: 100 }}
-                  error={!!fieldErrors.startTime}
-                >
-                  <InputLabel>Minutes</InputLabel>
-                  <Select
-                    value={parseTime(form.startTime, "startTime").minute}
-                    onChange={(e) =>
-                      handleTimeChange("startTime", "minute", e.target.value)
-                    }
-                    label="Minutes"
+                    <InputLabel>Hour</InputLabel>
+                    <Select
+                      value={parseTime(form.startTime, "startTime").hour}
+                      onChange={(e) =>
+                        handleTimeChange("startTime", "hour", e.target.value)
+                      }
+                      label="Hour"
+                    >
+                      <MenuItem value="-">-</MenuItem>
+                      {Array.from({ length: 24 }, (_, i) =>
+                        i.toString().padStart(2, "0")
+                      ).map((hour) => (
+                        <MenuItem key={hour} value={hour}>
+                          {hour}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  <FormControl
+                    required
+                    size="small"
+                    sx={{ minWidth: 100 }}
+                    error={!!fieldErrors.startTime}
                   >
-                    <MenuItem value="-">-</MenuItem>
-                    {Array.from({ length: 60 }, (_, i) =>
-                      i.toString().padStart(2, "0")
-                    ).map((minute) => (
-                      <MenuItem key={minute} value={minute}>
-                        {minute}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <IconButton
-                  onClick={() => setCurrentTime("startTime")}
-                  sx={{ alignSelf: "flex-end", mb: 1 }}
+                    <InputLabel>Minutes</InputLabel>
+                    <Select
+                      value={parseTime(form.startTime, "startTime").minute}
+                      onChange={(e) =>
+                        handleTimeChange("startTime", "minute", e.target.value)
+                      }
+                      label="Minutes"
+                    >
+                      <MenuItem value="-">-</MenuItem>
+                      {Array.from({ length: 60 }, (_, i) =>
+                        i.toString().padStart(2, "0")
+                      ).map((minute) => (
+                        <MenuItem key={minute} value={minute}>
+                          {minute}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  <IconButton
+                    onClick={() => setCurrentTime("startTime")}
+                    sx={{ alignSelf: "flex-end", mb: 1 }}
+                  >
+                    <AccessTimeIcon />
+                  </IconButton>
+                </Box>
+                <FormControl
+                  fullWidth
+                  size="small"
+                  required
+                  error={!!fieldErrors.initialFlowrate}
+                  sx={{ flex: { sm: "1 1 0" }, minWidth: 0 }}
                 >
-                  <AccessTimeIcon />
-                </IconButton>
-              </Box>
-              {fieldErrors.startTime && (
-                <Typography
-                  variant="caption"
-                  color="error"
-                  sx={{ mt: -1, mb: 1, ml: 1 }}
-                >
-                  {fieldErrors.startTime}
-                </Typography>
-              )}
-              <FormControl
-                fullWidth
-                required
-                error={!!fieldErrors.initialFlowrate}
-              >
                 <InputLabel>Initial Flowrate (L/min)</InputLabel>
                 <Select
                   name="initialFlowrate"
@@ -1770,7 +1800,13 @@ const NewSample = () => {
                     {fieldErrors.initialFlowrate}
                   </Typography>
                 )}
-              </FormControl>
+                </FormControl>
+              </Box>
+              {fieldErrors.startTime && (
+                <Typography variant="caption" color="error" sx={{ mt: -1, mb: 1, ml: 1 }}>
+                  {fieldErrors.startTime}
+                </Typography>
+              )}
               {!showCollectionSection && !collectionFieldsEdited ? (
                 <Button
                   variant="outlined"
@@ -1793,64 +1829,111 @@ const NewSample = () => {
                   >
                     Air-monitor Pick-Up
                   </Typography>
-                  <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-                    <FormControl
-                      required
-                      sx={{ minWidth: 100 }}
-                      error={insufficientSampleTime || collectionTimeBeforeSetup || !!fieldErrors.endTime}
-                    >
-                      <InputLabel>Hour</InputLabel>
-                      <Select
-                        value={parseTime(form.endTime, "endTime").hour}
-                        onChange={(e) =>
-                          handleTimeChange("endTime", "hour", e.target.value)
-                        }
-                        label="Hour"
+                  <Box sx={{ display: "flex", gap: 1, flexDirection: { xs: "column", sm: "row" }, flexWrap: "wrap", alignItems: { sm: "flex-start" } }}>
+                    <Box sx={{ display: "flex", gap: 1, alignItems: "center", flex: { sm: "0 0 auto" } }}>
+                      <FormControl
+                        required
+                        size="small"
+                        sx={{ minWidth: 100 }}
+                        error={insufficientSampleTime || collectionTimeBeforeSetup || !!fieldErrors.endTime}
                       >
-                        <MenuItem value="-">-</MenuItem>
-                        {Array.from({ length: 24 }, (_, i) =>
-                          i.toString().padStart(2, "0")
-                        ).map((hour) => (
-                          <MenuItem key={hour} value={hour}>
-                            {hour}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                    <FormControl
-                      required
-                      sx={{ minWidth: 100 }}
-                      error={insufficientSampleTime || collectionTimeBeforeSetup || !!fieldErrors.endTime}
-                    >
-                      <InputLabel>Minutes</InputLabel>
-                      <Select
-                        value={parseTime(form.endTime, "endTime").minute}
-                        onChange={(e) =>
-                          handleTimeChange("endTime", "minute", e.target.value)
-                        }
-                        label="Minutes"
+                        <InputLabel>Hour</InputLabel>
+                        <Select
+                          value={parseTime(form.endTime, "endTime").hour}
+                          onChange={(e) =>
+                            handleTimeChange("endTime", "hour", e.target.value)
+                          }
+                          label="Hour"
+                        >
+                          <MenuItem value="-">-</MenuItem>
+                          {Array.from({ length: 24 }, (_, i) =>
+                            i.toString().padStart(2, "0")
+                          ).map((hour) => (
+                            <MenuItem key={hour} value={hour}>
+                              {hour}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                      <FormControl
+                        required
+                        size="small"
+                        sx={{ minWidth: 100 }}
+                        error={insufficientSampleTime || collectionTimeBeforeSetup || !!fieldErrors.endTime}
                       >
-                        <MenuItem value="-">-</MenuItem>
-                        {Array.from({ length: 60 }, (_, i) =>
-                          i.toString().padStart(2, "0")
-                        ).map((minute) => (
-                          <MenuItem key={minute} value={minute}>
-                            {minute}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                    <IconButton
-                      onClick={() => {
-                        setCurrentTime("endTime");
-                        setCollectionFieldsEdited(true);
-                        setShowCollectionSection(true);
+                        <InputLabel>Minutes</InputLabel>
+                        <Select
+                          value={parseTime(form.endTime, "endTime").minute}
+                          onChange={(e) =>
+                            handleTimeChange("endTime", "minute", e.target.value)
+                          }
+                          label="Minutes"
+                        >
+                          <MenuItem value="-">-</MenuItem>
+                          {Array.from({ length: 60 }, (_, i) =>
+                            i.toString().padStart(2, "0")
+                          ).map((minute) => (
+                            <MenuItem key={minute} value={minute}>
+                              {minute}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                      <IconButton
+                        onClick={() => {
+                          setCurrentTime("endTime");
+                          setCollectionFieldsEdited(true);
+                          setShowCollectionSection(true);
+                        }}
+                        sx={{ alignSelf: "flex-end", mb: 1 }}
+                      >
+                        <AccessTimeIcon />
+                      </IconButton>
+                    </Box>
+                    <Box sx={{ display: "flex", alignItems: "center", flex: { sm: "0 0 auto" } }}>
+                      <Checkbox
+                        name="nextDay"
+                        checked={form.nextDay}
+                        onChange={handleChange}
+                      />
+                      <Typography variant="body1" sx={{ ml: -1, mr: 1 }}>
+                        Next Day
+                      </Typography>
+                    </Box>
+                    <TextField
+                      size="small"
+                      name="finalFlowrate"
+                      label="Final Flowrate (L/min)"
+                      value={form.finalFlowrate}
+                      onChange={handleChange}
+                      onBlur={(e) => {
+                        const value = e.target.value;
+                        if (value && !isNaN(parseFloat(value))) {
+                          const num = parseFloat(value);
+                          const hasAtMostOneDecimal = parseFloat(num.toFixed(1)) === num;
+                          const formatted = hasAtMostOneDecimal ? num.toFixed(1) : num.toFixed(2);
+                          setForm((prev) => ({
+                            ...prev,
+                            finalFlowrate: formatted,
+                          }));
+                        }
                       }}
-                      sx={{ alignSelf: "flex-end", mb: 1 }}
-                    >
-                      <AccessTimeIcon />
-                    </IconButton>
+                      type="number"
+                      inputProps={{ step: "0.01", min: "0" }}
+                      fullWidth
+                      sx={{ flex: { sm: "1 1 0" }, minWidth: 0 }}
+                      error={!!fieldErrors.finalFlowrate}
+                      helperText={
+                        fieldErrors.finalFlowrate ||
+                        (form.initialFlowrate && !isNaN(parseFloat(form.initialFlowrate))
+                          ? `Must be within 10% of initial flowrate (${(parseFloat(form.initialFlowrate) * 0.9).toFixed(2)} - ${(parseFloat(form.initialFlowrate) * 1.1).toFixed(2)} L/min)`
+                          : "")
+                      }
+                    />
                   </Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: -0.5, mb: 1 }}>
+                    *If pump has failed, set final flowrate to 0L/min
+                  </Typography>
                   {fieldErrors.endTime && (
                     <Typography
                       variant="caption"
@@ -1869,49 +1952,8 @@ const NewSample = () => {
                       Insufficient sample time
                     </Typography>
                   )}
-                  <Box sx={{ display: "flex", alignItems: "center", mt: -1, mb: 1 }}>
-                    <Checkbox
-                      name="nextDay"
-                      checked={form.nextDay}
-                      onChange={handleChange}
-                    />
-                    <Typography variant="body1" sx={{ ml: -1, mr: 1 }}>
-                      Next Day
-                    </Typography>
-                  </Box>
                   <TextField
-                    name="finalFlowrate"
-                    label="Final Flowrate (L/min)"
-                    value={form.finalFlowrate}
-                    onChange={handleChange}
-                    onBlur={(e) => {
-                      const value = e.target.value;
-                      if (value && !isNaN(parseFloat(value))) {
-                        const num = parseFloat(value);
-                        // If whole number or has only 1 decimal place, format to 1 decimal place, otherwise 2 decimal places
-                        const hasAtMostOneDecimal = parseFloat(num.toFixed(1)) === num;
-                        const formatted = hasAtMostOneDecimal ? num.toFixed(1) : num.toFixed(2);
-                        setForm((prev) => ({
-                          ...prev,
-                          finalFlowrate: formatted,
-                        }));
-                      }
-                    }}
-                    type="number"
-                    inputProps={{ step: "0.01", min: "0" }}
-                    fullWidth
-                    error={!!fieldErrors.finalFlowrate}
-                    helperText={
-                      fieldErrors.finalFlowrate ||
-                      (form.initialFlowrate && !isNaN(parseFloat(form.initialFlowrate))
-                        ? `Must be within 10% of initial flowrate (${(parseFloat(form.initialFlowrate) * 0.9).toFixed(2)} - ${(parseFloat(form.initialFlowrate) * 1.1).toFixed(2)} L/min)`
-                        : "")
-                    }
-                  />
-                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: -0.5, mb: 1 }}>
-                    *If pump has failed, set final flowrate to 0L/min
-                  </Typography>
-                  <TextField
+                    size="small"
                     name="averageFlowrate"
                     label="Average Flowrate"
                     value={
@@ -1942,6 +1984,7 @@ const NewSample = () => {
             </>
           )}
           <TextField
+            size="small"
             name="notes"
             label="Notes"
             value={form.notes}

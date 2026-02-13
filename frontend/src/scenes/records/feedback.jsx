@@ -108,7 +108,9 @@ const Feedback = () => {
       }
     };
     fetchFeedback();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [showSnackbar]);
 
   useEffect(() => {
@@ -168,7 +170,7 @@ const Feedback = () => {
       !("SpeechRecognition" in window)
     ) {
       setDictationError(
-        "Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari."
+        "Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.",
       );
       return;
     }
@@ -194,7 +196,8 @@ const Feedback = () => {
             const current = prev || "";
             const isFirst = !current || current.trim().length === 0;
             const newText = isFirst
-              ? finalTranscript.charAt(0).toUpperCase() + finalTranscript.slice(1)
+              ? finalTranscript.charAt(0).toUpperCase() +
+                finalTranscript.slice(1)
               : finalTranscript;
             return current + (current ? " " : "") + newText;
           });
@@ -252,7 +255,8 @@ const Feedback = () => {
       date,
       feedbackDescription: feedbackDescription.trim(),
       feedbackType,
-      nonConformance: feedbackType === FEEDBACK_TYPE_NEGATIVE ? nonConformance : "",
+      nonConformance:
+        feedbackType === FEEDBACK_TYPE_NEGATIVE ? nonConformance : "",
       nonConformanceReference:
         feedbackType === FEEDBACK_TYPE_NEGATIVE &&
         nonConformance === "yes" &&
@@ -269,7 +273,7 @@ const Feedback = () => {
     } catch (err) {
       showSnackbar(
         err.response?.data?.message || "Failed to add feedback",
-        "error"
+        "error",
       );
     }
   };
@@ -278,12 +282,12 @@ const Feedback = () => {
     if (!record.receivedBy) return "—";
     const user = users.find((u) => u._id === record.receivedBy);
     return user
-      ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || record.receivedBy
+      ? `${user.firstName || ""} ${user.lastName || ""}`.trim() ||
+          record.receivedBy
       : record.receivedBy;
   };
 
-  const showNonConformanceSection =
-    feedbackType === FEEDBACK_TYPE_NEGATIVE;
+  const showNonConformanceSection = feedbackType === FEEDBACK_TYPE_NEGATIVE;
   const showNonConformanceRef =
     feedbackType === FEEDBACK_TYPE_NEGATIVE && nonConformance === "yes";
 
@@ -339,7 +343,9 @@ const Feedback = () => {
             <TableContainer>
               <Table>
                 <TableHead>
-                  <TableRow sx={{ backgroundColor: theme.palette.primary.main }}>
+                  <TableRow
+                    sx={{ backgroundColor: theme.palette.primary.main }}
+                  >
                     <TableCell sx={{ color: "white", fontWeight: "bold" }}>
                       Date
                     </TableCell>
@@ -381,9 +387,18 @@ const Feedback = () => {
       </Box>
 
       {/* Add Feedback Modal */}
-      <Dialog open={modalOpen} onClose={handleCloseModal} maxWidth="sm" fullWidth>
+      <Dialog
+        open={modalOpen}
+        onClose={handleCloseModal}
+        maxWidth="sm"
+        fullWidth
+      >
         <DialogTitle>
-          <Box display="flex" justifyContent="space-between" alignItems="center">
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+          >
             <Typography variant="h6">Add Feedback</Typography>
             <IconButton onClick={handleCloseModal} size="small">
               <CloseIcon />
@@ -429,7 +444,10 @@ const Feedback = () => {
               value={feedbackDescription}
               onChange={(e) => {
                 setFeedbackDescription(e.target.value);
-                setFormErrors((prev) => ({ ...prev, feedbackDescription: null }));
+                setFormErrors((prev) => ({
+                  ...prev,
+                  feedbackDescription: null,
+                }));
               }}
               multiline
               rows={4}
@@ -438,7 +456,10 @@ const Feedback = () => {
               helperText={formErrors.feedbackDescription}
               InputProps={{
                 endAdornment: (
-                  <InputAdornment position="end" sx={{ alignSelf: "flex-end", mb: 1 }}>
+                  <InputAdornment
+                    position="end"
+                    sx={{ alignSelf: "flex-end", mb: 1 }}
+                  >
                     <IconButton
                       onClick={isDictating ? stopDictation : startDictation}
                       color={isDictating ? "error" : "primary"}
@@ -518,14 +539,19 @@ const Feedback = () => {
                   value={nonConformance}
                   onChange={(e) => {
                     setNonConformance(e.target.value);
-                    if (e.target.value !== "yes") setNonConformanceRefSuffix("");
+                    if (e.target.value !== "yes")
+                      setNonConformanceRefSuffix("");
                     setFormErrors((prev) => ({
                       ...prev,
                       nonConformanceRefSuffix: null,
                     }));
                   }}
                 >
-                  <FormControlLabel value="yes" control={<Radio />} label="Yes" />
+                  <FormControlLabel
+                    value="yes"
+                    control={<Radio />}
+                    label="Yes"
+                  />
                   <FormControlLabel value="no" control={<Radio />} label="No" />
                 </RadioGroup>
               </FormControl>
@@ -572,7 +598,8 @@ const Feedback = () => {
                 </MenuItem>
                 {users.map((u) => (
                   <MenuItem key={u._id} value={u._id}>
-                    {[u.firstName, u.lastName].filter(Boolean).join(" ") || "Unknown"}
+                    {[u.firstName, u.lastName].filter(Boolean).join(" ") ||
+                      "Unknown"}
                   </MenuItem>
                 ))}
               </Select>

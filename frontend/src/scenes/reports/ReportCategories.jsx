@@ -24,7 +24,8 @@ const categories = [
     id: "asbestos-removal-jobs",
     title: "Air Monitoring and Clearances",
     icon: AsbestosRemovalIcon,
-    description: "Access air monitoring shifts and clearance reports for asbestos removal",
+    description:
+      "Access air monitoring shifts and clearance reports for asbestos removal",
     color: "#ff9800", // orange-500
   },
   {
@@ -52,11 +53,11 @@ const ReportCategories = ({
 
   // Filter categories to only show those with available reports
   const filteredCategories = categories.filter((category) =>
-    availableCategories.includes(category.id)
+    availableCategories.includes(category.id),
   );
 
   return (
-    <Grid container spacing={3}>
+    <Grid container spacing={{ xs: 1.5, sm: 3 }}>
       {filteredCategories.map((category) => (
         <Grid item xs={12} sm={6} md={4} key={category.id}>
           <Card

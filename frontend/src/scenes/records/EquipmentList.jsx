@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import {
   Box,
   Typography,
@@ -119,9 +125,9 @@ const EquipmentList = () => {
         ? new Date(
             Math.max(
               ...calibrations.map((cal) =>
-                new Date(cal.calibrationDate || cal.date).getTime()
-              )
-            )
+                new Date(cal.calibrationDate || cal.date).getTime(),
+              ),
+            ),
           )
         : null;
 
@@ -134,20 +140,22 @@ const EquipmentList = () => {
                 .filter((cal) => cal.nextCalibrationDue || cal.calibrationDue)
                 .map((cal) =>
                   new Date(
-                    cal.nextCalibrationDue || cal.calibrationDue
-                  ).getTime()
-                )
-            )
+                    cal.nextCalibrationDue || cal.calibrationDue,
+                  ).getTime(),
+                ),
+            ),
           )
         : null;
 
     // Get the most recent calibration for status checking
-    const mostRecentCalibration = calibrations.length > 0
-      ? calibrations.sort(
-          (a, b) =>
-            new Date(b.calibrationDate || b.date) - new Date(a.calibrationDate || a.date)
-        )[0]
-      : null;
+    const mostRecentCalibration =
+      calibrations.length > 0
+        ? calibrations.sort(
+            (a, b) =>
+              new Date(b.calibrationDate || b.date) -
+              new Date(a.calibrationDate || a.date),
+          )[0]
+        : null;
 
     return {
       ...pump,
@@ -169,14 +177,15 @@ const EquipmentList = () => {
         case "Site flowmeter":
         case "Bubble flowmeter":
           try {
-            const response = await flowmeterCalibrationService.getByFlowmeter(
-              equipmentReference
-            );
+            const response =
+              await flowmeterCalibrationService.getByFlowmeter(
+                equipmentReference,
+              );
             calibrations = response.data || response || [];
           } catch (err) {
             console.error(
               `Error fetching flowmeter calibrations for ${equipmentReference}:`,
-              err
+              err,
             );
           }
           break;
@@ -185,21 +194,21 @@ const EquipmentList = () => {
           try {
             const allData = await graticuleService.getAll();
             // Handle response structure: { data: [...], pagination: {...} } or direct array
-            const calibrationsArray = Array.isArray(allData?.data) 
-              ? allData.data 
-              : Array.isArray(allData) 
-                ? allData 
+            const calibrationsArray = Array.isArray(allData?.data)
+              ? allData.data
+              : Array.isArray(allData)
+                ? allData
                 : [];
             const filtered = calibrationsArray.filter(
               (cal) =>
                 cal.graticuleId === equipmentReference ||
-                cal.graticuleReference === equipmentReference
+                cal.graticuleReference === equipmentReference,
             );
             calibrations = filtered;
           } catch (err) {
             console.error(
               `Error fetching graticule calibrations for ${equipmentReference}:`,
-              err
+              err,
             );
           }
           break;
@@ -211,63 +220,59 @@ const EquipmentList = () => {
           } catch (err) {
             console.error(
               `Error fetching EFA calibrations for ${equipmentReference}:`,
-              err
+              err,
             );
           }
           break;
 
         case "Phase Contrast Microscope":
           try {
-            const pcmData = await pcmMicroscopeService.getByEquipment(
-              equipmentReference
-            );
+            const pcmData =
+              await pcmMicroscopeService.getByEquipment(equipmentReference);
             calibrations = pcmData.calibrations || pcmData || [];
           } catch (err) {
             console.error(
               `Error fetching PCM calibrations for ${equipmentReference}:`,
-              err
+              err,
             );
           }
           break;
 
         case "Polarised Light Microscope":
           try {
-            const plmData = await plmMicroscopeService.getByEquipment(
-              equipmentReference
-            );
+            const plmData =
+              await plmMicroscopeService.getByEquipment(equipmentReference);
             calibrations = plmData.calibrations || plmData || [];
           } catch (err) {
             console.error(
               `Error fetching PLM calibrations for ${equipmentReference}:`,
-              err
+              err,
             );
           }
           break;
 
         case "Stereomicroscope":
           try {
-            const stereoData = await stereomicroscopeService.getByEquipment(
-              equipmentReference
-            );
+            const stereoData =
+              await stereomicroscopeService.getByEquipment(equipmentReference);
             calibrations = stereoData.calibrations || stereoData || [];
           } catch (err) {
             console.error(
               `Error fetching Stereomicroscope calibrations for ${equipmentReference}:`,
-              err
+              err,
             );
           }
           break;
 
         case "HSE Test Slide":
           try {
-            const hseData = await hseTestSlideService.getByEquipment(
-              equipmentReference
-            );
+            const hseData =
+              await hseTestSlideService.getByEquipment(equipmentReference);
             calibrations = hseData.data || hseData || [];
           } catch (err) {
             console.error(
               `Error fetching HSE Test Slide calibrations for ${equipmentReference}:`,
-              err
+              err,
             );
           }
           break;
@@ -279,7 +284,7 @@ const EquipmentList = () => {
           // Return empty array to avoid individual fetch (bulk fetch should handle all pumps)
           calibrations = [];
           console.warn(
-            `Air pump ${equipmentReference} not found in bulk fetch results. This should not happen during initial load.`
+            `Air pump ${equipmentReference} not found in bulk fetch results. This should not happen during initial load.`,
           );
           break;
 
@@ -300,7 +305,7 @@ const EquipmentList = () => {
           .filter((date) => !isNaN(date.getTime()));
         if (calibrationDates.length > 0) {
           lastCalibration = new Date(
-            Math.max(...calibrationDates.map((d) => d.getTime()))
+            Math.max(...calibrationDates.map((d) => d.getTime())),
           );
         }
 
@@ -316,7 +321,7 @@ const EquipmentList = () => {
           .filter((date) => date && !isNaN(date.getTime()));
         if (dueDates.length > 0) {
           calibrationDue = new Date(
-            Math.max(...dueDates.map((d) => d.getTime()))
+            Math.max(...dueDates.map((d) => d.getTime())),
           );
         }
       }
@@ -329,7 +334,7 @@ const EquipmentList = () => {
     } catch (err) {
       console.error(
         `Error fetching calibration data for ${equipmentItem.equipmentReference}:`,
-        err
+        err,
       );
       // Return equipment without calibration data if fetch fails
       return {
@@ -341,100 +346,131 @@ const EquipmentList = () => {
   };
 
   // Fetch full equipment list and cache it (only fetch once or when explicitly needed)
-  const fetchEquipment = useCallback(async (forceRefresh = false) => {
-    // If we have already loaded and not forcing refresh, skip
-    if (hasLoadedRef.current && !forceRefresh) {
-      console.log("EquipmentList: Skipping fetch - already loaded and not forcing refresh");
-      return;
-    }
-
-    console.log("EquipmentList: Starting fetchEquipment, forceRefresh:", forceRefresh);
-    try {
-      setLoading(true);
-      setError(null);
-
-      // Fetch all equipment (no filters) to build cache
-      console.log("EquipmentList: Fetching all equipment...");
-      const response = await equipmentService.getAll({
-        limit: 1000, // Get a large number to cache everything
-      });
-      const baseEquipment = response.equipment || [];
-      console.log(`EquipmentList: Fetched ${baseEquipment.length} equipment items`);
-
-      // Separate air pumps from other equipment for bulk fetching
-      const airPumps = baseEquipment.filter(
-        (eq) => eq.equipmentType === "Air pump"
-      );
-      const otherEquipment = baseEquipment.filter(
-        (eq) => eq.equipmentType !== "Air pump"
-      );
-
-      // Bulk fetch calibrations for all air pumps at once
-      let pumpCalibrationsMap = {};
-      if (airPumps.length > 0) {
-        try {
-          console.log(`EquipmentList: Bulk fetching calibrations for ${airPumps.length} air pumps`);
-          const pumpIds = airPumps.map((pump) => pump._id?.toString() || pump._id);
-          console.log("EquipmentList: Pump IDs:", pumpIds);
-          const bulkCalibrations =
-            await airPumpCalibrationService.getBulkPumpCalibrations(
-              pumpIds,
-              1000
-            );
-          console.log("EquipmentList: Bulk calibrations response:", bulkCalibrations);
-          // Convert to map keyed by pump _id string
-          if (bulkCalibrations && typeof bulkCalibrations === 'object') {
-            Object.keys(bulkCalibrations).forEach((pumpId) => {
-              pumpCalibrationsMap[pumpId] = bulkCalibrations[pumpId];
-            });
-            console.log(`EquipmentList: Mapped calibrations for ${Object.keys(pumpCalibrationsMap).length} pumps`);
-          }
-        } catch (err) {
-          console.error("EquipmentList: Error bulk fetching pump calibrations:", err);
-          console.error("EquipmentList: Error details:", err.response?.data || err.message);
-          // Continue with empty map - individual fetches will handle errors
-        }
-      } else {
-        console.log("EquipmentList: No air pumps found, skipping bulk fetch");
+  const fetchEquipment = useCallback(
+    async (forceRefresh = false) => {
+      // If we have already loaded and not forcing refresh, skip
+      if (hasLoadedRef.current && !forceRefresh) {
+        console.log(
+          "EquipmentList: Skipping fetch - already loaded and not forcing refresh",
+        );
+        return;
       }
 
-      // Process air pumps with bulk-fetched calibrations
-      const airPumpsWithCalibrations = await Promise.all(
-        airPumps.map(async (pump) => {
-          // Convert pump._id to string to match backend response keys
-          const pumpIdString = pump._id?.toString() || pump._id;
-          const calibrations = pumpCalibrationsMap[pumpIdString] || [];
-          if (calibrations.length === 0) {
-            console.log(`EquipmentList: No calibrations found for pump ${pump.equipmentReference} (ID: ${pumpIdString})`);
-          } else {
-            console.log(`EquipmentList: Found ${calibrations.length} calibrations for pump ${pump.equipmentReference}`);
+      console.log(
+        "EquipmentList: Starting fetchEquipment, forceRefresh:",
+        forceRefresh,
+      );
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Fetch all equipment (no filters) to build cache
+        console.log("EquipmentList: Fetching all equipment...");
+        const response = await equipmentService.getAll({
+          limit: 1000, // Get a large number to cache everything
+        });
+        const baseEquipment = response.equipment || [];
+        console.log(
+          `EquipmentList: Fetched ${baseEquipment.length} equipment items`,
+        );
+
+        // Separate air pumps from other equipment for bulk fetching
+        const airPumps = baseEquipment.filter(
+          (eq) => eq.equipmentType === "Air pump",
+        );
+        const otherEquipment = baseEquipment.filter(
+          (eq) => eq.equipmentType !== "Air pump",
+        );
+
+        // Bulk fetch calibrations for all air pumps at once
+        let pumpCalibrationsMap = {};
+        if (airPumps.length > 0) {
+          try {
+            console.log(
+              `EquipmentList: Bulk fetching calibrations for ${airPumps.length} air pumps`,
+            );
+            const pumpIds = airPumps.map(
+              (pump) => pump._id?.toString() || pump._id,
+            );
+            console.log("EquipmentList: Pump IDs:", pumpIds);
+            const bulkCalibrations =
+              await airPumpCalibrationService.getBulkPumpCalibrations(
+                pumpIds,
+                1000,
+              );
+            console.log(
+              "EquipmentList: Bulk calibrations response:",
+              bulkCalibrations,
+            );
+            // Convert to map keyed by pump _id string
+            if (bulkCalibrations && typeof bulkCalibrations === "object") {
+              Object.keys(bulkCalibrations).forEach((pumpId) => {
+                pumpCalibrationsMap[pumpId] = bulkCalibrations[pumpId];
+              });
+              console.log(
+                `EquipmentList: Mapped calibrations for ${Object.keys(pumpCalibrationsMap).length} pumps`,
+              );
+            }
+          } catch (err) {
+            console.error(
+              "EquipmentList: Error bulk fetching pump calibrations:",
+              err,
+            );
+            console.error(
+              "EquipmentList: Error details:",
+              err.response?.data || err.message,
+            );
+            // Continue with empty map - individual fetches will handle errors
           }
-          return processPumpCalibrations(pump, calibrations);
-        })
-      );
+        } else {
+          console.log("EquipmentList: No air pumps found, skipping bulk fetch");
+        }
 
-      // Process other equipment types (individual fetches as before)
-      const otherEquipmentWithCalibrations = await Promise.all(
-        otherEquipment.map((equipmentItem) =>
-          fetchCalibrationDataForEquipment(equipmentItem)
-        )
-      );
+        // Process air pumps with bulk-fetched calibrations
+        const airPumpsWithCalibrations = await Promise.all(
+          airPumps.map(async (pump) => {
+            // Convert pump._id to string to match backend response keys
+            const pumpIdString = pump._id?.toString() || pump._id;
+            const calibrations = pumpCalibrationsMap[pumpIdString] || [];
+            if (calibrations.length === 0) {
+              console.log(
+                `EquipmentList: No calibrations found for pump ${pump.equipmentReference} (ID: ${pumpIdString})`,
+              );
+            } else {
+              console.log(
+                `EquipmentList: Found ${calibrations.length} calibrations for pump ${pump.equipmentReference}`,
+              );
+            }
+            return processPumpCalibrations(pump, calibrations);
+          }),
+        );
 
-      // Combine and cache the full equipment list
-      const equipmentWithCalibrations = [
-        ...airPumpsWithCalibrations,
-        ...otherEquipmentWithCalibrations,
-      ];
-      console.log(`EquipmentList: Caching ${equipmentWithCalibrations.length} equipment items (${airPumpsWithCalibrations.length} air pumps, ${otherEquipmentWithCalibrations.length} other)`);
-      setCachedEquipment(equipmentWithCalibrations);
-      hasLoadedRef.current = true;
-    } catch (err) {
-      console.error("Error fetching equipment:", err);
-      setError(err.message || "Failed to fetch equipment");
-    } finally {
-      setLoading(false);
-    }
-  }, [processPumpCalibrations]); // Stable callback - uses ref to track load state
+        // Process other equipment types (individual fetches as before)
+        const otherEquipmentWithCalibrations = await Promise.all(
+          otherEquipment.map((equipmentItem) =>
+            fetchCalibrationDataForEquipment(equipmentItem),
+          ),
+        );
+
+        // Combine and cache the full equipment list
+        const equipmentWithCalibrations = [
+          ...airPumpsWithCalibrations,
+          ...otherEquipmentWithCalibrations,
+        ];
+        console.log(
+          `EquipmentList: Caching ${equipmentWithCalibrations.length} equipment items (${airPumpsWithCalibrations.length} air pumps, ${otherEquipmentWithCalibrations.length} other)`,
+        );
+        setCachedEquipment(equipmentWithCalibrations);
+        hasLoadedRef.current = true;
+      } catch (err) {
+        console.error("Error fetching equipment:", err);
+        setError(err.message || "Failed to fetch equipment");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [processPumpCalibrations],
+  ); // Stable callback - uses ref to track load state
 
   const handleFilterChange = (field, value) => {
     setFilters((prev) => ({ ...prev, [field]: value }));
@@ -450,7 +486,7 @@ const EquipmentList = () => {
     const handleEquipmentDataUpdate = (event) => {
       console.log(
         "Equipment data updated, refreshing Equipment List:",
-        event.detail
+        event.detail,
       );
       fetchEquipment(true); // Force refresh equipment data cache
       fetchCalibrationFrequencies(); // Also refresh calibration frequencies
@@ -461,7 +497,7 @@ const EquipmentList = () => {
     return () => {
       window.removeEventListener(
         "equipmentDataUpdated",
-        handleEquipmentDataUpdate
+        handleEquipmentDataUpdate,
       );
     };
   }, []); // Empty deps - fetchEquipment is stable
@@ -607,7 +643,7 @@ const EquipmentList = () => {
               await airPumpCalibrationService.getPumpCalibrations(
                 equipment._id,
                 1,
-                1000
+                1000,
               );
             console.log("Pump calibration data:", pumpData); // Debug log
             const calibrations = pumpData.data || pumpData || [];
@@ -616,7 +652,7 @@ const EquipmentList = () => {
             if (calibrations.length === 0) {
               console.log(
                 "No calibrations found for pump:",
-                equipment.equipmentReference
+                equipment.equipmentReference,
               );
             }
 
@@ -637,7 +673,7 @@ const EquipmentList = () => {
             setError(
               `Failed to fetch calibration history: ${
                 err.response?.data?.message || err.message || "Unknown error"
-              }`
+              }`,
             );
           }
           break;
@@ -647,7 +683,7 @@ const EquipmentList = () => {
           try {
             const flowmeterData =
               await flowmeterCalibrationService.getByFlowmeter(
-                equipmentReference
+                equipmentReference,
               );
             history = (flowmeterData.calibrations || flowmeterData || []).map(
               (cal) => ({
@@ -656,7 +692,7 @@ const EquipmentList = () => {
                 notes: cal.notes || "",
                 calibratedBy: cal.calibratedBy?.name || "N/A",
                 type: "Flowmeter Calibration",
-              })
+              }),
             );
           } catch (err) {
             console.error("Error fetching flowmeter calibrations:", err);
@@ -680,9 +716,8 @@ const EquipmentList = () => {
 
         case "Phase Contrast Microscope":
           try {
-            const pcmData = await pcmMicroscopeService.getByEquipment(
-              equipmentReference
-            );
+            const pcmData =
+              await pcmMicroscopeService.getByEquipment(equipmentReference);
             history = (pcmData.calibrations || pcmData || []).map((cal) => ({
               date: cal.date,
               calibrationId: cal.calibrationId || cal._id,
@@ -697,9 +732,8 @@ const EquipmentList = () => {
 
         case "Polarised Light Microscope":
           try {
-            const plmData = await plmMicroscopeService.getByEquipment(
-              equipmentReference
-            );
+            const plmData =
+              await plmMicroscopeService.getByEquipment(equipmentReference);
             history = (plmData.calibrations || plmData || []).map((cal) => ({
               date: cal.date,
               calibrationId: cal.calibrationId || cal._id,
@@ -714,9 +748,8 @@ const EquipmentList = () => {
 
         case "Stereomicroscope":
           try {
-            const stereoData = await stereomicroscopeService.getByEquipment(
-              equipmentReference
-            );
+            const stereoData =
+              await stereomicroscopeService.getByEquipment(equipmentReference);
             history = (stereoData.calibrations || stereoData || []).map(
               (cal) => ({
                 date: cal.date,
@@ -724,7 +757,7 @@ const EquipmentList = () => {
                 notes: cal.notes || "",
                 calibratedBy: cal.calibratedBy?.name || "N/A",
                 type: "Stereomicroscope Calibration",
-              })
+              }),
             );
           } catch (err) {
             console.error("Error fetching Stereomicroscope calibrations:", err);
@@ -734,28 +767,27 @@ const EquipmentList = () => {
         case "Graticule":
           try {
             // Try to get archived calibrations first, then active ones
-            const archivedData = await graticuleService.getArchivedByEquipment(
-              equipmentReference
-            );
+            const archivedData =
+              await graticuleService.getArchivedByEquipment(equipmentReference);
             const allData = await graticuleService.getAll();
             // Handle response structure: { data: [...], pagination: {...} } or direct array
-            const calibrationsArray = Array.isArray(allData?.data) 
-              ? allData.data 
-              : Array.isArray(allData) 
-                ? allData 
+            const calibrationsArray = Array.isArray(allData?.data)
+              ? allData.data
+              : Array.isArray(allData)
+                ? allData
                 : [];
             const filtered = calibrationsArray.filter(
               (cal) =>
                 cal.graticuleId === equipmentReference ||
-                cal.graticuleReference === equipmentReference
+                cal.graticuleReference === equipmentReference,
             );
             // Handle archived data structure similarly
-            const archived = Array.isArray(archivedData?.data) 
-              ? archivedData.data 
-              : Array.isArray(archivedData?.calibrations) 
-                ? archivedData.calibrations 
-                : Array.isArray(archivedData) 
-                  ? archivedData 
+            const archived = Array.isArray(archivedData?.data)
+              ? archivedData.data
+              : Array.isArray(archivedData?.calibrations)
+                ? archivedData.calibrations
+                : Array.isArray(archivedData)
+                  ? archivedData
                   : [];
             const combined = [...filtered, ...archived];
             history = combined.map((cal) => ({
@@ -791,7 +823,7 @@ const EquipmentList = () => {
       setError(
         err.response?.data?.message ||
           err.message ||
-          "Failed to fetch calibration history"
+          "Failed to fetch calibration history",
       );
     } finally {
       setLoadingHistory(false);
@@ -841,14 +873,14 @@ const EquipmentList = () => {
     // For Air pumps, check if the most recent calibration has all flowrates failing
     // If all test results failed, the pump should be Out-of-Service
     // This check must happen BEFORE checking if calibration is overdue
-    if (equipment.equipmentType === "Air pump" && equipment.mostRecentCalibration) {
+    if (
+      equipment.equipmentType === "Air pump" &&
+      equipment.mostRecentCalibration
+    ) {
       const mostRecentCal = equipment.mostRecentCalibration;
-      if (
-        mostRecentCal.testResults &&
-        mostRecentCal.testResults.length > 0
-      ) {
+      if (mostRecentCal.testResults && mostRecentCal.testResults.length > 0) {
         const allFailed = mostRecentCal.testResults.every(
-          (result) => !result.passed
+          (result) => !result.passed,
         );
         if (allFailed) {
           return "Out-of-Service";
@@ -888,7 +920,8 @@ const EquipmentList = () => {
 
   const getCalibrationFrequencyOptions = (equipmentType) => {
     return calibrationFrequencies.filter(
-      (freq) => freq.equipmentType.toLowerCase() === equipmentType.toLowerCase()
+      (freq) =>
+        freq.equipmentType.toLowerCase() === equipmentType.toLowerCase(),
     );
   };
 
@@ -904,7 +937,7 @@ const EquipmentList = () => {
       (item) =>
         item.equipmentReference?.toLowerCase() ===
           trimmedReference.toLowerCase() &&
-        (!excludeId || item._id !== excludeId)
+        (!excludeId || item._id !== excludeId),
     );
 
     if (existing) {
@@ -930,7 +963,7 @@ const EquipmentList = () => {
   const equipmentWithStatus = useMemo(() => {
     // Always use cached equipment if available
     const sourceEquipment = cachedEquipment.length > 0 ? cachedEquipment : [];
-    
+
     return sourceEquipment.map((item) => ({
       ...item,
       calculatedStatus: calculateStatus(item),
@@ -1266,7 +1299,7 @@ const EquipmentList = () => {
                   return "-";
                 }
                 const daysUntil = calculateDaysUntilCalibration(
-                  params.row.calibrationDue
+                  params.row.calibrationDue,
                 );
 
                 let daysText;
@@ -1313,13 +1346,17 @@ const EquipmentList = () => {
               minWidth: 200,
               renderCell: ({ row }) => {
                 const isAirPump = row.equipmentType === "Air pump";
-                
+
                 return (
                   <Box display="flex" alignItems="center" gap={1}>
                     {isAirPump ? (
                       <IconButton
                         size="small"
-                        onClick={() => navigate(`/records/laboratory/calibrations/pump/${row.equipmentReference}`)}
+                        onClick={() =>
+                          navigate(
+                            `/records/laboratory/calibrations/pump/${row.equipmentReference}`,
+                          )
+                        }
                         title="View Calibration History"
                         sx={{ color: theme.palette.info.main }}
                       >
@@ -1878,7 +1915,10 @@ const EquipmentList = () => {
               </Typography>
               {equipmentToArchive.brandModel && (
                 <>
-                  <Typography variant="body2" sx={{ fontWeight: "bold", mb: 1 }}>
+                  <Typography
+                    variant="body2"
+                    sx={{ fontWeight: "bold", mb: 1 }}
+                  >
                     Brand/Model:
                   </Typography>
                   <Typography variant="body1">
@@ -1912,7 +1952,6 @@ const EquipmentList = () => {
           </Button>
         </DialogActions>
       </Dialog>
-
     </Box>
   );
 };

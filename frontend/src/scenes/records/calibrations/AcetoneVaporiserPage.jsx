@@ -45,7 +45,7 @@ const AcetoneVaporiserPage = () => {
 
   const [calibrations, setCalibrations] = useState([]);
   const [loading, setLoading] = useState(true);
-  
+
   // Dialog and form state
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [vaporisers, setVaporisers] = useState([]);
@@ -54,7 +54,7 @@ const AcetoneVaporiserPage = () => {
   const [techniciansLoading, setTechniciansLoading] = useState(false);
   const [formError, setFormError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
-  
+
   const [formData, setFormData] = useState({
     equipmentId: "",
     date: formatDateForInput(new Date()),
@@ -73,7 +73,7 @@ const AcetoneVaporiserPage = () => {
   useEffect(() => {
     if (addDialogOpen && currentUser && technicians.length > 0) {
       const currentUserInList = technicians.find(
-        (tech) => tech._id === currentUser._id
+        (tech) => tech._id === currentUser._id,
       );
       if (currentUserInList) {
         setFormData((prev) => ({
@@ -87,21 +87,21 @@ const AcetoneVaporiserPage = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      
+
       // Fetch all acetone vaporiser calibrations
       const response = await acetoneVaporiserCalibrationService.getAll({
         limit: 1000,
-        sortBy: 'date',
-        sortOrder: 'desc'
+        sortBy: "date",
+        sortOrder: "desc",
       });
-      
+
       const calibrationData = response.data || [];
-      
+
       // Transform data for display
       const transformedCalibrations = calibrationData.map((cal) => ({
         id: cal._id,
         _id: cal._id,
-        vaporiserId: cal.vaporiserReference || '',
+        vaporiserId: cal.vaporiserReference || "",
         vaporiserEquipmentId: cal.vaporiserId,
         date: cal.date,
         temperature: cal.temperature,
@@ -121,7 +121,8 @@ const AcetoneVaporiserPage = () => {
 
         if (
           !calibrationsByEquipment[equipmentIdStr] ||
-          new Date(cal.date) > new Date(calibrationsByEquipment[equipmentIdStr].date)
+          new Date(cal.date) >
+            new Date(calibrationsByEquipment[equipmentIdStr].date)
         ) {
           calibrationsByEquipment[equipmentIdStr] = cal;
         }
@@ -146,11 +147,13 @@ const AcetoneVaporiserPage = () => {
         equipmentType: "Acetone Vaporiser",
         limit: 1000,
       });
-      
+
       const equipment = response.equipment || [];
-      setVaporisers(equipment.sort((a, b) =>
-        a.equipmentReference.localeCompare(b.equipmentReference)
-      ));
+      setVaporisers(
+        equipment.sort((a, b) =>
+          a.equipmentReference.localeCompare(b.equipmentReference),
+        ),
+      );
     } catch (error) {
       console.error("Error fetching vaporisers:", error);
       setVaporisers([]);
@@ -164,21 +167,22 @@ const AcetoneVaporiserPage = () => {
       setTechniciansLoading(true);
       const response = await userService.getAll();
       const allUsers = response.data || response || [];
-      
+
       // Filter users who have signatory=true OR calibration approval=true
       const technicianUsers = allUsers.filter(
         (user) =>
           user.isActive &&
-          (user.labSignatory === true || user.labApprovals?.calibrations === true)
+          (user.labSignatory === true ||
+            user.labApprovals?.calibrations === true),
       );
-      
+
       // Sort alphabetically by name
       const sortedUsers = technicianUsers.sort((a, b) => {
         const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
         const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
         return nameA.localeCompare(nameB);
       });
-      
+
       setTechnicians(sortedUsers);
     } catch (error) {
       console.error("Error fetching technicians:", error);
@@ -243,22 +247,25 @@ const AcetoneVaporiserPage = () => {
 
     try {
       setSubmitting(true);
-      
+
       const calibrationData = {
         equipmentId: formData.equipmentId,
         date: formData.date,
         temperature: parseFloat(formData.temperature),
         technicianId: formData.technicianId,
-        notes: formData.notes || '',
+        notes: formData.notes || "",
       };
-      
+
       await acetoneVaporiserCalibrationService.create(calibrationData);
-      
+
       handleDialogClose();
       fetchData();
     } catch (error) {
       console.error("Error submitting calibration:", error);
-      const errorMessage = error.response?.data?.message || error.message || "Failed to save calibration";
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to save calibration";
       setFormError(errorMessage);
     } finally {
       setSubmitting(false);
@@ -270,24 +277,35 @@ const AcetoneVaporiserPage = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this calibration record?")) {
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this calibration record?",
+      )
+    ) {
       return;
     }
-    
+
     try {
       await acetoneVaporiserCalibrationService.delete(id);
       fetchData();
     } catch (error) {
       console.error("Error deleting calibration:", error);
-      alert(error.response?.data?.message || error.message || "Failed to delete calibration");
+      alert(
+        error.response?.data?.message ||
+          error.message ||
+          "Failed to delete calibration",
+      );
     }
   };
 
   const handleViewHistory = (calibration) => {
     // Navigate to history page for this equipment
-    const equipmentId = calibration.equipmentId || calibration.vaporiserEquipmentId;
+    const equipmentId =
+      calibration.equipmentId || calibration.vaporiserEquipmentId;
     if (equipmentId) {
-      navigate(`/records/laboratory/calibrations/acetone-vaporiser/${equipmentId}`);
+      navigate(
+        `/records/laboratory/calibrations/acetone-vaporiser/${equipmentId}`,
+      );
     }
   };
 
@@ -417,7 +435,11 @@ const AcetoneVaporiserPage = () => {
         <Box component="form" onSubmit={handleSubmit}>
           <DialogContent>
             {formError && (
-              <Alert severity="error" sx={{ mb: 2 }} onClose={() => setFormError(null)}>
+              <Alert
+                severity="error"
+                sx={{ mb: 2 }}
+                onClose={() => setFormError(null)}
+              >
                 {formError}
               </Alert>
             )}
@@ -450,7 +472,12 @@ const AcetoneVaporiserPage = () => {
               </FormControl>
 
               <Box>
-                <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                <Box
+                  display="flex"
+                  justifyContent="space-between"
+                  alignItems="center"
+                  mb={1}
+                >
                   <TextField
                     fullWidth
                     label="Calibration Date"

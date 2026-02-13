@@ -129,7 +129,7 @@ const ProjectReports = () => {
         dates.map((date) => {
           const d = new Date(date);
           return d.toISOString().split("T")[0]; // Get YYYY-MM-DD format
-        })
+        }),
       ),
     ].sort();
 
@@ -172,7 +172,8 @@ const ProjectReports = () => {
 
   // Get auth context for admin check
   const { currentUser } = useAuth();
-  const isAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
+  const isAdmin =
+    currentUser?.role === "admin" || currentUser?.role === "super_admin";
 
   // Debug logging for admin check
   console.log("ProjectReports - currentUser:", currentUser);
@@ -218,7 +219,7 @@ const ProjectReports = () => {
       // Save back to localStorage
       localStorage.setItem(
         "recentProjectSearches",
-        JSON.stringify(limitedSearches)
+        JSON.stringify(limitedSearches),
       );
 
       // Dispatch a custom event to notify other components
@@ -238,9 +239,8 @@ const ProjectReports = () => {
 
       // Fetch active asbestos removal jobs
       try {
-        const { default: asbestosRemovalJobService } = await import(
-          "../../services/asbestosRemovalJobService"
-        );
+        const { default: asbestosRemovalJobService } =
+          await import("../../services/asbestosRemovalJobService");
         const jobsResponse = await asbestosRemovalJobService.getAll({
           projectId: projectId,
         });
@@ -248,7 +248,7 @@ const ProjectReports = () => {
         const activeAsbestosJobs = jobs.filter(
           (job) =>
             (job.projectId === projectId || job.projectId?._id === projectId) &&
-            job.status === "in_progress"
+            job.status === "in_progress",
         );
 
         // Fetch shifts for all asbestos removal jobs to get dates
@@ -262,7 +262,7 @@ const ProjectReports = () => {
           } catch (shiftError) {
             console.error(
               `Error fetching shifts for job ${job._id}:`,
-              shiftError
+              shiftError,
             );
           }
 
@@ -283,9 +283,8 @@ const ProjectReports = () => {
 
       // Fetch active client supplied jobs (fibre ID)
       try {
-        const { clientSuppliedJobsService } = await import(
-          "../../services/api"
-        );
+        const { clientSuppliedJobsService } =
+          await import("../../services/api");
         const clientJobsResponse = await clientSuppliedJobsService.getAll({
           projectId: projectId,
         });
@@ -293,7 +292,8 @@ const ProjectReports = () => {
         const activeClientJobs = clientJobs.filter(
           (job) =>
             (job.projectId === projectId || job.projectId?._id === projectId) &&
-            (job.status === "In Progress" || job.status === "Analysis Complete")
+            (job.status === "In Progress" ||
+              job.status === "Analysis Complete"),
         );
 
         activeClientJobs.forEach((job) => {
@@ -376,9 +376,8 @@ const ProjectReports = () => {
 
       // Check asbestos removal jobs (air monitoring + clearances) - only from completed jobs
       try {
-        const { default: asbestosRemovalJobService } = await import(
-          "../../services/asbestosRemovalJobService"
-        );
+        const { default: asbestosRemovalJobService } =
+          await import("../../services/asbestosRemovalJobService");
 
         // First check if there are any completed asbestos removal jobs for this project
         const completedJobsResponse = await asbestosRemovalJobService.getAll();
@@ -387,7 +386,7 @@ const ProjectReports = () => {
         const hasCompletedJobs = completedJobs.some(
           (job) =>
             (job.projectId === projectId || job.projectId?._id === projectId) &&
-            job.status === "completed"
+            job.status === "completed",
         );
 
         // Only check for reports if there are completed jobs
@@ -401,7 +400,7 @@ const ProjectReports = () => {
               headers: {
                 Authorization: `Bearer ${localStorage.getItem("token")}`,
               },
-            }
+            },
           );
 
           let hasAirMonitoring = false;
@@ -415,9 +414,8 @@ const ProjectReports = () => {
           // Check clearances using the dedicated endpoint
           let hasClearances = false;
           try {
-            const clearanceReports = await reportService.getClearanceReports(
-              projectId
-            );
+            const clearanceReports =
+              await reportService.getClearanceReports(projectId);
             hasClearances =
               clearanceReports &&
               Array.isArray(clearanceReports) &&
@@ -455,9 +453,8 @@ const ProjectReports = () => {
       // Check fibre count reports (client supplied jobs)
       try {
         // Check for completed fibre count reports
-        const fibreCountReports = await reportService.getFibreCountReports(
-          projectId
-        );
+        const fibreCountReports =
+          await reportService.getFibreCountReports(projectId);
         const hasCompletedReports =
           fibreCountReports &&
           Array.isArray(fibreCountReports) &&
@@ -481,7 +478,7 @@ const ProjectReports = () => {
             headers: {
               Authorization: `Bearer ${localStorage.getItem("token")}`,
             },
-          }
+          },
         );
 
         if (uploadedReportsResponse.ok) {
@@ -489,7 +486,7 @@ const ProjectReports = () => {
 
           // Add categories based on uploaded report types
           const uploadedCategories = uploadedReports.map(
-            (report) => report.reportType
+            (report) => report.reportType,
           );
           const uniqueUploadedCategories = [...new Set(uploadedCategories)];
 
@@ -565,7 +562,7 @@ const ProjectReports = () => {
             if (!assessmentReports || !Array.isArray(assessmentReports)) {
               console.warn(
                 "No assessment reports returned or invalid format:",
-                assessmentReports
+                assessmentReports,
               );
               reportsData = [];
               break;
@@ -598,7 +595,7 @@ const ProjectReports = () => {
                 headers: {
                   Authorization: `Bearer ${localStorage.getItem("token")}`,
                 },
-              }
+              },
             );
 
             if (airMonitoringResponse.ok) {
@@ -644,9 +641,8 @@ const ProjectReports = () => {
 
           // Get clearances for this project using the dedicated endpoint
           try {
-            const clearanceReports = await reportService.getClearanceReports(
-              projectId
-            );
+            const clearanceReports =
+              await reportService.getClearanceReports(projectId);
 
             if (
               clearanceReports &&
@@ -668,7 +664,7 @@ const ProjectReports = () => {
                   revision: clearance.revision || 0,
                   type: "clearance",
                   data: clearance,
-                })
+                }),
               );
 
               reportsData.push(...mappedClearanceReports);
@@ -680,9 +676,8 @@ const ProjectReports = () => {
           break;
 
         case "fibre-id":
-          const fibreIdReports = await reportService.getFibreIdReports(
-            projectId
-          );
+          const fibreIdReports =
+            await reportService.getFibreIdReports(projectId);
           reportsData = fibreIdReports.map((report) => ({
             id: report.id,
             date: report.date,
@@ -696,9 +691,8 @@ const ProjectReports = () => {
           break;
 
         case "fibre-count":
-          const fibreCountReports = await reportService.getFibreCountReports(
-            projectId
-          );
+          const fibreCountReports =
+            await reportService.getFibreCountReports(projectId);
           reportsData = fibreCountReports.map((report) => ({
             id: report.id,
             date: report.date,
@@ -725,7 +719,7 @@ const ProjectReports = () => {
             headers: {
               Authorization: `Bearer ${localStorage.getItem("token")}`,
             },
-          }
+          },
         );
 
         if (uploadedReportsResponse.ok) {
@@ -751,7 +745,7 @@ const ProjectReports = () => {
       } catch (error) {
         console.log(
           "No uploaded reports found for category:",
-          selectedCategory
+          selectedCategory,
         );
       }
 
@@ -786,12 +780,12 @@ const ProjectReports = () => {
         report.type === "shift"
           ? "Air Monitoring"
           : report.type === "clearance"
-          ? "Clearance"
-          : report.type === "fibre_id"
-          ? "Fibre ID"
-          : report.type === "asbestos_assessment"
-          ? "Asbestos Assessment"
-          : "Report";
+            ? "Clearance"
+            : report.type === "fibre_id"
+              ? "Fibre ID"
+              : report.type === "asbestos_assessment"
+                ? "Asbestos Assessment"
+                : "Report";
       showSnackbar(`Opening ${reportTypeName} report...`, "info");
 
       if (report.type === "shift") {
@@ -806,7 +800,7 @@ const ProjectReports = () => {
               return completeSample.data;
             }
             return sample;
-          })
+          }),
         );
 
         // Ensure project and client are fully populated
@@ -821,17 +815,16 @@ const ProjectReports = () => {
           typeof projectData.client === "string"
         ) {
           const clientResponse = await clientService.getById(
-            projectData.client
+            projectData.client,
           );
           projectData.client = clientResponse.data;
         }
 
         // Get the full job data with all necessary fields
-        const { default: asbestosRemovalJobService } = await import(
-          "../../services/asbestosRemovalJobService"
-        );
+        const { default: asbestosRemovalJobService } =
+          await import("../../services/asbestosRemovalJobService");
         const fullJobDataResponse = await asbestosRemovalJobService.getById(
-          job._id
+          job._id,
         );
         const fullJobData = fullJobDataResponse.data; // Extract the actual data from axios response
 
@@ -872,7 +865,7 @@ const ProjectReports = () => {
                 }
                 return sample.collectedBy || "";
               })
-              .filter(Boolean)
+              .filter(Boolean),
           ),
         ];
 
@@ -923,19 +916,16 @@ const ProjectReports = () => {
         });
       } else if (report.type === "clearance") {
         // Generate clearance report PDF using the new template system
-        const { generateHTMLTemplatePDF } = await import(
-          "../../utils/templatePDFGenerator"
-        );
+        const { generateHTMLTemplatePDF } =
+          await import("../../utils/templatePDFGenerator");
 
         // Get the full clearance data
-        const { default: asbestosClearanceService } = await import(
-          "../../services/asbestosClearanceService"
-        );
+        const { default: asbestosClearanceService } =
+          await import("../../services/asbestosClearanceService");
         // Use report.id or report.data.id (backend returns 'id', not '_id')
         const clearanceId = report.id || report.data?.id || report.data?._id;
-        const fullClearance = await asbestosClearanceService.getById(
-          clearanceId
-        );
+        const fullClearance =
+          await asbestosClearanceService.getById(clearanceId);
 
         // Debug logging to see what clearance data we're getting
         console.log("=== CLEARANCE DATA FROM REPORTS PAGE ===");
@@ -1001,7 +991,8 @@ const ProjectReports = () => {
         // Prepare sample items for the report
         const sampleItemsForReport = sampleItems
           .filter(
-            (item) => item.analysisData && item.analysisData.isAnalysed === true
+            (item) =>
+              item.analysisData && item.analysisData.isAnalysed === true,
           )
           .map((item, index) => ({
             itemNumber: index + 1,
@@ -1140,7 +1131,7 @@ const ProjectReports = () => {
       if (report.type !== "shift") {
         showSnackbar(
           "CSV export is only available for air monitoring reports",
-          "info"
+          "info",
         );
         return;
       }
@@ -1162,7 +1153,7 @@ const ProjectReports = () => {
             return completeSample.data;
           }
           return sample;
-        })
+        }),
       );
 
       // Get project data
@@ -1181,11 +1172,10 @@ const ProjectReports = () => {
       }
 
       // Get full job data
-      const { default: asbestosRemovalJobService } = await import(
-        "../../services/asbestosRemovalJobService"
-      );
+      const { default: asbestosRemovalJobService } =
+        await import("../../services/asbestosRemovalJobService");
       const fullJobDataResponse = await asbestosRemovalJobService.getById(
-        job._id
+        job._id,
       );
       const fullJobData = fullJobDataResponse.data;
 
@@ -1242,8 +1232,8 @@ const ProjectReports = () => {
         shift?.supervisor
           ? formatPersonName(shift.supervisor)
           : shift?.defaultSampler
-          ? formatPersonName(shift.defaultSampler)
-          : "",
+            ? formatPersonName(shift.defaultSampler)
+            : "",
       ]);
       csvRows.push(["Analysed By", shift?.analysedBy || ""]);
       csvRows.push([
@@ -1333,7 +1323,7 @@ const ProjectReports = () => {
       // Convert to CSV string
       const csvContent = csvRows
         .map((row) =>
-          row.length ? row.map((cell) => escapeCsvCell(cell)).join(",") : ""
+          row.length ? row.map((cell) => escapeCsvCell(cell)).join(",") : "",
         )
         .join("\r\n");
 
@@ -1377,14 +1367,14 @@ const ProjectReports = () => {
         report.type === "shift"
           ? "Air Monitoring"
           : report.type === "clearance"
-          ? "Clearance"
-          : report.type === "fibre_id"
-          ? "Fibre ID"
-          : report.type === "fibre_count"
-          ? "Fibre Count"
-          : report.type === "asbestos_assessment"
-          ? "Asbestos Assessment"
-          : "Report";
+            ? "Clearance"
+            : report.type === "fibre_id"
+              ? "Fibre ID"
+              : report.type === "fibre_count"
+                ? "Fibre Count"
+                : report.type === "asbestos_assessment"
+                  ? "Asbestos Assessment"
+                  : "Report";
       showSnackbar(`Downloading ${reportTypeName} report...`, "info");
       if (report.type === "shift") {
         const { shift, job } = report.data;
@@ -1397,7 +1387,7 @@ const ProjectReports = () => {
               return completeSample.data;
             }
             return sample;
-          })
+          }),
         );
 
         let projectData = job.projectId;
@@ -1411,17 +1401,16 @@ const ProjectReports = () => {
           typeof projectData.client === "string"
         ) {
           const clientResponse = await clientService.getById(
-            projectData.client
+            projectData.client,
           );
           projectData.client = clientResponse.data;
         }
 
         // Get the full job data with all necessary fields
-        const { default: asbestosRemovalJobService } = await import(
-          "../../services/asbestosRemovalJobService"
-        );
+        const { default: asbestosRemovalJobService } =
+          await import("../../services/asbestosRemovalJobService");
         const fullJobDataResponse = await asbestosRemovalJobService.getById(
-          job._id
+          job._id,
         );
         const fullJobData = fullJobDataResponse.data; // Extract the actual data from axios response
 
@@ -1456,7 +1445,7 @@ const ProjectReports = () => {
                 }
                 return sample.collectedBy || "";
               })
-              .filter(Boolean)
+              .filter(Boolean),
           ),
         ];
 
@@ -1497,19 +1486,16 @@ const ProjectReports = () => {
         });
       } else if (report.type === "clearance") {
         // Generate clearance report PDF using the new template system
-        const { generateHTMLTemplatePDF } = await import(
-          "../../utils/templatePDFGenerator"
-        );
+        const { generateHTMLTemplatePDF } =
+          await import("../../utils/templatePDFGenerator");
 
         // Get the full clearance data
-        const { default: asbestosClearanceService } = await import(
-          "../../services/asbestosClearanceService"
-        );
+        const { default: asbestosClearanceService } =
+          await import("../../services/asbestosClearanceService");
         // Use report.id or report.data.id (backend returns 'id', not '_id')
         const clearanceId = report.id || report.data?.id || report.data?._id;
-        const fullClearance = await asbestosClearanceService.getById(
-          clearanceId
-        );
+        const fullClearance =
+          await asbestosClearanceService.getById(clearanceId);
 
         // Debug logging to see what clearance data we're getting
         console.log("=== CLEARANCE DATA FROM REPORTS PAGE ===");
@@ -1574,7 +1560,8 @@ const ProjectReports = () => {
         // Prepare sample items for the report
         const sampleItemsForReport = sampleItems
           .filter(
-            (item) => item.analysisData && item.analysisData.isAnalysed === true
+            (item) =>
+              item.analysisData && item.analysisData.isAnalysed === true,
           )
           .map((item, index) => ({
             itemNumber: index + 1,
@@ -1728,7 +1715,7 @@ const ProjectReports = () => {
     if (report?.type === "clearance" && !revisionReason.trim()) {
       showSnackbar(
         "Please provide a reason for revising this clearance report.",
-        "error"
+        "error",
       );
       return;
     }
@@ -1740,9 +1727,8 @@ const ProjectReports = () => {
 
         if (shift && shift._id && job && job._id) {
           const { shiftService } = await import("../../services/api");
-          const { default: asbestosRemovalJobService } = await import(
-            "../../services/asbestosRemovalJobService"
-          );
+          const { default: asbestosRemovalJobService } =
+            await import("../../services/asbestosRemovalJobService");
 
           // Get current shift data to increment revision count
           const currentShift = await shiftService.getById(shift._id);
@@ -1765,7 +1751,7 @@ const ProjectReports = () => {
           // Show success message
           showSnackbar(
             "Report and job status reset to in progress. You can now revise the report.",
-            "success"
+            "success",
           );
 
           // Reload reports to reflect the change
@@ -1773,20 +1759,17 @@ const ProjectReports = () => {
         }
       } else if (report.type === "clearance") {
         // For clearance reports, reset the clearance status and increment revision count
-        const { default: asbestosClearanceService } = await import(
-          "../../services/asbestosClearanceService"
-        );
-        const { default: asbestosRemovalJobService } = await import(
-          "../../services/asbestosRemovalJobService"
-        );
+        const { default: asbestosClearanceService } =
+          await import("../../services/asbestosClearanceService");
+        const { default: asbestosRemovalJobService } =
+          await import("../../services/asbestosRemovalJobService");
 
         // Use report.id or report.data.id (backend returns 'id', not '_id')
         const clearanceId = report.id || report.data?.id || report.data?._id;
 
         // Get current clearance data to increment revision count
-        const currentClearance = await asbestosClearanceService.getById(
-          clearanceId
-        );
+        const currentClearance =
+          await asbestosClearanceService.getById(clearanceId);
         const currentRevision = currentClearance.revision || 0;
         const newRevision = currentRevision + 1;
 
@@ -1820,7 +1803,7 @@ const ProjectReports = () => {
             (job) =>
               (job.projectId === projectId ||
                 job.projectId?._id === projectId) &&
-              job.status === "completed"
+              job.status === "completed",
           );
 
           if (projectJob) {
@@ -1831,23 +1814,22 @@ const ProjectReports = () => {
         } catch (jobError) {
           console.error(
             "Error updating associated asbestos removal job:",
-            jobError
+            jobError,
           );
         }
 
         // Show success message
         showSnackbar(
           "Clearance and job status reset to in progress. You can now revise the report.",
-          "success"
+          "success",
         );
 
         // Reload reports to reflect the change
         loadReports();
       } else if (report.type === "fibre_id" || report.type === "fibre_count") {
         // For fibre ID and fibre count reports (client supplied jobs), reset the status to Analysis Complete
-        const { clientSuppliedJobsService } = await import(
-          "../../services/api"
-        );
+        const { clientSuppliedJobsService } =
+          await import("../../services/api");
 
         // Get the job ID (could be in data.id or data._id)
         const jobId = report.data._id || report.data.id || report.id;
@@ -1868,7 +1850,7 @@ const ProjectReports = () => {
         // Show success message
         showSnackbar(
           "Client supplied job status reset to Analysis Complete. You can now revise the report.",
-          "success"
+          "success",
         );
 
         // Reload reports to reflect the change
@@ -1911,7 +1893,7 @@ const ProjectReports = () => {
       if (!chainOfCustody || !chainOfCustody.data) {
         showSnackbar(
           "No Chain of Custody document available for this report",
-          "info"
+          "info",
         );
         return;
       }
@@ -1984,7 +1966,7 @@ const ProjectReports = () => {
             Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
           body: formData,
-        }
+        },
       );
 
       if (!response.ok) {
@@ -2025,7 +2007,7 @@ const ProjectReports = () => {
   const backText = cameFromProjects ? "Back to Projects" : "Back to Reports";
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ p: 3, px: { xs: 1.5, sm: 3 } }}>
       {/* Header */}
       <Box sx={{ mb: 4 }}>
         <Button

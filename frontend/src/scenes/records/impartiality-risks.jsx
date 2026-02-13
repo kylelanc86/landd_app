@@ -144,11 +144,11 @@ const ImpartialityRisks = () => {
 
   const riskRating = useMemo(
     () => getRiskRating(likelihood, consequenceRating),
-    [likelihood, consequenceRating]
+    [likelihood, consequenceRating],
   );
   const residualRiskRating = useMemo(
     () => getRiskRating(residualLikelihood, residualConsequence),
-    [residualLikelihood, residualConsequence]
+    [residualLikelihood, residualConsequence],
   );
 
   const handleBackToHome = () => {
@@ -212,7 +212,10 @@ const ImpartialityRisks = () => {
       handleCloseModal();
     } catch (err) {
       console.error("Error creating impartiality risk:", err);
-      showSnackbar(err.response?.data?.message || "Failed to add impartiality risk", "error");
+      showSnackbar(
+        err.response?.data?.message || "Failed to add impartiality risk",
+        "error",
+      );
     }
   };
 
@@ -268,7 +271,9 @@ const ImpartialityRisks = () => {
             <TableContainer>
               <Table>
                 <TableHead>
-                  <TableRow sx={{ backgroundColor: theme.palette.primary.main }}>
+                  <TableRow
+                    sx={{ backgroundColor: theme.palette.primary.main }}
+                  >
                     <TableCell sx={{ color: "white", fontWeight: "bold" }}>
                       Activity
                     </TableCell>
@@ -307,7 +312,11 @@ const ImpartialityRisks = () => {
         fullWidth
       >
         <DialogTitle>
-          <Box display="flex" justifyContent="space-between" alignItems="center">
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+          >
             <Typography variant="h6">Add Impartiality Risk</Typography>
             <IconButton onClick={handleCloseModal} size="small">
               <CloseIcon />
@@ -364,9 +373,7 @@ const ImpartialityRisks = () => {
                 ))}
               </Select>
               {formErrors.consequenceRating && (
-                <FormHelperText>
-                  {formErrors.consequenceRating}
-                </FormHelperText>
+                <FormHelperText>{formErrors.consequenceRating}</FormHelperText>
               )}
             </FormControl>
             <FormControl fullWidth error={!!formErrors.likelihood}>
@@ -442,9 +449,7 @@ const ImpartialityRisks = () => {
                 ))}
               </Select>
               {formErrors.residualLikelihood && (
-                <FormHelperText>
-                  {formErrors.residualLikelihood}
-                </FormHelperText>
+                <FormHelperText>{formErrors.residualLikelihood}</FormHelperText>
               )}
             </FormControl>
             <TextField

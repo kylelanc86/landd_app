@@ -52,7 +52,7 @@ const ClearanceReportTemplates = () => {
   const navigate = useNavigate();
 
   const [selectedTemplate, setSelectedTemplate] = useState(
-    "asbestosClearanceNonFriable"
+    "asbestosClearanceNonFriable",
   );
   const [templates, setTemplates] = useState({});
   const [loading, setLoading] = useState(true);
@@ -258,7 +258,7 @@ const ClearanceReportTemplates = () => {
         console.log("Loaded templates:", allTemplates);
         console.log(
           "Template types found:",
-          allTemplates.map((t) => t.templateType)
+          allTemplates.map((t) => t.templateType),
         );
 
         // Convert array to object with templateType as key
@@ -299,10 +299,10 @@ const ClearanceReportTemplates = () => {
     if (currentTemplate && currentTemplate.selectedLegislation) {
       // Separate ACT and NSW legislation
       const actLegislation = currentTemplate.selectedLegislation.filter(
-        (item) => item.jurisdiction === "ACT"
+        (item) => item.jurisdiction === "ACT",
       );
       const nswLegislation = currentTemplate.selectedLegislation.filter(
-        (item) => item.jurisdiction === "NSW"
+        (item) => item.jurisdiction === "NSW",
       );
 
       setSelectedACTLegislation(actLegislation);
@@ -358,14 +358,13 @@ const ClearanceReportTemplates = () => {
     if (!templates[newTemplateType]) {
       try {
         console.log(
-          `Template ${newTemplateType} not found in state, fetching from backend...`
+          `Template ${newTemplateType} not found in state, fetching from backend...`,
         );
         setLoading(true);
 
         // Fetch the specific template from the backend
-        const templateData = await reportTemplateService.getTemplateByType(
-          newTemplateType
-        );
+        const templateData =
+          await reportTemplateService.getTemplateByType(newTemplateType);
 
         // Update the templates state with the new template
         setTemplates((prev) => ({
@@ -375,7 +374,7 @@ const ClearanceReportTemplates = () => {
 
         console.log(
           `Template ${newTemplateType} loaded successfully:`,
-          templateData
+          templateData,
         );
       } catch (error) {
         console.error(`Error fetching template ${newTemplateType}:`, error);
@@ -470,7 +469,7 @@ const ClearanceReportTemplates = () => {
       "Set editingSection to:",
       field,
       "and editData to:",
-      data || ""
+      data || "",
     );
   };
 
@@ -519,7 +518,7 @@ const ClearanceReportTemplates = () => {
         console.log("Sending update payload:", updatePayload);
         const updatedTemplate = await reportTemplateService.updateTemplate(
           currentTemplate,
-          updatePayload
+          updatePayload,
         );
         console.log("Updated template received:", updatedTemplate);
 
@@ -560,7 +559,7 @@ const ClearanceReportTemplates = () => {
 
     // Convert selected IDs to full legislation objects (ACT only)
     const selectedItems = legislationItems.filter(
-      (item) => selectedIds.includes(item._id) && item.jurisdiction === "ACT"
+      (item) => selectedIds.includes(item._id) && item.jurisdiction === "ACT",
     );
     console.log("DEBUG: Selected ACT items:", selectedItems);
 
@@ -617,7 +616,7 @@ const ClearanceReportTemplates = () => {
 
     // Convert selected IDs to full legislation objects (NSW only)
     const selectedItems = legislationItems.filter(
-      (item) => selectedIds.includes(item._id) && item.jurisdiction === "NSW"
+      (item) => selectedIds.includes(item._id) && item.jurisdiction === "NSW",
     );
     console.log("DEBUG: Selected NSW items:", selectedItems);
 
@@ -711,7 +710,7 @@ const ClearanceReportTemplates = () => {
       // Use the utility function to generate PDF
       const fileName = await generateHTMLTemplatePDF(
         selectedTemplate,
-        previewData
+        previewData,
       );
 
       setSaveStatus({
@@ -880,7 +879,7 @@ const ClearanceReportTemplates = () => {
                 onClick={() =>
                   handleDetailedEdit(
                     fields[0],
-                    template.standardSections?.[fields[0]] || ""
+                    template.standardSections?.[fields[0]] || "",
                   )
                 }
                 size="small"
@@ -1021,7 +1020,7 @@ const ClearanceReportTemplates = () => {
                     'textarea[aria-label*="' +
                       editingSection.charAt(0).toUpperCase() +
                       editingSection.slice(1).replace(/([A-Z])/g, " $1") +
-                      '"]'
+                      '"]',
                   );
                   if (textField) {
                     const start = textField.selectionStart;
@@ -1087,7 +1086,7 @@ const ClearanceReportTemplates = () => {
                     'textarea[aria-label*="' +
                       editingSection.charAt(0).toUpperCase() +
                       editingSection.slice(1).replace(/([A-Z])/g, " $1") +
-                      '"]'
+                      '"]',
                   );
                   if (textField) {
                     const start = textField.selectionStart;
@@ -1211,7 +1210,7 @@ const ClearanceReportTemplates = () => {
             >
               <Typography variant="h4" sx={{ mb: 2, color: "#009900" }}>
                 {replacePlaceholders(
-                  template.standardSections.backgroundInformationTitle
+                  template.standardSections.backgroundInformationTitle,
                 )}
               </Typography>
               <Typography
@@ -1219,7 +1218,7 @@ const ClearanceReportTemplates = () => {
                 sx={{ mb: 3, whiteSpace: "pre-line" }}
               >
                 {replacePlaceholders(
-                  template.standardSections.backgroundInformationContent
+                  template.standardSections.backgroundInformationContent,
                 )}
               </Typography>
 
@@ -1227,7 +1226,7 @@ const ClearanceReportTemplates = () => {
 
               <Typography variant="h5" sx={{ mb: 2 }}>
                 {replacePlaceholders(
-                  template.standardSections.legislativeRequirementsTitle
+                  template.standardSections.legislativeRequirementsTitle,
                 )}
               </Typography>
               <Typography
@@ -1235,7 +1234,7 @@ const ClearanceReportTemplates = () => {
                 sx={{ mb: 2, whiteSpace: "pre-line" }}
               >
                 {replacePlaceholders(
-                  template.standardSections.legislativeRequirementsContent
+                  template.standardSections.legislativeRequirementsContent,
                 )}
               </Typography>
 
@@ -1300,7 +1299,7 @@ const ClearanceReportTemplates = () => {
 
               <Typography variant="h5" sx={{ mb: 2 }}>
                 {replacePlaceholders(
-                  template.standardSections.inspectionDetailsTitle
+                  template.standardSections.inspectionDetailsTitle,
                 )}
               </Typography>
               <Typography
@@ -1308,7 +1307,7 @@ const ClearanceReportTemplates = () => {
                 sx={{ mb: 2, whiteSpace: "pre-line" }}
               >
                 {replacePlaceholders(
-                  template.standardSections.inspectionDetailsContent
+                  template.standardSections.inspectionDetailsContent,
                 )}
               </Typography>
 
@@ -1316,7 +1315,7 @@ const ClearanceReportTemplates = () => {
 
               <Typography variant="h5" sx={{ mb: 2 }}>
                 {replacePlaceholders(
-                  template.standardSections.inspectionExclusionsTitle
+                  template.standardSections.inspectionExclusionsTitle,
                 )}
               </Typography>
               <Typography
@@ -1324,7 +1323,7 @@ const ClearanceReportTemplates = () => {
                 sx={{ mb: 2, whiteSpace: "pre-line" }}
               >
                 {replacePlaceholders(
-                  template.standardSections.inspectionExclusionsContent
+                  template.standardSections.inspectionExclusionsContent,
                 )}
               </Typography>
 
@@ -1332,7 +1331,7 @@ const ClearanceReportTemplates = () => {
 
               <Typography variant="h5" sx={{ mb: 2 }}>
                 {replacePlaceholders(
-                  template.standardSections.clearanceCertificationTitle
+                  template.standardSections.clearanceCertificationTitle,
                 )}
               </Typography>
               <Typography
@@ -1340,7 +1339,7 @@ const ClearanceReportTemplates = () => {
                 sx={{ mb: 2, whiteSpace: "pre-line" }}
               >
                 {replacePlaceholders(
-                  template.standardSections.clearanceCertificationContent
+                  template.standardSections.clearanceCertificationContent,
                 )}
               </Typography>
 
@@ -1615,7 +1614,8 @@ const ClearanceReportTemplates = () => {
                 {(template.standardSections ||
                   template.leadAssessmentSections) &&
                   Object.entries(
-                    template.standardSections || template.leadAssessmentSections
+                    template.standardSections ||
+                      template.leadAssessmentSections,
                   ).map(([key, value]) => (
                     <Grid item xs={12} md={6} key={key}>
                       <Box
@@ -1768,7 +1768,7 @@ const ClearanceReportTemplates = () => {
                             <Select
                               multiple
                               value={selectedACTLegislation.map(
-                                (item) => item._id
+                                (item) => item._id,
                               )}
                               onChange={handleACTLegislationChange}
                               input={
@@ -1784,7 +1784,7 @@ const ClearanceReportTemplates = () => {
                                 >
                                   {selected.map((value) => {
                                     const item = legislationItems.find(
-                                      (item) => item._id === value
+                                      (item) => item._id === value,
                                     );
                                     return (
                                       <Chip
@@ -1804,7 +1804,7 @@ const ClearanceReportTemplates = () => {
                               disabled={legislationLoading}
                             >
                               {legislationItems.filter(
-                                (item) => item.jurisdiction === "ACT"
+                                (item) => item.jurisdiction === "ACT",
                               ).length > 0 ? (
                                 legislationItems
                                   .filter((item) => item.jurisdiction === "ACT")
@@ -1813,7 +1813,7 @@ const ClearanceReportTemplates = () => {
                                       <Checkbox
                                         checked={selectedACTLegislation.some(
                                           (selected) =>
-                                            selected._id === item._id
+                                            selected._id === item._id,
                                         )}
                                       />
                                       <ListItemText
@@ -1838,7 +1838,7 @@ const ClearanceReportTemplates = () => {
                             <Select
                               multiple
                               value={selectedNSWLegislation.map(
-                                (item) => item._id
+                                (item) => item._id,
                               )}
                               onChange={handleNSWLegislationChange}
                               input={
@@ -1854,7 +1854,7 @@ const ClearanceReportTemplates = () => {
                                 >
                                   {selected.map((value) => {
                                     const item = legislationItems.find(
-                                      (item) => item._id === value
+                                      (item) => item._id === value,
                                     );
                                     return (
                                       <Chip
@@ -1874,7 +1874,7 @@ const ClearanceReportTemplates = () => {
                               disabled={legislationLoading}
                             >
                               {legislationItems.filter(
-                                (item) => item.jurisdiction === "NSW"
+                                (item) => item.jurisdiction === "NSW",
                               ).length > 0 ? (
                                 legislationItems
                                   .filter((item) => item.jurisdiction === "NSW")
@@ -1883,7 +1883,7 @@ const ClearanceReportTemplates = () => {
                                       <Checkbox
                                         checked={selectedNSWLegislation.some(
                                           (selected) =>
-                                            selected._id === item._id
+                                            selected._id === item._id,
                                         )}
                                       />
                                       <ListItemText
@@ -1979,9 +1979,9 @@ const ClearanceReportTemplates = () => {
                       ([sectionName, fields]) => {
                         return renderDetailedTemplateSection(
                           sectionName,
-                          fields
+                          fields,
                         );
-                      }
+                      },
                     )}
                   </Grid>
                 </TabPanel>

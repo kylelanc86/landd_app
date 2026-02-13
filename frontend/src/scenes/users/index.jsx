@@ -58,7 +58,7 @@ const Users = () => {
           console.log(
             `[USERS] Loaded ${
               response.data?.length || 0
-            } users in ${fetchTime.toFixed(0)}ms`
+            } users in ${fetchTime.toFixed(0)}ms`,
           );
         }
       } catch (error) {
@@ -83,7 +83,7 @@ const Users = () => {
     const userToUpdate = users.find((u) => u._id === statusChangeId);
     if (!statusChangeType && userToUpdate?.role === "admin") {
       const activeAdmins = users.filter(
-        (u) => u.isActive && u.role === "admin"
+        (u) => u.isActive && u.role === "admin",
       );
       if (activeAdmins.length <= 1) {
         setStatusDialogOpen(false);
@@ -94,7 +94,7 @@ const Users = () => {
     }
     if (!statusChangeType && userToUpdate?.role === "super_admin") {
       const activeSuperAdmins = users.filter(
-        (u) => u.isActive && u.role === "super_admin"
+        (u) => u.isActive && u.role === "super_admin",
       );
       if (activeSuperAdmins.length <= 1) {
         setStatusDialogOpen(false);
@@ -109,7 +109,7 @@ const Users = () => {
         isActive: statusChangeType,
       });
       setUsers(
-        users.map((u) => (u._id === statusChangeId ? response.data : u))
+        users.map((u) => (u._id === statusChangeId ? response.data : u)),
       );
       setStatusDialogOpen(false);
       setStatusChangeId(null);
@@ -123,7 +123,7 @@ const Users = () => {
     (user) => {
       navigate(`/users/edit/${user._id}`);
     },
-    [navigate]
+    [navigate],
   );
 
   const handleStatusChange = useCallback(
@@ -133,7 +133,7 @@ const Users = () => {
         const userToDeactivate = users.find((u) => u._id === userId);
         if (userToDeactivate?.role === "admin") {
           const activeAdmins = users.filter(
-            (u) => u.isActive && u.role === "admin"
+            (u) => u.isActive && u.role === "admin",
           );
           if (activeAdmins.length <= 1) {
             setStatusDialogOpen(true);
@@ -144,7 +144,7 @@ const Users = () => {
         }
         if (userToDeactivate?.role === "super_admin") {
           const activeSuperAdmins = users.filter(
-            (u) => u.isActive && u.role === "super_admin"
+            (u) => u.isActive && u.role === "super_admin",
           );
           if (activeSuperAdmins.length <= 1) {
             setStatusDialogOpen(true);
@@ -158,7 +158,7 @@ const Users = () => {
       setStatusChangeType(newStatus);
       setStatusDialogOpen(true);
     },
-    [users]
+    [users],
   );
 
   // Memoize columns to prevent unnecessary re-renders
@@ -289,16 +289,10 @@ const Users = () => {
                     handleStatusChange(params.row._id, !params.row.isActive)
                   }
                   title={
-                    params.row.isActive
-                      ? "Deactivate User"
-                      : "Activate User"
+                    params.row.isActive ? "Deactivate User" : "Activate User"
                   }
                 >
-                  {params.row.isActive ? (
-                    <DeleteIcon />
-                  ) : (
-                    <CheckCircleIcon />
-                  )}
+                  {params.row.isActive ? <DeleteIcon /> : <CheckCircleIcon />}
                 </IconButton>
               )}
             </Box>
@@ -308,7 +302,7 @@ const Users = () => {
         filterable: false,
       },
     ],
-    [currentUser, handleEditUser, handleStatusChange]
+    [currentUser, handleEditUser, handleStatusChange],
   );
 
   // Users are filtered by the backend API based on showInactive state
@@ -481,15 +475,15 @@ const Users = () => {
             {statusChangeType
               ? "Are you sure you want to restore this user? They will regain access to the system."
               : users.find((u) => u._id === statusChangeId)?.role === "admin" &&
-                users.filter((u) => u.isActive && u.role === "admin").length <= 1
-              ? "Cannot deactivate the last active admin user. Please ensure another admin user is active before deactivating this user."
-              : users.find((u) => u._id === statusChangeId)?.role ===
-                  "super_admin" &&
-                users.filter(
-                  (u) => u.isActive && u.role === "super_admin"
-                ).length <= 1
-              ? "Cannot deactivate the last active super admin user. There must always be at least one super admin."
-              : "Are you sure you want to deactivate this user? They will lose access to the system but can be restored later."}
+                  users.filter((u) => u.isActive && u.role === "admin")
+                    .length <= 1
+                ? "Cannot deactivate the last active admin user. Please ensure another admin user is active before deactivating this user."
+                : users.find((u) => u._id === statusChangeId)?.role ===
+                      "super_admin" &&
+                    users.filter((u) => u.isActive && u.role === "super_admin")
+                      .length <= 1
+                  ? "Cannot deactivate the last active super admin user. There must always be at least one super admin."
+                  : "Are you sure you want to deactivate this user? They will lose access to the system but can be restored later."}
           </Typography>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>

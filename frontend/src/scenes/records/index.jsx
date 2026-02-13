@@ -372,7 +372,7 @@ const Records = () => {
 
   return (
     <Box m="20px">
-      <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+      <Box sx={{ display: "flex", alignItems: "center", mb: { xs: 1, sm: 2 } }}>
         {view !== "home" && (
           <IconButton
             onClick={handleBackClick}
@@ -386,14 +386,14 @@ const Records = () => {
           variant="h3"
           component="h1"
           gutterBottom
-          sx={{ mt: 3, mb: 4, fontWeight: 600 }}
+          sx={{ mt: { xs: 1, sm: 3 }, mb: { xs: 1.5, sm: 2 }, fontWeight: 600 }}
         >
           {getHeaderTitle()}
         </Typography>
       </Box>
 
       {view === "home" ? (
-        <Box sx={{ mt: 4 }}>
+        <Box sx={{ mt: 1 }}>
           <Grid container spacing={isTablet ? 3 : 4}>
             {availableRecordModules.map((module) => (
               <Grid item xs={12} sm={6} md={6} lg={6} key={module.id}>

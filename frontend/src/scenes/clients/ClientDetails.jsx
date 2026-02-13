@@ -76,10 +76,10 @@ const ClientDetails = () => {
 
       if (!apiKey) {
         console.error(
-          "Google Maps API key is missing. Please check your environment configuration."
+          "Google Maps API key is missing. Please check your environment configuration.",
         );
         setGoogleMapsError(
-          "Google Maps API key is missing. Please check your environment configuration."
+          "Google Maps API key is missing. Please check your environment configuration.",
         );
         return;
       }
@@ -92,7 +92,7 @@ const ClientDetails = () => {
         const autocompleteService =
           new google.maps.places.AutocompleteService();
         const placesService = new google.maps.places.PlacesService(
-          document.createElement("div")
+          document.createElement("div"),
         );
 
         setAutocompleteService(autocompleteService);
@@ -103,7 +103,7 @@ const ClientDetails = () => {
       } catch (error) {
         console.error("Error loading Google Maps script:", error);
         setGoogleMapsError(
-          "Error loading Google Maps. Please try refreshing the page."
+          "Error loading Google Maps. Please try refreshing the page.",
         );
       }
     };
@@ -220,7 +220,7 @@ const ClientDetails = () => {
         console.log(
           "🚫 Blocking navigation to:",
           targetPath,
-          "due to unsaved changes"
+          "due to unsaved changes",
         );
         setPendingNavigation(targetPath);
         setUnsavedChangesDialogOpen(true);
@@ -267,7 +267,7 @@ const ClientDetails = () => {
         console.log(
           "🚫 Blocking link navigation to:",
           href,
-          "due to unsaved changes"
+          "due to unsaved changes",
         );
         e.preventDefault();
         e.stopPropagation();
@@ -384,7 +384,7 @@ const ClientDetails = () => {
               case window.google?.maps?.places?.PlacesServiceStatus
                 ?.REQUEST_DENIED:
                 console.error(
-                  "Google Places API request denied. Check API key and billing."
+                  "Google Places API request denied. Check API key and billing.",
                 );
                 break;
               case window.google?.maps?.places?.PlacesServiceStatus
@@ -400,7 +400,7 @@ const ClientDetails = () => {
             }
           }
           setIsAddressLoading(false);
-        }
+        },
       );
     } catch (error) {
       console.error("Error fetching address predictions:", error);
@@ -429,7 +429,7 @@ const ClientDetails = () => {
         } else {
           console.error("Error getting place details:", status);
         }
-      }
+      },
     );
   };
 
@@ -498,12 +498,12 @@ const ClientDetails = () => {
     } catch (err) {
       console.error(
         `Error ${isCreating ? "creating" : "updating"} client:`,
-        err
+        err,
       );
       setError(
         `Failed to ${
           isCreating ? "create" : "update"
-        } client. Please try again.`
+        } client. Please try again.`,
       );
     } finally {
       setSaving(false);
@@ -845,8 +845,8 @@ const ClientDetails = () => {
                       ? "Creating..."
                       : "Saving..."
                     : isCreating
-                    ? "Create Client"
-                    : "Save Changes"}
+                      ? "Create Client"
+                      : "Save Changes"}
                 </Button>
               </Box>
             </Grid>

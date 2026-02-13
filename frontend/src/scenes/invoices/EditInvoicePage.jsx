@@ -241,7 +241,7 @@ const EditInvoicePage = () => {
         ? projectsData.filter((project) => {
             const projectStatus = project.status?.toLowerCase();
             return activeStatuses.some(
-              (status) => projectStatus === status.toLowerCase()
+              (status) => projectStatus === status.toLowerCase(),
             );
           })
         : [];
@@ -317,7 +317,7 @@ const EditInvoicePage = () => {
 
           // Get payment terms from the selected client
           const selectedClientObj = clients.find(
-            (client) => client.name === selectedClient?.name
+            (client) => client.name === selectedClient?.name,
           );
           let paymentTerms = 30; // Default fallback
 
@@ -379,17 +379,17 @@ const EditInvoicePage = () => {
             const qty = field === "qty" ? value : item.qty;
             const unitPrice = field === "unitPrice" ? value : item.unitPrice;
             updatedItem.taxAmount = parseFloat(
-              calculateTaxAmount(qty, unitPrice)
+              calculateTaxAmount(qty, unitPrice),
             );
             updatedItem.amount = parseFloat(
-              calculateTotalAmount(qty, unitPrice)
+              calculateTotalAmount(qty, unitPrice),
             );
           }
 
           return updatedItem;
         }
         return item;
-      })
+      }),
     );
   };
 
@@ -411,16 +411,16 @@ const EditInvoicePage = () => {
             const qty = item.qty || 0;
             const unitPrice = selectedItem.unitPrice || 0;
             updatedItem.taxAmount = parseFloat(
-              calculateTaxAmount(qty, unitPrice)
+              calculateTaxAmount(qty, unitPrice),
             );
             updatedItem.amount = parseFloat(
-              calculateTotalAmount(qty, unitPrice)
+              calculateTotalAmount(qty, unitPrice),
             );
 
             return updatedItem;
           }
           return item;
-        })
+        }),
       );
     }
   };
@@ -446,7 +446,7 @@ const EditInvoicePage = () => {
 
           // Get payment terms from the selected client
           const selectedClientObj = clients.find(
-            (client) => client.name === selectedClient?.name
+            (client) => client.name === selectedClient?.name,
           );
           let paymentTerms = 30; // Default fallback
 
@@ -497,7 +497,7 @@ const EditInvoicePage = () => {
       // Update invoice via API
       const response = await invoiceService.update(
         invoiceId,
-        updatedInvoiceData
+        updatedInvoiceData,
       );
 
       if (response.status === 200) {
@@ -526,15 +526,15 @@ const EditInvoicePage = () => {
         invoiceItems.forEach((item, index) => {
           if (!item.qty || item.qty <= 0)
             validationErrors.push(
-              `Line item ${index + 1}: Quantity must be greater than 0`
+              `Line item ${index + 1}: Quantity must be greater than 0`,
             );
           if (!item.unitPrice || item.unitPrice <= 0)
             validationErrors.push(
-              `Line item ${index + 1}: Unit price must be greater than 0`
+              `Line item ${index + 1}: Unit price must be greater than 0`,
             );
           if (!item.amount || item.amount <= 0)
             validationErrors.push(
-              `Line item ${index + 1}: Amount must be greater than 0`
+              `Line item ${index + 1}: Amount must be greater than 0`,
             );
         });
       }
@@ -548,7 +548,7 @@ const EditInvoicePage = () => {
       if (error.response?.data?.message === "Invoice validation failed") {
         console.error(
           "Backend validation failed:",
-          error.response.data.details
+          error.response.data.details,
         );
         return;
       }
@@ -622,7 +622,7 @@ const EditInvoicePage = () => {
                 const filtered = (options || []).filter(
                   (option) =>
                     option.name.toLowerCase().includes(filterValue) ||
-                    option.projectID.toLowerCase().includes(filterValue)
+                    option.projectID.toLowerCase().includes(filterValue),
                 );
                 return filtered;
               }}
@@ -638,8 +638,8 @@ const EditInvoicePage = () => {
                     projects.length === 0 && !loading
                       ? "No active projects found. Please ensure you're logged in and there are projects with active statuses."
                       : projects.length > 0
-                      ? `Found ${projects.length} active projects. Type to filter or click to see all.`
-                      : ""
+                        ? `Found ${projects.length} active projects. Type to filter or click to see all.`
+                        : ""
                   }
                 />
               )}
@@ -701,7 +701,7 @@ const EditInvoicePage = () => {
                 Payment Terms:{" "}
                 {(() => {
                   const selectedClientObj = clients.find(
-                    (client) => client.name === selectedClient?.name
+                    (client) => client.name === selectedClient?.name,
                   );
                   return (
                     selectedClientObj?.paymentTerms || "Standard (30 days)"
@@ -814,7 +814,7 @@ const EditInvoicePage = () => {
                       getOptionLabel={(option) => option.itemNo || ""}
                       value={
                         availableInvoiceItems.find(
-                          (ai) => ai.itemNo === item.itemNo
+                          (ai) => ai.itemNo === item.itemNo,
                         ) || null
                       }
                       onChange={(event, newValue) =>
@@ -880,7 +880,7 @@ const EditInvoicePage = () => {
                         handleItemChange(
                           item.id,
                           "qty",
-                          parseFloat(e.target.value) || 0
+                          parseFloat(e.target.value) || 0,
                         )
                       }
                       fullWidth
@@ -914,7 +914,7 @@ const EditInvoicePage = () => {
                         handleItemChange(
                           item.id,
                           "unitPrice",
-                          parseFloat(e.target.value) || 0
+                          parseFloat(e.target.value) || 0,
                         )
                       }
                       fullWidth
@@ -1050,7 +1050,7 @@ const EditInvoicePage = () => {
             <Typography variant="h5" sx={{ fontWeight: "bold" }}>
               Total: AUD${" "}
               {(calculateInvoiceTotal() + calculateInvoiceTaxTotal()).toFixed(
-                2
+                2,
               )}
             </Typography>
           </Box>

@@ -71,6 +71,8 @@ const SampleList = () => {
   const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = useState(false);
   const [sampleToDelete, setSampleToDelete] = useState(null);
   const [showDescriptionDialog, setShowDescriptionDialog] = useState(false);
+  const [showDescriptionRequiredForCompleteDialog, setShowDescriptionRequiredForCompleteDialog] =
+    useState(false);
   const [showSamplingCompleteDialog, setShowSamplingCompleteDialog] =
     useState(false);
   const [tempDescription, setTempDescription] = useState("");
@@ -84,6 +86,8 @@ const SampleList = () => {
   const [descriptionModalOpen, setDescriptionModalOpen] = useState(false);
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const showDescriptionButton = useMediaQuery(theme.breakpoints.down("md"));
+  const isMobileOrTablet = useMediaQuery("(max-width: 960px)");
+  const isPortrait = useMediaQuery("(orientation: portrait)");
   const { showSnackbar } = useSnackbar();
 
   // Check if report is authorized
@@ -143,7 +147,7 @@ const SampleList = () => {
           shiftService
             .getSitePlan(shiftId)
             .then((response) => setSitePlanData(response.data))
-            .catch(() => setSitePlanData(null))
+            .catch(() => setSitePlanData(null)),
         );
 
         // Job data (non-critical for initial render)
@@ -155,7 +159,7 @@ const SampleList = () => {
               .then((response) => setJob(response.data))
               .catch(() => {
                 // Silently fail - job data is not critical for page load
-              })
+              }),
           );
         }
 
@@ -171,14 +175,14 @@ const SampleList = () => {
                     const number = extractSampleNumber(sample.fullSampleID);
                     return Math.max(max, number);
                   },
-                  0
+                  0,
                 );
                 setNextSampleNumber(highestNumber + 1);
               })
               .catch((err) => {
                 console.error("Error fetching project samples:", err);
                 // Keep default of 1 if fetch fails
-              })
+              }),
           );
         }
 
@@ -208,16 +212,18 @@ const SampleList = () => {
 
       // If it's a field blank sample, only validate basic required fields
       if (sample.location === "Field blank") {
-        const isValid = (
-          sample.sampleNumber && sample.location && sampler && sample.cowlNo
+        const isValid =
+          sample.sampleNumber && sample.location && sampler && sample.cowlNo;
+        console.log(
+          `[SampleList] Field blank sample ${sample.fullSampleID} validation:`,
+          isValid,
         );
-        console.log(`[SampleList] Field blank sample ${sample.fullSampleID} validation:`, isValid);
         return isValid;
       }
 
       // If sample has failed status, it's considered complete (has all required data, just failed flowrate validation)
       if (sample.status === "failed") {
-        const isValid = (
+        const isValid =
           sample.sampleNumber &&
           sample.type &&
           sample.location &&
@@ -230,14 +236,16 @@ const SampleList = () => {
           sample.endTime &&
           sample.initialFlowrate &&
           sample.finalFlowrate &&
-          sample.averageFlowrate
+          sample.averageFlowrate;
+        console.log(
+          `[SampleList] Failed sample ${sample.fullSampleID} validation (status=failed, checking required fields only):`,
+          isValid,
         );
-        console.log(`[SampleList] Failed sample ${sample.fullSampleID} validation (status=failed, checking required fields only):`, isValid);
         return isValid;
       }
 
       // For non-field blank, non-failed samples, validate all required fields AND flowrates
-      const isValid = (
+      const isValid =
         sample.sampleNumber &&
         sample.type &&
         sample.location &&
@@ -253,9 +261,11 @@ const SampleList = () => {
         sample.averageFlowrate &&
         // Ensure flowrates are valid numbers
         parseFloat(sample.initialFlowrate) > 0 &&
-        parseFloat(sample.finalFlowrate) > 0
+        parseFloat(sample.finalFlowrate) > 0;
+      console.log(
+        `[SampleList] Regular sample ${sample.fullSampleID} validation:`,
+        isValid,
       );
-      console.log(`[SampleList] Regular sample ${sample.fullSampleID} validation:`, isValid);
       return isValid;
     });
   }, []);
@@ -265,7 +275,7 @@ const SampleList = () => {
     if (samples.length > 0) {
       console.log("[SampleList] Validating samples for completion:", {
         totalSamples: samples.length,
-        samples: samples.map(s => ({
+        samples: samples.map((s) => ({
           id: s.fullSampleID,
           status: s.status,
           hasRequiredFields: {
@@ -289,19 +299,20 @@ const SampleList = () => {
             average: s.averageFlowrate,
           },
           isFieldBlank: s.location === "Field blank",
-        }))
+        })),
       });
-      
+
       const isValid = validateSamplesCompleteMemo(samples);
-      
+
       console.log("[SampleList] Validation result:", {
         isValid,
         isCompleteDisabled: !isValid,
         shiftStatus: shift?.status,
         isReportAuthorized,
-        buttonWillBeDisabled: !isValid || shift?.status !== "ongoing" || isReportAuthorized
+        buttonWillBeDisabled:
+          !isValid || shift?.status !== "ongoing" || isReportAuthorized,
       });
-      
+
       setIsCompleteDisabled(!isValid);
     } else {
       console.log("[SampleList] No samples, disabling completion button");
@@ -371,7 +382,7 @@ const SampleList = () => {
             return fullSample.data;
           }
           return sample;
-        })
+        }),
       );
 
       const escapeCsvCell = (value) => {
@@ -503,7 +514,7 @@ const SampleList = () => {
 
       const csv = csvRows
         .map((row) =>
-          row.length ? row.map((cell) => escapeCsvCell(cell)).join(",") : ""
+          row.length ? row.map((cell) => escapeCsvCell(cell)).join(",") : "",
         )
         .join("\r\n");
 
@@ -545,6 +556,11 @@ const SampleList = () => {
 
   // Add handleSampleComplete function
   const handleSampleComplete = () => {
+    // Check if description of works has been filled in
+    if (!descriptionOfWorks?.trim()) {
+      setShowDescriptionRequiredForCompleteDialog(true);
+      return;
+    }
     // Set the current description as the temp description for editing
     setTempDescription(descriptionOfWorks);
     setShowSamplingCompleteDialog(true);
@@ -673,7 +689,7 @@ const SampleList = () => {
       !("SpeechRecognition" in window)
     ) {
       setDictationError(
-        "Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari."
+        "Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.",
       );
       return;
     }
@@ -758,17 +774,31 @@ const SampleList = () => {
   }
 
   return (
-    <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
+    <Box
+      sx={{
+        p: { xs: 2, sm: 3, md: 4 },
+        px: { xs: 0.68, sm: 1.02, md: 4 },
+      }}
+    >
       {/* Breadcrumbs */}
-      <Breadcrumbs sx={{ marginBottom: 3 }}>
+      <Breadcrumbs
+        sx={{
+          marginBottom: 3,
+          "& .MuiBreadcrumbs-separator": {
+            display: { xs: "none", sm: "inline-flex" },
+          },
+        }}
+      >
         <Link
           component="button"
           variant="body1"
           onClick={() => navigate("/asbestos-removal")}
           sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
         >
-          <ArrowBackIcon sx={{ mr: 1 }} />
-          Asbestos Removal Jobs
+          <ArrowBackIcon sx={{ mr: { xs: 0, sm: 1 } }} />
+          <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
+            Asbestos Removal Jobs
+          </Box>
         </Link>
         <Link
           component="button"
@@ -781,7 +811,12 @@ const SampleList = () => {
               navigate("/asbestos-removal");
             }
           }}
-          sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
+          sx={{
+            fontSize: isMobile ? "0.9rem" : "1rem",
+            display: "flex",
+            alignItems: "center",
+            cursor: "pointer",
+          }}
         >
           Job Details
         </Link>
@@ -797,14 +832,14 @@ const SampleList = () => {
       )}
 
       <Typography
-        variant="h4"
+        variant="h6"
         sx={{
-          fontSize: { xs: "1.1rem", md: "2.125rem" },
+          fontSize: { xs: "0.9rem", sm: "1rem", md: "1.25rem" },
           color:
             theme.palette.mode === "dark"
               ? "#fff"
               : theme.palette.secondary[200],
-          mb: 4,
+          mb: 1,
         }}
       >
         {job?.projectId?.projectID ? `${job.projectId.projectID}: ` : ""}
@@ -828,7 +863,10 @@ const SampleList = () => {
           }}
         >
           <Typography variant="h6">Description of Works</Typography>
-          <IconButton size="small" aria-label={descriptionSectionExpanded ? "Collapse" : "Expand"}>
+          <IconButton
+            size="small"
+            aria-label={descriptionSectionExpanded ? "Collapse" : "Expand"}
+          >
             {descriptionSectionExpanded ? (
               <ExpandLessIcon />
             ) : (
@@ -837,111 +875,116 @@ const SampleList = () => {
           </IconButton>
         </Box>
         <Collapse in={descriptionSectionExpanded}>
-        <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
-          <TextField
-            sx={{ flex: 1 }}
-            multiline
-            minRows={2}
-            maxRows={6}
-            value={descriptionOfWorks}
-            onChange={handleDescriptionChange}
-            placeholder="Enter a description of works for this shift..."
-            required
-            error={!descriptionOfWorks}
-            helperText={
-              !descriptionOfWorks ? "Description of works is required" : ""
-            }
-            disabled={isReportAuthorized}
-            InputProps={{
-              endAdornment: !isReportAuthorized ? (
-                <InputAdornment position="end">
-                  <IconButton
-                    onClick={isDictating ? stopDictation : startDictation}
-                    color={isDictating ? "error" : "primary"}
-                    title={isDictating ? "Stop Dictation" : "Start Dictation"}
-                    sx={{
-                      backgroundColor: isDictating
-                        ? theme.palette.error.light
-                        : "transparent",
-                      "&:hover": {
+          <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
+            <TextField
+              sx={{ flex: 1 }}
+              multiline
+              minRows={2}
+              maxRows={6}
+              value={descriptionOfWorks}
+              onChange={handleDescriptionChange}
+              placeholder="Enter a description of works for this shift..."
+              required
+              error={!descriptionOfWorks}
+              helperText={
+                !descriptionOfWorks ? "Description of works is required" : ""
+              }
+              disabled={isReportAuthorized}
+              InputProps={{
+                endAdornment: !isReportAuthorized ? (
+                  <InputAdornment position="end">
+                    <IconButton
+                      onClick={isDictating ? stopDictation : startDictation}
+                      color={isDictating ? "error" : "primary"}
+                      title={isDictating ? "Stop Dictation" : "Start Dictation"}
+                      sx={{
                         backgroundColor: isDictating
-                          ? theme.palette.error.main
-                          : theme.palette.action.hover,
-                      },
-                    }}
-                  >
-                    <MicIcon />
-                  </IconButton>
-                </InputAdornment>
-              ) : undefined,
-            }}
-          />
-          <Button
-            variant="contained"
-            onClick={saveDescriptionOfWorks}
-            disabled={!descriptionOfWorks.trim() || isReportAuthorized}
-            sx={{
-              backgroundColor: theme.palette.primary.main,
-              "&:hover": {
-                backgroundColor: theme.palette.primary.dark,
-              },
-              minWidth: 140,
-              height: 56, // Match the height of the text field
-            }}
-          >
-            Save Description
-          </Button>
-        </Box>
-        {/* Dictation Status and Errors */}
-        {isDictating && (
-          <Box sx={{ mt: 1, display: "flex", alignItems: "center", gap: 1 }}>
-            <Box
-              sx={{
-                width: 8,
-                height: 8,
-                borderRadius: "50%",
-                backgroundColor: "error.main",
-                animation: "pulse 1.5s ease-in-out infinite",
-                "@keyframes pulse": {
-                  "0%": { opacity: 1 },
-                  "50%": { opacity: 0.5 },
-                  "100%": { opacity: 1 },
-                },
+                          ? theme.palette.error.light
+                          : "transparent",
+                        "&:hover": {
+                          backgroundColor: isDictating
+                            ? theme.palette.error.main
+                            : theme.palette.action.hover,
+                        },
+                      }}
+                    >
+                      <MicIcon />
+                    </IconButton>
+                  </InputAdornment>
+                ) : undefined,
               }}
             />
-            <Typography variant="caption" color="text.secondary">
-              Dictating... Speak clearly into your microphone
-            </Typography>
+            <Button
+              variant="contained"
+              onClick={saveDescriptionOfWorks}
+              disabled={!descriptionOfWorks.trim() || isReportAuthorized}
+              sx={{
+                backgroundColor: theme.palette.primary.main,
+                "&:hover": {
+                  backgroundColor: theme.palette.primary.dark,
+                },
+                minWidth: 140,
+                height: 56, // Match the height of the text field
+              }}
+            >
+              Save Description
+            </Button>
           </Box>
-        )}
-        {dictationError && (
-          <Typography
-            variant="caption"
-            color="error.main"
-            sx={{ mt: 1, display: "block" }}
-          >
-            {dictationError}
-          </Typography>
-        )}
-        {/* Save Status Messages */}
-        <Box sx={{ mt: 1, display: "flex", alignItems: "center", gap: 2 }}>
-          {descSaveStatus === "Saved" && (
-            <Typography variant="caption" color="success.main">
-              Description saved successfully
+          {/* Dictation Status and Errors */}
+          {isDictating && (
+            <Box sx={{ mt: 1, display: "flex", alignItems: "center", gap: 1 }}>
+              <Box
+                sx={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  backgroundColor: "error.main",
+                  animation: "pulse 1.5s ease-in-out infinite",
+                  "@keyframes pulse": {
+                    "0%": { opacity: 1 },
+                    "50%": { opacity: 0.5 },
+                    "100%": { opacity: 1 },
+                  },
+                }}
+              />
+              <Typography variant="caption" color="text.secondary">
+                Dictating... Speak clearly into your microphone
+              </Typography>
+            </Box>
+          )}
+          {dictationError && (
+            <Typography
+              variant="caption"
+              color="error.main"
+              sx={{ mt: 1, display: "block" }}
+            >
+              {dictationError}
             </Typography>
           )}
-          {descSaveStatus === "Error" && (
-            <Typography variant="caption" color="error.main">
-              Error saving description
-            </Typography>
-          )}
-        </Box>
+          {/* Save Status Messages */}
+          <Box sx={{ mt: 1, display: "flex", alignItems: "center", gap: 2 }}>
+            {descSaveStatus === "Saved" && (
+              <Typography variant="caption" color="success.main">
+                Description saved successfully
+              </Typography>
+            )}
+            {descSaveStatus === "Error" && (
+              <Typography variant="caption" color="error.main">
+                Error saving description
+              </Typography>
+            )}
+          </Box>
         </Collapse>
       </Box>
       <Stack
         direction={{ xs: "column", sm: "row" }}
         spacing={2}
-        sx={{ mb: 4 }}
+        sx={{
+          mb: 2,
+          "& .MuiButton-root": {
+            fontSize: { xs: "0.7rem", sm: "0.875rem" },
+          },
+        }}
         justifyContent="space-between"
         alignItems="center"
       >
@@ -952,6 +995,7 @@ const SampleList = () => {
             onClick={handleAddSample}
             disabled={isReportAuthorized}
             sx={{
+              "& .MuiButton-startIcon": { display: { xs: "none", sm: "flex" } },
               backgroundColor: theme.palette.primary.main,
               "&:hover": {
                 backgroundColor: theme.palette.primary.dark,
@@ -967,6 +1011,9 @@ const SampleList = () => {
               onClick={() => setDescriptionModalOpen(true)}
               disabled={isReportAuthorized}
               sx={{
+                "& .MuiButton-startIcon": {
+                  display: { xs: "none", sm: "flex" },
+                },
                 borderColor: theme.palette.primary.main,
                 color: theme.palette.primary.main,
                 "&:hover": {
@@ -975,7 +1022,18 @@ const SampleList = () => {
                 },
               }}
             >
-              Description of Works
+              <Box
+                component="span"
+                sx={{ display: { xs: "none", sm: "inline" } }}
+              >
+                Description of Works
+              </Box>
+              <Box
+                component="span"
+                sx={{ display: { xs: "inline", sm: "none" } }}
+              >
+                Description
+              </Box>
             </Button>
           )}
           <Button
@@ -984,6 +1042,7 @@ const SampleList = () => {
             onClick={handleOpenSitePlan}
             disabled={isReportAuthorized}
             sx={{
+              "& .MuiButton-startIcon": { display: { xs: "none", sm: "flex" } },
               borderColor: theme.palette.secondary.main,
               color: theme.palette.secondary.main,
               "&:hover": {
@@ -992,7 +1051,18 @@ const SampleList = () => {
               },
             }}
           >
-            {sitePlanData?.sitePlan ? "Edit Site Plan" : "Add Site Plan"}
+            <Box
+              component="span"
+              sx={{ display: { xs: "none", sm: "inline" } }}
+            >
+              {sitePlanData?.sitePlan ? "Edit Site Plan" : "Add Site Plan"}
+            </Box>
+            <Box
+              component="span"
+              sx={{ display: { xs: "inline", sm: "none" } }}
+            >
+              Site Plan
+            </Box>
           </Button>
           {sitePlanData?.sitePlan && (
             <Button
@@ -1001,7 +1071,7 @@ const SampleList = () => {
               onClick={() => {
                 if (
                   window.confirm(
-                    "Are you sure you want to delete this site plan? This action cannot be undone."
+                    "Are you sure you want to delete this site plan? This action cannot be undone.",
                   )
                 ) {
                   handleSaveSitePlan({
@@ -1012,6 +1082,9 @@ const SampleList = () => {
               }}
               disabled={isReportAuthorized}
               sx={{
+                "& .MuiButton-startIcon": {
+                  display: { xs: "none", sm: "flex" },
+                },
                 borderColor: theme.palette.error.main,
                 color: theme.palette.error.main,
                 "&:hover": {
@@ -1029,6 +1102,7 @@ const SampleList = () => {
           startIcon={<DownloadIcon />}
           onClick={handleDownloadCSV}
           sx={{
+            display: { xs: "none", md: "inline-flex" },
             borderColor: theme.palette.primary.main,
             color: theme.palette.primary.main,
             "&:hover": {
@@ -1041,22 +1115,47 @@ const SampleList = () => {
         </Button>
       </Stack>
 
-      <TableContainer component={Paper}>
+      <TableContainer
+        component={Paper}
+        sx={{
+          "& .MuiTableCell-root": {
+            "@media (max-width: 960px) and (orientation: portrait)": {
+              fontSize: "0.8em",
+            },
+            "@media (max-width: 960px) and (orientation: landscape)": {
+              fontSize: "0.8em",
+            },
+          },
+        }}
+      >
         <Table>
           <TableHead>
             <TableRow>
               <TableCell
-                sx={{ width: "140px", minWidth: "140px", maxWidth: "140px" }}
+                sx={{
+                  width: "140px",
+                  minWidth: "140px",
+                  maxWidth: "140px",
+                  "@media (max-width: 960px) and (orientation: portrait)": {
+                    minWidth: "80px",
+                    maxWidth: "none",
+                  },
+                }}
                 onClick={
                   !isReportAuthorized
                     ? () => handleSort("sampleNumber")
                     : undefined
                 }
               >
-                Sample Number
+                Sample No.
               </TableCell>
               <TableCell
-                sx={{ width: "100px", minWidth: "100px", maxWidth: "100px" }}
+                sx={{
+                  width: "100px",
+                  minWidth: "100px",
+                  maxWidth: "100px",
+                  "@media (max-width: 960px)": { display: "none" },
+                }}
                 onClick={
                   !isReportAuthorized ? () => handleSort("cowlNo") : undefined
                 }
@@ -1064,7 +1163,12 @@ const SampleList = () => {
                 Cowl Number
               </TableCell>
               <TableCell
-                sx={{ width: "100px", minWidth: "100px", maxWidth: "100px" }}
+                sx={{
+                  width: "100px",
+                  minWidth: "100px",
+                  maxWidth: "100px",
+                  "@media (max-width: 960px)": { display: "none" },
+                }}
                 onClick={
                   !isReportAuthorized ? () => handleSort("type") : undefined
                 }
@@ -1072,7 +1176,13 @@ const SampleList = () => {
                 Type
               </TableCell>
               <TableCell
-                sx={{ minWidth: "200px", flex: 2 }}
+                sx={{
+                  minWidth: "200px",
+                  flex: 2,
+                  "@media (max-width: 960px) and (orientation: portrait)": {
+                    minWidth: "120px",
+                  },
+                }}
                 onClick={
                   !isReportAuthorized ? () => handleSort("location") : undefined
                 }
@@ -1080,7 +1190,13 @@ const SampleList = () => {
                 Location
               </TableCell>
               <TableCell
-                sx={{ minWidth: "70px", maxWidth: "110px" }}
+                sx={{
+                  minWidth: "70px",
+                  maxWidth: "110px",
+                  "@media (max-width: 960px) and (orientation: portrait)": {
+                    display: "none",
+                  },
+                }}
                 onClick={
                   !isReportAuthorized
                     ? () => handleSort("startTime")
@@ -1090,7 +1206,13 @@ const SampleList = () => {
                 Start Time
               </TableCell>
               <TableCell
-                sx={{ minWidth: "70px", maxWidth: "110px" }}
+                sx={{
+                  minWidth: "70px",
+                  maxWidth: "110px",
+                  "@media (max-width: 960px) and (orientation: portrait)": {
+                    display: "none",
+                  },
+                }}
                 onClick={
                   !isReportAuthorized ? () => handleSort("endTime") : undefined
                 }
@@ -1098,7 +1220,13 @@ const SampleList = () => {
                 End Time
               </TableCell>
               <TableCell
-                sx={{ minWidth: "100px", maxWidth: "150px" }}
+                sx={{
+                  minWidth: "100px",
+                  maxWidth: "150px",
+                  "@media (max-width: 960px) and (orientation: portrait)": {
+                    display: "none",
+                  },
+                }}
                 onClick={
                   !isReportAuthorized
                     ? () => handleSort("averageFlowrate")
@@ -1108,7 +1236,19 @@ const SampleList = () => {
                 Flow Rate (L/min)
               </TableCell>
               <TableCell
-                sx={{ width: "180px", minWidth: "200px", maxWidth: "200px" }}
+                sx={{
+                  width: "180px",
+                  minWidth: "200px",
+                  maxWidth: "200px",
+                  "@media (max-width: 960px) and (orientation: portrait)": {
+                    display: "none",
+                  },
+                  "@media (max-width: 960px) and (orientation: landscape)": {
+                    width: "90px",
+                    minWidth: "90px",
+                    maxWidth: "100px",
+                  },
+                }}
               >
                 Actions
               </TableCell>
@@ -1119,40 +1259,110 @@ const SampleList = () => {
               <TableRow>
                 <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
                   <Typography variant="body1" color="text.secondary">
-                  No samples found for this job. Click 'Add Samples' to get started.
+                    No samples found for this job. Click 'Add Samples' to get
+                    started.
                   </Typography>
                 </TableCell>
               </TableRow>
             ) : (
               sortedSamples.map((sample) => (
-                <TableRow key={sample._id}>
+                <TableRow
+                  key={sample._id}
+                  onClick={() => {
+                    if (isMobileOrTablet && !isReportAuthorized) {
+                      navigate(
+                        `/air-monitoring/shift/${shiftId}/samples/edit/${sample._id}`,
+                      );
+                    }
+                  }}
+                  sx={{
+                    cursor: isMobileOrTablet ? "pointer" : "default",
+                  }}
+                >
                   <TableCell
-                    sx={{ width: "140px", minWidth: "140px", maxWidth: "140px" }}
+                    sx={{
+                      width: "140px",
+                      minWidth: "140px",
+                      maxWidth: "140px",
+                      "@media (max-width: 960px) and (orientation: portrait)": {
+                        minWidth: "80px",
+                        maxWidth: "none",
+                      },
+                    }}
                   >
                     {sample.fullSampleID}
                   </TableCell>
                   <TableCell
-                    sx={{ width: "100px", minWidth: "100px", maxWidth: "100px" }}
+                    sx={{
+                      width: "100px",
+                      minWidth: "100px",
+                      maxWidth: "100px",
+                      "@media (max-width: 960px)": { display: "none" },
+                    }}
                   >
                     {sample.cowlNo || "-"}
                   </TableCell>
                   <TableCell
-                    sx={{ width: "100px", minWidth: "100px", maxWidth: "100px" }}
+                    sx={{
+                      width: "100px",
+                      minWidth: "100px",
+                      maxWidth: "100px",
+                      "@media (max-width: 960px)": { display: "none" },
+                    }}
                   >
                     {sample.location === "Field blank" ? "-" : sample.type}
                   </TableCell>
-                  <TableCell sx={{ minWidth: "200px", flex: 2 }}>
+                  <TableCell
+                    sx={{
+                      minWidth: "200px",
+                      flex: 2,
+                      "@media (max-width: 960px) and (orientation: portrait)": {
+                        minWidth: "120px",
+                      },
+                    }}
+                  >
                     {sample.location}
                   </TableCell>
-                  <TableCell sx={{ minWidth: "70px", maxWidth: "110px" }}>
+                  <TableCell
+                    sx={{
+                      minWidth: "70px",
+                      maxWidth: "110px",
+                      "@media (max-width: 960px) and (orientation: portrait)": {
+                        display: "none",
+                      },
+                    }}
+                  >
                     {formatTime(sample.startTime)}
                   </TableCell>
-                  <TableCell sx={{ minWidth: "70px", maxWidth: "110px" }}>
+                  <TableCell
+                    sx={{
+                      minWidth: "70px",
+                      maxWidth: "110px",
+                      "@media (max-width: 960px) and (orientation: portrait)": {
+                        display: "none",
+                      },
+                    }}
+                  >
                     {sample.endTime ? formatTime(sample.endTime) : "-"}
                   </TableCell>
-                  <TableCell sx={{ minWidth: "100px", maxWidth: "150px" }}>
+                  <TableCell
+                    sx={{
+                      minWidth: "100px",
+                      maxWidth: "150px",
+                      "@media (max-width: 960px) and (orientation: portrait)": {
+                        display: "none",
+                      },
+                    }}
+                  >
                     {sample.status === "failed" ? (
-                      <Typography component="span" sx={{ color: "error.main", fontWeight: "bold", fontSize: "inherit" }}>
+                      <Typography
+                        component="span"
+                        sx={{
+                          color: "error.main",
+                          fontWeight: "bold",
+                          fontSize: "inherit",
+                        }}
+                      >
                         Failed
                       </Typography>
                     ) : (
@@ -1160,18 +1370,36 @@ const SampleList = () => {
                     )}
                   </TableCell>
                   <TableCell
-                    sx={{ width: "180px", minWidth: "180px", maxWidth: "180px" }}
+                    sx={{
+                      width: "180px",
+                      minWidth: "180px",
+                      maxWidth: "180px",
+                      "@media (max-width: 960px) and (orientation: portrait)": {
+                        display: "none",
+                      },
+                      "@media (max-width: 960px) and (orientation: landscape)":
+                        {
+                          width: "90px",
+                          minWidth: "90px",
+                          maxWidth: "100px",
+                        },
+                    }}
+                    onClick={(e) => e.stopPropagation()}
                   >
                     <Button
                       variant="outlined"
                       size="small"
-                      onClick={() =>
+                      onClick={(e) => {
+                        e.stopPropagation();
                         navigate(
-                          `/air-monitoring/shift/${shiftId}/samples/edit/${sample._id}`
-                        )
-                      }
+                          `/air-monitoring/shift/${shiftId}/samples/edit/${sample._id}`,
+                        );
+                      }}
                       disabled={isReportAuthorized}
-                      sx={{ mr: 1 }}
+                      sx={{
+                        mr: 1,
+                        "@media (max-width: 960px)": { display: "none" },
+                      }}
                     >
                       Edit Sample
                     </Button>
@@ -1218,7 +1446,10 @@ const SampleList = () => {
                   isCompleteDisabled,
                   shiftStatus: shift?.status,
                   isReportAuthorized,
-                  buttonDisabled: isCompleteDisabled || shift?.status !== "ongoing" || isReportAuthorized
+                  buttonDisabled:
+                    isCompleteDisabled ||
+                    shift?.status !== "ongoing" ||
+                    isReportAuthorized,
                 });
                 handleSampleComplete();
               }}
@@ -1267,6 +1498,39 @@ const SampleList = () => {
           )}
       </Box>
 
+      {/* Description Required for Complete Sampling Dialog */}
+      <Dialog
+        open={showDescriptionRequiredForCompleteDialog}
+        onClose={() => setShowDescriptionRequiredForCompleteDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Description of Works Required</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ mt: 2, mb: 2 }}>
+            Please fill in the description of works before completing sampling.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setShowDescriptionRequiredForCompleteDialog(false)}
+            variant="outlined"
+          >
+            OK
+          </Button>
+          <Button
+            onClick={() => {
+              setShowDescriptionRequiredForCompleteDialog(false);
+              setDescriptionModalOpen(true);
+            }}
+            variant="contained"
+            color="primary"
+          >
+            Fill in Description
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Description Required Dialog */}
       <Dialog
         open={showDescriptionDialog}
@@ -1293,7 +1557,7 @@ const SampleList = () => {
               setShowDescriptionDialog(false);
               // Scroll to the description field
               const descriptionField = document.querySelector(
-                'textarea[placeholder*="description of works"]'
+                'textarea[placeholder*="description of works"]',
               );
               if (descriptionField) {
                 descriptionField.scrollIntoView({
@@ -1360,7 +1624,9 @@ const SampleList = () => {
               }}
             />
             {isDictating && (
-              <Box sx={{ mt: 1, display: "flex", alignItems: "center", gap: 1 }}>
+              <Box
+                sx={{ mt: 1, display: "flex", alignItems: "center", gap: 1 }}
+              >
                 <Box
                   sx={{
                     width: 8,
@@ -1404,9 +1670,7 @@ const SampleList = () => {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDescriptionModalOpen(false)}>
-            Close
-          </Button>
+          <Button onClick={() => setDescriptionModalOpen(false)}>Close</Button>
           <Button
             variant="contained"
             onClick={async () => {
@@ -1433,30 +1697,47 @@ const SampleList = () => {
       >
         <DialogTitle>Complete Sampling</DialogTitle>
         <DialogContent>
-          <Typography variant="body1" sx={{ mb: 3 }}>
+          {isPortrait ? (
+            <Box
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                py: 4,
+                px: 2,
+                textAlign: "center",
+              }}
+            >
+              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                Please rotate your device to landscape mode
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                The complete sampling form is best viewed in landscape
+                orientation. Please rotate your device to continue.
+              </Typography>
+            </Box>
+          ) : (
+            <>
+          <Typography
+            variant="body1"
+            sx={{ mb: 2, fontSize: { xs: "0.8em", sm: "0.95em" } }}
+          >
             Please review and confirm the description of works and sample
             summary before completing sampling.
           </Typography>
 
           {/* Description of Works Section */}
-          <Box sx={{ mb: 3 }}>
-            <Typography variant="h6" sx={{ mb: 2 }}>
-              Description of Works
-            </Typography>
-            <TextField
-              fullWidth
-              multiline
-              rows={4}
-              value={tempDescription}
-              onChange={(e) => setTempDescription(e.target.value)}
-              placeholder="Enter description of works..."
-              variant="outlined"
-            />
-          </Box>
+          <Typography variant="body1" sx={{ fontSize: { xs: "0.8em", sm: "0.95em" }, mb: 2, wordBreak: "break-word" }}>
+            <Box component="span" sx={{fontWeight: "bold" }}>
+              Description of Works:
+            </Box>{" "}
+            {tempDescription || descriptionOfWorks || ""}
+          </Typography>
 
           {/* Sample Summary Section */}
           <Box sx={{ mb: 2 }}>
-            <Typography variant="h6" sx={{ mb: 2 }}>
+            <Typography variant="h6" sx={{ fontSize: { xs: "0.8em", sm: "0.95em" }, mb: 2 }}>
               Sample Summary ({samples.length} samples)
             </Typography>
             {samples.length > 0 ? (
@@ -1498,12 +1779,21 @@ const SampleList = () => {
                         </TableCell>
                         <TableCell>
                           {sample.status === "failed" ? (
-                            <Typography component="span" sx={{ color: "error.main", fontWeight: "bold", fontSize: "inherit" }}>
+                            <Typography
+                              component="span"
+                              sx={{
+                                color: "error.main",
+                                fontWeight: "bold",
+                                fontSize: "inherit",
+                              }}
+                            >
                               Failed
                             </Typography>
-                          ) : sample.averageFlowrate
-                          ? `${sample.averageFlowrate} L/min`
-                          : "-"}
+                          ) : sample.averageFlowrate ? (
+                            `${sample.averageFlowrate} L/min`
+                          ) : (
+                            "-"
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1515,6 +1805,8 @@ const SampleList = () => {
               </Typography>
             )}
           </Box>
+            </>
+          )}
         </DialogContent>
         <DialogActions>
           <Button
@@ -1527,7 +1819,7 @@ const SampleList = () => {
             onClick={handleConfirmSamplingComplete}
             variant="contained"
             color="primary"
-            disabled={!tempDescription.trim()}
+            disabled={isPortrait || !tempDescription.trim()}
           >
             Complete Sampling
           </Button>

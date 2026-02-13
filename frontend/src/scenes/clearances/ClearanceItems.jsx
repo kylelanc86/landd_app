@@ -32,6 +32,8 @@ import {
   Autocomplete,
   Alert,
   InputAdornment,
+  useTheme,
+  useMediaQuery,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -57,14 +59,18 @@ import customDataFieldGroupService from "../../services/customDataFieldGroupServ
 import {
   compressImage,
   needsCompression,
-  saveFileToDevice,
+  saveFileToDevice, // eslint-disable-line no-unused-vars -- used when save-to-device is re-enabled
 } from "../../utils/imageCompression";
 import { formatDate } from "../../utils/dateUtils";
 import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
 
 const ClearanceItems = () => {
+  const theme = useTheme();
   const navigate = useNavigate();
   const { clearanceId } = useParams();
+  const isPortrait = useMediaQuery("(orientation: portrait)");
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const showRotateAlert = isPortrait && isMobile;
 
   const [items, setItems] = useState([]);
   const [clearance, setClearance] = useState(null);
@@ -202,7 +208,7 @@ const ClearanceItems = () => {
       !("SpeechRecognition" in window)
     ) {
       setDictationError(
-        "Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari."
+        "Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.",
       );
       return;
     }
@@ -328,7 +334,7 @@ const ClearanceItems = () => {
       fetchCustomDataFields();
     } else {
       console.error(
-        "[ClearanceItems] No clearanceId provided in URL parameters"
+        "[ClearanceItems] No clearanceId provided in URL parameters",
       );
       setError("No clearance ID provided");
       setLoading(false);
@@ -372,7 +378,7 @@ const ClearanceItems = () => {
             ? materialsDescriptionsData.length
             : "unknown",
           timestamp: new Date().toISOString(),
-        }
+        },
       );
 
       // Handle both array and object responses and sort alphabetically
@@ -411,7 +417,7 @@ const ClearanceItems = () => {
         "[ClearanceItems] fetchCustomDataFields - Data processing completed",
         {
           processingDuration: `${(processEndTime - processStartTime).toFixed(
-            2
+            2,
           )}ms`,
           processedRoomAreasCount: processedData.roomAreas.length,
           processedLocationDescriptionsCount:
@@ -419,7 +425,7 @@ const ClearanceItems = () => {
           processedMaterialsDescriptionsCount:
             processedData.materialsDescriptions.length,
           timestamp: new Date().toISOString(),
-        }
+        },
       );
 
       setCustomDataFields(processedData);
@@ -522,7 +528,7 @@ const ClearanceItems = () => {
             {
               projectId: clearanceData.projectId._id || clearanceData.projectId,
               timestamp: new Date().toISOString(),
-            }
+            },
           );
           const jobFetchStartTime = performance.now();
 
@@ -540,13 +546,13 @@ const ClearanceItems = () => {
           const jobFetchEndTime = performance.now();
           console.log("[ClearanceItems] fetchData - Jobs fetched", {
             jobsFetchDuration: `${(jobFetchEndTime - jobFetchStartTime).toFixed(
-              2
+              2,
             )}ms`,
             jobsCount: Array.isArray(jobsResponse?.data)
               ? jobsResponse.data.length
               : Array.isArray(jobsResponse?.jobs)
-              ? jobsResponse.jobs.length
-              : 0,
+                ? jobsResponse.jobs.length
+                : 0,
             timestamp: new Date().toISOString(),
           });
           const projectId =
@@ -557,7 +563,7 @@ const ClearanceItems = () => {
 
           console.log(
             "Looking for asbestos removal job with projectId:",
-            projectId
+            projectId,
           );
           console.log("Clearance data projectId:", clearanceData.projectId);
           console.log("Jobs response structure:", jobsResponse);
@@ -569,7 +575,7 @@ const ClearanceItems = () => {
               projectIdId: job.projectId?._id,
               name: job.name,
               asbestosRemovalist: job.asbestosRemovalist,
-            }))
+            })),
           );
 
           // Find the asbestos removal job that matches this project
@@ -596,7 +602,7 @@ const ClearanceItems = () => {
           if (projectJobs.length > 1 && clearanceData?.asbestosRemovalist) {
             matchingJob = projectJobs.find(
               (job) =>
-                job.asbestosRemovalist === clearanceData.asbestosRemovalist
+                job.asbestosRemovalist === clearanceData.asbestosRemovalist,
             );
             console.log(
               "[ClearanceItems] fetchData - Multiple jobs found, attempting to match by asbestosRemovalist",
@@ -604,7 +610,7 @@ const ClearanceItems = () => {
                 clearanceAsbestosRemovalist: clearanceData.asbestosRemovalist,
                 matchedByRemovalist: !!matchingJob,
                 timestamp: new Date().toISOString(),
-              }
+              },
             );
           }
 
@@ -716,7 +722,7 @@ const ClearanceItems = () => {
         await asbestosClearanceService.updateItem(
           clearanceId,
           editingItem._id,
-          itemData
+          itemData,
         );
         showSnackbar("Item updated successfully", "success");
         setDialogOpen(false);
@@ -733,14 +739,13 @@ const ClearanceItems = () => {
         await fetchData();
 
         // Find the newly created item and open photo gallery
-        const updatedItems = await asbestosClearanceService.getItems(
-          clearanceId
-        );
+        const updatedItems =
+          await asbestosClearanceService.getItems(clearanceId);
         const createdItem = updatedItems.find(
           (item) =>
             item.locationDescription === itemData.locationDescription &&
             item.roomArea === itemData.roomArea &&
-            item.materialDescription === itemData.materialDescription
+            item.materialDescription === itemData.materialDescription,
         );
 
         if (createdItem) {
@@ -751,9 +756,8 @@ const ClearanceItems = () => {
 
       // Update clearance type based on all items (only for editing, since we already fetched items for new items)
       if (editingItem) {
-        const updatedItems = await asbestosClearanceService.getItems(
-          clearanceId
-        );
+        const updatedItems =
+          await asbestosClearanceService.getItems(clearanceId);
         await updateClearanceTypeFromItems(updatedItems);
       }
     } catch (err) {
@@ -774,7 +778,7 @@ const ClearanceItems = () => {
     });
     // Don't show level floor checkbox for Vehicle/Equipment items
     setShowLevelFloor(
-      clearance?.clearanceType !== "Vehicle/Equipment" && !!item.levelFloor
+      clearance?.clearanceType !== "Vehicle/Equipment" && !!item.levelFloor,
     );
     // Reset first tap state when editing
     setFirstTapFields({
@@ -851,7 +855,7 @@ const ClearanceItems = () => {
 
     const hasFriable = items.some((item) => item.asbestosType === "friable");
     const hasNonFriable = items.some(
-      (item) => item.asbestosType === "non-friable"
+      (item) => item.asbestosType === "non-friable",
     );
 
     let newClearanceType;
@@ -880,7 +884,7 @@ const ClearanceItems = () => {
         }));
 
         console.log(
-          `Clearance type automatically updated to: ${newClearanceType}`
+          `Clearance type automatically updated to: ${newClearanceType}`,
         );
       } catch (error) {
         console.error("Error updating clearance type:", error);
@@ -943,7 +947,7 @@ const ClearanceItems = () => {
       } catch (backCameraError) {
         console.log(
           "Back camera not available, trying any camera:",
-          backCameraError
+          backCameraError,
         );
         // Fallback to any available camera
         mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -1031,19 +1035,19 @@ const ClearanceItems = () => {
         // Ensure we don't go out of bounds
         const clampedSourceX = Math.max(
           0,
-          Math.min(sourceX, videoRef.videoWidth - sourceWidth)
+          Math.min(sourceX, videoRef.videoWidth - sourceWidth),
         );
         const clampedSourceY = Math.max(
           0,
-          Math.min(sourceY, videoRef.videoHeight - sourceHeight)
+          Math.min(sourceY, videoRef.videoHeight - sourceHeight),
         );
         const clampedSourceWidth = Math.min(
           sourceWidth,
-          videoRef.videoWidth - clampedSourceX
+          videoRef.videoWidth - clampedSourceX,
         );
         const clampedSourceHeight = Math.min(
           sourceHeight,
-          videoRef.videoHeight - clampedSourceY
+          videoRef.videoHeight - clampedSourceY,
         );
 
         // Draw the zoomed portion to canvas, scaled to fill
@@ -1056,7 +1060,7 @@ const ClearanceItems = () => {
           0,
           0,
           canvas.width,
-          canvas.height
+          canvas.height,
         );
       } else {
         // No zoom, capture full frame
@@ -1074,23 +1078,22 @@ const ClearanceItems = () => {
       canvas.toBlob(
         async (blob) => {
           if (blob) {
-            // Create a file from the blob (full quality)
+            // eslint-disable-next-line no-unused-vars -- used when save-to-device block is re-enabled
             const fullQualityFile = new File([blob], filename, {
               type: "image/jpeg",
             });
 
-            // Save full-size original to device
-            try {
-              const projectFolderName = getProjectFolderName();
-              await saveFileToDevice(fullQualityFile, filename, {
-                projectId: projectFolderName
-                  ? `${projectFolderName} - Photos`
-                  : "clearance-photos",
-              });
-            } catch (error) {
-              console.error("Error saving photo to device:", error);
-              // Continue with upload even if device save fails
-            }
+            // Temporarily disabled - save photo to device (re-enable when ready)
+            // try {
+            //   const projectFolderName = getProjectFolderName();
+            //   await saveFileToDevice(fullQualityFile, filename, {
+            //     projectId: projectFolderName
+            //       ? `${projectFolderName} - Photos`
+            //       : "clearance-photos",
+            //   });
+            // } catch (error) {
+            //   console.error("Error saving photo to device:", error);
+            // }
 
             // Now process the full-quality file for upload (will be compressed if needed)
             // Pass it with a special name to prevent double-saving in handlePhotoUploadForGallery
@@ -1101,7 +1104,7 @@ const ClearanceItems = () => {
           }
         },
         "image/jpeg",
-        1.0 // Full quality for device storage
+        1.0, // Full quality for device storage
       );
     }
 
@@ -1163,7 +1166,8 @@ const ClearanceItems = () => {
         setLastTapTime(0);
         zoomPanRef.current = { zoom: 1, panX: 0, panY: 0 };
         if (zoomWrapperRef.current) {
-          zoomWrapperRef.current.style.transform = "scale(1) translate(0px, 0px)";
+          zoomWrapperRef.current.style.transform =
+            "scale(1) translate(0px, 0px)";
         }
         return;
       }
@@ -1188,9 +1192,17 @@ const ClearanceItems = () => {
       const distance = getDistance(e.touches[0], e.touches[1]);
       const center = getCenter(e.touches[0], e.touches[1]);
 
-      if (lastPinchDistance !== null && videoContainerRef.current && zoomWrapperRef.current) {
+      if (
+        lastPinchDistance !== null &&
+        videoContainerRef.current &&
+        zoomWrapperRef.current
+      ) {
         const scale = distance / lastPinchDistance;
-        const { zoom: curZoom, panX: curPanX, panY: curPanY } = zoomPanRef.current;
+        const {
+          zoom: curZoom,
+          panX: curPanX,
+          panY: curPanY,
+        } = zoomPanRef.current;
         const newZoom = Math.max(1, Math.min(5, curZoom * scale));
         const container = videoContainerRef.current;
         const rect = container.getBoundingClientRect();
@@ -1204,7 +1216,11 @@ const ClearanceItems = () => {
         const maxPan = (newZoom - 1) * 50;
         const clampedPanX = Math.max(-maxPan, Math.min(maxPan, newPanX));
         const clampedPanY = Math.max(-maxPan, Math.min(maxPan, newPanY));
-        zoomPanRef.current = { zoom: newZoom, panX: clampedPanX, panY: clampedPanY };
+        zoomPanRef.current = {
+          zoom: newZoom,
+          panX: clampedPanX,
+          panY: clampedPanY,
+        };
         zoomWrapperRef.current.style.transform = `scale(${newZoom}) translate(${clampedPanX}px, ${clampedPanY}px)`;
         setLastPinchDistance(distance);
         setLastPanPoint(center);
@@ -1212,14 +1228,28 @@ const ClearanceItems = () => {
         setLastPinchDistance(distance);
         setLastPanPoint(center);
       }
-    } else if (e.touches.length === 1 && lastPanPoint && zoomPanRef.current.zoom > 1) {
+    } else if (
+      e.touches.length === 1 &&
+      lastPanPoint &&
+      zoomPanRef.current.zoom > 1
+    ) {
       const curZoom = zoomPanRef.current.zoom;
       const deltaX = (e.touches[0].clientX - lastPanPoint.x) / curZoom;
       const deltaY = (e.touches[0].clientY - lastPanPoint.y) / curZoom;
       const maxPan = (curZoom - 1) * 50;
-      const newPanX = Math.max(-maxPan, Math.min(maxPan, zoomPanRef.current.panX + deltaX));
-      const newPanY = Math.max(-maxPan, Math.min(maxPan, zoomPanRef.current.panY + deltaY));
-      zoomPanRef.current = { ...zoomPanRef.current, panX: newPanX, panY: newPanY };
+      const newPanX = Math.max(
+        -maxPan,
+        Math.min(maxPan, zoomPanRef.current.panX + deltaX),
+      );
+      const newPanY = Math.max(
+        -maxPan,
+        Math.min(maxPan, zoomPanRef.current.panY + deltaY),
+      );
+      zoomPanRef.current = {
+        ...zoomPanRef.current,
+        panX: newPanX,
+        panY: newPanY,
+      };
       if (zoomWrapperRef.current) {
         zoomWrapperRef.current.style.transform = `scale(${zoomPanRef.current.zoom}) translate(${newPanX}px, ${newPanY}px)`;
       }
@@ -1333,7 +1363,7 @@ const ClearanceItems = () => {
         clearanceId,
         selectedItemForPhotos._id,
         photoData,
-        true // includeInReport default to true
+        true, // includeInReport default to true
       );
 
       // Update the selected item with the new photo data immediately
@@ -1386,7 +1416,7 @@ const ClearanceItems = () => {
     }
     // Find the photo in the selected item
     const photo = selectedItemForPhotos?.photographs?.find(
-      (p) => p._id === photoId
+      (p) => p._id === photoId,
     );
     return photo?.includeInReport ?? true;
   };
@@ -1415,7 +1445,7 @@ const ClearanceItems = () => {
 
     // Check if photo has a stored description
     const photo = selectedItemForPhotos?.photographs?.find(
-      (p) => p._id === photoId
+      (p) => p._id === photoId,
     );
     if (photo?.description) {
       return photo.description;
@@ -1470,18 +1500,18 @@ const ClearanceItems = () => {
       Object.entries(localPhotoChanges).forEach(
         ([photoId, includeInReport]) => {
           const photo = selectedItemForPhotos?.photographs?.find(
-            (p) => p._id === photoId
+            (p) => p._id === photoId,
           );
           if (photo && photo.includeInReport !== includeInReport) {
             togglePromises.push(
               asbestosClearanceService.togglePhotoInReport(
                 clearanceId,
                 selectedItemForPhotos._id,
-                photoId
-              )
+                photoId,
+              ),
             );
           }
-        }
+        },
       );
 
       // Handle photo description changes (can be done in parallel)
@@ -1492,10 +1522,10 @@ const ClearanceItems = () => {
               clearanceId,
               selectedItemForPhotos._id,
               photoId,
-              description
-            )
+              description,
+            ),
           );
-        }
+        },
       );
 
       // Process toggle operations in parallel
@@ -1515,7 +1545,7 @@ const ClearanceItems = () => {
           await asbestosClearanceService.deletePhotoFromItem(
             clearanceId,
             selectedItemForPhotos._id,
-            photoId
+            photoId,
           );
           deletionResults.push({ status: "fulfilled", photoId });
         } catch (error) {
@@ -1538,7 +1568,7 @@ const ClearanceItems = () => {
         if (result.reason) {
           console.error(
             `Operation failed for photo ${result.photoId || "unknown"}:`,
-            result.reason
+            result.reason,
           );
         }
       });
@@ -1552,7 +1582,7 @@ const ClearanceItems = () => {
           // Some operations succeeded, some failed
           showSnackbar(
             `Saved ${successes.length} of ${allResults.length} changes. Some operations failed.`,
-            "warning"
+            "warning",
           );
         }
       } else {
@@ -1574,7 +1604,7 @@ const ClearanceItems = () => {
       // Update selected item
       const updatedItems = await asbestosClearanceService.getItems(clearanceId);
       const updatedItem = updatedItems.find(
-        (item) => item._id === selectedItemForPhotos._id
+        (item) => item._id === selectedItemForPhotos._id,
       );
       if (updatedItem) {
         setSelectedItemForPhotos(updatedItem);
@@ -1613,7 +1643,7 @@ const ClearanceItems = () => {
             originalSizeKB,
             shouldCompress,
             timestamp: new Date().toISOString(),
-          }
+          },
         );
 
         if (shouldCompress) {
@@ -1621,7 +1651,7 @@ const ClearanceItems = () => {
             "[ClearanceItems] handlePhotoUploadForGallery - Starting compression",
             {
               timestamp: new Date().toISOString(),
-            }
+            },
           );
           const compressionStartTime = performance.now();
 
@@ -1645,21 +1675,21 @@ const ClearanceItems = () => {
                 compressionEndTime - compressionStartTime
               ).toFixed(2)}ms`,
               timestamp: new Date().toISOString(),
-            }
+            },
           );
 
           const compressedSizeKB = Math.round(
-            (compressedImage.length * 0.75) / 1024
+            (compressedImage.length * 0.75) / 1024,
           );
           const reduction = Math.round(
-            ((originalSizeKB - compressedSizeKB) / originalSizeKB) * 100
+            ((originalSizeKB - compressedSizeKB) / originalSizeKB) * 100,
           );
 
           console.log(
             "[ClearanceItems] handlePhotoUploadForGallery - Adding compressed photo",
             {
               timestamp: new Date().toISOString(),
-            }
+            },
           );
           const addStartTime = performance.now();
           await handleAddPhotoToItem(compressedImage);
@@ -1669,7 +1699,7 @@ const ClearanceItems = () => {
             {
               addDuration: `${(addEndTime - addStartTime).toFixed(2)}ms`,
               timestamp: new Date().toISOString(),
-            }
+            },
           );
 
           setCompressionStatus({
@@ -1681,7 +1711,7 @@ const ClearanceItems = () => {
             "[ClearanceItems] handlePhotoUploadForGallery - No compression needed, reading file",
             {
               timestamp: new Date().toISOString(),
-            }
+            },
           );
           const readStartTime = performance.now();
           const reader = new FileReader();
@@ -1692,7 +1722,7 @@ const ClearanceItems = () => {
               {
                 readDuration: `${(readEndTime - readStartTime).toFixed(2)}ms`,
                 timestamp: new Date().toISOString(),
-              }
+              },
             );
             const addStartTime = performance.now();
             await handleAddPhotoToItem(e.target.result);
@@ -1702,7 +1732,7 @@ const ClearanceItems = () => {
               {
                 addDuration: `${(addEndTime - addStartTime).toFixed(2)}ms`,
                 timestamp: new Date().toISOString(),
-              }
+              },
             );
             setCompressionStatus({
               type: "info",
@@ -1718,7 +1748,7 @@ const ClearanceItems = () => {
           {
             totalDuration: `${(uploadEndTime - uploadStartTime).toFixed(2)}ms`,
             timestamp: new Date().toISOString(),
-          }
+          },
         );
       } catch (error) {
         const uploadEndTime = performance.now();
@@ -1749,7 +1779,7 @@ const ClearanceItems = () => {
         "[ClearanceItems] fetchAirMonitoringReports - No project ID",
         {
           timestamp: new Date().toISOString(),
-        }
+        },
       );
       showSnackbar("No project found for this clearance", "error");
       return;
@@ -1766,11 +1796,11 @@ const ClearanceItems = () => {
           {
             projectId: clearance?.projectId?._id,
             timestamp: new Date().toISOString(),
-          }
+          },
         );
         showSnackbar(
           "Unable to identify asbestos removal job for this clearance. Please ensure the clearance is properly linked to an asbestos removal job.",
-          "error"
+          "error",
         );
         setLoadingReports(false);
         return;
@@ -1781,12 +1811,12 @@ const ClearanceItems = () => {
         {
           asbestosRemovalJobId,
           timestamp: new Date().toISOString(),
-        }
+        },
       );
       const apiStartTime = performance.now();
       const reports =
         await asbestosClearanceService.getAirMonitoringReportsByJob(
-          asbestosRemovalJobId
+          asbestosRemovalJobId,
         );
       const apiEndTime = performance.now();
       console.log(
@@ -1795,7 +1825,7 @@ const ClearanceItems = () => {
           reportsCount: Array.isArray(reports) ? reports.length : 0,
           apiDuration: `${(apiEndTime - apiStartTime).toFixed(2)}ms`,
           timestamp: new Date().toISOString(),
-        }
+        },
       );
       setAirMonitoringReports(reports);
 
@@ -1819,7 +1849,7 @@ const ClearanceItems = () => {
         "[ClearanceItems] fetchAirMonitoringReports - Loading state set to false",
         {
           timestamp: new Date().toISOString(),
-        }
+        },
       );
     }
   };
@@ -1835,9 +1865,8 @@ const ClearanceItems = () => {
       setGeneratingAirMonitoringPDF(true);
 
       // Generate the air monitoring report PDF
-      const { generateShiftReport } = await import(
-        "../../utils/generateShiftReport"
-      );
+      const { generateShiftReport } =
+        await import("../../utils/generateShiftReport");
       const { shiftService, sampleService, projectService, clientService } =
         await import("../../services/api");
       const asbestosRemovalJobService = (
@@ -1895,7 +1924,7 @@ const ClearanceItems = () => {
 
       showSnackbar(
         "Air monitoring report selected and uploaded successfully",
-        "success"
+        "success",
       );
 
       setAirMonitoringReportsDialogOpen(false);
@@ -1913,7 +1942,7 @@ const ClearanceItems = () => {
   const handleRemoveAirMonitoringReport = async () => {
     if (
       window.confirm(
-        "Are you sure you want to remove the air monitoring report?"
+        "Are you sure you want to remove the air monitoring report?",
       )
     ) {
       try {
@@ -2020,20 +2049,20 @@ const ClearanceItems = () => {
 
       console.log(
         "Complete clearance button clicked - asbestosRemovalJobId:",
-        asbestosRemovalJobId
+        asbestosRemovalJobId,
       );
 
       // Navigate to asbestos removal job details after completing clearance
       if (asbestosRemovalJobId) {
         console.log(
           "Navigating to asbestos removal job details:",
-          `/asbestos-removal/jobs/${asbestosRemovalJobId}/details`
+          `/asbestos-removal/jobs/${asbestosRemovalJobId}/details`,
         );
         // Navigate to the asbestos removal job details using the already fetched job ID
         navigate(`/asbestos-removal/jobs/${asbestosRemovalJobId}/details`);
       } else {
         console.log(
-          "No asbestosRemovalJobId found, attempting to find job ID again..."
+          "No asbestosRemovalJobId found, attempting to find job ID again...",
         );
 
         // Try to find the job ID one more time as a fallback
@@ -2057,7 +2086,7 @@ const ClearanceItems = () => {
             navigate(`/asbestos-removal/jobs/${matchingJob._id}/details`);
           } else {
             console.log(
-              "Still no matching job found, navigating to asbestos removal list"
+              "Still no matching job found, navigating to asbestos removal list",
             );
             navigate("/asbestos-removal");
           }
@@ -2142,7 +2171,36 @@ const ClearanceItems = () => {
 
   return (
     <PermissionGate requiredPermissions={["asbestos.view"]}>
-      <Box m="20px">
+      <Box m="20px" sx={{ position: "relative" }}>
+        {/* Portrait on mobile: Rotate device alert overlay */}
+        {showRotateAlert && (
+          <Box
+            sx={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 1300,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "rgba(255, 255, 255, 0.97)",
+              p: 3,
+              textAlign: "center",
+            }}
+          >
+            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+              Please rotate your device to landscape mode
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              This page is best viewed in landscape orientation. Please rotate
+              your device to continue.
+            </Typography>
+          </Box>
+        )}
+
         {/* PDF Loading Overlay */}
         <PDFLoadingOverlay
           open={generatingAirMonitoringPDF}
@@ -2171,7 +2229,7 @@ const ClearanceItems = () => {
               navigate(
                 asbestosRemovalJobId
                   ? `/asbestos-removal/jobs/${asbestosRemovalJobId}/details`
-                  : `/asbestos-removal`
+                  : `/asbestos-removal`,
               )
             }
             sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
@@ -2363,7 +2421,7 @@ const ClearanceItems = () => {
                           items.length > 0 &&
                           items.some(
                             (item) =>
-                              item.levelFloor && item.levelFloor.trim() !== ""
+                              item.levelFloor && item.levelFloor.trim() !== "",
                           ) && <TableCell>Level/Floor</TableCell>}
                         <TableCell>Room/Area</TableCell>
                         <TableCell>Location Description</TableCell>
@@ -2382,7 +2440,7 @@ const ClearanceItems = () => {
                       items.length > 0 &&
                       items.some(
                         (item) =>
-                          item.levelFloor && item.levelFloor.trim() !== ""
+                          item.levelFloor && item.levelFloor.trim() !== "",
                       );
 
                     // For Vehicle/Equipment, show simplified view
@@ -2738,7 +2796,7 @@ const ClearanceItems = () => {
                           setForm({ ...form, roomArea: newInputValue })
                         }
                         options={customDataFields.roomAreas.map(
-                          (item) => item.text
+                          (item) => item.text,
                         )}
                         onOpen={() => {
                           if (isTablet() && !firstTapFields.roomArea) {
@@ -2749,7 +2807,7 @@ const ClearanceItems = () => {
                           }
                           console.log(
                             "Room areas options:",
-                            customDataFields.roomAreas
+                            customDataFields.roomAreas,
                           );
                         }}
                         freeSolo
@@ -2811,7 +2869,7 @@ const ClearanceItems = () => {
                           })
                         }
                         options={customDataFields.locationDescriptions.map(
-                          (item) => item.text
+                          (item) => item.text,
                         )}
                         onOpen={() => {
                           if (
@@ -2891,7 +2949,7 @@ const ClearanceItems = () => {
                           })
                         }
                         options={customDataFields.materialsDescriptions.map(
-                          (item) => item.text
+                          (item) => item.text,
                         )}
                         onOpen={() => {
                           if (
@@ -3639,7 +3697,7 @@ const ClearanceItems = () => {
                   });
                   showSnackbar(
                     "Job specific exclusions saved successfully",
-                    "success"
+                    "success",
                   );
                   setExclusionsLastSaved(new Date());
                   setJobExclusionsModalOpen(false);
@@ -3647,7 +3705,7 @@ const ClearanceItems = () => {
                   console.error("Error saving job specific exclusions:", error);
                   showSnackbar(
                     "Failed to save job specific exclusions",
-                    "error"
+                    "error",
                   );
                 } finally {
                   setSavingExclusions(false);
@@ -3938,7 +3996,10 @@ const ClearanceItems = () => {
                     bgcolor: "rgba(0,0,0,0.4)",
                     color: "white",
                     borderColor: "rgba(255,255,255,0.6)",
-                    "&:hover": { bgcolor: "rgba(0,0,0,0.6)", borderColor: "rgba(255,255,255,0.9)" },
+                    "&:hover": {
+                      bgcolor: "rgba(0,0,0,0.6)",
+                      borderColor: "rgba(255,255,255,0.9)",
+                    },
                   }}
                 >
                   Cancel
@@ -3950,13 +4011,17 @@ const ClearanceItems = () => {
                   size="medium"
                   startIcon={<PhotoCameraIcon />}
                   disabled={!stream}
-                  sx={{ borderRadius: 2, textTransform: "none", fontWeight: 500 }}
+                  sx={{
+                    borderRadius: 2,
+                    textTransform: "none",
+                    fontWeight: 500,
+                  }}
                 >
                   Capture
                 </Button>
               </Box>
             </Box>,
-            document.body
+            document.body,
           )}
 
         {/* Delete Confirmation Dialog */}
@@ -4287,7 +4352,7 @@ const ClearanceItems = () => {
                                   e.stopPropagation(); // Prevent opening full-size view
                                   handleTogglePhotoInReport(
                                     selectedItemForPhotos._id,
-                                    photo._id
+                                    photo._id,
                                   );
                                 }}
                                 onClick={(e) => {
@@ -4309,14 +4374,14 @@ const ClearanceItems = () => {
                                 top: 8,
                                 right: 8,
                                 backgroundColor: isPhotoMarkedForDeletion(
-                                  photo._id
+                                  photo._id,
                                 )
                                   ? "rgba(76, 175, 80, 0.8)"
                                   : "rgba(0, 0, 0, 0.6)",
                                 color: "white",
                                 "&:hover": {
                                   backgroundColor: isPhotoMarkedForDeletion(
-                                    photo._id
+                                    photo._id,
                                   )
                                     ? "rgba(76, 175, 80, 1)"
                                     : "rgba(0, 0, 0, 0.8)",
@@ -4336,7 +4401,7 @@ const ClearanceItems = () => {
                                   // Mark for deletion
                                   handleDeletePhotoFromItem(
                                     selectedItemForPhotos._id,
-                                    photo._id
+                                    photo._id,
                                   );
                                 }
                               }}
@@ -4368,12 +4433,12 @@ const ClearanceItems = () => {
                                   size="small"
                                   value={getCurrentPhotoDescription(
                                     photo._id,
-                                    selectedItemForPhotos
+                                    selectedItemForPhotos,
                                   )}
                                   onChange={(e) =>
                                     handleDescriptionChange(
                                       photo._id,
-                                      e.target.value
+                                      e.target.value,
                                     )
                                   }
                                   onBlur={() =>
@@ -4436,7 +4501,7 @@ const ClearanceItems = () => {
                                   >
                                     {getCurrentPhotoDescription(
                                       photo._id,
-                                      selectedItemForPhotos
+                                      selectedItemForPhotos,
                                     )}
                                   </Typography>
                                   <Typography

@@ -167,7 +167,7 @@ const DraftInvoicePage = () => {
         ? projectsData.filter((project) => {
             const projectStatus = project.status?.toLowerCase();
             return activeStatuses.some(
-              (status) => projectStatus === status.toLowerCase()
+              (status) => projectStatus === status.toLowerCase(),
             );
           })
         : [];
@@ -317,17 +317,17 @@ const DraftInvoicePage = () => {
             const qty = field === "qty" ? value : item.qty;
             const unitPrice = field === "unitPrice" ? value : item.unitPrice;
             updatedItem.taxAmount = parseFloat(
-              calculateTaxAmount(qty, unitPrice)
+              calculateTaxAmount(qty, unitPrice),
             );
             updatedItem.amount = parseFloat(
-              calculateTotalAmount(qty, unitPrice)
+              calculateTotalAmount(qty, unitPrice),
             );
           }
 
           return updatedItem;
         }
         return item;
-      })
+      }),
     );
   };
 
@@ -349,16 +349,16 @@ const DraftInvoicePage = () => {
             const qty = item.qty || 0;
             const unitPrice = selectedItem.unitPrice || 0;
             updatedItem.taxAmount = parseFloat(
-              calculateTaxAmount(qty, unitPrice)
+              calculateTaxAmount(qty, unitPrice),
             );
             updatedItem.amount = parseFloat(
-              calculateTotalAmount(qty, unitPrice)
+              calculateTotalAmount(qty, unitPrice),
             );
 
             return updatedItem;
           }
           return item;
-        })
+        }),
       );
     }
   };
@@ -384,7 +384,7 @@ const DraftInvoicePage = () => {
 
           // Get payment terms from the selected client
           const selectedClientObj = clients.find(
-            (client) => client.name === selectedClient?.name
+            (client) => client.name === selectedClient?.name,
           );
           let paymentTerms = 30; // Default fallback
 
@@ -473,15 +473,15 @@ const DraftInvoicePage = () => {
         invoiceItems.forEach((item, index) => {
           if (!item.qty || item.qty <= 0)
             validationErrors.push(
-              `Line item ${index + 1}: Quantity must be greater than 0`
+              `Line item ${index + 1}: Quantity must be greater than 0`,
             );
           if (!item.unitPrice || item.unitPrice <= 0)
             validationErrors.push(
-              `Line item ${index + 1}: Unit price must be greater than 0`
+              `Line item ${index + 1}: Unit price must be greater than 0`,
             );
           if (!item.amount || item.amount <= 0)
             validationErrors.push(
-              `Line item ${index + 1}: Amount must be greater than 0`
+              `Line item ${index + 1}: Amount must be greater than 0`,
             );
         });
       }
@@ -495,7 +495,7 @@ const DraftInvoicePage = () => {
       if (error.response?.data?.message === "Invoice validation failed") {
         console.error(
           "Backend validation failed:",
-          error.response.data.details
+          error.response.data.details,
         );
         return;
       }
@@ -561,7 +561,7 @@ const DraftInvoicePage = () => {
                 const filtered = (options || []).filter(
                   (option) =>
                     option.name.toLowerCase().includes(filterValue) ||
-                    option.projectID.toLowerCase().includes(filterValue)
+                    option.projectID.toLowerCase().includes(filterValue),
                 );
                 return filtered;
               }}
@@ -577,8 +577,8 @@ const DraftInvoicePage = () => {
                     projects.length === 0 && !loading
                       ? "No active projects found. Please ensure you're logged in and there are projects with active statuses."
                       : projects.length > 0
-                      ? `Found ${projects.length} active projects. Type to filter or click to see all.`
-                      : ""
+                        ? `Found ${projects.length} active projects. Type to filter or click to see all.`
+                        : ""
                   }
                 />
               )}
@@ -644,7 +644,7 @@ const DraftInvoicePage = () => {
                 Payment Terms:{" "}
                 {(() => {
                   const selectedClientObj = clients.find(
-                    (client) => client.name === selectedClient?.name
+                    (client) => client.name === selectedClient?.name,
                   );
                   return (
                     selectedClientObj?.paymentTerms || "Standard (30 days)"
@@ -758,7 +758,7 @@ const DraftInvoicePage = () => {
                       getOptionLabel={(option) => option.itemNo || ""}
                       value={
                         availableInvoiceItems.find(
-                          (ai) => ai.itemNo === item.itemNo
+                          (ai) => ai.itemNo === item.itemNo,
                         ) || null
                       }
                       onChange={(event, newValue) =>
@@ -824,7 +824,7 @@ const DraftInvoicePage = () => {
                         handleItemChange(
                           item.id,
                           "qty",
-                          parseFloat(e.target.value) || 0
+                          parseFloat(e.target.value) || 0,
                         )
                       }
                       fullWidth
@@ -858,7 +858,7 @@ const DraftInvoicePage = () => {
                         handleItemChange(
                           item.id,
                           "unitPrice",
-                          parseFloat(e.target.value) || 0
+                          parseFloat(e.target.value) || 0,
                         )
                       }
                       fullWidth
@@ -994,7 +994,7 @@ const DraftInvoicePage = () => {
             <Typography variant="h5" sx={{ fontWeight: "bold" }}>
               Total: AUD${" "}
               {(calculateInvoiceTotal() + calculateInvoiceTaxTotal()).toFixed(
-                2
+                2,
               )}
             </Typography>
           </Box>

@@ -112,7 +112,7 @@ const EFAPage = () => {
 
       // Filter for Filter Holders from the equipment array
       const filterHolderEquipment = (response.equipment || []).filter(
-        (item) => item.equipmentType === "Filter Holder"
+        (item) => item.equipmentType === "Filter Holder",
       );
 
       setEfas(filterHolderEquipment);
@@ -135,7 +135,8 @@ const EFAPage = () => {
       const labSignatoryUsers = allUsers.filter(
         (user) =>
           user.isActive &&
-          (user.labSignatory === true || user.labApprovals?.calibrations === true)
+          (user.labSignatory === true ||
+            user.labApprovals?.calibrations === true),
       );
 
       // Sort alphabetically by name
@@ -210,7 +211,7 @@ const EFAPage = () => {
       const technicianName =
         calibration.technicianName || calibration.technician || "";
       const matchingTechnician = labSignatories.find(
-        (tech) => `${tech.firstName} ${tech.lastName}` === technicianName
+        (tech) => `${tech.firstName} ${tech.lastName}` === technicianName,
       );
 
       setFormData({
@@ -319,7 +320,7 @@ const EFAPage = () => {
         console.log("Update data:", backendData);
         const updateResult = await efaService.update(
           editingCalibration._id,
-          backendData
+          backendData,
         );
         console.log("Update result:", updateResult);
       } else {
@@ -330,7 +331,7 @@ const EFAPage = () => {
       }
 
       console.log(
-        "Update/Create successful, closing dialog and refreshing data"
+        "Update/Create successful, closing dialog and refreshing data",
       );
       setOpenDialog(false);
       setEditingCalibration(null);
@@ -413,7 +414,7 @@ const EFAPage = () => {
         if (!isNaN(d1) && !isNaN(d2)) {
           const difference = Math.abs(d1 - d2);
           console.log(
-            `${filter.name}: d1=${d1}, d2=${d2}, difference=${difference}`
+            `${filter.name}: d1=${d1}, d2=${d2}, difference=${difference}`,
           );
 
           if (difference > 0.5) {
@@ -477,8 +478,8 @@ const EFAPage = () => {
 
       console.log(
         `Filter averages: [${averages.join(
-          ", "
-        )}], min=${min}, max=${max}, difference=${difference}`
+          ", ",
+        )}], min=${min}, max=${max}, difference=${difference}`,
       );
 
       return difference <= 0.5 ? "Pass" : "Fail";
@@ -493,7 +494,7 @@ const EFAPage = () => {
 
   const handleTechnicianChange = (technicianId) => {
     const selectedTechnician = labSignatories.find(
-      (t) => t._id === technicianId
+      (t) => t._id === technicianId,
     );
     setFormData((prev) => ({
       ...prev,
@@ -677,8 +678,8 @@ const EFAPage = () => {
                           item.status === "Pass"
                             ? theme.palette.success.main
                             : item.status === "Fail"
-                            ? theme.palette.error.main
-                            : theme.palette.grey[500],
+                              ? theme.palette.error.main
+                              : theme.palette.grey[500],
                         color: "white",
                         padding: "4px 8px",
                         borderRadius: "4px",
@@ -693,8 +694,7 @@ const EFAPage = () => {
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2" fontWeight="medium">
-                      {item.nextCalibration ||
-                        "On change of Cowl model"}
+                      {item.nextCalibration || "On change of Cowl model"}
                     </Typography>
                   </TableCell>
                   <TableCell>

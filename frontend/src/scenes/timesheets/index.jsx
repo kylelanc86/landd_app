@@ -140,7 +140,7 @@ const Timesheets = () => {
       window.history.replaceState(
         {},
         "",
-        `${window.location.pathname}?${searchParams.toString()}`
+        `${window.location.pathname}?${searchParams.toString()}`,
       );
     }
   }, [selectedDate, targetUserId]);
@@ -154,7 +154,7 @@ const Timesheets = () => {
       setIsLoading(true);
       const formattedDate = format(selectedDate, "yyyy-MM-dd");
       const response = await api.get(
-        `/timesheets/range/${formattedDate}/${formattedDate}?userId=${targetUserId}`
+        `/timesheets/range/${formattedDate}/${formattedDate}?userId=${targetUserId}`,
       );
 
       // Handle both response structures
@@ -255,7 +255,7 @@ const Timesheets = () => {
     try {
       const formattedDate = format(selectedDate, "yyyy-MM-dd");
       const response = await api.get(
-        `/timesheets/status/range/${formattedDate}/${formattedDate}?userId=${targetUserId}`
+        `/timesheets/status/range/${formattedDate}/${formattedDate}?userId=${targetUserId}`,
       );
 
       // Handle both response structures
@@ -296,7 +296,7 @@ const Timesheets = () => {
 
       if (!targetUserId) {
         setErrorMessage(
-          "Error: No user ID available. Please try logging in again."
+          "Error: No user ID available. Please try logging in again.",
         );
         setErrorDialogOpen(true);
         return;
@@ -339,7 +339,7 @@ const Timesheets = () => {
 
     if (!targetUserId) {
       setErrorMessage(
-        "Error: No user ID available. Please try logging in again."
+        "Error: No user ID available. Please try logging in again.",
       );
       setErrorDialogOpen(true);
       return;
@@ -348,7 +348,7 @@ const Timesheets = () => {
     try {
       if (timesheetStatus === "finalised") {
         setErrorMessage(
-          "Cannot modify entries for a finalised timesheet. Please unfinalise first."
+          "Cannot modify entries for a finalised timesheet. Please unfinalise first.",
         );
         setErrorDialogOpen(true);
         return;
@@ -437,8 +437,8 @@ const Timesheets = () => {
         // Update existing entry optimistically
         setTimeEntries((prev) =>
           prev.map((entry) =>
-            entry._id === editingEntryId ? optimisticEntry : entry
-          )
+            entry._id === editingEntryId ? optimisticEntry : entry,
+          ),
         );
       } else {
         // Add new entry optimistically
@@ -468,8 +468,8 @@ const Timesheets = () => {
           // Update the temporary ID with the real one from the server
           setTimeEntries((prev) =>
             prev.map((entry) =>
-              entry._id === optimisticEntry._id ? response.data : entry
-            )
+              entry._id === optimisticEntry._id ? response.data : entry,
+            ),
           );
         }
 
@@ -494,17 +494,17 @@ const Timesheets = () => {
             prev.map((entry) =>
               entry._id === editingEntryId
                 ? timeEntries.find((e) => e._id === editingEntryId)
-                : entry
-            )
+                : entry,
+            ),
           );
         } else {
           setTimeEntries((prev) =>
-            prev.filter((entry) => entry._id !== optimisticEntry._id)
+            prev.filter((entry) => entry._id !== optimisticEntry._id),
           );
         }
 
         setErrorMessage(
-          apiError.response?.data?.message || "Error saving time entry"
+          apiError.response?.data?.message || "Error saving time entry",
         );
         setErrorDialogOpen(true);
       } finally {
@@ -518,7 +518,7 @@ const Timesheets = () => {
     } catch (error) {
       console.error("Error in handleSubmit:", error);
       setErrorMessage(
-        error.response?.data?.message || "Error saving time entry"
+        error.response?.data?.message || "Error saving time entry",
       );
       setErrorDialogOpen(true);
     }
@@ -606,7 +606,7 @@ const Timesheets = () => {
     } catch (error) {
       console.error("Error splitting cross-day entry:", error);
       setErrorMessage(
-        error.response?.data?.message || "Error splitting time entry"
+        error.response?.data?.message || "Error splitting time entry",
       );
       setCrossDayDialogOpen(false);
       setPendingCrossDayEntry(null);
@@ -677,7 +677,7 @@ const Timesheets = () => {
         }
 
         setErrorMessage(
-          apiError.response?.data?.message || "Error deleting time entry"
+          apiError.response?.data?.message || "Error deleting time entry",
         );
         setErrorDialogOpen(true);
       } finally {
@@ -691,7 +691,7 @@ const Timesheets = () => {
     } catch (error) {
       console.error("Error in handleDelete:", error);
       setErrorMessage(
-        error.response?.data?.message || "Error deleting time entry"
+        error.response?.data?.message || "Error deleting time entry",
       );
       setErrorDialogOpen(true);
 
@@ -785,7 +785,7 @@ const Timesheets = () => {
         // Build status parameter from active statuses
         const statusParam = activeStatuses.join(",");
         const projectsResponse = await api.get(
-          `/projects?status=${statusParam}&limit=1000`
+          `/projects?status=${statusParam}&limit=1000`,
         );
         const projectsData = Array.isArray(projectsResponse.data)
           ? projectsResponse.data
@@ -818,7 +818,7 @@ const Timesheets = () => {
         (project.name &&
           project.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (project.projectID &&
-          project.projectID.toLowerCase().includes(searchTerm.toLowerCase()))
+          project.projectID.toLowerCase().includes(searchTerm.toLowerCase())),
     );
     const sortedFiltered = sortProjectsByID(filtered);
     setFilteredProjects(sortedFiltered);
@@ -1068,7 +1068,7 @@ const Timesheets = () => {
           console.warn(
             "Error creating calendar event for entry:",
             entry._id,
-            error
+            error,
           );
           // Create placeholder event so invalid entries can still be deleted
           const placeholderDate = new Date(selectedDate || new Date());
@@ -1098,7 +1098,7 @@ const Timesheets = () => {
   // Memoize the events array to prevent unnecessary recalculations
   const calendarEvents = useMemo(
     () => getCalendarEvents(),
-    [getCalendarEvents]
+    [getCalendarEvents],
   );
 
   // Generate a key to force FullCalendar re-render when events change
@@ -1111,14 +1111,14 @@ const Timesheets = () => {
   const handleSelect = (info) => {
     if (timesheetStatus === "finalised") {
       setErrorMessage(
-        "Cannot add entries to a finalised timesheet. Please unfinalise first."
+        "Cannot add entries to a finalised timesheet. Please unfinalise first.",
       );
       setErrorDialogOpen(true);
       return;
     }
     if (timesheetStatus === "absent") {
       setErrorMessage(
-        "Cannot add entries to an absent timesheet. Please mark as present first."
+        "Cannot add entries to an absent timesheet. Please mark as present first.",
       );
       setErrorDialogOpen(true);
       return;
@@ -1155,14 +1155,14 @@ const Timesheets = () => {
   const handleAddEntryClick = () => {
     if (timesheetStatus === "finalised") {
       setErrorMessage(
-        "Cannot add entries to a finalised timesheet. Please unfinalise first."
+        "Cannot add entries to a finalised timesheet. Please unfinalise first.",
       );
       setErrorDialogOpen(true);
       return;
     }
     if (timesheetStatus === "absent") {
       setErrorMessage(
-        "Cannot add entries to an absent timesheet. Please mark as present first."
+        "Cannot add entries to an absent timesheet. Please mark as present first.",
       );
       setErrorDialogOpen(true);
       return;
@@ -1191,7 +1191,7 @@ const Timesheets = () => {
       // Validate entry data before opening edit dialog
       if (!entry.startTime || !entry.endTime) {
         setErrorMessage(
-          "This entry has invalid time data and cannot be edited. Please delete and recreate it."
+          "This entry has invalid time data and cannot be edited. Please delete and recreate it.",
         );
         setErrorDialogOpen(true);
         return;
@@ -1221,7 +1221,7 @@ const Timesheets = () => {
     if (timesheetStatus === "finalised") {
       info.revert();
       setErrorMessage(
-        "Cannot modify entries for a finalised timesheet. Please unfinalise first."
+        "Cannot modify entries for a finalised timesheet. Please unfinalise first.",
       );
       setErrorDialogOpen(true);
       return;
@@ -1229,7 +1229,7 @@ const Timesheets = () => {
     if (timesheetStatus === "absent") {
       info.revert();
       setErrorMessage(
-        "Cannot modify entries for an absent timesheet. Please mark as present first."
+        "Cannot modify entries for an absent timesheet. Please mark as present first.",
       );
       setErrorDialogOpen(true);
       return;
@@ -1279,7 +1279,7 @@ const Timesheets = () => {
         const newEndHours = Math.floor(newEndTotalMinutes / 60) % 24;
         const newEndMins = newEndTotalMinutes % 60;
         finalEndTime = `${String(newEndHours).padStart(2, "0")}:${String(
-          newEndMins
+          newEndMins,
         ).padStart(2, "0")}`;
       }
 
@@ -1295,8 +1295,8 @@ const Timesheets = () => {
       // Optimistically update the UI immediately
       setTimeEntries((prev) =>
         prev.map((e) =>
-          e._id === entry._id ? { ...e, startTime, endTime: finalEndTime } : e
-        )
+          e._id === entry._id ? { ...e, startTime, endTime: finalEndTime } : e,
+        ),
       );
 
       // Make API call in background
@@ -1307,12 +1307,12 @@ const Timesheets = () => {
     } catch (error) {
       // Revert the optimistic update on error
       setTimeEntries((prev) =>
-        prev.map((e) => (e._id === entry._id ? entry : e))
+        prev.map((e) => (e._id === entry._id ? entry : e)),
       );
       info.revert();
       setErrorMessage(
         error.response?.data?.message ||
-          "Failed to update time entry. Please try again."
+          "Failed to update time entry. Please try again.",
       );
       setErrorDialogOpen(true);
     }
@@ -1322,7 +1322,7 @@ const Timesheets = () => {
     if (timesheetStatus === "finalised") {
       info.revert();
       setErrorMessage(
-        "Cannot modify entries for a finalised timesheet. Please unfinalise first."
+        "Cannot modify entries for a finalised timesheet. Please unfinalise first.",
       );
       setErrorDialogOpen(true);
       return;
@@ -1330,7 +1330,7 @@ const Timesheets = () => {
     if (timesheetStatus === "absent") {
       info.revert();
       setErrorMessage(
-        "Cannot modify entries for an absent timesheet. Please mark as present first."
+        "Cannot modify entries for an absent timesheet. Please mark as present first.",
       );
       setErrorDialogOpen(true);
       return;
@@ -1373,7 +1373,7 @@ const Timesheets = () => {
         const minEndHours = Math.floor(minEndTotalMinutes / 60) % 24;
         const minEndMins = minEndTotalMinutes % 60;
         endTime = `${String(minEndHours).padStart(2, "0")}:${String(
-          minEndMins
+          minEndMins,
         ).padStart(2, "0")}`;
       }
 
@@ -1388,8 +1388,8 @@ const Timesheets = () => {
       // Optimistically update the UI immediately
       setTimeEntries((prev) =>
         prev.map((e) =>
-          e._id === entry._id ? { ...e, startTime, endTime } : e
-        )
+          e._id === entry._id ? { ...e, startTime, endTime } : e,
+        ),
       );
 
       // Make API call in background
@@ -1400,12 +1400,12 @@ const Timesheets = () => {
     } catch (error) {
       // Revert the optimistic update on error
       setTimeEntries((prev) =>
-        prev.map((e) => (e._id === entry._id ? entry : e))
+        prev.map((e) => (e._id === entry._id ? entry : e)),
       );
       info.revert();
       setErrorMessage(
         error.response?.data?.message ||
-          "Failed to update time entry. Please try again."
+          "Failed to update time entry. Please try again.",
       );
       setErrorDialogOpen(true);
     }
@@ -1697,7 +1697,7 @@ const Timesheets = () => {
               disabled={timesheetStatus === "absent"}
               onClick={() =>
                 handleStatusUpdate(
-                  timesheetStatus === "finalised" ? "incomplete" : "finalised"
+                  timesheetStatus === "finalised" ? "incomplete" : "finalised",
                 )
               }
               sx={{
@@ -1731,7 +1731,7 @@ const Timesheets = () => {
               disabled={timesheetStatus === "finalised"}
               onClick={() =>
                 handleStatusUpdate(
-                  timesheetStatus === "absent" ? "incomplete" : "absent"
+                  timesheetStatus === "absent" ? "incomplete" : "absent",
                 )
               }
               sx={{
@@ -2001,7 +2001,7 @@ const Timesheets = () => {
               const startHour = show24HourView ? 0 : 6;
               const slotIndex = Math.floor(
                 (arg.date.getHours() - startHour) * 4 +
-                  arg.date.getMinutes() / 15
+                  arg.date.getMinutes() / 15,
               );
               if (slotIndex % 4 === 0 || slotIndex % 4 === 1) {
                 return "fc-slot-green";
@@ -2017,15 +2017,15 @@ const Timesheets = () => {
               // Check if this is marked as an invalid entry
               if (eventInfo.event.extendedProps?.isInvalid) {
                 const entry = timeEntries.find(
-                  (e) => e._id === eventInfo.event.id
+                  (e) => e._id === eventInfo.event.id,
                 );
                 const entryTitle = entry?.isBreak
                   ? "Break"
                   : entry?.isAdminWork
-                  ? "Admin Work"
-                  : entry?.projectData?.name ||
-                    entry?.projectId?.name ||
-                    "Project Work";
+                    ? "Admin Work"
+                    : entry?.projectData?.name ||
+                      entry?.projectId?.name ||
+                      "Project Work";
 
                 return (
                   <Box sx={{ p: 1 }}>
@@ -2081,13 +2081,13 @@ const Timesheets = () => {
               ) {
                 // Try to get entry data to show what we can
                 const entry = timeEntries.find(
-                  (e) => e._id === eventInfo.event.id
+                  (e) => e._id === eventInfo.event.id,
                 );
                 const entryTitle = entry?.isBreak
                   ? "Break"
                   : entry?.isAdminWork
-                  ? "Admin Work"
-                  : entry?.projectData?.name || "Project Work";
+                    ? "Admin Work"
+                    : entry?.projectData?.name || "Project Work";
 
                 return (
                   <Box sx={{ p: 1 }}>
@@ -2139,7 +2139,7 @@ const Timesheets = () => {
                 eventInfo.event.extendedProps.projectData ||
                 (eventInfo.event.extendedProps.projectId
                   ? projects.find(
-                      (p) => p._id === eventInfo.event.extendedProps.projectId
+                      (p) => p._id === eventInfo.event.extendedProps.projectId,
                     )
                   : null);
               const isProcessing = processingEntries.has(eventInfo.event.id);
@@ -2168,7 +2168,7 @@ const Timesheets = () => {
                 } - ${
                   eventInfo.event.extendedProps.projectInputType?.replace(
                     "_",
-                    " "
+                    " ",
                   ) || ""
                 }${
                   eventInfo.event.extendedProps.description
@@ -2650,8 +2650,8 @@ const Timesheets = () => {
                     formData.isBreak
                       ? "break"
                       : formData.isAdminWork
-                      ? "admin"
-                      : "project"
+                        ? "admin"
+                        : "project"
                   }
                   onChange={(e) =>
                     setFormData({

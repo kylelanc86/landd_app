@@ -143,7 +143,7 @@ const ReportsList = ({
   }
 
   return (
-    <Paper sx={{ p: 3 }}>
+    <Paper sx={{ p: 3, px: { xs: 1.5, sm: 3 } }}>
       <Typography variant="h6" gutterBottom>
         {getCategoryTitle()}
       </Typography>

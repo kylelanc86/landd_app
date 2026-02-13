@@ -1347,7 +1347,9 @@ const Dashboard = () => {
                 // Filter calibrations widget based on permissions
                 if (item.id === "calibrations") {
                   // Only show for admin level users, or users with calibrations approval, or users with lab signatory approval
-                  const isAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
+                  const isAdmin =
+                    currentUser?.role === "admin" ||
+                    currentUser?.role === "super_admin";
                   const hasCalibrationsApproval =
                     currentUser?.labApprovals?.calibrations === true;
                   const hasLabSignatoryApproval =

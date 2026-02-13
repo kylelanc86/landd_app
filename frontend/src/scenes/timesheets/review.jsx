@@ -75,10 +75,10 @@ const TimesheetReview = () => {
   // Report modal state
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [reportStartDate, setReportStartDate] = useState(
-    format(weekStart, "yyyy-MM-dd")
+    format(weekStart, "yyyy-MM-dd"),
   );
   const [reportEndDate, setReportEndDate] = useState(
-    format(weekEnd, "yyyy-MM-dd")
+    format(weekEnd, "yyyy-MM-dd"),
   );
   const [reportSelectedUser, setReportSelectedUser] = useState("");
   const [reportLoading, setReportLoading] = useState(false);
@@ -112,7 +112,7 @@ const TimesheetReview = () => {
       for (const user of users) {
         try {
           const response = await api.get(
-            `/timesheets/range/${startDate}/${endDate}?userId=${user._id}`
+            `/timesheets/range/${startDate}/${endDate}?userId=${user._id}`,
           );
           const userEntries = response.data || [];
           allEntries.push(...userEntries);
@@ -212,7 +212,7 @@ const TimesheetReview = () => {
     try {
       const formattedDate = format(date, "yyyy-MM-dd");
       const response = await api.get(
-        `/timesheets/range/${formattedDate}/${formattedDate}?userId=${userId}`
+        `/timesheets/range/${formattedDate}/${formattedDate}?userId=${userId}`,
       );
 
       const entries = response.data || [];
@@ -324,14 +324,14 @@ const TimesheetReview = () => {
 
       // Fetch timesheet data for selected user and date range
       const response = await api.get(
-        `/timesheets/range/${reportStartDate}/${reportEndDate}?userId=${reportSelectedUser}`
+        `/timesheets/range/${reportStartDate}/${reportEndDate}?userId=${reportSelectedUser}`,
       );
 
       const entries = response.data || [];
 
       // Fetch timesheet status data to check for absent days
       const statusResponse = await api.get(
-        `/timesheets/status/range/${reportStartDate}/${reportEndDate}?userId=${reportSelectedUser}`
+        `/timesheets/status/range/${reportStartDate}/${reportEndDate}?userId=${reportSelectedUser}`,
       );
       const statusData = statusResponse.data || [];
 
@@ -412,14 +412,14 @@ const TimesheetReview = () => {
               } catch (err) {
                 console.error(
                   `Error fetching timesheet entry ${entryId}:`,
-                  err
+                  err,
                 );
                 return null;
               }
             });
 
             const projectEntries = (await Promise.all(entriesPromises)).filter(
-              (e) => e !== null
+              (e) => e !== null,
             );
 
             // Filter entries within the date range and calculate totals
@@ -458,7 +458,7 @@ const TimesheetReview = () => {
         } catch (error) {
           console.error(
             `Error fetching data for project ${projectKey}:`,
-            error
+            error,
           );
           projectTotals[projectKey].totalMinutes =
             projectTotals[projectKey].userMinutes;
@@ -504,7 +504,7 @@ const TimesheetReview = () => {
       csvContent += `Employee:,${userName}\n`;
       csvContent += `Period:,${format(
         new Date(reportStartDate),
-        "dd/MM/yyyy"
+        "dd/MM/yyyy",
       )} - ${format(new Date(reportEndDate), "dd/MM/yyyy")}\n`;
       csvContent += `\n`;
       csvContent += `Summary\n`;
@@ -523,7 +523,7 @@ const TimesheetReview = () => {
 
       // Sort projects by user time spent (descending)
       const sortedProjects = Object.values(projectTotals).sort(
-        (a, b) => b.userMinutes - a.userMinutes
+        (a, b) => b.userMinutes - a.userMinutes,
       );
       sortedProjects.forEach((project) => {
         const userHours = formatHours(project.userMinutes);
@@ -553,14 +553,14 @@ const TimesheetReview = () => {
 
             if (difference > 0) {
               budgetStatus = `Under budget: $${Math.abs(
-                difference
+                difference,
               ).toLocaleString(undefined, {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
               })} (${(100 - percentageUsed).toFixed(1)}%)`;
             } else if (difference < 0) {
               budgetStatus = `Over budget: $${Math.abs(
-                difference
+                difference,
               ).toLocaleString(undefined, {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
@@ -583,8 +583,8 @@ const TimesheetReview = () => {
         "download",
         `${userName.replace(
           /\s+/g,
-          "-"
-        )}-performance-report-${reportStartDate}-to-${reportEndDate}.csv`
+          "-",
+        )}-performance-report-${reportStartDate}-to-${reportEndDate}.csv`,
       );
       link.style.visibility = "hidden";
       document.body.appendChild(link);
@@ -616,7 +616,7 @@ const TimesheetReview = () => {
     const userData = timesheetData[userId] || {};
     const total = Object.values(userData).reduce(
       (sum, minutes) => sum + minutes,
-      0
+      0,
     );
     return total;
   };
@@ -784,8 +784,8 @@ const TimesheetReview = () => {
                         backgroundColor: isWeekend
                           ? theme.palette.grey[400]
                           : isToday
-                          ? theme.palette.warning.main
-                          : theme.palette.primary.main,
+                            ? theme.palette.warning.main
+                            : theme.palette.primary.main,
                         color: theme.palette.primary.contrastText,
                         fontWeight: 700,
                         fontSize: "0.9rem",
@@ -915,8 +915,8 @@ const TimesheetReview = () => {
                                 isApproved && minutes > 0
                                   ? theme.palette.info.light
                                   : isWeekend
-                                  ? theme.palette.grey[200]
-                                  : getCellColor(minutes, isApproved),
+                                    ? theme.palette.grey[200]
+                                    : getCellColor(minutes, isApproved),
                               fontWeight: 500,
                               fontSize: "0.9rem",
                               border: `1px solid ${theme.palette.divider}`,
@@ -1148,7 +1148,7 @@ const TimesheetReview = () => {
                     {modalData.totalMinutes > 0
                       ? Math.round(
                           (modalData.projectMinutes / modalData.totalMinutes) *
-                            100
+                            100,
                         )
                       : 0}
                     %
@@ -1342,7 +1342,7 @@ const TimesheetReview = () => {
               onClick={() => {
                 const formattedDate = format(selectedDay, "yyyy-MM-dd");
                 navigate(
-                  `/timesheets?date=${formattedDate}&userId=${selectedUser._id}`
+                  `/timesheets?date=${formattedDate}&userId=${selectedUser._id}`,
                 );
               }}
               variant="contained"

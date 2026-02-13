@@ -1078,7 +1078,7 @@ const IAQNewSample = () => {
               helperText={
                 fieldErrors.sampleNumber
                   ? fieldErrors.sampleNumber
-                  : `Full Sample ID will be: ${form.sampleNumber || "XXX"}`
+                  : `Full Sample ID: ${form.sampleNumber || "XXX"}`
               }
             />
           </Box>

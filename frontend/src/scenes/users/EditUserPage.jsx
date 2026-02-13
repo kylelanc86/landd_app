@@ -154,8 +154,8 @@ const EditUserPage = () => {
               canSetJobComplete: user.canSetJobComplete || false,
               labSignatory: user.labSignatory || false,
               reportProofer: user.reportProofer || false,
-            })
-          )
+            }),
+          ),
         );
       } catch (error) {
         console.error("Error fetching user:", error);
@@ -221,7 +221,7 @@ const EditUserPage = () => {
     const handleRefreshClick = (e) => {
       // Check if it's a refresh button click or F5 key
       const isRefreshButton = e.target.closest(
-        'button[aria-label*="refresh"], button[title*="refresh"], .refresh-button'
+        'button[aria-label*="refresh"], button[title*="refresh"], .refresh-button',
       );
       const isF5Key = e.key === "F5";
 
@@ -348,7 +348,7 @@ const EditUserPage = () => {
         isActive: form.isActive,
         licences: form.licences.filter(
           (licence) =>
-            licence.state && licence.licenceNumber && licence.licenceType
+            licence.state && licence.licenceNumber && licence.licenceType,
         ), // Only include valid licences
         signature: form.signature || "",
         chargeOutRate: parseFloat(form.chargeOutRate) || 0,
@@ -373,7 +373,7 @@ const EditUserPage = () => {
       showSnackbar(
         "Failed to update user: " +
           (error.response?.data?.message || error.message),
-        "error"
+        "error",
       );
     } finally {
       setSaving(false);
@@ -427,7 +427,7 @@ const EditUserPage = () => {
       showSnackbar(
         "Failed to send password reset email: " +
           (error.response?.data?.message || error.message),
-        "error"
+        "error",
       );
     } finally {
       setSendingReset(false);
@@ -466,9 +466,9 @@ const EditUserPage = () => {
 
   const isSuperAdmin = currentUser?.role === "super_admin";
   const isEditingSuperAdmin = form.role === "super_admin";
-  const isEditingSelf = currentUser?.id === userId || currentUser?._id === userId;
-  const canEditProtectedFields =
-    !isEditingSuperAdmin || isSuperAdmin;
+  const isEditingSelf =
+    currentUser?.id === userId || currentUser?._id === userId;
+  const canEditProtectedFields = !isEditingSuperAdmin || isSuperAdmin;
   const roleOptions = USER_LEVELS.filter((level) => {
     if (SUPER_ADMIN_ONLY_LEVELS.includes(level))
       return (isSuperAdmin && !isEditingSelf) || isEditingSuperAdmin;
@@ -673,7 +673,7 @@ const EditUserPage = () => {
                             handleWorkingHoursChange(
                               day.key,
                               "enabled",
-                              e.target.checked
+                              e.target.checked,
                             )
                           }
                           size="small"
@@ -690,7 +690,7 @@ const EditUserPage = () => {
                         handleWorkingHoursChange(
                           day.key,
                           "hours",
-                          e.target.value
+                          e.target.value,
                         )
                       }
                       disabled={!form.workingHours[day.key].enabled}
@@ -726,7 +726,7 @@ const EditUserPage = () => {
                         onChange={(e) =>
                           handleLabApprovalsChange(
                             "fibreCounting",
-                            e.target.checked
+                            e.target.checked,
                           )
                         }
                         color="primary"
@@ -743,7 +743,7 @@ const EditUserPage = () => {
                         onChange={(e) =>
                           handleLabApprovalsChange(
                             "fibreIdentification",
-                            e.target.checked
+                            e.target.checked,
                           )
                         }
                         color="primary"
@@ -760,7 +760,7 @@ const EditUserPage = () => {
                         onChange={(e) =>
                           handleLabApprovalsChange(
                             "calibrations",
-                            e.target.checked
+                            e.target.checked,
                           )
                         }
                         color="primary"
@@ -788,49 +788,50 @@ const EditUserPage = () => {
           </Box>
 
           {/* Job Complete Permission Section - Only for Employee users */}
-          {(currentUser.role === "admin" || isSuperAdmin) && form.role === "employee" && (
-            <Box sx={{ mt: 3 }}>
-              <Typography variant="h6" sx={{ mb: 2 }}>
-                Project Status Permissions
-              </Typography>
-              <Box
-                sx={{
-                  border: "1px solid #e0e0e0",
-                  borderRadius: 1,
-                  p: 2,
-                  backgroundColor: "#fafafa",
-                }}
-              >
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={form.canSetJobComplete}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          canSetJobComplete: e.target.checked,
-                        })
-                      }
-                      color="primary"
-                    />
-                  }
-                  label={
-                    <Box>
-                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                        Can Set "Job Complete" Status
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Allow this employee to change project status to "Job
-                        Complete". Admin and Manager users can always set this
-                        status.
-                      </Typography>
-                    </Box>
-                  }
-                  sx={{ alignItems: "flex-start" }}
-                />
+          {(currentUser.role === "admin" || isSuperAdmin) &&
+            form.role === "employee" && (
+              <Box sx={{ mt: 3 }}>
+                <Typography variant="h6" sx={{ mb: 2 }}>
+                  Project Status Permissions
+                </Typography>
+                <Box
+                  sx={{
+                    border: "1px solid #e0e0e0",
+                    borderRadius: 1,
+                    p: 2,
+                    backgroundColor: "#fafafa",
+                  }}
+                >
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={form.canSetJobComplete}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            canSetJobComplete: e.target.checked,
+                          })
+                        }
+                        color="primary"
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                          Can Set "Job Complete" Status
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Allow this employee to change project status to "Job
+                          Complete". Admin and Manager users can always set this
+                          status.
+                        </Typography>
+                      </Box>
+                    }
+                    sx={{ alignItems: "flex-start" }}
+                  />
+                </Box>
               </Box>
-            </Box>
-          )}
+            )}
 
           {/* Report Authorization Section - Available for all roles */}
           {hasPermission(currentUser, "users.edit") && (
@@ -896,7 +897,7 @@ const EditUserPage = () => {
                             handleLaaLicenceChange(
                               index,
                               "licenceType",
-                              e.target.value
+                              e.target.value,
                             )
                           }
                         >
@@ -926,7 +927,7 @@ const EditUserPage = () => {
                           handleLaaLicenceChange(
                             index,
                             "licenceNumber",
-                            e.target.value
+                            e.target.value,
                           )
                         }
                         fullWidth

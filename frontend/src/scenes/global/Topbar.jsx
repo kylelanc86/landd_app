@@ -85,7 +85,7 @@ const Topbar = () => {
       position="fixed"
       className="topbar"
       sx={{
-        backgroundColor: `${theme.palette.primary.main} !important`, // Force green background
+        background: `linear-gradient(to right, #045E1F, #96CC78) !important`,
         boxShadow: "0px 2px 8px rgba(0, 0, 0, 0.1)",
         width: "100%",
         zIndex: (theme) => theme.zIndex.drawer + 1,
@@ -93,6 +93,9 @@ const Topbar = () => {
         display: "flex",
         alignItems: "center",
         borderBottom: "1px solid #EEEEEE",
+        "@media (max-width: 1280px)": {
+          borderRadius: 0,
+        },
       }}
     >
       <Toolbar
@@ -134,12 +137,11 @@ const Topbar = () => {
               sx={{
                 color: "#FFF",
                 fontWeight: 600,
-                fontSize: isMobile ? "0.9rem" : "1rem",
                 letterSpacing: "0.5px",
                 whiteSpace: "nowrap",
               }}
             >
-              {isMobile ? "L&D CONSULTING" : "LANCASTER & DICKENSON CONSULTING"}
+              {isMobile ? "L&D CONSULTING" : "L&D CONSULTING"}
             </Typography>
           )}
         </Box>
@@ -194,7 +196,10 @@ const Topbar = () => {
             <Tooltip title="Refresh">
               <IconButton
                 onClick={handleRefresh}
-                sx={{ color: "#FFF", display: { xs: "none", sm: "inline-flex" } }}
+                sx={{
+                  color: "#FFF",
+                  display: { xs: "none", sm: "inline-flex" },
+                }}
               >
                 <RefreshIcon />
               </IconButton>

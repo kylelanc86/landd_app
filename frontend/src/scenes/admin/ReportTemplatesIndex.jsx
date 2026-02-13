@@ -86,7 +86,7 @@ const ReportTemplatesIndex = () => {
       const updatePromises = templateTypes.map((templateType) =>
         reportTemplateService.updateTemplate(templateType, {
           companyDetails: editData,
-        })
+        }),
       );
 
       await Promise.all(updatePromises);

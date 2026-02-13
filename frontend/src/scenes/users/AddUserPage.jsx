@@ -140,7 +140,7 @@ const AddUserPage = () => {
     const handleRefreshClick = (e) => {
       // Check if it's a refresh button click or F5 key
       const isRefreshButton = e.target.closest(
-        'button[aria-label*="refresh"], button[title*="refresh"], .refresh-button'
+        'button[aria-label*="refresh"], button[title*="refresh"], .refresh-button',
       );
       const isF5Key = e.key === "F5";
 
@@ -268,7 +268,7 @@ const AddUserPage = () => {
         phone: form.phone.trim() || "", // Ensure phone is included and trimmed
         licences: form.licences.filter(
           (licence) =>
-            licence.state && licence.licenceNumber && licence.licenceType
+            licence.state && licence.licenceNumber && licence.licenceType,
         ), // Only include valid licences
         signature: form.signature || "",
         workingHours: form.workingHours,
@@ -284,7 +284,7 @@ const AddUserPage = () => {
       // Show success message and navigate back to users list
       showSnackbar(
         "User created successfully! A welcome email with password setup instructions has been sent to the user's email address.",
-        "success"
+        "success",
       );
 
       // Reset unsaved changes flag
@@ -295,7 +295,7 @@ const AddUserPage = () => {
       showSnackbar(
         "Failed to create user: " +
           (error.response?.data?.message || error.message),
-        "error"
+        "error",
       );
     } finally {
       setSaving(false);
@@ -435,7 +435,8 @@ const AddUserPage = () => {
                 value={form.role}
                 onChange={handleChange}
                 disabled={
-                  currentUser.role !== "admin" && currentUser.role !== "super_admin"
+                  currentUser.role !== "admin" &&
+                  currentUser.role !== "super_admin"
                 }
               >
                 {roleOptions.map((level) => (
@@ -526,7 +527,7 @@ const AddUserPage = () => {
                             handleWorkingHoursChange(
                               day.key,
                               "enabled",
-                              e.target.checked
+                              e.target.checked,
                             )
                           }
                           size="small"
@@ -543,7 +544,7 @@ const AddUserPage = () => {
                         handleWorkingHoursChange(
                           day.key,
                           "hours",
-                          e.target.value
+                          e.target.value,
                         )
                       }
                       disabled={!form.workingHours[day.key].enabled}
@@ -579,7 +580,7 @@ const AddUserPage = () => {
                         onChange={(e) =>
                           handleLabApprovalsChange(
                             "fibreCounting",
-                            e.target.checked
+                            e.target.checked,
                           )
                         }
                         color="primary"
@@ -596,7 +597,7 @@ const AddUserPage = () => {
                         onChange={(e) =>
                           handleLabApprovalsChange(
                             "fibreIdentification",
-                            e.target.checked
+                            e.target.checked,
                           )
                         }
                         color="primary"
@@ -613,7 +614,7 @@ const AddUserPage = () => {
                         onChange={(e) =>
                           handleLabApprovalsChange(
                             "calibrations",
-                            e.target.checked
+                            e.target.checked,
                           )
                         }
                         color="primary"
@@ -749,7 +750,7 @@ const AddUserPage = () => {
                             handleLaaLicenceChange(
                               index,
                               "licenceType",
-                              e.target.value
+                              e.target.value,
                             )
                           }
                         >
@@ -779,7 +780,7 @@ const AddUserPage = () => {
                           handleLaaLicenceChange(
                             index,
                             "licenceNumber",
-                            e.target.value
+                            e.target.value,
                           )
                         }
                         fullWidth

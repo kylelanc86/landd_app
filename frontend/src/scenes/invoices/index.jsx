@@ -109,14 +109,14 @@ const Invoices = () => {
 
         setInvoices(invoicesRes.data);
         setProjects(
-          Array.isArray(projectsRes.data?.data) ? projectsRes.data.data : []
+          Array.isArray(projectsRes.data?.data) ? projectsRes.data.data : [],
         );
         setClients(
           Array.isArray(clientsRes.data.clients)
             ? clientsRes.data.clients
             : Array.isArray(clientsRes.data)
-            ? clientsRes.data
-            : []
+              ? clientsRes.data
+              : [],
         );
         setLoading(false);
       } catch (err) {
@@ -134,7 +134,7 @@ const Invoices = () => {
   useEffect(() => {
     if (form.date && form.client && !dueDateManuallyChanged) {
       const selectedClient = clients.find(
-        (client) => client._id === form.client
+        (client) => client._id === form.client,
       );
       let paymentTerms = 30; // Default fallback
 
@@ -244,7 +244,7 @@ const Invoices = () => {
           } catch (error) {
             console.error(
               "Error checking Xero connection after callback:",
-              error
+              error,
             );
             setXeroError("Failed to verify Xero connection");
             setShowXeroAlert(true);
@@ -304,7 +304,7 @@ const Invoices = () => {
         project.projectID
           ?.toLowerCase()
           .includes(projectSearch.toLowerCase()) ||
-        project.name?.toLowerCase().includes(projectSearch.toLowerCase())
+        project.name?.toLowerCase().includes(projectSearch.toLowerCase()),
     );
   }, [allActiveProjects, projectSearch]);
 
@@ -431,8 +431,8 @@ const Invoices = () => {
                           invoice.lineItems?.reduce(
                             (sum, item) =>
                               sum + (item.amount - (item.taxAmount || 0)),
-                            0
-                          ) || 0
+                            0,
+                          ) || 0,
                         ).toLocaleString(undefined, {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
@@ -446,8 +446,8 @@ const Invoices = () => {
                         text: `$${Number(
                           invoice.lineItems?.reduce(
                             (sum, item) => sum + (item.taxAmount || 0),
-                            0
-                          ) || 0
+                            0,
+                          ) || 0,
                         ).toLocaleString(undefined, {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
@@ -463,7 +463,7 @@ const Invoices = () => {
                           {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2,
-                          }
+                          },
                         )}`,
                         alignment: "right",
                       },
@@ -509,7 +509,7 @@ const Invoices = () => {
             Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
           body: JSON.stringify(doc),
-        }
+        },
       );
 
       if (!response.ok) {
@@ -619,7 +619,7 @@ const Invoices = () => {
     });
 
     console.log(
-      `getFilteredInvoices: Final result - ${sorted.length} invoices after sorting`
+      `getFilteredInvoices: Final result - ${sorted.length} invoices after sorting`,
     );
     return sorted;
   }, [invoices, sortBy, sortDir, searchQuery, projects, currentUser]);
@@ -640,7 +640,7 @@ const Invoices = () => {
   const handleDeleteInvoice = async (invoice) => {
     try {
       const confirmDelete = window.confirm(
-        `Are you sure you want to delete invoice ${invoice.invoiceID}? This action cannot be undone.`
+        `Are you sure you want to delete invoice ${invoice.invoiceID}? This action cannot be undone.`,
       );
 
       if (!confirmDelete) {
@@ -666,7 +666,7 @@ const Invoices = () => {
         } else {
           setErrorMessage(
             "Failed to delete invoice: " +
-              (error.response?.data?.message || error.message)
+              (error.response?.data?.message || error.message),
           );
           setErrorDialogOpen(true);
         }
@@ -674,7 +674,7 @@ const Invoices = () => {
     } catch (error) {
       console.error("Error in handleDeleteInvoice:", error);
       setErrorMessage(
-        "An unexpected error occurred while deleting the invoice."
+        "An unexpected error occurred while deleting the invoice.",
       );
       setErrorDialogOpen(true);
     }
@@ -688,7 +688,7 @@ const Invoices = () => {
     }
 
     const confirmDelete = window.confirm(
-      `Are you sure you want to permanently delete ${selectedInvoices.length} invoice(s)? This action cannot be undone.`
+      `Are you sure you want to permanently delete ${selectedInvoices.length} invoice(s)? This action cannot be undone.`,
     );
 
     if (!confirmDelete) {
@@ -705,16 +705,16 @@ const Invoices = () => {
       // Delete each selected invoice with better error handling
       const deleteResults = await Promise.allSettled(
         selectedInvoices.map((invoiceId) =>
-          invoiceService.hardDelete(invoiceId)
-        )
+          invoiceService.hardDelete(invoiceId),
+        ),
       );
 
       // Count successful and failed deletions
       const successful = deleteResults.filter(
-        (result) => result.status === "fulfilled"
+        (result) => result.status === "fulfilled",
       ).length;
       const failed = deleteResults.filter(
-        (result) => result.status === "rejected"
+        (result) => result.status === "rejected",
       ).length;
 
       if (failed === 0) {
@@ -723,7 +723,7 @@ const Invoices = () => {
         setErrorDialogOpen(true);
       } else {
         setErrorMessage(
-          `Deleted ${successful} invoice(s) successfully. ${failed} invoice(s) were already deleted or not found.`
+          `Deleted ${successful} invoice(s) successfully. ${failed} invoice(s) were already deleted or not found.`,
         );
         setIsSuccessMessage(true);
         setErrorDialogOpen(true);
@@ -732,7 +732,7 @@ const Invoices = () => {
       console.error("Error bulk deleting invoices:", error);
       setErrorMessage(
         "Failed to delete some invoices: " +
-          (error.response?.data?.message || error.message)
+          (error.response?.data?.message || error.message),
       );
       setErrorDialogOpen(true);
     }
@@ -753,7 +753,7 @@ const Invoices = () => {
         (invoice) =>
           invoice.status === "draft" &&
           !invoice.xeroInvoiceId &&
-          !invoice.isDeleted
+          !invoice.isDeleted,
       );
 
       if (draftInvoices.length === 0) {
@@ -769,7 +769,7 @@ const Invoices = () => {
         try {
           console.log(
             "Sending invoice to Xero:",
-            JSON.stringify(invoice, null, 2)
+            JSON.stringify(invoice, null, 2),
           );
           const response = await xeroService.createInvoice(invoice);
           console.log("Created Xero invoice:", response);
@@ -785,7 +785,7 @@ const Invoices = () => {
       setInvoices(invoicesRes.data);
 
       setErrorMessage(
-        `Successfully synced ${draftInvoices.length} draft invoices to Xero`
+        `Successfully synced ${draftInvoices.length} draft invoices to Xero`,
       );
       setIsSuccessMessage(true);
       setErrorDialogOpen(true);
@@ -1120,7 +1120,7 @@ const Invoices = () => {
     try {
       // Find the project object that matches the projectID
       const selectedProject = projects.find(
-        (p) => p.projectID === form.projectID
+        (p) => p.projectID === form.projectID,
       );
 
       if (!selectedProject) {
@@ -1136,7 +1136,7 @@ const Invoices = () => {
 
         // Get payment terms from the selected client
         const selectedClient = clients.find(
-          (client) => client._id === form.client
+          (client) => client._id === form.client,
         );
         let paymentTerms = 30; // Default fallback
 
@@ -1159,7 +1159,7 @@ const Invoices = () => {
 
       // Get client name from the selected client ID
       const selectedClient = clients.find(
-        (client) => client._id === form.client
+        (client) => client._id === form.client,
       );
       const clientName =
         selectedClient?.name || selectedProject.client?.name || "";
@@ -1195,7 +1195,7 @@ const Invoices = () => {
     try {
       // Find the project object that matches the projectID
       const selectedProject = projects.find(
-        (p) => p.projectID === form.projectID
+        (p) => p.projectID === form.projectID,
       );
 
       if (!selectedProject) {
@@ -1211,7 +1211,7 @@ const Invoices = () => {
 
         // Get payment terms from the selected client
         const selectedClient = clients.find(
-          (client) => client._id === form.client
+          (client) => client._id === form.client,
         );
         let paymentTerms = 30; // Default fallback
 
@@ -1234,7 +1234,7 @@ const Invoices = () => {
 
       // Get client name from the selected client ID
       const selectedClient = clients.find(
-        (client) => client._id === form.client
+        (client) => client._id === form.client,
       );
       const clientName =
         selectedClient?.name || selectedProject.client?.name || "";
@@ -1810,7 +1810,7 @@ const Invoices = () => {
                     Payment Terms:{" "}
                     {(() => {
                       const selectedClient = clients.find(
-                        (client) => client._id === form.client
+                        (client) => client._id === form.client,
                       );
                       return (
                         selectedClient?.paymentTerms || "Standard (30 days)"

@@ -179,7 +179,7 @@ const GraticulePage = () => {
 
       // Filter for graticules from the equipment array
       const graticuleEquipment = (response.equipment || []).filter(
-        (item) => item.equipmentType === "Graticule"
+        (item) => item.equipmentType === "Graticule",
       );
 
       setGraticules(graticuleEquipment);
@@ -202,7 +202,8 @@ const GraticulePage = () => {
       const labSignatoryUsers = allUsers.filter(
         (user) =>
           user.isActive &&
-          (user.labSignatory === true || user.labApprovals?.calibrations === true)
+          (user.labSignatory === true ||
+            user.labApprovals?.calibrations === true),
       );
 
       // Sort alphabetically by name
@@ -232,12 +233,12 @@ const GraticulePage = () => {
 
       // Filter for PCM microscopes from the equipment array
       const pcmEquipment = (response.equipment || []).filter(
-        (item) => item.equipmentType === "Phase Contrast Microscope"
+        (item) => item.equipmentType === "Phase Contrast Microscope",
       );
 
       // Sort by equipment reference
       const sortedPcm = pcmEquipment.sort((a, b) =>
-        a.equipmentReference.localeCompare(b.equipmentReference)
+        a.equipmentReference.localeCompare(b.equipmentReference),
       );
 
       setPcmMicroscopes(sortedPcm);
@@ -309,10 +310,10 @@ const GraticulePage = () => {
 
       // Get the most recent calibration for each size
       const latest13mm = calibrations13mm.sort(
-        (a, b) => new Date(b.date) - new Date(a.date)
+        (a, b) => new Date(b.date) - new Date(a.date),
       )[0];
       const latest25mm = calibrations25mm.sort(
-        (a, b) => new Date(b.date) - new Date(a.date)
+        (a, b) => new Date(b.date) - new Date(a.date),
       )[0];
 
       // Calculate effective areas from calibrations
@@ -436,7 +437,7 @@ const GraticulePage = () => {
 
       // Find the graticule equipment ID by matching the graticule reference
       const graticuleEquipment = graticules.find(
-        (g) => g.equipmentReference === calibration.graticuleId
+        (g) => g.equipmentReference === calibration.graticuleId,
       );
 
       // Recalculate next calibration using the correct calibration frequency
@@ -444,11 +445,11 @@ const GraticulePage = () => {
       if (graticuleEquipment && graticuleEquipment.calibrationFrequency) {
         recalculatedNextCalibration = calculateNextCalibration(
           formatDateForInput(calibration.date),
-          graticuleEquipment.calibrationFrequency
+          graticuleEquipment.calibrationFrequency,
         );
         console.log(
           "Recalculated next calibration for edit:",
-          recalculatedNextCalibration
+          recalculatedNextCalibration,
         );
       }
 
@@ -456,7 +457,7 @@ const GraticulePage = () => {
       const technicianName =
         calibration.technicianName || calibration.technician || "";
       const matchingTechnician = labSignatories.find(
-        (tech) => `${tech.firstName} ${tech.lastName}` === technicianName
+        (tech) => `${tech.firstName} ${tech.lastName}` === technicianName,
       );
 
       // Find the microscope if it exists
@@ -466,7 +467,7 @@ const GraticulePage = () => {
         // Try to find by ID first
         if (calibration.microscopeId) {
           const matchingMicroscope = pcmMicroscopes.find(
-            (m) => m._id === calibration.microscopeId
+            (m) => m._id === calibration.microscopeId,
           );
           if (matchingMicroscope) {
             microscopeId = matchingMicroscope._id;
@@ -476,7 +477,7 @@ const GraticulePage = () => {
         // If not found by ID, try by reference
         if (!microscopeId && calibration.microscopeReference) {
           const matchingMicroscope = pcmMicroscopes.find(
-            (m) => m.equipmentReference === calibration.microscopeReference
+            (m) => m.equipmentReference === calibration.microscopeReference,
           );
           if (matchingMicroscope) {
             microscopeId = matchingMicroscope._id;
@@ -556,7 +557,7 @@ const GraticulePage = () => {
 
       // Get selected graticule for reference (calibration frequency is optional for graticules)
       const selectedGraticule = graticules.find(
-        (g) => g._id === formData.graticuleEquipmentId
+        (g) => g._id === formData.graticuleEquipmentId,
       );
 
       console.log("All validations passed, proceeding with submission");
@@ -589,7 +590,7 @@ const GraticulePage = () => {
       console.log("Backend data being sent:", backendData);
       console.log(
         "Next calibration in backend data:",
-        backendData.nextCalibration
+        backendData.nextCalibration,
       );
 
       if (editingCalibration) {
@@ -610,16 +611,16 @@ const GraticulePage = () => {
 
         console.log(
           "Updating equipment calibration date:",
-          equipmentUpdateData
+          equipmentUpdateData,
         );
         await equipmentService.update(
           formData.graticuleEquipmentId,
-          equipmentUpdateData
+          equipmentUpdateData,
         );
       } catch (equipmentError) {
         console.error(
           "Failed to update equipment calibration date:",
-          equipmentError
+          equipmentError,
         );
         // Don't fail the whole operation if equipment update fails
       }
@@ -634,7 +635,7 @@ const GraticulePage = () => {
       window.dispatchEvent(
         new CustomEvent("equipmentDataUpdated", {
           detail: { equipmentId: formData.graticuleEquipmentId },
-        })
+        }),
       );
     } catch (err) {
       setError(err.message || "Failed to save calibration");
@@ -673,7 +674,7 @@ const GraticulePage = () => {
 
   const handleGraticuleChange = (graticuleEquipmentId) => {
     const selectedGraticule = graticules.find(
-      (g) => g._id === graticuleEquipmentId
+      (g) => g._id === graticuleEquipmentId,
     );
 
     console.log("Graticule selected:", {
@@ -691,11 +692,11 @@ const GraticulePage = () => {
     ) {
       nextCalibration = calculateNextCalibration(
         formData.date,
-        selectedGraticule.calibrationFrequency
+        selectedGraticule.calibrationFrequency,
       );
       console.log(
         "Next calibration calculated on graticule change:",
-        nextCalibration
+        nextCalibration,
       );
     }
 
@@ -716,7 +717,7 @@ const GraticulePage = () => {
 
   const handleTechnicianChange = (technicianId) => {
     const selectedTechnician = labSignatories.find(
-      (t) => t._id === technicianId
+      (t) => t._id === technicianId,
     );
     setFormData((prev) => ({
       ...prev,
@@ -729,7 +730,7 @@ const GraticulePage = () => {
 
   const handleMicroscopeChange = (microscopeEquipmentId) => {
     const selectedMicroscope = pcmMicroscopes.find(
-      (m) => m._id === microscopeEquipmentId
+      (m) => m._id === microscopeEquipmentId,
     );
     setFormData((prev) => ({
       ...prev,
@@ -851,7 +852,7 @@ const GraticulePage = () => {
 
   const handleDateChange = (date) => {
     const selectedGraticule = graticules.find(
-      (g) => g._id === formData.graticuleEquipmentId
+      (g) => g._id === formData.graticuleEquipmentId,
     );
 
     console.log("Date change debug:", {
@@ -867,7 +868,7 @@ const GraticulePage = () => {
     if (selectedGraticule && selectedGraticule.calibrationFrequency) {
       nextCalibration = calculateNextCalibration(
         date,
-        selectedGraticule.calibrationFrequency
+        selectedGraticule.calibrationFrequency,
       );
       console.log("Calculated next calibration:", nextCalibration);
     }
@@ -1018,8 +1019,8 @@ const GraticulePage = () => {
                           item.status === "Pass"
                             ? theme.palette.success.main
                             : item.status === "Fail"
-                            ? theme.palette.error.main
-                            : theme.palette.grey[500],
+                              ? theme.palette.error.main
+                              : theme.palette.grey[500],
                         color: "white",
                         padding: "4px 8px",
                         borderRadius: "4px",
@@ -1064,7 +1065,7 @@ const GraticulePage = () => {
 
                       // If there's a specific nextCalibration date, show it (for backward compatibility)
                       const daysUntil = calculateDaysUntilCalibration(
-                        item.nextCalibration
+                        item.nextCalibration,
                       );
 
                       let daysText;

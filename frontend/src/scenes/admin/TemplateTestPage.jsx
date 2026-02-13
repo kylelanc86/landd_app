@@ -65,7 +65,7 @@ const TemplateTestPage = () => {
     try {
       const content = await getSpecificSectionExample(
         sampleClearance,
-        sectionKey
+        sectionKey,
       );
       console.log(`Section ${sectionKey}:`, content);
       // Show content in console for testing purposes
