@@ -1473,13 +1473,7 @@ const NewSample = () => {
                 fullWidth
                 disabled
                 error={!!fieldErrors.sampleNumber}
-                helperText={
-                  fieldErrors.sampleNumber
-                    ? fieldErrors.sampleNumber
-                    : projectID
-                    ? `Full Sample ID will be: ${projectID}-${form.sampleNumber || "XXX"}`
-                    : "Loading job details..."
-                }
+
               />
             </Box>
             )}

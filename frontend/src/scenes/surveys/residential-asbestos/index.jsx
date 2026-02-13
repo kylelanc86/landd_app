@@ -872,16 +872,46 @@ const ResidentialAsbestosAssessment = () => {
                   <TableCell sx={{ fontWeight: "bold", maxWidth: "195px" }}>
                     Project Name
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", minWidth: "110px" }}>
+                  <TableCell
+                    sx={{
+                      fontWeight: "bold",
+                      minWidth: "110px",
+                      display: "none",
+                      "@media (orientation: landscape)": {
+                        display: "table-cell",
+                      },
+                    }}
+                  >
                     Survey Date
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", maxWidth: "140px" }}>
+                  <TableCell
+                    sx={{
+                      fontWeight: "bold",
+                      maxWidth: "140px",
+                      display: { xs: "none", sm: "table-cell" },
+                    }}
+                  >
                     Status
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", minWidth: "180px" }}>
+                  <TableCell
+                    sx={{
+                      fontWeight: "bold",
+                      minWidth: "180px",
+                      display: "none",
+                      "@media (min-width: 600px) and (orientation: portrait)": {
+                        display: "table-cell",
+                      },
+                    }}
+                  >
                     Sample Analysis
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", minWidth: "120px" }}>
+                  <TableCell
+                    sx={{
+                      fontWeight: "bold",
+                      minWidth: "120px",
+                      display: { xs: "none", sm: "table-cell" },
+                    }}
+                  >
                     Actions
                   </TableCell>
                 </TableRow>
@@ -928,14 +958,45 @@ const ResidentialAsbestosAssessment = () => {
                             <Typography
                               variant="caption"
                               color="text.secondary"
-                              display="block"
+                              component="span"
+                              sx={{
+                                display: "none",
+                                "@media (orientation: landscape)": {
+                                  display: "block",
+                                },
+                              }}
                             >
                               Client: {job.clientName}
                             </Typography>
                           )}
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            component="span"
+                            sx={{
+                              display: "none",
+                              "@media (orientation: portrait)": {
+                                display: "block",
+                              },
+                            }}
+                          >
+                            Survey Date: {job.surveyDate
+                              ? new Date(job.surveyDate).toLocaleDateString(
+                                  "en-GB",
+                                )
+                              : "N/A"}
+                          </Typography>
                         </Typography>
                       </TableCell>
-                      <TableCell sx={{ width: "105px" }}>
+                      <TableCell
+                        sx={{
+                          width: "105px",
+                          display: "none",
+                          "@media (orientation: landscape)": {
+                            display: "table-cell",
+                          },
+                        }}
+                      >
                         <Typography variant="body2">
                           {job.surveyDate
                             ? new Date(job.surveyDate).toLocaleDateString(
@@ -944,7 +1005,12 @@ const ResidentialAsbestosAssessment = () => {
                             : "N/A"}
                         </Typography>
                       </TableCell>
-                      <TableCell sx={{ maxWidth: "150px" }}>
+                      <TableCell
+                        sx={{
+                          maxWidth: "150px",
+                          display: { xs: "none", sm: "table-cell" },
+                        }}
+                      >
                         <Chip
                           label={formatStatusLabel(job.status)}
                           size="small"
@@ -956,7 +1022,13 @@ const ResidentialAsbestosAssessment = () => {
                       </TableCell>
                       <TableCell
                         onClick={(e) => e.stopPropagation()}
-                        sx={{ maxWidth: "140px" }}
+                        sx={{
+                          maxWidth: "140px",
+                          display: "none",
+                          "@media (min-width: 600px) and (orientation: portrait)": {
+                            display: "table-cell",
+                          },
+                        }}
                       >
                         <Box
                           sx={{
@@ -1096,7 +1168,10 @@ const ResidentialAsbestosAssessment = () => {
                       </TableCell>
                       <TableCell
                         onClick={(e) => e.stopPropagation()}
-                        sx={{ minWidth: "120px" }}
+                        sx={{
+                          minWidth: "120px",
+                          display: { xs: "none", sm: "table-cell" },
+                        }}
                       >
                         <Box
                           sx={{

@@ -71,6 +71,9 @@ const ClearanceItems = () => {
   const isPortrait = useMediaQuery("(orientation: portrait)");
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const showRotateAlert = isPortrait && isMobile;
+  const isMobileLandscape = useMediaQuery(
+    "(orientation: landscape) and (max-width: 950px)",
+  );
 
   const [items, setItems] = useState([]);
   const [clearance, setClearance] = useState(null);
@@ -4167,6 +4170,32 @@ const ClearanceItems = () => {
                 Manage Photos
               </Typography>
             </Box>
+            {isMobileLandscape && selectedItemForPhotos && (
+              <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                <Button
+                  variant="outlined"
+                  startIcon={<PhotoCameraIcon />}
+                  onClick={handleTakePhoto}
+                  size="small"
+                >
+                  Take Photo
+                </Button>
+                <Button
+                  variant="outlined"
+                  startIcon={<UploadIcon />}
+                  component="label"
+                  size="small"
+                >
+                  Upload Photo
+                  <input
+                    type="file"
+                    hidden
+                    accept="image/*"
+                    onChange={handlePhotoUploadForGallery}
+                  />
+                </Button>
+              </Box>
+            )}
             <IconButton onClick={handleClosePhotoGallery}>
               <CloseIcon />
             </IconButton>
@@ -4174,29 +4203,79 @@ const ClearanceItems = () => {
           <DialogContent sx={{ px: 3, pt: 3, pb: 3, border: "none" }}>
             {selectedItemForPhotos && (
               <>
-                <Box sx={{ mb: 3 }}>
+                {isPortrait ? (
+                  <Box
+                    sx={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      py: 4,
+                      px: 2,
+                      textAlign: "center",
+                    }}
+                  >
+                    <Alert severity="info" sx={{ mb: 2 }}>
+                      <Typography variant="h6" sx={{ mb: 1, fontWeight: 600 }}>
+                        Please rotate your device to landscape mode
+                      </Typography>
+                      <Typography variant="body2" component="div">
+                        The manage photos form is best viewed in landscape
+                        orientation. Please rotate your device to continue.
+                      </Typography>
+                    </Alert>
+                  </Box>
+                ) : (
+                  <>
+                <Box
+                  sx={{
+                    mb: 3,
+                    ...(isMobileLandscape && {
+                      display: "flex",
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      gap: 1,
+                      "& .MuiTypography-root": { mb: 0 },
+                    }),
+                  }}
+                >
                   <Typography
                     variant="body2"
                     color="text.secondary"
-                    sx={{ mb: 1 }}
+                    sx={{ mb: isMobileLandscape ? 0 : 1 }}
                   >
                     <strong>Location:</strong>{" "}
                     {selectedItemForPhotos.locationDescription}
                   </Typography>
+                  {isMobileLandscape && (
+                    <Typography variant="body2" color="text.secondary">
+                      |
+                    </Typography>
+                  )}
                   <Typography
                     variant="body2"
                     color="text.secondary"
-                    sx={{ mb: 1 }}
+                    sx={{ mb: isMobileLandscape ? 0 : 1 }}
                   >
-                    <strong>Room/Area:</strong> {selectedItemForPhotos.roomArea}
+                    <strong>Room/Area:</strong>{" "}
+                    {selectedItemForPhotos.roomArea}
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
+                  {isMobileLandscape && (
+                    <Typography variant="body2" color="text.secondary">
+                      |
+                    </Typography>
+                  )}
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ mb: isMobileLandscape ? 0 : 0 }}
+                  >
                     <strong>Material:</strong>{" "}
                     {selectedItemForPhotos.materialDescription}
                   </Typography>
                 </Box>
 
-                {/* Add Photo Section */}
+                {!isMobileLandscape && (
                 <Box sx={{ mb: 3, p: 2, bgcolor: "grey.50", borderRadius: 2 }}>
                   <Typography
                     variant="subtitle1"
@@ -4234,6 +4313,7 @@ const ClearanceItems = () => {
                     </Alert>
                   )}
                 </Box>
+                )}
 
                 {/* Photos Grid */}
                 <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 600 }}>
@@ -4523,6 +4603,8 @@ const ClearanceItems = () => {
                       </Grid>
                     ))}
                   </Grid>
+                )}
+                  </>
                 )}
               </>
             )}

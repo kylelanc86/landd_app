@@ -37,6 +37,7 @@ import {
   Divider,
   RadioGroup,
   Radio,
+  useMediaQuery,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -317,6 +318,10 @@ const AssessmentItems = () => {
   const location = useLocation();
   const { id } = useParams();
   const { currentUser } = useAuth();
+  const isPortrait = useMediaQuery("(orientation: portrait)");
+  const isMobileLandscape = useMediaQuery(
+    "(orientation: landscape) and (max-width: 950px)",
+  );
 
   // Support both asbestos-assessment and residential-asbestos routes
   const isResidential = (location.pathname || "").includes(
@@ -2154,7 +2159,7 @@ const AssessmentItems = () => {
 
   if (error) {
     return (
-      <Box m="20px">
+      <Box m="8px">
         <Alert severity="error">{error}</Alert>
       </Box>
     );
@@ -2162,7 +2167,7 @@ const AssessmentItems = () => {
 
   return (
     <PermissionGate requiredPermissions={["asbestos.view"]}>
-      <Box m="20px">
+      <Box m="8px">
         <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
           Assessment Items
         </Typography>
@@ -2185,13 +2190,40 @@ const AssessmentItems = () => {
         {/* Project Info */}
         {assessment && (
           <Box sx={{ mb: 3 }}>
-            <Typography variant="h6" color="text.secondary">
+            <Typography
+              variant="h6"
+              color="text.secondary"
+              sx={{
+                display: "block",
+                "@media (orientation: landscape) and (max-width: 950px)": {
+                  display: "none",
+                },
+              }}
+            >
               Project ID: {assessment.projectId?.projectID || "N/A"}
             </Typography>
-            <Typography variant="h6" color="text.secondary">
+            <Typography
+              variant="h6"
+              color="text.secondary"
+              sx={{
+                display: "block",
+                "@media (orientation: landscape) and (max-width: 950px)": {
+                  display: "none",
+                },
+              }}
+            >
               Site Name: {assessment.projectId?.name || "N/A"}
             </Typography>
-            <Typography variant="h6" color="text.secondary">
+            <Typography
+              variant="h6"
+              color="text.secondary"
+              sx={{
+                display: "block",
+                "@media (orientation: landscape) and (max-width: 950px)": {
+                  display: "none",
+                },
+              }}
+            >
               Date of Assessment:{" "}
               {assessment?.assessmentDate
                 ? new Date(assessment.assessmentDate).toLocaleDateString(
@@ -2204,121 +2236,171 @@ const AssessmentItems = () => {
                   )
                 : "Unknown Date"}
             </Typography>
+            <Typography
+              variant="h6"
+              color="text.secondary"
+              sx={{
+                display: "none",
+                "@media (orientation: landscape) and (max-width: 950px)": {
+                  display: "block",
+                },
+              }}
+            >
+              {assessment.projectId?.projectID || "N/A"}:{" "}
+              {assessment.projectId?.name || "N/A"} (
+              {assessment?.assessmentDate
+                ? new Date(assessment.assessmentDate).toLocaleDateString(
+                    "en-GB",
+                    {
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "2-digit",
+                    },
+                  )
+                : "Unknown Date"}
+              )
+            </Typography>
           </Box>
         )}
 
-        {!isResidential && (
+        {/* Assessment Scope + Site Plan Actions - same line, Site Plan ~halfway */}
+        <Box
+          display="flex"
+          flexWrap="wrap"
+          alignItems="center"
+          gap={2}
+          sx={{ mt: 3, mb: 2 }}
+        >
+          {!isResidential && (
+            <Box
+              display="flex"
+              alignItems="center"
+              gap={1}
+              sx={{ flex: 1, minWidth: 0 }}
+              flexWrap="wrap"
+            >
+              <Button
+                variant="outlined"
+                color="primary"
+                onClick={() => {
+                  if (
+                    assessment?.assessmentScope &&
+                    Array.isArray(assessment.assessmentScope) &&
+                    assessment.assessmentScope.length > 0
+                  ) {
+                    setScopeItems(assessment.assessmentScope);
+                  } else {
+                    setScopeItems([""]);
+                  }
+                  setScopeDialogOpen(true);
+                }}
+              >
+                Scope of Assessment
+              </Button>
+              {assessment?.assessmentScope &&
+                Array.isArray(assessment.assessmentScope) &&
+                assessment.assessmentScope.length > 0 &&
+                assessment.assessmentScope.some(
+                  (item) => item.trim() !== "",
+                ) && (
+                  <>
+                    <ArrowForwardIcon sx={{ color: "text.secondary" }} />
+                    <Typography variant="body1">
+                      {assessment.assessmentScope
+                        .filter((item) => item.trim() !== "")
+                        .join(" | ")}
+                    </Typography>
+                  </>
+                )}
+              {(!assessment?.assessmentScope ||
+                !Array.isArray(assessment.assessmentScope) ||
+                assessment.assessmentScope.length === 0 ||
+                !assessment.assessmentScope.some(
+                  (item) => item.trim() !== "",
+                )) && (
+                <Typography
+                  variant="body2"
+                  color="#de0a26"
+                  sx={{ fontWeight: "medium", ml: 1 }}
+                >
+                  ⚠ Add scope item(s)
+                </Typography>
+              )}
+            </Box>
+          )}
           <Box
             display="flex"
-            gap={2}
-            sx={{ mt: 3 }}
             alignItems="center"
+            gap={2}
+            sx={{
+              flex: 1,
+              minWidth: 0,
+              justifyContent: !isResidential ? "center" : "flex-start",
+            }}
             flexWrap="wrap"
           >
             <Button
               variant="outlined"
-              color="primary"
-              onClick={() => {
-                // Load current scope items when opening dialog
-                if (
-                  assessment?.assessmentScope &&
-                  Array.isArray(assessment.assessmentScope) &&
-                  assessment.assessmentScope.length > 0
-                ) {
-                  setScopeItems(assessment.assessmentScope);
-                } else {
-                  setScopeItems([""]);
-                }
-                setScopeDialogOpen(true);
-              }}
+              color="secondary"
+              onClick={() => setSitePlanDrawingDialogOpen(true)}
+              startIcon={<MapIcon />}
             >
-              Scope of Assessment
+              {assessment?.sitePlanFile ? "Edit Site Plan" : "Site Plan"}
             </Button>
-            {assessment?.assessmentScope &&
-              Array.isArray(assessment.assessmentScope) &&
-              assessment.assessmentScope.length > 0 &&
-              assessment.assessmentScope.some((item) => item.trim() !== "") && (
-                <>
-                  <ArrowForwardIcon sx={{ color: "text.secondary" }} />
-                  <Typography variant="body1">
-                    {assessment.assessmentScope
-                      .filter((item) => item.trim() !== "")
-                      .join(" | ")}
-                  </Typography>
-                </>
-              )}
-            {(!assessment?.assessmentScope ||
-              !Array.isArray(assessment.assessmentScope) ||
-              assessment.assessmentScope.length === 0 ||
-              !assessment.assessmentScope.some(
-                (item) => item.trim() !== "",
-              )) && (
+            {assessment?.sitePlanFile && (
+              <Button
+                variant="outlined"
+                color="error"
+                onClick={handleRemoveSitePlan}
+                startIcon={<DeleteIcon />}
+                sx={{
+                  borderColor: "#d32f2f",
+                  color: "#d32f2f",
+                  "&:hover": {
+                    borderColor: "#b71c1c",
+                    backgroundColor: "rgba(211, 47, 47, 0.04)",
+                  },
+                }}
+              >
+                Delete Site Plan
+              </Button>
+            )}
+            {assessment?.sitePlanFile && (
               <Typography
                 variant="body2"
-                color="#de0a26"
+                color="success.main"
                 sx={{ fontWeight: "medium" }}
               >
-                ⚠ At least one scope item is required.
+                ✓ Site Plan Attached
+              </Typography>
+            )}
+            {!assessment?.sitePlanFile && (
+              <Typography
+                variant="body2"
+                color="warning.main"
+                sx={{ fontWeight: "medium" }}
+              >
+                ⚠ No Site Plan
               </Typography>
             )}
           </Box>
-        )}
-
-        {/* Site Plan Actions */}
-        <Box
-          display="flex"
-          gap={2}
-          sx={{ mt: 2, mb: 2 }}
-          alignItems="center"
-          flexWrap="wrap"
-        >
-          <Button
-            variant="outlined"
-            color="secondary"
-            onClick={() => setSitePlanDrawingDialogOpen(true)}
-            startIcon={<MapIcon />}
-          >
-            {assessment?.sitePlanFile ? "Edit Site Plan" : "Site Plan"}
-          </Button>
-          {assessment?.sitePlanFile && (
-            <Button
-              variant="outlined"
-              color="error"
-              onClick={handleRemoveSitePlan}
-              startIcon={<DeleteIcon />}
-              sx={{
-                borderColor: "#d32f2f",
-                color: "#d32f2f",
-                "&:hover": {
-                  borderColor: "#b71c1c",
-                  backgroundColor: "rgba(211, 47, 47, 0.04)",
-                },
-              }}
-            >
-              Delete Site Plan
-            </Button>
-          )}
-          {assessment?.sitePlanFile && (
-            <Typography
-              variant="body2"
-              color="success.main"
-              sx={{ fontWeight: "medium" }}
-            >
-              ✓ Site Plan Attached
-            </Typography>
-          )}
-          {!assessment?.sitePlanFile && (
-            <Typography
-              variant="body2"
-              color="warning.main"
-              sx={{ fontWeight: "medium" }}
-            >
-              ⚠ No Site Plan
-            </Typography>
-          )}
         </Box>
 
-        <Box sx={{ mt: 2, mb: 2, display: "flex", gap: 2, flexWrap: "wrap" }}>
+        <Box
+          sx={{
+            mt: 2,
+            mb: 2,
+            display: "flex",
+            gap: 2,
+            flexWrap: "wrap",
+            "@media (orientation: portrait) and (max-width: 600px)": {
+              flexWrap: "nowrap",
+              justifyContent: "space-between",
+              gap: 1,
+              "& .MuiButton-startIcon": { display: "none" },
+            },
+          }}
+        >
           <Button
             variant="contained"
             color="secondary"
@@ -2327,7 +2409,29 @@ const AssessmentItems = () => {
             }}
             startIcon={<AddIcon />}
           >
-            Add Assessment Item
+            <Box
+              component="span"
+              sx={{
+                m: 1,
+                display: "none",
+                "@media (orientation: portrait) and (max-width: 600px)": {
+                  display: "inline",
+                },
+              }}
+            >
+              Add Item
+            </Box>
+            <Box
+              component="span"
+              sx={{
+                display: "inline",
+                "@media (orientation: portrait) and (max-width: 600px)": {
+                  display: "none",
+                },
+              }}
+            >
+              Add Assessment Item
+            </Box>
           </Button>
           <Button
             variant="contained"
@@ -2341,7 +2445,28 @@ const AssessmentItems = () => {
               },
             }}
           >
-            Job Specific Exclusions
+            <Box
+              component="span"
+              sx={{
+                display: "none",
+                "@media (orientation: portrait) and (max-width: 600px)": {
+                  display: "inline",
+                },
+              }}
+            >
+              Exclusions
+            </Box>
+            <Box
+              component="span"
+              sx={{
+                display: "inline",
+                "@media (orientation: portrait) and (max-width: 600px)": {
+                  display: "none",
+                },
+              }}
+            >
+              Job Specific Exclusions
+            </Box>
           </Button>
           <Button
             variant="contained"
@@ -2355,13 +2480,42 @@ const AssessmentItems = () => {
               },
             }}
           >
-            Discussion/Conclusions
+            <Box
+              component="span"
+              sx={{
+                display: "none",
+                "@media (orientation: portrait) and (max-width: 600px)": {
+                  display: "inline",
+                },
+              }}
+            >
+              Discussion
+            </Box>
+            <Box
+              component="span"
+              sx={{
+                display: "inline",
+                "@media (orientation: portrait) and (max-width: 600px)": {
+                  display: "none",
+                },
+              }}
+            >
+              Discussion/Conclusions
+            </Box>
           </Button>
         </Box>
 
         <Card sx={{ mt: 3 }}>
-          <CardContent>
-            <TableContainer component={Paper}>
+          <CardContent sx={{ p: 0, "&:last-child": { pb: 0 } }}>
+            <TableContainer
+              component={Paper}
+              sx={{
+                boxShadow: "none",
+                "@media (orientation: portrait) and (max-width: 600px)": {
+                  "& .MuiTableCell-root": { fontSize: "0.85em" },
+                },
+              }}
+            >
               <Table>
                 <TableHead>
                   <TableRow>
@@ -2375,17 +2529,78 @@ const AssessmentItems = () => {
                           Level/Floor
                         </TableCell>
                       )}
-                    <TableCell sx={{ fontWeight: "bold" }}>Room/Area</TableCell>
-                    <TableCell sx={{ fontWeight: "bold" }}>
+                    <TableCell
+                      sx={{
+                        fontWeight: "bold",
+                        display: "none",
+                        "@media (orientation: portrait) and (max-width: 600px)":
+                          {
+                            display: "table-cell",
+                            width: "55%",
+                            minWidth: "55%",
+                          },
+                      }}
+                    >
+                      Item Description
+                    </TableCell>
+                    <TableCell
+                      sx={{
+                        fontWeight: "bold",
+                        display: "table-cell",
+                        "@media (orientation: portrait) and (max-width: 600px)":
+                          {
+                            display: "none",
+                          },
+                      }}
+                    >
+                      Room/Area
+                    </TableCell>
+                    <TableCell
+                      sx={{
+                        fontWeight: "bold",
+                        display: "table-cell",
+                        "@media (orientation: portrait) and (max-width: 600px)":
+                          {
+                            display: "none",
+                          },
+                      }}
+                    >
                       Location Description
                     </TableCell>
-                    <TableCell sx={{ fontWeight: "bold" }}>
+                    <TableCell
+                      sx={{
+                        fontWeight: "bold",
+                        "@media (orientation: portrait) and (max-width: 600px)":
+                          {
+                            width: "25%",
+                            maxWidth: "25%",
+                          },
+                      }}
+                    >
                       Sample Reference
                     </TableCell>
-                    <TableCell sx={{ fontWeight: "bold" }}>
+                    <TableCell
+                      sx={{
+                        fontWeight: "bold",
+                        display: "table-cell",
+                        "@media (orientation: portrait) and (max-width: 600px)":
+                          {
+                            display: "none",
+                          },
+                      }}
+                    >
                       Asbestos Content
                     </TableCell>
-                    <TableCell sx={{ fontWeight: "bold" }}>
+                    <TableCell
+                      sx={{
+                        fontWeight: "bold",
+                        display: "table-cell",
+                        "@media (orientation: portrait) and (max-width: 600px)":
+                          {
+                            display: "none",
+                          },
+                      }}
+                    >
                       Photograph
                     </TableCell>
                     <TableCell sx={{ fontWeight: "bold" }}>Actions</TableCell>
@@ -2422,7 +2637,11 @@ const AssessmentItems = () => {
                             item.levelFloor && item.levelFloor.trim() !== "",
                         );
                       return (
-                        <TableRow key={item._id || item.itemNumber}>
+                        <TableRow
+                          key={item._id || item.itemNumber}
+                          onClick={() => handleEdit(item)}
+                          sx={{ cursor: "pointer" }}
+                        >
                           {hasLevelFloor && (
                             <TableCell>
                               {item.levelFloor ? (
@@ -2440,11 +2659,55 @@ const AssessmentItems = () => {
                               )}
                             </TableCell>
                           )}
-                          <TableCell>{item.roomArea || "N/A"}</TableCell>
-                          <TableCell>
+                          <TableCell
+                            sx={{
+                              display: "none",
+                              "@media (orientation: portrait) and (max-width: 600px)":
+                                {
+                                  display: "table-cell",
+                                  width: "55%",
+                                  minWidth: "55%",
+                                },
+                            }}
+                          >
+                            {[
+                              item.roomArea || "",
+                              item.locationDescription || "",
+                            ]
+                              .filter(Boolean)
+                              .join(" – ") || "N/A"}
+                          </TableCell>
+                          <TableCell
+                            sx={{
+                              display: "table-cell",
+                              "@media (orientation: portrait) and (max-width: 600px)":
+                                {
+                                  display: "none",
+                                },
+                            }}
+                          >
+                            {item.roomArea || "N/A"}
+                          </TableCell>
+                          <TableCell
+                            sx={{
+                              display: "table-cell",
+                              "@media (orientation: portrait) and (max-width: 600px)":
+                                {
+                                  display: "none",
+                                },
+                            }}
+                          >
                             {item.locationDescription || "N/A"}
                           </TableCell>
-                          <TableCell>
+                          <TableCell
+                            sx={{
+                              "@media (orientation: portrait) and (max-width: 600px)":
+                                {
+                                  width: "25%",
+                                  maxWidth: "25%",
+                                },
+                            }}
+                          >
                             {(() => {
                               const ref = (item.sampleReference || "").trim();
                               const firstIdx = items.findIndex(
@@ -2459,8 +2722,26 @@ const AssessmentItems = () => {
                                 : item.sampleReference || "N/A";
                             })()}
                           </TableCell>
-                          <TableCell>{item.asbestosContent || "N/A"}</TableCell>
-                          <TableCell>
+                          <TableCell
+                            sx={{
+                              display: "table-cell",
+                              "@media (orientation: portrait) and (max-width: 600px)":
+                                {
+                                  display: "none",
+                                },
+                            }}
+                          >
+                            {item.asbestosContent || "N/A"}
+                          </TableCell>
+                          <TableCell
+                            sx={{
+                              display: "table-cell",
+                              "@media (orientation: portrait) and (max-width: 600px)":
+                                {
+                                  display: "none",
+                                },
+                            }}
+                          >
                             {(() => {
                               const photoCount =
                                 (item.photographs?.length || 0) +
@@ -2501,7 +2782,7 @@ const AssessmentItems = () => {
                               );
                             })()}
                           </TableCell>
-                          <TableCell>
+                          <TableCell onClick={(e) => e.stopPropagation()}>
                             <Box display="flex" gap={1}>
                               <IconButton
                                 onClick={() => handleOpenPhotoGallery(item)}
@@ -2516,6 +2797,12 @@ const AssessmentItems = () => {
                                 color="primary"
                                 size="small"
                                 title="Edit"
+                                sx={{
+                                  display: "inline-flex",
+                                  "@media (max-width: 600px)": {
+                                    display: "none",
+                                  },
+                                }}
                               >
                                 <EditIcon />
                               </IconButton>
@@ -2524,6 +2811,13 @@ const AssessmentItems = () => {
                                 color="error"
                                 size="small"
                                 title="Delete"
+                                sx={{
+                                  display: "inline-flex",
+                                  "@media (orientation: portrait) and (max-width: 600px)":
+                                    {
+                                      display: "none",
+                                    },
+                                }}
                               >
                                 <DeleteIcon />
                               </IconButton>
@@ -3552,6 +3846,32 @@ const AssessmentItems = () => {
                 Manage Photos
               </Typography>
             </Box>
+            {isMobileLandscape && selectedItemForPhotos && (
+              <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                <Button
+                  variant="outlined"
+                  startIcon={<PhotoCameraIcon />}
+                  onClick={handleTakePhoto}
+                  size="small"
+                >
+                  Take Photo
+                </Button>
+                <Button
+                  variant="outlined"
+                  startIcon={<UploadIcon />}
+                  component="label"
+                  size="small"
+                >
+                  Upload Photo
+                  <input
+                    type="file"
+                    hidden
+                    accept="image/*"
+                    onChange={handlePhotoUploadForGallery}
+                  />
+                </Button>
+              </Box>
+            )}
             <IconButton onClick={handleClosePhotoGallery}>
               <CloseIcon />
             </IconButton>
@@ -3559,28 +3879,79 @@ const AssessmentItems = () => {
           <DialogContent sx={{ px: 3, pt: 3, pb: 3, border: "none" }}>
             {selectedItemForPhotos && (
               <>
-                <Box sx={{ mb: 3 }}>
+                {isPortrait ? (
+                  <Box
+                    sx={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      py: 4,
+                      px: 2,
+                      textAlign: "center",
+                    }}
+                  >
+                    <Alert severity="info" sx={{ mb: 2 }}>
+                      <Typography variant="h6" sx={{ mb: 1, fontWeight: 600 }}>
+                        Please rotate your device to landscape mode
+                      </Typography>
+                      <Typography variant="body2" component="div">
+                        The manage photos form is best viewed in landscape
+                        orientation. Please rotate your device to continue.
+                      </Typography>
+                    </Alert>
+                  </Box>
+                ) : (
+                  <>
+                <Box
+                  sx={{
+                    mb: 3,
+                    ...(isMobileLandscape && {
+                      display: "flex",
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      gap: 1,
+                      "& .MuiTypography-root": { mb: 0 },
+                    }),
+                  }}
+                >
                   <Typography
                     variant="body2"
                     color="text.secondary"
-                    sx={{ mb: 1 }}
+                    sx={{ mb: isMobileLandscape ? 0 : 1 }}
                   >
                     <strong>Location:</strong>{" "}
                     {selectedItemForPhotos.locationDescription}
                   </Typography>
+                  {isMobileLandscape && (
+                    <Typography variant="body2" color="text.secondary">
+                      |
+                    </Typography>
+                  )}
                   <Typography
                     variant="body2"
                     color="text.secondary"
-                    sx={{ mb: 1 }}
+                    sx={{ mb: isMobileLandscape ? 0 : 1 }}
                   >
-                    <strong>Room/Area:</strong> {selectedItemForPhotos.roomArea}
+                    <strong>Room/Area:</strong>{" "}
+                    {selectedItemForPhotos.roomArea}
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
+                  {isMobileLandscape && (
+                    <Typography variant="body2" color="text.secondary">
+                      |
+                    </Typography>
+                  )}
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ mb: isMobileLandscape ? 0 : 0 }}
+                  >
                     <strong>Material:</strong>{" "}
                     {selectedItemForPhotos.materialType}
                   </Typography>
                 </Box>
 
+                {!isMobileLandscape && (
                 <Box sx={{ mb: 3, p: 2, bgcolor: "grey.50", borderRadius: 2 }}>
                   <Typography
                     variant="subtitle1"
@@ -3618,6 +3989,7 @@ const AssessmentItems = () => {
                     </Alert>
                   )}
                 </Box>
+                )}
 
                 <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 600 }}>
                   Photos (
@@ -3899,6 +4271,8 @@ const AssessmentItems = () => {
                       </Grid>
                     ))}
                   </Grid>
+                )}
+                  </>
                 )}
               </>
             )}
