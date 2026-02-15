@@ -15,8 +15,6 @@ import {
   IconButton,
   TextField,
   InputAdornment,
-  Breadcrumbs,
-  Link,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -798,6 +796,13 @@ const ClientSuppliedJobs = () => {
           reportIssueDate: fullJob.reportIssueDate || null,
         });
         setReportViewedJobIds((prev) => new Set(prev).add(job._id));
+        try {
+          await clientSuppliedJobsService.update(job._id, {
+            reportViewedAt: new Date().toISOString(),
+          });
+        } catch (e) {
+          console.warn("Failed to persist report viewed:", e);
+        }
       } else {
         // Fibre Count jobs - use existing logic
         // Transform sample items to match air monitoring format
@@ -851,6 +856,13 @@ const ClientSuppliedJobs = () => {
           isClientSupplied: true, // Flag to indicate we want fibre count format
         });
         setReportViewedJobIds((prev) => new Set(prev).add(job._id));
+        try {
+          await clientSuppliedJobsService.update(job._id, {
+            reportViewedAt: new Date().toISOString(),
+          });
+        } catch (e) {
+          console.warn("Failed to persist report viewed:", e);
+        }
       }
     } catch (error) {
       console.error("Error generating PDF:", error);
@@ -965,7 +977,7 @@ const ClientSuppliedJobs = () => {
         response.data?.message ||
           `Authorisation request emails sent successfully to ${
             response.data?.recipients?.length || 0
-          } report proofer user(s)`,
+          } lab signatory user(s)`,
         "success",
       );
     } catch (error) {
@@ -1324,7 +1336,10 @@ const ClientSuppliedJobs = () => {
                           {(() => {
                             const conditions = {
                               notApproved: !job.reportApprovedBy,
-                              reportViewed: reportViewedJobIds.has(job._id),
+                              reportViewed:
+                                reportViewedJobIds.has(job._id) ||
+                                !!job.reportViewedAt,
+                              alreadySentForAuthorisation: !!job.authorisationRequestedBy,
                               hasAdminPermission: hasPermission(
                                 currentUser,
                                 "admin.view",
@@ -1333,8 +1348,8 @@ const ClientSuppliedJobs = () => {
                                 currentUser,
                                 "clientSup.edit",
                               ),
-                              isReportProofer: Boolean(
-                                currentUser?.reportProofer,
+                              isLabSignatory: Boolean(
+                                currentUser?.labSignatory,
                               ),
                             };
                             const baseVisible =
@@ -1342,11 +1357,11 @@ const ClientSuppliedJobs = () => {
                             const visibility = {
                               showAuthorise:
                                 baseVisible &&
-                                conditions.hasAdminPermission &&
-                                conditions.isReportProofer,
+                                conditions.isLabSignatory &&
+                                conditions.hasEditPermission,
                               showSend:
                                 baseVisible &&
-                                !conditions.isReportProofer &&
+                                !conditions.isLabSignatory &&
                                 conditions.hasEditPermission,
                             };
                             return (
@@ -1381,7 +1396,7 @@ const ClientSuppliedJobs = () => {
                                   <Button
                                     variant="outlined"
                                     size="small"
-                                    color="primary"
+                                    color={conditions.alreadySentForAuthorisation ? "inherit" : "primary"}
                                     startIcon={<MailIcon />}
                                     onClick={(e) => {
                                       e.stopPropagation();
@@ -1390,9 +1405,16 @@ const ClientSuppliedJobs = () => {
                                     disabled={
                                       sendingAuthorisationRequests[job._id]
                                     }
+                                    sx={
+                                      conditions.alreadySentForAuthorisation
+                                        ? { color: "text.secondary", borderColor: "grey.400" }
+                                        : undefined
+                                    }
                                   >
                                     {sendingAuthorisationRequests[job._id]
                                       ? "Sending..."
+                                      : conditions.alreadySentForAuthorisation
+                                      ? "Re-send for Authorisation"
                                       : "Send for Authorisation"}
                                   </Button>
                                 )}

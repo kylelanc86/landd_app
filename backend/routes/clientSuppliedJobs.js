@@ -553,15 +553,15 @@ router.post('/:id/send-for-authorisation', auth, checkPermission('clientSup.edit
       });
     }
 
-    // Get all users with report proofer approval
-    const reportProoferUsers = await User.find({
-      reportProofer: true,
+    // Get all users with lab signatory approval (fibre ID authorisation is done by lab signatories)
+    const labSignatoryUsers = await User.find({
+      labSignatory: true,
       isActive: true
     }).select('firstName lastName email');
 
-    if (reportProoferUsers.length === 0) {
+    if (labSignatoryUsers.length === 0) {
       return res.status(400).json({
-        message: 'No report proofer users found'
+        message: 'No lab signatory users found'
       });
     }
 
@@ -582,8 +582,8 @@ router.post('/:id/send-for-authorisation', auth, checkPermission('clientSup.edit
     const basePath = '/client-supplied';
     const jobUrl = `${frontendUrl}${basePath}`;
 
-    // Send email to all report proofer users
-    const emailPromises = reportProoferUsers.map(async (user) => {
+    // Send email to all lab signatory users
+    const emailPromises = labSignatoryUsers.map(async (user) => {
       try {
         await sendMail({
           to: user.email,
@@ -632,8 +632,8 @@ Please review and authorise the report at: ${jobUrl}
     await Promise.all(emailPromises);
 
     res.json({
-      message: `Authorisation request emails sent successfully to ${reportProoferUsers.length} report proofer user(s)`,
-      recipients: reportProoferUsers.map(u => ({ email: u.email, name: `${u.firstName} ${u.lastName}` }))
+      message: `Authorisation request emails sent successfully to ${labSignatoryUsers.length} lab signatory user(s)`,
+      recipients: labSignatoryUsers.map(u => ({ email: u.email, name: `${u.firstName} ${u.lastName}` }))
     });
   } catch (err) {
     console.error('Error sending authorisation request emails:', err);

@@ -54,14 +54,15 @@ const IndoorAirQuality = () => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [monitoringDate, setMonitoringDate] = useState(
-    formatDateForInput(new Date())
+    formatDateForInput(new Date()),
   );
   const [dateError, setDateError] = useState(null);
   const [editingRecord, setEditingRecord] = useState(null);
   const [recordToDelete, setRecordToDelete] = useState(null);
   const [reportViewedRecordIds, setReportViewedRecordIds] = useState(new Set());
   const [authorisingReports, setAuthorisingReports] = useState({});
-  const [sendingAuthorisationRequests, setSendingAuthorisationRequests] = useState({});
+  const [sendingAuthorisationRequests, setSendingAuthorisationRequests] =
+    useState({});
 
   // Load IAQ records
   useEffect(() => {
@@ -126,7 +127,9 @@ const IndoorAirQuality = () => {
 
     // Find the position of the current record (1-indexed)
     const reportNumber =
-      sameMonthYearRecords.findIndex((r) => r._id === record._id || r.id === record.id) + 1;
+      sameMonthYearRecords.findIndex(
+        (r) => r._id === record._id || r.id === record.id,
+      ) + 1;
 
     return `${monthYear} - ${reportNumber}`;
   };
@@ -203,9 +206,7 @@ const IndoorAirQuality = () => {
 
       const updatedRecord = response.data;
       setRecords(
-        records.map((r) =>
-          (r._id || r.id) === recordId ? updatedRecord : r
-        )
+        records.map((r) => ((r._id || r.id) === recordId ? updatedRecord : r)),
       );
       showSnackbar("IAQ record updated successfully", "success");
       handleCloseEditDialog();
@@ -229,9 +230,7 @@ const IndoorAirQuality = () => {
     try {
       const recordId = recordToDelete._id || recordToDelete.id;
       await iaqRecordService.delete(recordId);
-      setRecords(
-        records.filter((r) => (r._id || r.id) !== recordId)
-      );
+      setRecords(records.filter((r) => (r._id || r.id) !== recordId));
       showSnackbar("IAQ record deleted successfully", "success");
       setDeleteDialogOpen(false);
       setRecordToDelete(null);
@@ -245,22 +244,26 @@ const IndoorAirQuality = () => {
     e.stopPropagation();
     try {
       // Fetch the full record with populated samples
-      const recordResponse = await iaqRecordService.getById(record._id || record.id);
+      const recordResponse = await iaqRecordService.getById(
+        record._id || record.id,
+      );
       const fullRecord = recordResponse.data;
-      
+
       // Fetch all records for reference calculation
       const allRecordsResponse = await iaqRecordService.getAll();
       const allRecords = allRecordsResponse.data || [];
-      
+
       // Fetch samples for this record
-      const samplesResponse = await iaqSampleService.getByIAQRecord(record._id || record.id);
+      const samplesResponse = await iaqSampleService.getByIAQRecord(
+        record._id || record.id,
+      );
       const samples = samplesResponse.data || [];
-      
+
       if (samples.length === 0) {
         showSnackbar("No samples found for this record", "warning");
         return;
       }
-      
+
       // Generate PDF - open in new tab if not approved, download if approved
       await generateIAQReport({
         record: fullRecord,
@@ -268,14 +271,22 @@ const IndoorAirQuality = () => {
         samples: samples,
         openInNewTab: !fullRecord.reportApprovedBy,
         reportApprovedBy: fullRecord.reportApprovedBy || null,
-        reportIssueDate: fullRecord.reportIssueDate || null
+        reportIssueDate: fullRecord.reportIssueDate || null,
       });
-      
-      // Mark report as viewed if not approved
+
       if (!fullRecord.reportApprovedBy) {
-        setReportViewedRecordIds((prev) => new Set(prev).add(record._id || record.id));
+        setReportViewedRecordIds((prev) =>
+          new Set(prev).add(record._id || record.id),
+        );
+        try {
+          await iaqRecordService.update(record._id || record.id, {
+            reportViewedAt: new Date().toISOString(),
+          });
+        } catch (e) {
+          console.warn("Failed to persist report viewed:", e);
+        }
       }
-      
+
       if (fullRecord.reportApprovedBy) {
         showSnackbar("PDF downloaded successfully", "success");
       } else {
@@ -289,7 +300,10 @@ const IndoorAirQuality = () => {
 
   const handleAuthoriseReport = async (record) => {
     try {
-      setAuthorisingReports((prev) => ({ ...prev, [record._id || record.id]: true }));
+      setAuthorisingReports((prev) => ({
+        ...prev,
+        [record._id || record.id]: true,
+      }));
 
       await iaqRecordService.authorise(record._id || record.id);
 
@@ -301,41 +315,58 @@ const IndoorAirQuality = () => {
       // Generate and download the authorised report
       try {
         await handleGeneratePDF({ stopPropagation: () => {} }, record);
-        showSnackbar("Report authorised and downloaded successfully.", "success");
+        showSnackbar(
+          "Report authorised and downloaded successfully.",
+          "success",
+        );
       } catch (reportError) {
         console.error("Error generating authorised report:", reportError);
-        showSnackbar("Report authorised but failed to generate download.", "warning");
+        showSnackbar(
+          "Report authorised but failed to generate download.",
+          "warning",
+        );
       }
     } catch (error) {
       console.error("Error authorising report:", error);
       showSnackbar("Failed to authorise report. Please try again.", "error");
     } finally {
-      setAuthorisingReports((prev) => ({ ...prev, [record._id || record.id]: false }));
+      setAuthorisingReports((prev) => ({
+        ...prev,
+        [record._id || record.id]: false,
+      }));
     }
   };
 
   const handleSendForAuthorisation = async (record) => {
     try {
-      setSendingAuthorisationRequests((prev) => ({ ...prev, [record._id || record.id]: true }));
+      setSendingAuthorisationRequests((prev) => ({
+        ...prev,
+        [record._id || record.id]: true,
+      }));
 
-      const response = await iaqRecordService.sendForAuthorisation(record._id || record.id);
+      const response = await iaqRecordService.sendForAuthorisation(
+        record._id || record.id,
+      );
 
       showSnackbar(
         response.data?.message ||
           `Authorisation request emails sent successfully to ${
             response.data?.recipients?.length || 0
-          } report proofer user(s)`,
-        "success"
+          } lab signatory user(s)`,
+        "success",
       );
     } catch (error) {
       console.error("Error sending authorisation request emails:", error);
       showSnackbar(
         error.response?.data?.message ||
           "Failed to send authorisation request emails. Please try again.",
-        "error"
+        "error",
       );
     } finally {
-      setSendingAuthorisationRequests((prev) => ({ ...prev, [record._id || record.id]: false }));
+      setSendingAuthorisationRequests((prev) => ({
+        ...prev,
+        [record._id || record.id]: false,
+      }));
     }
   };
 
@@ -442,7 +473,9 @@ const IndoorAirQuality = () => {
                     <TableCell sx={{ color: "white", fontWeight: "bold" }}>
                       Status
                     </TableCell>
-                    <TableCell sx={{ color: "white", fontWeight: "bold", width: "35%" }}>
+                    <TableCell
+                      sx={{ color: "white", fontWeight: "bold", width: "35%" }}
+                    >
                       Actions
                     </TableCell>
                   </TableRow>
@@ -473,8 +506,16 @@ const IndoorAirQuality = () => {
                             size="small"
                           />
                         </TableCell>
-                        <TableCell onClick={(e) => e.stopPropagation()} sx={{ width: "35%" }}>
-                          <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
+                        <TableCell
+                          onClick={(e) => e.stopPropagation()}
+                          sx={{ width: "35%" }}
+                        >
+                          <Box
+                            display="flex"
+                            alignItems="center"
+                            gap={1}
+                            flexWrap="wrap"
+                          >
                             {record.status === "Samples Submitted to Lab" && (
                               <Button
                                 variant="contained"
@@ -506,7 +547,12 @@ const IndoorAirQuality = () => {
                             >
                               <DeleteIcon fontSize="small" />
                             </IconButton>
-                            <Box display="flex" flexDirection="column" alignItems="center" gap={0.5}>
+                            <Box
+                              display="flex"
+                              flexDirection="column"
+                              alignItems="center"
+                              gap={0.5}
+                            >
                               <IconButton
                                 size="small"
                                 onClick={(e) => handleGeneratePDF(e, record)}
@@ -522,7 +568,8 @@ const IndoorAirQuality = () => {
                                 }
                                 sx={{
                                   color:
-                                    record.status === "Complete - Satisfactory" ||
+                                    record.status ===
+                                      "Complete - Satisfactory" ||
                                     record.status === "Complete - Failed"
                                       ? theme.palette.info.main
                                       : theme.palette.action.disabled,
@@ -547,19 +594,24 @@ const IndoorAirQuality = () => {
                             {(() => {
                               const conditions = {
                                 notApproved: !record.reportApprovedBy,
-                                reportViewed: reportViewedRecordIds.has(record._id || record.id),
+                                reportViewed:
+                                  reportViewedRecordIds.has(
+                                    record._id || record.id,
+                                  ) || !!record.reportViewedAt,
+                                alreadySentForAuthorisation: !!record.authorisationRequestedBy,
                                 hasAdminPermission: hasPermission(
                                   currentUser,
-                                  "admin.view"
+                                  "admin.view",
                                 ),
                                 hasEditPermission: hasPermission(
                                   currentUser,
-                                  "projects.edit"
+                                  "projects.edit",
                                 ),
-                                isReportProofer: Boolean(
-                                  currentUser?.reportProofer
+                                isLabSignatory: Boolean(
+                                  currentUser?.labSignatory,
                                 ),
-                                isComplete: record.status === "Complete - Satisfactory" ||
+                                isComplete:
+                                  record.status === "Complete - Satisfactory" ||
                                   record.status === "Complete - Failed",
                               };
                               const baseVisible =
@@ -569,11 +621,11 @@ const IndoorAirQuality = () => {
                               const visibility = {
                                 showAuthorise:
                                   baseVisible &&
-                                  conditions.hasAdminPermission &&
-                                  conditions.isReportProofer,
+                                  conditions.isLabSignatory &&
+                                  conditions.hasEditPermission,
                                 showSend:
                                   baseVisible &&
-                                  !conditions.isReportProofer &&
+                                  !conditions.isLabSignatory &&
                                   conditions.hasEditPermission,
                               };
                               return (
@@ -588,7 +640,9 @@ const IndoorAirQuality = () => {
                                         handleAuthoriseReport(record);
                                       }}
                                       disabled={
-                                        authorisingReports[record._id || record.id]
+                                        authorisingReports[
+                                          record._id || record.id
+                                        ]
                                       }
                                       sx={{
                                         backgroundColor: "#4caf50",
@@ -598,7 +652,9 @@ const IndoorAirQuality = () => {
                                         },
                                       }}
                                     >
-                                      {authorisingReports[record._id || record.id]
+                                      {authorisingReports[
+                                        record._id || record.id
+                                      ]
                                         ? "Authorising..."
                                         : "Authorise Report"}
                                     </Button>
@@ -607,18 +663,29 @@ const IndoorAirQuality = () => {
                                     <Button
                                       variant="outlined"
                                       size="small"
-                                      color="primary"
+                                      color={conditions.alreadySentForAuthorisation ? "inherit" : "primary"}
                                       startIcon={<MailIcon />}
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         handleSendForAuthorisation(record);
                                       }}
                                       disabled={
-                                        sendingAuthorisationRequests[record._id || record.id]
+                                        sendingAuthorisationRequests[
+                                          record._id || record.id
+                                        ]
+                                      }
+                                      sx={
+                                        conditions.alreadySentForAuthorisation
+                                          ? { color: "text.secondary", borderColor: "grey.400" }
+                                          : undefined
                                       }
                                     >
-                                      {sendingAuthorisationRequests[record._id || record.id]
+                                      {sendingAuthorisationRequests[
+                                        record._id || record.id
+                                      ]
                                         ? "Sending..."
+                                        : conditions.alreadySentForAuthorisation
+                                        ? "Re-send for Authorisation"
                                         : "Send for Authorisation"}
                                     </Button>
                                   )}
@@ -657,7 +724,9 @@ const IndoorAirQuality = () => {
           </Box>
         </DialogTitle>
         <DialogContent>
-          <Box sx={{ mt: 2, display: "flex", gap: 2, alignItems: "flex-start" }}>
+          <Box
+            sx={{ mt: 2, display: "flex", gap: 2, alignItems: "flex-start" }}
+          >
             <TextField
               fullWidth
               label="Monitoring Date"
@@ -709,7 +778,9 @@ const IndoorAirQuality = () => {
           </Box>
         </DialogTitle>
         <DialogContent>
-          <Box sx={{ mt: 2, display: "flex", gap: 2, alignItems: "flex-start" }}>
+          <Box
+            sx={{ mt: 2, display: "flex", gap: 2, alignItems: "flex-start" }}
+          >
             <TextField
               fullWidth
               label="Monitoring Date"

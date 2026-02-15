@@ -221,9 +221,14 @@ const SampleList = () => {
         return isValid;
       }
 
-      // If sample has failed status, it's considered complete (has all required data, just failed flowrate validation)
+      // If sample has failed status, it's considered complete (has all required data, just failed flowrate validation).
+      // Allow flowrates to be 0 or falsy (pump may have stopped); require presence only ( != null ).
       if (sample.status === "failed") {
-        const isValid =
+        const hasFlowrates =
+          sample.initialFlowrate != null &&
+          sample.finalFlowrate != null &&
+          sample.averageFlowrate != null;
+        const isValid = (
           sample.sampleNumber &&
           sample.type &&
           sample.location &&
@@ -234,12 +239,7 @@ const SampleList = () => {
           sample.filterSize &&
           sample.startTime &&
           sample.endTime &&
-          sample.initialFlowrate &&
-          sample.finalFlowrate &&
-          sample.averageFlowrate;
-        console.log(
-          `[SampleList] Failed sample ${sample.fullSampleID} validation (status=failed, checking required fields only):`,
-          isValid,
+          hasFlowrates
         );
         return isValid;
       }

@@ -100,9 +100,20 @@ const formatSampleLocation = (sample) => {
   return location;
 };
 
+// Format fibre count for PDF so decimals (e.g. 2.5 for half fibres) display correctly; pass as string so pdfmake doesn't drop decimals
+const formatFibreCountForPdf = (value) => {
+  if (value == null || value === '') return '-';
+  return String(value);
+};
+
 // Add this helper function at the top of the file
 const formatReportedConcentration = (sample) => {
   if (!sample.analysis) return '-';
+  
+  // Failed samples (e.g. flowrate failure) do not have a fibre concentration
+  if (sample.status === 'failed') {
+    return '-';
+  }
   
   // Check for uncountable due to dust first (handle both boolean true and string "true")
   if (sample.analysis.uncountableDueToDust === true || sample.analysis.uncountableDueToDust === 'true') {
@@ -628,15 +639,29 @@ pdfMake.fonts = {
                   if (isClientSupplied) {
                     const uncountableDueToDust = sample.analysis?.uncountableDueToDust === true || sample.analysis?.uncountableDueToDust === 'true';
                     const isFailed = sample.status === "failed";
+                    // For failed samples: show optional fibre count values when conducted (each cell independently), otherwise '-'
+                    const fieldCountText = isFailed
+                      ? (sample.analysis?.fieldsCounted != null ? sample.analysis.fieldsCounted : '-')
+                      : (uncountableDueToDust ? '-' : ((sample.analysis?.fieldsCounted !== undefined && sample.analysis?.fieldsCounted !== null) ? sample.analysis.fieldsCounted : 'N/A'));
+                    const fibreCountText = isFailed
+                      ? (sample.analysis?.fibresCounted != null ? sample.analysis.fibresCounted : '-')
+                      : (uncountableDueToDust ? '-' : ((sample.analysis?.fibresCounted !== undefined && sample.analysis?.fibresCounted !== null) ? sample.analysis.fibresCounted : 'N/A'));
                     return [
                       { text: sample.fullSampleID || sample.sampleID || 'N/A', style: 'tableContent' },
                       { text: formatSampleLocation(sample), style: 'tableContent' },
-                      { text: isFailed ? '-' : (uncountableDueToDust ? '-' : ((sample.analysis?.fieldsCounted !== undefined && sample.analysis?.fieldsCounted !== null) ? sample.analysis.fieldsCounted : 'N/A')), style: 'tableContent' },
-                      { text: isFailed ? '-' : (uncountableDueToDust ? '-' : ((sample.analysis?.fibresCounted !== undefined && sample.analysis?.fibresCounted !== null) ? sample.analysis.fibresCounted : 'N/A')), style: 'tableContent' }
+                      { text: fieldCountText, style: 'tableContent' },
+                      { text: formatFibreCountForPdf(fibreCountText), style: 'tableContent' }
                     ];
                   } else {
                     const uncountableDueToDust = sample.analysis?.uncountableDueToDust === true || sample.analysis?.uncountableDueToDust === 'true';
                     const isFailed = sample.status === "failed";
+                    // For failed samples: show optional fibre count values when conducted (each cell independently), otherwise '-'
+                    const fieldCountText = isFailed
+                      ? (sample.analysis?.fieldsCounted != null ? sample.analysis.fieldsCounted : '-')
+                      : (uncountableDueToDust ? '-' : ((sample.analysis?.fieldsCounted !== undefined && sample.analysis?.fieldsCounted !== null) ? sample.analysis.fieldsCounted : 'N/A'));
+                    const fibreCountText = isFailed
+                      ? (sample.analysis?.fibresCounted != null ? sample.analysis.fibresCounted : '-')
+                      : (uncountableDueToDust ? '-' : ((sample.analysis?.fibresCounted !== undefined && sample.analysis?.fibresCounted !== null) ? sample.analysis.fibresCounted : 'N/A'));
                     return [
                       { text: sample.fullSampleID || sample.sampleID || 'N/A', style: 'tableContent' },
                       { text: formatSampleLocation(sample), style: 'tableContent' },
@@ -648,8 +673,8 @@ pdfMake.fonts = {
                           : (sample.averageFlowrate ? sample.averageFlowrate.toFixed(1) : '-'), 
                         style: 'tableContent'
                       },
-                      { text: isFailed ? '-' : (uncountableDueToDust ? '-' : ((sample.analysis?.fieldsCounted !== undefined && sample.analysis?.fieldsCounted !== null) ? sample.analysis.fieldsCounted : 'N/A')), style: 'tableContent' },
-                      { text: isFailed ? '-' : (uncountableDueToDust ? '-' : ((sample.analysis?.fibresCounted !== undefined && sample.analysis?.fibresCounted !== null) ? sample.analysis.fibresCounted : 'N/A')), style: 'tableContent' },
+                      { text: fieldCountText, style: 'tableContent' },
+                      { text: formatFibreCountForPdf(fibreCountText), style: 'tableContent' },
                       { 
                         text: formatReportedConcentration(sample),
                         style: 'tableContent',

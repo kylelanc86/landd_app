@@ -87,6 +87,10 @@ const shiftSchema = new mongoose.Schema({
     type: String,
     required: false
   },
+  reportViewedAt: {
+    type: Date,
+    required: false
+  },
   descriptionOfWorks: {
     type: String,
     required: false

@@ -56,6 +56,7 @@ import {
   projectService,
   clientService,
   userService,
+  clientSuppliedJobsService,
 } from "../../services/api";
 import asbestosClearanceService from "../../services/asbestosClearanceService";
 import asbestosRemovalJobService from "../../services/asbestosRemovalJobService";
@@ -877,10 +878,17 @@ const AsbestosRemovalJobDetails = () => {
       const shiftResponse = await shiftService.getById(shift._id);
       const latestShift = shiftResponse.data;
 
-      // Fetch job and samples for this shift
-      const jobResponse = await asbestosRemovalJobService.getById(
-        latestShift.job?._id || latestShift.job,
-      );
+      // Fetch job and samples for this shift - use correct service based on jobModel
+      let jobResponse;
+      if (latestShift.jobModel === "AsbestosRemovalJob") {
+        jobResponse = await asbestosRemovalJobService.getById(
+          latestShift.job?._id || latestShift.job,
+        );
+      } else {
+        jobResponse = await clientSuppliedJobsService.getById(
+          latestShift.job?._id || latestShift.job,
+        );
+      }
       const samplesResponse = await sampleService.getByShift(latestShift._id);
 
       // Ensure we have the complete sample data including analysis
@@ -920,6 +928,13 @@ const AsbestosRemovalJobDetails = () => {
           : null,
       });
       setReportViewedShiftIds((prev) => new Set(prev).add(shift._id));
+      try {
+        await shiftService.update(shift._id, {
+          reportViewedAt: new Date().toISOString(),
+        });
+      } catch (e) {
+        console.warn("Failed to persist report viewed:", e);
+      }
     } catch (err) {
       console.error("Error generating report:", err);
       showSnackbar("Failed to generate report.", "error");
@@ -953,10 +968,15 @@ const AsbestosRemovalJobDetails = () => {
 
       // Generate and download the report
       try {
-        // Fetch job and samples for this shift
-        const jobResponse = await asbestosRemovalJobService.getById(
-          shift.job?._id || shift.job,
-        );
+        // Fetch job and samples for this shift - use correct service based on jobModel
+        let jobResponse;
+        if (currentShift.data.jobModel === "AsbestosRemovalJob") {
+          jobResponse = await asbestosRemovalJobService.getById(
+            shift.job?._id || shift.job,
+          );
+        } else {
+          jobResponse = await clientSuppliedJobsService.getById(shift.job?._id || shift.job);
+        }
         const samplesResponse = await sampleService.getByShift(shift._id);
 
         // Ensure we have the complete sample data including analysis
@@ -1291,8 +1311,12 @@ const AsbestosRemovalJobDetails = () => {
 
       showSnackbar("PDF opened in new tab", "success");
 
-      // Mark report as viewed
       setReportViewedClearanceIds((prev) => new Set(prev).add(clearance._id));
+      try {
+        await asbestosClearanceService.markReportViewed(clearance._id);
+      } catch (e) {
+        console.warn("Failed to persist report viewed:", e);
+      }
     } catch (err) {
       console.error("Error generating PDF:", err);
       showSnackbar("Failed to generate PDF", "error");
@@ -2140,9 +2164,10 @@ const AsbestosRemovalJobDetails = () => {
                                   const permissionCheckStart = getTimestamp();
                                   const conditions = {
                                     notApproved: !shift.reportApprovedBy,
-                                    reportViewed: reportViewedShiftIds.has(
-                                      shift._id,
-                                    ),
+                                    reportViewed:
+                                      reportViewedShiftIds.has(shift._id) ||
+                                      !!shift.reportViewedAt,
+                                    alreadySentForAuthorisation: !!shift.authorisationRequestedBy,
                                     hasAdminPermission: hasPermission(
                                       currentUser,
                                       "admin.view",
@@ -2151,8 +2176,8 @@ const AsbestosRemovalJobDetails = () => {
                                       currentUser,
                                       "jobs.edit",
                                     ),
-                                    isReportProofer: Boolean(
-                                      currentUser?.reportProofer,
+                                    isLabSignatory: Boolean(
+                                      currentUser?.labSignatory,
                                     ),
                                   };
                                   const permissionCheckDuration = Math.round(
@@ -2165,11 +2190,11 @@ const AsbestosRemovalJobDetails = () => {
                                   const visibility = {
                                     showAuthorise:
                                       baseVisible &&
-                                      conditions.hasAdminPermission &&
-                                      conditions.isReportProofer,
+                                      conditions.isLabSignatory &&
+                                      conditions.hasEditPermission,
                                     showSend:
                                       baseVisible &&
-                                      !conditions.isReportProofer &&
+                                      !conditions.isLabSignatory &&
                                       conditions.hasEditPermission,
                                   };
 
@@ -2201,7 +2226,7 @@ const AsbestosRemovalJobDetails = () => {
                                         <Button
                                           variant="outlined"
                                           size="small"
-                                          color="primary"
+                                          color={conditions.alreadySentForAuthorisation ? "inherit" : "primary"}
                                           startIcon={<MailIcon />}
                                           onClick={(e) => {
                                             e.stopPropagation();
@@ -2212,11 +2237,18 @@ const AsbestosRemovalJobDetails = () => {
                                               shift._id
                                             ],
                                           )}
+                                          sx={
+                                            conditions.alreadySentForAuthorisation
+                                              ? { color: "text.secondary", borderColor: "grey.400" }
+                                              : undefined
+                                          }
                                         >
                                           {sendingAuthorisationRequests[
                                             shift._id
                                           ]
                                             ? "Sending..."
+                                            : conditions.alreadySentForAuthorisation
+                                            ? "Re-send for Authorisation"
                                             : "Send for Authorisation"}
                                         </Button>
                                       )}
@@ -2422,9 +2454,10 @@ const AsbestosRemovalJobDetails = () => {
                                   >
                                     View Report
                                   </Button>
-                                  {reportViewedClearanceIds.has(
+                                  {(reportViewedClearanceIds.has(
                                     clearance._id,
-                                  ) && (
+                                  ) ||
+                                    !!clearance.reportViewedAt) && (
                                     <>
                                       {currentUser?.reportProofer &&
                                         hasPermission(
@@ -2492,7 +2525,7 @@ const AsbestosRemovalJobDetails = () => {
                                           <Button
                                             variant="outlined"
                                             size="small"
-                                            color="primary"
+                                            color={clearance.authorisationRequestedBy ? "inherit" : "primary"}
                                             startIcon={<MailIcon />}
                                             onClick={(e) =>
                                               handleSendClearanceForAuthorisation(
@@ -2505,12 +2538,18 @@ const AsbestosRemovalJobDetails = () => {
                                                 clearance._id
                                               ],
                                             )}
-                                            sx={{ mr: 1 }}
+                                            sx={
+                                              clearance.authorisationRequestedBy
+                                                ? { mr: 1, color: "text.secondary", borderColor: "grey.400" }
+                                                : { mr: 1 }
+                                            }
                                           >
                                             {sendingClearanceAuthorisationRequests[
                                               clearance._id
                                             ]
                                               ? "Sending..."
+                                              : clearance.authorisationRequestedBy
+                                              ? "Re-send for Authorisation"
                                               : "Send for Authorisation"}
                                           </Button>
                                         )}
@@ -2573,7 +2612,9 @@ const AsbestosRemovalJobDetails = () => {
                       onChange={(e) => {
                         const hour = e.target.value;
                         const minutes = clearanceForm.inspectionTime
-                          ? clearanceForm.inspectionTime.split(":")[1] || "00"
+                          ? clearanceForm.inspectionTime
+                              .split(":")[1]
+                              ?.split(" ")[0] || "00"
                           : "00";
                         const ampm = clearanceForm.inspectionTime
                           ? clearanceForm.inspectionTime.split(" ")[1] || "AM"

@@ -535,7 +535,6 @@ const ClientSuppliedSamples = () => {
               ? "L&D Supplied Jobs"
               : "Client Supplied Jobs"}
           </Link>
-
         </Breadcrumbs>
 
         {/* Header */}

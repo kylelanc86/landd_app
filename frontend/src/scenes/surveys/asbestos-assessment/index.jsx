@@ -36,6 +36,8 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import SendIcon from "@mui/icons-material/Send";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import MailIcon from "@mui/icons-material/Mail";
 import { tokens } from "../../../theme/tokens";
@@ -50,6 +52,7 @@ import { hasPermission } from "../../../config/permissions";
 import { getTodaySydney } from "../../../utils/dateUtils";
 import { useSnackbar } from "../../../context/SnackbarContext";
 import PDFLoadingOverlay from "../../../components/PDFLoadingOverlay";
+import { generateFibreIDReport } from "../../../utils/generateFibreIDReport";
 
 const CACHE_KEY = "asbestosAssessmentJobsCache";
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -148,6 +151,16 @@ const AsbestosAssessment = () => {
 
   // View Report state
   const [generatingReportId, setGeneratingReportId] = useState(null);
+
+  // Fibre ID report and approval state
+  const [generatingFibreIDReportId, setGeneratingFibreIDReportId] =
+    useState(null);
+  const [approvingReportId, setApprovingReportId] = useState(null);
+  const [fibreIDReportViewedJobIds, setFibreIDReportViewedJobIds] = useState(
+    () => new Set(),
+  );
+  const [sendingAuthorisationJobId, setSendingAuthorisationJobId] =
+    useState(null);
 
   // Delete confirmation state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -264,7 +277,7 @@ const AsbestosAssessment = () => {
       const response = await projectService.getAll({
         limit: 1000,
         status:
-          "Assigned,In progress,Samples submitted,Lab Analysis Completed,Report sent for review,Ready for invoicing,Invoice sent, Quote sent",
+          "Assigned,In progress,Samples submitted,Lab Analysis Complete,Report sent for review,Ready for invoicing,Invoice sent, Quote sent",
       });
 
       if (response && response.data) {
@@ -548,7 +561,7 @@ const AsbestosAssessment = () => {
     navigate(`/fibre-id/assessment/${job.id}/item/1/analysis`);
   };
 
-  const handleGoToLDSuppliedJobs = (event, job) => {
+  const handleGoToLDSuppliedJobs = (event) => {
     event.stopPropagation();
     navigate("/laboratory-services/ld-supplied");
   };
@@ -760,6 +773,130 @@ const AsbestosAssessment = () => {
     }
   };
 
+  const handleViewFibreIDReport = async (event, job) => {
+    event.stopPropagation();
+    if (generatingFibreIDReportId) return;
+    setGeneratingFibreIDReportId(job.id);
+    try {
+      const response =
+        await asbestosAssessmentService.getAsbestosAssessmentById(job.id);
+      const fullAssessment = response.data;
+      const items = fullAssessment.items || [];
+      const isVA = (i) =>
+        i.asbestosContent === "Visually Assessed as Asbestos" ||
+        i.asbestosContent === "Visually Assessed as Non-Asbestos" ||
+        i.asbestosContent === "Visually Assessed as Non-asbestos";
+      const sampledItems = items.filter((item, index) => {
+        if (!item.sampleReference?.trim()) return false;
+        if (isVA(item)) return false;
+        const ref = item.sampleReference.trim();
+        const firstIndex = items.findIndex(
+          (x) => (x.sampleReference || "").trim() === ref,
+        );
+        return index === firstIndex && item.analysisData?.isAnalysed === true;
+      });
+      const sampleItemsForReport = sampledItems.map((item, index) => ({
+        itemNumber: item.itemNumber || index + 1,
+        sampleReference: item.sampleReference || `Sample ${index + 1}`,
+        labReference: item.sampleReference || `Sample ${index + 1}`,
+        locationDescription: item.locationDescription || "N/A",
+        analysisData: item.analysisData,
+      }));
+      let analyst = "Unknown Analyst";
+      if (fullAssessment.analyst?.firstName) {
+        analyst = `${fullAssessment.analyst.firstName} ${fullAssessment.analyst.lastName}`;
+      } else {
+        const itemWithAnalyst = fullAssessment.items?.find(
+          (i) => i.analysedBy && i.analysisData?.isAnalysed,
+        );
+        if (itemWithAnalyst?.analysedBy?.firstName) {
+          analyst = `${itemWithAnalyst.analysedBy.firstName} ${itemWithAnalyst.analysedBy.lastName}`;
+        }
+      }
+      const assessmentForReport = {
+        _id: fullAssessment._id,
+        projectId: fullAssessment.projectId,
+        status: fullAssessment.status,
+        assessmentDate: fullAssessment.assessmentDate,
+        samplesReceivedDate: fullAssessment.samplesReceivedDate,
+        revision: fullAssessment.revision || 0,
+        LAA: fullAssessment.LAA,
+        assessorId: fullAssessment.assessorId,
+      };
+      const pdfDataUrl = await generateFibreIDReport({
+        assessment: assessmentForReport,
+        sampleItems: sampleItemsForReport,
+        analyst,
+        openInNewTab: false,
+        returnPdfData: true,
+        reportApprovedBy: fullAssessment.reportApprovedBy || null,
+        reportIssueDate: fullAssessment.reportIssueDate || null,
+      });
+      if (pdfDataUrl) {
+        // Use blob URL so the new tab opens reliably (data URLs can be too long or fail in window.open)
+        const base64 = pdfDataUrl.includes(",")
+          ? pdfDataUrl.split(",")[1]
+          : pdfDataUrl;
+        if (base64) {
+          const binary = atob(base64);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++)
+            bytes[i] = binary.charCodeAt(i);
+          const blob = new Blob([bytes], { type: "application/pdf" });
+          const blobUrl = URL.createObjectURL(blob);
+          window.open(blobUrl, "_blank");
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+        } else {
+          window.open(pdfDataUrl, "_blank");
+        }
+      }
+      showSnackbar("Fibre ID report generated successfully.", "success");
+      setFibreIDReportViewedJobIds((prev) => new Set(prev).add(job.id));
+    } catch (err) {
+      console.error("Error generating Fibre ID report:", err);
+      showSnackbar(
+        err.response?.data?.message ||
+          err.message ||
+          "Failed to generate Fibre ID report",
+        "error",
+      );
+    } finally {
+      setGeneratingFibreIDReportId(null);
+    }
+  };
+
+  const handleApproveReport = async (event, job) => {
+    event.stopPropagation();
+    if (approvingReportId) return;
+    setApprovingReportId(job.id);
+    try {
+      const approver =
+        currentUser?.firstName && currentUser?.lastName
+          ? `${currentUser.firstName} ${currentUser.lastName}`
+          : currentUser?.name || currentUser?.email || "Unknown";
+      const assessment = job.originalData || job;
+      await asbestosAssessmentService.updateAsbestosAssessment(job.id, {
+        ...assessment,
+        reportApprovedBy: approver,
+        reportIssueDate: new Date().toISOString(),
+        status: "report-ready-for-review",
+      });
+      clearJobsCache();
+      await fetchJobs({ force: true, silent: true });
+      showSnackbar("Report approved successfully.", "success");
+    } catch (err) {
+      console.error("Error approving report:", err);
+      showSnackbar(
+        err.response?.data?.message ||
+          err.message ||
+          "Failed to approve report",
+        "error",
+      );
+    } finally {
+      setApprovingReportId(null);
+    }
+  };
+
   const handleSendForAuthorisation = async (event, job) => {
     event.stopPropagation();
     if (sendingAuthorisationRequests[job.id]) return;
@@ -776,7 +913,7 @@ const AsbestosAssessment = () => {
         response.data?.message ||
           `Authorisation request emails sent successfully to ${
             response.data?.recipients?.length || 0
-          } report proofer user(s)`,
+          } lab signatory user(s)`,
         "success",
       );
       clearJobsCache();
@@ -800,8 +937,12 @@ const AsbestosAssessment = () => {
   return (
     <Container maxWidth="xl">
       <PDFLoadingOverlay
-        open={!!generatingReportId}
-        message="Generating Asbestos Assessment PDF..."
+        open={!!generatingReportId || !!generatingFibreIDReportId}
+        message={
+          generatingFibreIDReportId
+            ? "Generating Fibre ID PDF..."
+            : "Generating Asbestos Assessment PDF..."
+        }
       />
       <Box sx={{ mt: 4, mb: 4 }}>
         <Breadcrumbs sx={{ mb: 3 }}>
@@ -944,12 +1085,7 @@ const AsbestosAssessment = () => {
                               variant="caption"
                               color="text.secondary"
                               component="span"
-                              sx={{
-                                display: "none",
-                                "@media (orientation: landscape)": {
-                                  display: "block",
-                                },
-                              }}
+                              display="block"
                             >
                               Client: {job.clientName}
                             </Typography>
@@ -1149,6 +1285,63 @@ const AsbestosAssessment = () => {
                                 }}
                               />
                             )}
+                          {areAllSampledItemsAnalysed(job) && (
+                            <>
+                              <Tooltip title="View Fibre ID Report">
+                                <IconButton
+                                  onClick={(e) =>
+                                    handleViewFibreIDReport(e, job)
+                                  }
+                                  color="primary"
+                                  size="small"
+                                  disabled={
+                                    generatingFibreIDReportId === job.id
+                                  }
+                                >
+                                  <PictureAsPdfIcon />
+                                </IconButton>
+                              </Tooltip>
+                              {job.status === "sample-analysis-complete" &&
+                                !job.originalData?.reportApprovedBy &&
+                                fibreIDReportViewedJobIds.has(job.id) &&
+                                (() => {
+                                  const canApproveFibreIDReport =
+                                    hasPermission(
+                                      currentUser,
+                                      "asbestos.edit",
+                                    ) && Boolean(currentUser?.labSignatory);
+                                  return canApproveFibreIDReport ? (
+                                    <Tooltip title="Approve Report">
+                                      <IconButton
+                                        onClick={(e) =>
+                                          handleApproveReport(e, job)
+                                        }
+                                        color="success"
+                                        size="small"
+                                        disabled={approvingReportId === job.id}
+                                      >
+                                        <CheckCircleIcon />
+                                      </IconButton>
+                                    </Tooltip>
+                                  ) : (
+                                    <Tooltip title="Send for Authorisation">
+                                      <IconButton
+                                        onClick={(e) =>
+                                          handleSendForAuthorisation(e, job)
+                                        }
+                                        color="primary"
+                                        size="small"
+                                        disabled={
+                                          sendingAuthorisationRequests[job.id]
+                                        }
+                                      >
+                                        <SendIcon />
+                                      </IconButton>
+                                    </Tooltip>
+                                  );
+                                })()}
+                            </>
+                          )}
                         </Box>
                       </TableCell>
                       <TableCell
@@ -1166,7 +1359,7 @@ const AsbestosAssessment = () => {
                             alignItems: "center",
                           }}
                         >
-                          {/* Complete: only when ASSESSMENT report is authorised (reportAuthorisedBy), NOT fibre ID approval (reportApprovedBy). Restricted to admins or users with Can Set Job Complete. */}
+                          {/* Complete: only when ASSESSMENT report is authorised (reportAuthorisedBy). Restricted to admins or users with Can Set Job Complete. */}
                           {!!(
                             job.originalData?.reportAuthorisedBy ||
                             job.reportAuthorisedBy
@@ -1419,7 +1612,7 @@ const AsbestosAssessment = () => {
             >
               <MenuItem value="ACT">ACT</MenuItem>
               <MenuItem value="NSW">NSW</MenuItem>
-              {/* <MenuItem value="Commonwealth">Commonwealth</MenuItem> */}
+              <MenuItem value="Commonwealth">Commonwealth</MenuItem>
             </Select>
           </FormControl>
 

@@ -78,7 +78,9 @@ router.post('/register', async (req, res) => {
         role: user.role,
         phone: user.phone,
         notifications: user.notifications,
-        labSignatory: user.labSignatory || false
+        labSignatory: user.labSignatory || false,
+        reportProofer: user.reportProofer || false,
+        labApprovals: user.labApprovals || {}
       }
     });
   } catch (err) {
@@ -135,6 +137,7 @@ router.post('/login', async (req, res) => {
           phone: user.phone,
           notifications: user.notifications,
           labSignatory: user.labSignatory || false,
+          reportProofer: user.reportProofer || false,
           labApprovals: user.labApprovals || {
             fibreCounting: false,
             fibreIdentification: false,
@@ -157,11 +160,13 @@ router.get('/me', auth, async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('-password');
     
-    // Ensure labSignatory field is present for backward compatibility
-    if (user && user.labSignatory === undefined) {
-      user.labSignatory = false;
+    // Ensure labSignatory and reportProofer fields are present for backward compatibility
+    if (user) {
+      if (user.labSignatory === undefined) user.labSignatory = false;
+      if (user.reportProofer === undefined) user.reportProofer = false;
+      if (!user.labApprovals) user.labApprovals = {};
     }
-    
+
     res.json(user);
   } catch (err) {
     res.status(500).json({ message: err.message });

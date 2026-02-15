@@ -223,6 +223,7 @@ router.patch('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports
       'status',
       'reportApprovedBy',
       'reportIssueDate',
+      'reportViewedAt',
       'analysedBy',
       'analysisDate',
       'samplesReceivedDate',
@@ -899,15 +900,16 @@ router.post(
           .json({ message: 'Report has already been authorised' });
       }
 
+      // Air monitoring shift authorisation is done by lab signatories
       const signatoryUsers = await User.find({
-        reportProofer: true,
+        labSignatory: true,
         isActive: true,
       }).select('firstName lastName email');
 
       if (signatoryUsers.length === 0) {
         return res
           .status(400)
-          .json({ message: 'No report proofer users found' });
+          .json({ message: 'No lab signatory users found' });
       }
 
       let projectName =

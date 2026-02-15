@@ -676,7 +676,7 @@ router.get(
         clearances = await AsbestosClearance.find({
           asbestosRemovalJobId: job._id,
         })
-          .select("_id projectId clearanceDate clearanceType status inspectionTime asbestosRemovalist LAA jurisdiction secondaryHeader vehicleEquipmentDescription notes useComplexTemplate jobSpecificExclusions")
+          .select("_id projectId clearanceDate clearanceType status inspectionTime asbestosRemovalist LAA jurisdiction secondaryHeader vehicleEquipmentDescription notes useComplexTemplate jobSpecificExclusions reportApprovedBy reportIssueDate reportViewedAt authorisationRequestedBy")
           .populate({
             path: "projectId",
             select: "projectID name",
@@ -703,7 +703,7 @@ router.get(
           { jobModel: null },
         ],
       })
-        .select("_id job date status jobModel reportApprovedBy reportIssueDate")
+        .select("_id job date status jobModel reportApprovedBy reportIssueDate reportViewedAt authorisationRequestedBy")
         .lean();
       metrics.timings.shifts = `${(
         performance.now() - shiftsStart
