@@ -542,6 +542,7 @@ const Records = () => {
           {view === "laboratory" &&
           !currentUser?.labApprovals?.calibrations &&
           currentUser?.role !== "admin" &&
+          currentUser?.role !== "super_admin" &&
           currentUser?.role !== "manager" ? (
             <Box sx={{ textAlign: "center", py: 4 }}>
               <Typography variant="h6" color="error" gutterBottom>
@@ -555,6 +556,7 @@ const Records = () => {
           ) : view === "general" &&
             currentUser?.labApprovals?.calibrations === true &&
             currentUser?.role !== "admin" &&
+            currentUser?.role !== "super_admin" &&
             currentUser?.role !== "manager" ? (
             <Box sx={{ textAlign: "center", py: 4 }}>
               <Typography variant="h6" color="error" gutterBottom>
