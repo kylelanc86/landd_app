@@ -279,7 +279,15 @@ const Users = () => {
               {/* Show edit button for admin and super_admin users */}
               {(currentUser.role === "admin" ||
                 currentUser.role === "super_admin") && (
-                <IconButton onClick={() => handleEditUser(params.row)}>
+                <IconButton
+                  onClick={() => handleEditUser(params.row)}
+                  sx={{
+                    color: "rgba(97, 90, 90, 0.87) !important",
+                    "& .MuiSvgIcon-root": {
+                      color: "rgba(97, 90, 90, 0.87) !important",
+                    },
+                  }}
+                >
                   <EditIcon />
                 </IconButton>
               )}
@@ -291,6 +299,12 @@ const Users = () => {
                   title={
                     params.row.isActive ? "Deactivate User" : "Activate User"
                   }
+                  sx={{
+                    color: "rgba(97, 90, 90, 0.87) !important",
+                    "& .MuiSvgIcon-root": {
+                      color: "rgba(97, 90, 90, 0.87) !important",
+                    },
+                  }}
                 >
                   {params.row.isActive ? <DeleteIcon /> : <CheckCircleIcon />}
                 </IconButton>
@@ -400,6 +414,10 @@ const Users = () => {
             },
             "& .MuiDataGrid-row:hover": {
               backgroundColor: "#e3f2fd",
+            },
+            "& .MuiDataGrid-cell[data-field='actions'] .MuiIconButton-root, & .MuiDataGrid-cell[data-field='actions'] .MuiSvgIcon-root": {
+              color: "rgba(97, 90, 90, 0.87) !important",
+              fill: "rgba(97, 90, 90, 0.87) !important",
             },
           }}
         >
