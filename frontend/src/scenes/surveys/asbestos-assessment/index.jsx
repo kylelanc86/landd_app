@@ -1023,10 +1023,7 @@ const AsbestosAssessment = () => {
                     sx={{
                       fontWeight: "bold",
                       minWidth: "180px",
-                      display: "none",
-                      "@media (min-width: 600px) and (orientation: portrait)": {
-                        display: "table-cell",
-                      },
+                      display: { xs: "none", sm: "table-cell" },
                     }}
                   >
                     Sample Analysis
@@ -1145,10 +1142,7 @@ const AsbestosAssessment = () => {
                         onClick={(e) => e.stopPropagation()}
                         sx={{
                           maxWidth: "140px",
-                          display: "none",
-                          "@media (min-width: 600px) and (orientation: portrait)": {
-                            display: "table-cell",
-                          },
+                          display: { xs: "none", sm: "table-cell" },
                         }}
                       >
                         <Box
@@ -1273,75 +1267,33 @@ const AsbestosAssessment = () => {
                           {hasSamplesSubmitted(job) &&
                             currentUser?.labApprovals?.fibreCounting !==
                               true && (
-                              <Chip
-                                label={getLabStatusLabel(job)}
-                                size="small"
+                              <Box
+                                onClick={
+                                  areAllSampledItemsAnalysed(job)
+                                    ? (e) => handleGoToLDSuppliedJobs(e, job)
+                                    : undefined
+                                }
                                 sx={{
-                                  color: "white",
-                                  backgroundColor:
-                                    getLabStatusLabel(job) === "Analysis complete"
-                                      ? theme.palette.success?.main ?? "#2e7d32"
-                                      : theme.palette.primary.main,
+                                  cursor: areAllSampledItemsAnalysed(job)
+                                    ? "pointer"
+                                    : "default",
                                 }}
-                              />
-                            )}
-                          {areAllSampledItemsAnalysed(job) && (
-                            <>
-                              <Tooltip title="View Fibre ID Report">
-                                <IconButton
-                                  onClick={(e) =>
-                                    handleViewFibreIDReport(e, job)
-                                  }
-                                  color="primary"
+                              >
+                                <Chip
+                                  label={getLabStatusLabel(job)}
                                   size="small"
-                                  disabled={
-                                    generatingFibreIDReportId === job.id
-                                  }
-                                >
-                                  <PictureAsPdfIcon />
-                                </IconButton>
-                              </Tooltip>
-                              {job.status === "sample-analysis-complete" &&
-                                !job.originalData?.reportApprovedBy &&
-                                fibreIDReportViewedJobIds.has(job.id) &&
-                                (() => {
-                                  const canApproveFibreIDReport =
-                                    hasPermission(
-                                      currentUser,
-                                      "asbestos.edit",
-                                    ) && Boolean(currentUser?.labSignatory);
-                                  return canApproveFibreIDReport ? (
-                                    <Tooltip title="Approve Report">
-                                      <IconButton
-                                        onClick={(e) =>
-                                          handleApproveReport(e, job)
-                                        }
-                                        color="success"
-                                        size="small"
-                                        disabled={approvingReportId === job.id}
-                                      >
-                                        <CheckCircleIcon />
-                                      </IconButton>
-                                    </Tooltip>
-                                  ) : (
-                                    <Tooltip title="Send for Authorisation">
-                                      <IconButton
-                                        onClick={(e) =>
-                                          handleSendForAuthorisation(e, job)
-                                        }
-                                        color="primary"
-                                        size="small"
-                                        disabled={
-                                          sendingAuthorisationRequests[job.id]
-                                        }
-                                      >
-                                        <SendIcon />
-                                      </IconButton>
-                                    </Tooltip>
-                                  );
-                                })()}
-                            </>
-                          )}
+                                  sx={{
+                                    color: "white",
+                                    backgroundColor:
+                                      getLabStatusLabel(job) ===
+                                      "Analysis complete"
+                                        ? theme.palette.success?.main ??
+                                          "#2e7d32"
+                                        : theme.palette.primary.main,
+                                  }}
+                                />
+                              </Box>
+                            )}
                         </Box>
                       </TableCell>
                       <TableCell

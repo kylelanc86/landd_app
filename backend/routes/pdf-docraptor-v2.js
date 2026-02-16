@@ -119,6 +119,24 @@ const formatAsbestosCountForPdf = (asbestosCount, analysisComplete) => {
   return numberToWords(asbestosCount) + ' (' + asbestosCount + ')';
 };
 
+/**
+ * Strip the asbestos count line from discussion text (for backwards compatibility with saved assessments).
+ * Removes leading lines like "Two (2) asbestos items were identified..." or "No asbestos containing materials...".
+ */
+const stripAsbestosCountLineFromDiscussion = (text) => {
+  if (!text || typeof text !== 'string') return text;
+  const trimmed = text.trim();
+  if (!trimmed) return '';
+  // Match: "No asbestos containing materials were identified during the assessment conducted at ..." (full first line)
+  const noAcmPattern = /^No asbestos containing materials were identified during the assessment conducted at [^\n]+(\s*\n)?/i;
+  // Match: "X asbestos items were identified during the assessment of ..." (full first line; X = "Two (2)", "**Analysis incomplete**", etc.)
+  const withCountPattern = /^[^\n]*asbestos items were identified during the assessment of [^\n]+(\s*\n)?/i;
+  let result = trimmed
+    .replace(noAcmPattern, '')
+    .replace(withCountPattern, '');
+  return result.replace(/^\s*\n+/, '').trim();
+};
+
 const normalizeColorForDisplay = (value) => {
   const color = String(value || "").trim();
   if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(color)) {
@@ -136,7 +154,10 @@ const generateAttachmentText = (clearanceData) => {
     item.photographs && item.photographs.some(photo => photo.includeInReport)
   );
   const hasSitePlan = clearanceData.sitePlan && clearanceData.sitePlanFile;
-  const hasAirMonitoring = clearanceData.airMonitoring && clearanceData.airMonitoringReport;
+  const hasAirMonitoring = clearanceData.airMonitoring && (
+    clearanceData.airMonitoringReport ||
+    (clearanceData.airMonitoringReports && clearanceData.airMonitoringReports.length > 0)
+  );
 
   // No photos, site plan, or air monitoring report
   if (!hasPhotos && !hasSitePlan && !hasAirMonitoring) {
@@ -1587,14 +1608,21 @@ router.post('/generate-asbestos-clearance-v2', async (req, res) => {
     // Handle PDF merging for site plan and air monitoring reports
     let finalPdfBuffer = pdfBuffer;
 
-    // If there's an air monitoring report, merge it with the generated PDF
-    if (clearanceData.airMonitoringReport) {
+    // Air monitoring: support multiple reports in chronological order (earliest first)
+    const airReports = (clearanceData.airMonitoringReports && clearanceData.airMonitoringReports.length > 0)
+      ? [...clearanceData.airMonitoringReports].sort(
+          (a, b) => new Date(a.shiftDate || 0) - new Date(b.shiftDate || 0)
+        )
+      : (clearanceData.airMonitoringReport
+          ? [{ reportData: clearanceData.airMonitoringReport }]
+          : []);
+    for (const report of airReports) {
+      const base64 = report.reportData || report;
+      if (!base64) continue;
       try {
-        // Now that frontend generates PDFs, airMonitoringReport should always be base64 data
-        const mergedPdf = await mergePDFs(finalPdfBuffer, clearanceData.airMonitoringReport);
-        finalPdfBuffer = mergedPdf; // Update the final buffer
+        finalPdfBuffer = await mergePDFs(finalPdfBuffer, base64);
       } catch (error) {
-        console.error(`Error merging air monitoring PDFs:`, error);
+        console.error(`Error merging air monitoring PDF:`, error);
       }
     }
 
@@ -2855,15 +2883,24 @@ const generateAssessmentHTML = async (assessmentData) => {
       firstSampledPerRef.every((i) => i.analysisData?.isAnalysed === true);
     const asbestosCountDisplay = asbestosCount > 0 ? formatAsbestosCountForPdf(asbestosCount, analysisComplete) : String(asbestosCount);
     const acmRemovalSentence = 'ACM should be removed prior to the commencement of works which may damage or disturb the material.';
-    const defaultDiscussionText = asbestosCount === 0
-      ? `No asbestos containing materials were identified during the assessment conducted at ${siteName}.`
-      : `${asbestosCountDisplay} asbestos items were identified during the assessment of ${siteName}.\n\n${acmRemovalSentence}`;
+    const residentialCeilingSubfloorTextLegacy = 'The assessment of the ceiling void was limited to a visual inspection from the access hatch. A combination of insulation batts and loose-fill insulation was identified within the ceiling void, these materials were visually assessed as synthetic mineral fibres (SMF). No suspect ACM was identified during the assessment of the ceiling void however, it is common for ACM to be present within ceiling voids in the forms of debris and/or packers. It is recommended that persons accessing the ceiling void wear a minimum P2 respirator and coveralls.\n\nNo suspect ACM was identified during the assessment of the subfloor, it is common for ACM to be present within subfloors in the form of debris, packers, and/or formwork. It is recommended that persons accessing the crawl space wear a minimum P2 respirator and coveralls.';
+    let defaultDiscussionText = '';
+    if (asbestosCount > 0) {
+      defaultDiscussionText = acmRemovalSentence;
+      if (isResidential) defaultDiscussionText = residentialCeilingSubfloorTextLegacy + '\n\n' + defaultDiscussionText;
+    } else if (isResidential) {
+      defaultDiscussionText = residentialCeilingSubfloorTextLegacy;
+    }
     let discussionConclusionsRaw = (assessmentData.discussionConclusions || '').trim() || defaultDiscussionText;
     const analysisIncompleteReplacement = formatAsbestosCountForPdf(asbestosCount, analysisComplete);
     discussionConclusionsRaw = discussionConclusionsRaw
       .replace(/\{ANALYSIS INCOMPLETE\}/g, analysisIncompleteReplacement)
       .replace(/\{ANALYSIS_INCOMPLETE\}/g, analysisIncompleteReplacement);
+    discussionConclusionsRaw = stripAsbestosCountLineFromDiscussion(discussionConclusionsRaw);
     const discussionConclusionsHtml = toJustifiedParagraphsHtml(discussionConclusionsRaw);
+    const asbestosCountLineLegacy = asbestosCount === 0
+      ? `No asbestos containing materials were identified during the assessment conducted at ${siteName}.`
+      : `${asbestosCountDisplay} asbestos items were identified during the assessment of ${siteName}.`;
 
     // Page numbers: cover=1, version=2, item1=3, then assessment register pages, then discussion, then optional RCM page, then additional 1 & 2
     const sampleRegisterPageCount = shouldMoveFirstItemToNewPage
@@ -2884,8 +2921,8 @@ const generateAssessmentHTML = async (assessmentData) => {
 
     const populatedDiscussionConclusions = asbestosDiscussionConclusionsTemplateWithUrl
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
+      .replace(/\[ASBESTOS_COUNT_LINE\]/g, asbestosCountLineLegacy)
       .replace(/\[ASBESTOS_ITEMS_SECTION\]/g, asbestosItemsSection)
-      .replace(/\[NON_ASBESTOS_ITEMS_SECTION\]/g, nonAsbestosItemsSection)
       .replace(/\[DISCUSSION_CONCLUSIONS_CONTENT\]/g, discussionConclusionsHtml)
       .replace(/\[SIGN_OFF_CONTENT\]/g, discussionSignOffContent)
       .replace(/\[SIGNATURE_IMAGE\]/g, discussionSignatureContent)
@@ -3575,23 +3612,29 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
     firstSampledPerRefFlow.every((i) => i.analysisData?.isAnalysed === true);
   const asbestosCountDisplayFlow = asbestosCountFlow > 0 ? formatAsbestosCountForPdf(asbestosCountFlow, analysisCompleteFlow) : String(asbestosCountFlow);
   const acmRemovalSentenceFlow = 'ACM should be removed prior to the commencement of works which may damage or disturb the material.';
-  let defaultDiscussionTextFlow = asbestosCountFlow === 0
-    ? `No asbestos containing materials were identified during the assessment conducted at ${assessmentSiteAddress}.`
-    : `${asbestosCountDisplayFlow} asbestos items were identified during the assessment of ${assessmentSiteAddress}.`;
   const residentialCeilingSubfloorText = 'The assessment of the ceiling void was limited to a visual inspection from the access hatch. A combination of insulation batts and loose-fill insulation was identified within the ceiling void, these materials were visually assessed as synthetic mineral fibres (SMF). No suspect ACM was identified during the assessment of the ceiling void however, it is common for ACM to be present within ceiling voids in the forms of debris and/or packers. It is recommended that persons accessing the ceiling void wear a minimum P2 respirator and coveralls.\n\nNo suspect ACM was identified during the assessment of the subfloor, it is common for ACM to be present within subfloors in the form of debris, packers, and/or formwork. It is recommended that persons accessing the crawl space wear a minimum P2 respirator and coveralls.';
-  if (isResidential) {
-    defaultDiscussionTextFlow = defaultDiscussionTextFlow + '\n\n' + residentialCeilingSubfloorText;
-  }
+  // Default discussion text (no asbestos count line - that is hard-coded in PDF layout)
+  let defaultDiscussionTextFlow = '';
   if (asbestosCountFlow > 0) {
-    defaultDiscussionTextFlow = defaultDiscussionTextFlow + '\n\n' + acmRemovalSentenceFlow;
+    defaultDiscussionTextFlow = acmRemovalSentenceFlow;
+    if (isResidential) defaultDiscussionTextFlow = residentialCeilingSubfloorText + '\n\n' + defaultDiscussionTextFlow;
+  } else if (isResidential) {
+    defaultDiscussionTextFlow = residentialCeilingSubfloorText;
   }
-  // Use saved discussion/conclusions as-is when present (modal already includes ACM sentence and residential text in its default)
+  // Use saved discussion/conclusions when present; strip asbestos count line for backwards compatibility
   let discussionConclusionsRaw = (assessmentData.discussionConclusions || '').trim() || defaultDiscussionTextFlow;
   const analysisIncompleteReplacementFlow = formatAsbestosCountForPdf(asbestosCountFlow, analysisCompleteFlow);
   discussionConclusionsRaw = discussionConclusionsRaw
     .replace(/\{ANALYSIS INCOMPLETE\}/g, analysisIncompleteReplacementFlow)
     .replace(/\{ANALYSIS_INCOMPLETE\}/g, analysisIncompleteReplacementFlow);
+  discussionConclusionsRaw = stripAsbestosCountLineFromDiscussion(discussionConclusionsRaw);
   const discussionConclusionsHtml = toJustifiedParagraphsHtml(discussionConclusionsRaw);
+
+  // Hard-coded first line: asbestos count (always shown, not in discussion text box)
+  const asbestosCountLineFlow = asbestosCountFlow === 0
+    ? `No asbestos containing materials were identified during the assessment conducted at ${assessmentSiteAddress}.`
+    : `${asbestosCountDisplayFlow} asbestos items were identified during the assessment of ${assessmentSiteAddress}.`;
+  const asbestosCountLineHtml = `<p style="margin: 0 0 8px 0; text-align: justify;">${escapeHtml(asbestosCountLineFlow)}</p>`;
 
   const jobSpecificExclusionsRaw = (assessmentData.jobSpecificExclusions || '').trim();
   const inspectionExclusionsHtml = toJustifiedParagraphsHtml(jobSpecificExclusionsRaw);
@@ -3786,15 +3829,12 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
         <div class="page-break"></div>
         <div class="section-header">${escapeHtml(templateContent?.standardSections?.discussionTitle || 'DISCUSSION AND CONCLUSIONS')}</div>
         <div class="section-body">
-          ${isResidential
-            ? `${discussionConclusionsHtml ? `<div class="section-body discussion-conclusions-content" style="text-align: justify !important; width: 100%;">${discussionConclusionsHtml}</div>` : ''}${inspectionExclusionsHtml ? `<div class="section-body discussion-conclusions-content" style="margin-top: 12px; text-align: justify !important; width: 100%;">${inspectionExclusionsHtml}</div>` : ''}`
-            : `<p style="margin: 0; padding-bottom: 8px;">The following is a summary of asbestos and non-asbestos materials identified during this assessment:</p>
+          ${asbestosCountLineHtml}
+          <p style="margin: 0; padding-bottom: 8px;">The following is a summary of asbestos materials identified during this assessment:</p>
           <p style="margin: 0; padding-bottom: 4px; text-decoration: underline; font-weight: 600; font-size: 0.8rem;">Asbestos Items</p>
           ${asbestosItemsSectionFlow}
-          <p style="margin: 0; padding-bottom: 4px; text-decoration: underline; font-weight: 600; font-size: 0.8rem;">Non-asbestos Items</p>
-          ${nonAsbestosItemsSectionFlow}
           ${discussionConclusionsHtml ? `<div class="section-body discussion-conclusions-content" style="margin-top: 12px; text-align: justify !important; width: 100%;">${discussionConclusionsHtml}</div>` : ''}
-          ${inspectionExclusionsHtml ? `<div class="section-body discussion-conclusions-content" style="margin-top: 12px; text-align: justify !important; width: 100%;">${inspectionExclusionsHtml}</div>` : ''}`}
+          ${inspectionExclusionsHtml ? `<div class="section-body discussion-conclusions-content" style="margin-top: 12px; text-align: justify !important; width: 100%;">${inspectionExclusionsHtml}</div>` : ''}
         </div>
 
         ${recommendedControlMeasuresHtml}

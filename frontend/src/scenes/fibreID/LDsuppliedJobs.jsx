@@ -497,52 +497,6 @@ const LDsuppliedJobs = () => {
     }
   };
 
-  const handleApproveReport = async (assessment) => {
-    try {
-      const now = new Date().toISOString();
-      const approver =
-        currentUser?.firstName && currentUser?.lastName
-          ? `${currentUser.firstName} ${currentUser.lastName}`
-          : currentUser?.name || currentUser?.email || "Unknown";
-
-      // Fibre ID approval only - update reportApprovedBy. Do NOT touch reportAuthorisedBy (assessment authorisation).
-      const projectId = assessment.projectId?._id || assessment.projectId;
-      const response = await asbestosAssessmentService.updateAsbestosAssessment(
-        assessment._id,
-        {
-          projectId,
-          assessmentDate: assessment.assessmentDate,
-          reportApprovedBy: approver,
-          reportIssueDate: now,
-          status: "report-ready-for-review",
-        },
-      );
-
-      console.log("Report approved successfully:", response);
-
-      // Refresh the assessments list
-      await fetchAsbestosAssessments();
-
-      // Generate and attach the approved report to the assessment (no automatic download)
-      try {
-        await handleGeneratePDF(assessment, {
-          uploadToAssessment: true,
-          skipOpenDownload: true,
-        });
-        showSnackbar("Report approved successfully.", "success");
-      } catch (reportError) {
-        console.error("Error generating approved report:", reportError);
-        showSnackbar(
-          "Report approved but failed to save report to assessment.",
-          "warning",
-        );
-      }
-    } catch (error) {
-      console.error("Error approving report:", error);
-      showSnackbar("Failed to approve report. Please try again.", "error");
-    }
-  };
-
   const handleSendForApproval = async (assessment) => {
     try {
       setSendingApprovalEmails((prev) => ({ ...prev, [assessment._id]: true }));
@@ -1140,9 +1094,6 @@ const LDsuppliedJobs = () => {
                             </Box>
                             {(() => {
                               const conditions = {
-                                fibreIdApproved: Boolean(
-                                  assessment.reportApprovedBy,
-                                ),
                                 notAuthorised: !assessment.reportAuthorisedBy,
                                 reportViewed: reportViewedAssessmentIds.has(
                                   assessment._id,
@@ -1166,24 +1117,12 @@ const LDsuppliedJobs = () => {
                               const canAuthorise =
                                 conditions.isReportProofer ||
                                 conditions.isLabSignatory;
-                              const canApproveFibreId =
-                                conditions.isReportProofer ||
-                                conditions.isLabSignatory ||
-                                currentUser?.labApprovals?.fibreCounting ||
-                                currentUser?.labApprovals?.fibreIdentification;
-                              // Approve (fibre ID): after viewing, when fibre ID not yet approved
-                              const showApproveFibreId =
-                                conditions.reportViewed &&
-                                !conditions.fibreIdApproved &&
-                                conditions.labComplete &&
-                                canApproveFibreId;
-                              // Authorise/Send: after viewing, when fibre ID approved but assessment not yet authorised
+                              // Authorise/Send: after viewing, when lab complete and assessment not yet authorised
                               const baseVisibleAuthorise =
                                 conditions.reportViewed &&
-                                conditions.fibreIdApproved &&
+                                conditions.labComplete &&
                                 conditions.notAuthorised;
                               const visibility = {
-                                showApproveFibreId,
                                 showAuthorise:
                                   baseVisibleAuthorise &&
                                   conditions.hasAdminPermission &&
@@ -1195,21 +1134,6 @@ const LDsuppliedJobs = () => {
                               };
                               return (
                                 <>
-                                  {visibility.showApproveFibreId && (
-                                    <Button
-                                      variant="contained"
-                                      size="small"
-                                      color="primary"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleApproveReport(assessment);
-                                      }}
-                                      disabled={generatingPDF[assessment._id]}
-                                      sx={{ textTransform: "none" }}
-                                    >
-                                      Approve
-                                    </Button>
-                                  )}
                                   {visibility.showAuthorise && (
                                     <Button
                                       variant="contained"

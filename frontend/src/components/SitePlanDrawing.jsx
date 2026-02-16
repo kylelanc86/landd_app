@@ -1,4 +1,11 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  forwardRef,
+  useImperativeHandle,
+} from "react";
 import {
   Box,
   Paper,
@@ -114,14 +121,22 @@ const legendArraysEqual = (a = [], b = []) => {
   return true;
 };
 
-const SitePlanDrawing = ({
-  onSave,
-  onCancel,
-  existingSitePlan,
-  existingLegend = [],
-  existingLegendTitle = "Key",
-  existingFigureTitle = "Asbestos Removal Site Plan",
-}) => {
+const REMINDER_CLOSE =
+  "You haven't added any items to the site plan key. Click OK to add key items, or Cancel to close anyway.";
+const REMINDER_SAVE =
+  "You haven't added any items to the site plan key. Click OK to add key items first, or Cancel to save anyway.";
+
+const SitePlanDrawing = forwardRef(function SitePlanDrawing(
+  {
+    onSave,
+    onCancel,
+    existingSitePlan,
+    existingLegend = [],
+    existingLegendTitle = "Key",
+    existingFigureTitle = "Asbestos Removal Site Plan",
+  },
+  ref
+) {
   const canvasRef = useRef(null);
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -164,6 +179,15 @@ const SitePlanDrawing = ({
   const [legendDraftTitle, setLegendDraftTitle] = useState("Key");
   const renderForExportRef = useRef(false);
   const activePointerIdRef = useRef(null);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      hasEmptyKey: () => legendEntries.length === 0,
+      openLegendDialog: () => setLegendDialogOpen(true),
+    }),
+    [legendEntries]
+  );
 
   useEffect(() => {
     setLegendEntries(normalizeLegendEntries(existingLegend));
@@ -1172,7 +1196,20 @@ const SitePlanDrawing = ({
     }
   }, [selectedItem, saveToHistory]);
 
+  const handleCancelClick = () => {
+    if (legendEntries.length === 0 && window.confirm(REMINDER_CLOSE)) {
+      setLegendDialogOpen(true);
+      return;
+    }
+    onCancel();
+  };
+
   const handleSave = async () => {
+    if (legendEntries.length === 0 && window.confirm(REMINDER_SAVE)) {
+      setLegendDialogOpen(true);
+      return;
+    }
+
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -2399,7 +2436,7 @@ const SitePlanDrawing = ({
               </Button>
               <Box display="flex" gap={1}>
                 <Button
-                  onClick={onCancel}
+                  onClick={handleCancelClick}
                   variant="outlined"
                   size="small"
                   sx={{ flex: 1 }}
@@ -2712,6 +2749,6 @@ const SitePlanDrawing = ({
       />
     </>
   );
-};
+});
 
 export default SitePlanDrawing;

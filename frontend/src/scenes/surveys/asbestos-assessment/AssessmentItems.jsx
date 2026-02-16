@@ -90,9 +90,21 @@ const addBusinessDays = (date, businessDays) => {
   return result;
 };
 
+/** True if a single result part is asbestos (not non-asbestos fibres). */
+const isAsbestosResultPart = (part) => {
+  const p = (part || "").trim();
+  if (!p) return false;
+  if (/^no asbestos detected$/i.test(p) || /^no fibres?\s*detected$/i.test(p))
+    return false;
+  if (/^trace\s+.+\s+detected$/i.test(p))
+    return /chrysotile|amosite|crocidolite|umf|unidentified\s+mineral\s+fibre/i.test(p);
+  return /chrysotile|amosite|crocidolite|umf|unidentified\s+mineral\s+fibre/i.test(p);
+};
+
 /**
  * Get the effective asbestos display for an item (matches backend logic for discussion count).
- * Returns 'No Asbestos Detected', 'Visually Assessed as Non-Asbestos', or an asbestos type string.
+ * Shows only asbestos types (Chrysotile, Amosite, Crocidolite, UMF) or "No Asbestos Detected";
+ * non-asbestos fibres are not shown in this column.
  */
 const getEffectiveAsbestosDisplayForItem = (item, items) => {
   const findSampled = (ref) => {
@@ -111,7 +123,8 @@ const getEffectiveAsbestosDisplayForItem = (item, items) => {
     ""
   ).trim();
   if (!raw) return "No Asbestos Detected";
-  if (/^no asbestos detected$/i.test(raw)) return "No Asbestos Detected";
+  if (/^no asbestos detected$/i.test(raw) || /^no fibres?\s*detected$/i.test(raw))
+    return "No Asbestos Detected";
   if (
     /Visually Assessed as Non-Asbestos/i.test(raw) ||
     /Visually Assessed as Non-ACM/i.test(raw)
@@ -119,14 +132,11 @@ const getEffectiveAsbestosDisplayForItem = (item, items) => {
     return "Visually Assessed as Non-Asbestos";
   if (raw === "Visually Assessed as Asbestos")
     return "Visually Assessed as Asbestos";
-  if (
-    /chrysotile|amosite|crocidolite|umf|unidentified\s+mineral\s+fibre/i.test(
-      raw,
-    )
-  )
-    return raw;
-  if (/trace.*detected/i.test(raw)) return raw;
-  return "No Asbestos Detected";
+  // finalResult can be comma-separated (e.g. "Chrysotile Asbestos, Fibreglass") – show only asbestos parts
+  const parts = raw.split(/\s*,\s*/).map((s) => s.trim()).filter(Boolean);
+  const asbestosOnly = parts.filter(isAsbestosResultPart);
+  if (asbestosOnly.length === 0) return "No Asbestos Detected";
+  return asbestosOnly.join(", ");
 };
 
 const isVisuallyAssessedContent = (ac) => {
@@ -201,13 +211,12 @@ const formatAsbestosCountForDisplay = (asbestosCount, analysisComplete) => {
 
 /**
  * Default discussion/conclusions text when none is entered (matches PDF backend).
- * Shows "{ANALYSIS INCOMPLETE}" instead of the count until lab analysis is complete for the assessment.
- * For residential assessments, appends ceiling void and subfloor text.
+ * The asbestos count line ("X asbestos items were identified...") is NOT included here;
+ * it is hard-coded in the PDF layout. This default only contains ACM removal sentence
+ * and residential ceiling/subfloor text when applicable.
  */
 const getDefaultDiscussionConclusions = (assessment, isResidential = false) => {
   const items = assessment?.items || [];
-  const siteName =
-    assessment?.projectId?.name || assessment?.siteName || "Unknown Site";
   const asbestosCount = items.filter((item) => {
     const display = getEffectiveAsbestosDisplayForItem(item, items);
     return (
@@ -215,55 +224,18 @@ const getDefaultDiscussionConclusions = (assessment, isResidential = false) => {
       display !== "Visually Assessed as Non-Asbestos"
     );
   }).length;
-  let baseText;
-  if (asbestosCount === 0) {
-    baseText = `No asbestos containing materials were identified during the assessment conducted at ${siteName}.`;
-  } else {
-    const hasSampledItemsRequiringAnalysis = items.some(
-      (i) =>
-        (i.sampleReference || "").trim() &&
-        !isVisuallyAssessedContent(i.asbestosContent),
-    );
-    const firstSampledPerRef = hasSampledItemsRequiringAnalysis
-      ? items.filter((item, index) => {
-          if (
-            !(item.sampleReference || "").trim() ||
-            isVisuallyAssessedContent(item.asbestosContent)
-          )
-            return false;
-          const ref = (item.sampleReference || "").trim();
-          return (
-            index ===
-            items.findIndex((i) => (i.sampleReference || "").trim() === ref)
-          );
-        })
-      : [];
-    const analysisComplete =
-      assessment?.status === "sample-analysis-complete" ||
-      !hasSampledItemsRequiringAnalysis ||
-      firstSampledPerRef.every((i) => i.analysisData?.isAnalysed === true);
-    const asbestosCountDisplay =
-      asbestosCount > 0 && !analysisComplete
-        ? "{ANALYSIS INCOMPLETE}"
-        : formatAsbestosCountForDisplay(asbestosCount, analysisComplete);
-    baseText = `${asbestosCountDisplay} asbestos items were identified during the assessment of ${siteName}.`;
-  }
   if (asbestosCount > 0) {
     if (isResidential) {
       return (
-        baseText +
-        "\n\n" +
-        RESIDENTIAL_CEILING_SUBFLOOR_TEXT +
-        "\n\n" +
-        ACM_REMOVAL_SENTENCE
+        RESIDENTIAL_CEILING_SUBFLOOR_TEXT + "\n\n" + ACM_REMOVAL_SENTENCE
       );
     }
-    return baseText + "\n\n" + ACM_REMOVAL_SENTENCE;
+    return ACM_REMOVAL_SENTENCE;
   }
   if (isResidential) {
-    return baseText + "\n\n" + RESIDENTIAL_CEILING_SUBFLOOR_TEXT;
+    return RESIDENTIAL_CEILING_SUBFLOOR_TEXT;
   }
-  return baseText;
+  return "";
 };
 
 /**
@@ -313,6 +285,25 @@ const resolveAnalysisIncompleteForDisplay = (text, assessment) => {
     .replace(/\{ANALYSIS_INCOMPLETE\}/g, replacement);
 };
 
+/**
+ * Strip the asbestos count line from discussion text for display in the modal.
+ * The count line is hard-coded in the PDF; the text box should only show the custom discussion content.
+ */
+const stripAsbestosCountLineForDisplay = (text) => {
+  if (!text || typeof text !== "string") return text;
+  const trimmed = text.trim();
+  if (!trimmed) return "";
+  const noAcmPattern =
+    /^No asbestos containing materials were identified during the assessment conducted at [^\n]+(\s*\n)?/i;
+  const withCountPattern =
+    /^[^\n]*asbestos items were identified during the assessment of [^\n]+(\s*\n)?/i;
+  return trimmed
+    .replace(noAcmPattern, "")
+    .replace(withCountPattern, "")
+    .replace(/^\s*\n+/, "")
+    .trim();
+};
+
 const AssessmentItems = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -355,7 +346,7 @@ const AssessmentItems = () => {
     asbestosType: "",
     condition: "",
     risk: "",
-    recommendations: "",
+    recommendations: "Maintain material in good condition",
     notes: "",
   });
 
@@ -424,6 +415,7 @@ const AssessmentItems = () => {
   const [uploadingSitePlan, setUploadingSitePlan] = useState(false);
   const [sitePlanDrawingDialogOpen, setSitePlanDrawingDialogOpen] =
     useState(false);
+  const sitePlanDrawingRef = useRef(null);
 
   // Dictation state (for recommendations)
   const [isDictating, setIsDictating] = useState(false);
@@ -922,7 +914,7 @@ const AssessmentItems = () => {
       asbestosType: "",
       condition: "",
       risk: "",
-      recommendations: "",
+      recommendations: "Maintain material in good condition",
       notes: "",
     });
     setShowLevelFloor(false);
@@ -1397,6 +1389,16 @@ const AssessmentItems = () => {
   };
 
   const handleSitePlanDrawingClose = () => {
+    if (sitePlanDrawingRef.current?.hasEmptyKey?.()) {
+      if (
+        window.confirm(
+          "You haven't added any items to the site plan key. Click OK to add key items, or Cancel to close anyway."
+        )
+      ) {
+        sitePlanDrawingRef.current?.openLegendDialog?.();
+        return;
+      }
+    }
     setSitePlanDrawingDialogOpen(false);
   };
 
@@ -2731,7 +2733,7 @@ const AssessmentItems = () => {
                                 },
                             }}
                           >
-                            {item.asbestosContent || "N/A"}
+                            {getEffectiveAsbestosDisplayForItem(item, items)}
                           </TableCell>
                           <TableCell
                             sx={{
@@ -3090,7 +3092,10 @@ const AssessmentItems = () => {
                             });
                           } else {
                             setIsNonACM(false);
-                            setForm({ ...form, recommendations: "" });
+                            setForm({
+                              ...form,
+                              recommendations: "Maintain material in good condition",
+                            });
                           }
                         }}
                       >
@@ -4958,6 +4963,9 @@ const AssessmentItems = () => {
               overflow: "hidden",
             }}
           >
+            <Typography variant="body2" color="#c30010" fontWeight={500} fontStyle="italic" sx={{ mb: 1 }}>
+              * A note outlining the number of asbestos items identified during the assessment, along with a list of asbestos and non-asbestos items will be added to the assessment report automatically.
+            </Typography>
             <Box
               sx={{
                 flex: 1,
@@ -4969,10 +4977,12 @@ const AssessmentItems = () => {
             >
               <TextField
                 fullWidth
-                value={resolveAnalysisIncompleteForDisplay(
-                  (assessment?.discussionConclusions || "").trim() ||
-                    getDefaultDiscussionConclusions(assessment, isResidential),
-                  assessment,
+                value={stripAsbestosCountLineForDisplay(
+                  resolveAnalysisIncompleteForDisplay(
+                    (assessment?.discussionConclusions || "").trim() ||
+                      getDefaultDiscussionConclusions(assessment, isResidential),
+                    assessment,
+                  ),
                 )}
                 onChange={(e) => {
                   setAssessment((prev) => ({
@@ -5102,10 +5112,12 @@ const AssessmentItems = () => {
                   const rawContent =
                     (assessment?.discussionConclusions || "").trim() ||
                     getDefaultDiscussionConclusions(assessment, isResidential);
-                  const valueToSave = resolveAnalysisIncompleteForDisplay(
+                  const resolved = resolveAnalysisIncompleteForDisplay(
                     rawContent,
                     assessment,
                   );
+                  // Save without the asbestos count line (it is hard-coded in the PDF)
+                  const valueToSave = stripAsbestosCountLineForDisplay(resolved);
                   await asbestosAssessmentService.update(id, {
                     projectId:
                       assessment?.projectId?._id || assessment?.projectId,
@@ -5565,13 +5577,14 @@ const AssessmentItems = () => {
               alignItems="center"
             >
               <Typography variant="h6">Site Plan Drawing</Typography>
-              <IconButton onClick={() => setSitePlanDrawingDialogOpen(false)}>
+              <IconButton onClick={handleSitePlanDrawingClose}>
                 <CloseIcon />
               </IconButton>
             </Box>
           </DialogTitle>
           <DialogContent sx={{ p: 2, height: "100%" }}>
             <SitePlanDrawing
+              ref={sitePlanDrawingRef}
               onSave={handleSitePlanSave}
               onCancel={() => setSitePlanDrawingDialogOpen(false)}
               existingSitePlan={assessment?.sitePlanFile}

@@ -243,6 +243,7 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
       asbestosRemovalist,
       airMonitoring,
       airMonitoringReport,
+      airMonitoringReports,
       sitePlan,
       sitePlanFile,
       sitePlanSource,
@@ -280,6 +281,9 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
     clearance.asbestosRemovalist = asbestosRemovalist || clearance.asbestosRemovalist;
     clearance.airMonitoring = airMonitoring !== undefined ? airMonitoring : clearance.airMonitoring;
     clearance.airMonitoringReport = airMonitoringReport !== undefined ? airMonitoringReport : clearance.airMonitoringReport;
+    if (airMonitoringReports !== undefined) {
+      clearance.airMonitoringReports = airMonitoringReports;
+    }
     clearance.sitePlan = sitePlan !== undefined ? sitePlan : clearance.sitePlan;
     clearance.sitePlanFile = sitePlanFile !== undefined ? sitePlanFile : clearance.sitePlanFile;
     if (sitePlanLegend !== undefined) {
@@ -419,25 +423,38 @@ router.patch("/:id/status", auth, checkPermission("asbestos.edit"), async (req, 
   }
 });
 
-// Upload air monitoring report
+// Upload air monitoring report(s) - supports single (legacy) or multiple reports
 router.post("/:id/air-monitoring-report", auth, checkPermission("asbestos.edit"), async (req, res) => {
   try {
-    const { reportData, shiftDate, shiftId, airMonitoring } = req.body; // Expecting base64 data and metadata
+    const { reportData, shiftDate, shiftId, airMonitoring, reports } = req.body;
 
     const clearance = await AsbestosClearance.findById(req.params.id);
     if (!clearance) {
       return res.status(404).json({ message: "Asbestos clearance not found" });
     }
 
-    // Enable air monitoring when uploading a report (new approach)
     if (airMonitoring !== undefined) {
       clearance.airMonitoring = airMonitoring;
     }
-
-    clearance.airMonitoringReport = reportData;
-    clearance.airMonitoringShiftDate = shiftDate;
-    clearance.airMonitoringShiftId = shiftId;
     clearance.updatedBy = req.user.id;
+
+    if (Array.isArray(reports) && reports.length > 0) {
+      // Multiple reports: store in airMonitoringReports, sorted by shiftDate (earliest first)
+      const sorted = [...reports].sort(
+        (a, b) => new Date(a.shiftDate || 0) - new Date(b.shiftDate || 0)
+      );
+      clearance.airMonitoringReports = sorted.map((r) => ({
+        reportData: r.reportData,
+        shiftDate: r.shiftDate,
+        shiftId: r.shiftId,
+      }));
+      // Legacy single field: first report for backward compatibility
+      clearance.airMonitoringReport = sorted[0].reportData;
+    } else if (reportData != null) {
+      // Legacy single report
+      clearance.airMonitoringReport = reportData;
+      clearance.airMonitoringReports = [{ reportData, shiftDate, shiftId }];
+    }
 
     const updatedClearance = await clearance.save();
     

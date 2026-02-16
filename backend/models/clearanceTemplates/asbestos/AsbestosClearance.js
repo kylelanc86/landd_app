@@ -52,8 +52,15 @@ const asbestosClearanceSchema = new mongoose.Schema(
       default: false,
     },
     airMonitoringReport: {
-      type: String, // Will store the file path or base64 data
+      type: String, // Legacy: single report base64 (use airMonitoringReports for multiple)
     },
+    airMonitoringReports: [
+      {
+        reportData: { type: String },
+        shiftDate: { type: Date },
+        shiftId: { type: mongoose.Schema.Types.ObjectId, ref: "Shift" },
+      },
+    ],
     sitePlan: {
       type: Boolean,
       default: false,

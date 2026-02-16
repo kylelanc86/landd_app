@@ -107,7 +107,7 @@ const ClearanceItems = () => {
     useState(false);
   const [airMonitoringReports, setAirMonitoringReports] = useState([]);
   const [loadingReports, setLoadingReports] = useState(false);
-  const [selectedReport, setSelectedReport] = useState(null);
+  const [selectedReports, setSelectedReports] = useState([]);
   const [savingExclusions, setSavingExclusions] = useState(false);
   const [exclusionsLastSaved, setExclusionsLastSaved] = useState(null);
   const [isDictating, setIsDictating] = useState(false);
@@ -118,6 +118,7 @@ const ClearanceItems = () => {
   const [uploadingSitePlan, setUploadingSitePlan] = useState(false);
   const [sitePlanDrawingDialogOpen, setSitePlanDrawingDialogOpen] =
     useState(false);
+  const sitePlanDrawingRef = useRef(null);
   const [generatingAirMonitoringPDF, setGeneratingAirMonitoringPDF] =
     useState(false);
   const [attachmentsModalOpen, setAttachmentsModalOpen] = useState(false);
@@ -1352,8 +1353,18 @@ const ClearanceItems = () => {
     }
   };
 
-  // Handle site plan drawing dialog close
+  // Handle site plan drawing dialog close (X button, backdrop click)
   const handleSitePlanDrawingClose = () => {
+    if (sitePlanDrawingRef.current?.hasEmptyKey?.()) {
+      if (
+        window.confirm(
+          "You haven't added any items to the site plan key. Click OK to add key items, or Cancel to close anyway."
+        )
+      ) {
+        sitePlanDrawingRef.current?.openLegendDialog?.();
+        return;
+      }
+    }
     setSitePlanDrawingDialogOpen(false);
   };
 
@@ -1862,12 +1873,12 @@ const ClearanceItems = () => {
     fetchAirMonitoringReports();
   };
 
-  const handleSelectAirMonitoringReport = async (report) => {
+  const handleSelectAirMonitoringReport = async (reportsToAttach) => {
+    const list = Array.isArray(reportsToAttach) ? reportsToAttach : [reportsToAttach];
+    if (list.length === 0) return;
     try {
-      setSelectedReport(report);
       setGeneratingAirMonitoringPDF(true);
 
-      // Generate the air monitoring report PDF
       const { generateShiftReport } =
         await import("../../utils/generateShiftReport");
       const { shiftService, sampleService, projectService, clientService } =
@@ -1876,67 +1887,62 @@ const ClearanceItems = () => {
         await import("../../services/asbestosRemovalJobService")
       ).default;
 
-      // Get the shift data
-      const shiftResponse = await shiftService.getById(report._id);
-      const shift = shiftResponse.data;
+      const reportsPayload = [];
+      for (const report of list) {
+        const shiftResponse = await shiftService.getById(report._id);
+        const shift = shiftResponse.data;
+        const jobResponse = await asbestosRemovalJobService.getById(report.jobId);
+        const job = jobResponse.data;
+        const samplesResponse = await sampleService.getByShift(report._id);
+        const samples = samplesResponse.data || [];
 
-      // Get the asbestos removal job data
-      const jobResponse = await asbestosRemovalJobService.getById(report.jobId);
-      const job = jobResponse.data;
+        let project = job.projectId;
+        if (project && typeof project === "string") {
+          const projectResponse = await projectService.getById(project);
+          project = projectResponse.data;
+        }
+        if (project && project.client && typeof project.client === "string") {
+          const clientResponse = await clientService.getById(project.client);
+          project.client = clientResponse.data;
+        }
 
-      // Get samples for this shift
-      const samplesResponse = await sampleService.getByShift(report._id);
-      const samples = samplesResponse.data || [];
-
-      // Get project data
-      let project = job.projectId;
-      if (project && typeof project === "string") {
-        const projectResponse = await projectService.getById(project);
-        project = projectResponse.data;
+        const pdfDataUrl = await generateShiftReport({
+          shift,
+          job,
+          samples,
+          projectId: project,
+          returnPdfData: true,
+          sitePlanData: shift.sitePlan
+            ? { sitePlan: shift.sitePlan, sitePlanData: shift.sitePlanData }
+            : null,
+        });
+        const base64Data = pdfDataUrl.split(",")[1];
+        reportsPayload.push({
+          reportData: base64Data,
+          shiftDate: shift.date,
+          shiftId: shift._id,
+        });
       }
-      if (project && project.client && typeof project.client === "string") {
-        const clientResponse = await clientService.getById(project.client);
-        project.client = clientResponse.data;
-      }
 
-      // Generate the report and get the PDF data URL
-      const pdfDataUrl = await generateShiftReport({
-        shift: shift,
-        job: job,
-        samples: samples,
-        projectId: project,
-        returnPdfData: true, // This will return the PDF data URL instead of downloading
-        sitePlanData: shift.sitePlan
-          ? {
-              sitePlan: shift.sitePlan,
-              sitePlanData: shift.sitePlanData,
-            }
-          : null,
-      });
-
-      // Extract base64 data from data URL
-      const base64Data = pdfDataUrl.split(",")[1];
-
-      // Upload the report to the clearance and enable air monitoring
       await asbestosClearanceService.uploadAirMonitoringReport(clearanceId, {
-        reportData: base64Data,
-        shiftDate: shift.date,
-        shiftId: shift._id,
-        airMonitoring: true, // Enable air monitoring when report is uploaded
+        reports: reportsPayload,
+        airMonitoring: true,
       });
 
       showSnackbar(
-        "Air monitoring report selected and uploaded successfully",
+        list.length === 1
+          ? "Air monitoring report attached successfully"
+          : `${list.length} air monitoring reports attached successfully`,
         "success",
       );
 
       setAirMonitoringReportsDialogOpen(false);
-      setAttachmentsModalOpen(false); // Close the main air monitoring modal
-      setSelectedReport(null);
-      fetchData(); // Refresh clearance data
+      setAttachmentsModalOpen(false);
+      setSelectedReports([]);
+      fetchData();
     } catch (error) {
-      console.error("Error selecting air monitoring report:", error);
-      showSnackbar("Failed to select air monitoring report", "error");
+      console.error("Error selecting air monitoring report(s):", error);
+      showSnackbar("Failed to attach air monitoring report(s)", "error");
     } finally {
       setGeneratingAirMonitoringPDF(false);
     }
@@ -1949,9 +1955,10 @@ const ClearanceItems = () => {
       )
     ) {
       try {
-        // Update the clearance to remove the air monitoring report and disable air monitoring
+        // Update the clearance to remove the air monitoring report(s) and disable air monitoring
         await asbestosClearanceService.update(clearanceId, {
           airMonitoringReport: null,
+          airMonitoringReports: [],
           airMonitoring: false, // Disable air monitoring when report is removed
         });
 
@@ -2263,7 +2270,8 @@ const ClearanceItems = () => {
             >
               Air Monitoring Report
             </Button>
-            {clearance?.airMonitoringReport && (
+            {(clearance?.airMonitoringReport ||
+              (clearance?.airMonitoringReports?.length > 0)) && (
               <Box display="flex" alignItems="center" gap={2}>
                 <Button
                   variant="outlined"
@@ -2287,16 +2295,35 @@ const ClearanceItems = () => {
                   color="success.main"
                   sx={{ fontWeight: "medium" }}
                 >
-                  ✓ Air Monitoring Report Attached
-                  {clearance.airMonitoringShiftDate && (
+                  ✓ Air Monitoring Report
+                  {(clearance.airMonitoringReports?.length ?? 0) > 1
+                    ? "s"
+                    : ""}{" "}
+                  Attached
+                  {(clearance.airMonitoringReports?.length ?? 0) > 0 ? (
+                    <Box component="span" sx={{ ml: 1 }}>
+                      (
+                      {clearance.airMonitoringReports
+                        .slice()
+                        .sort(
+                          (a, b) =>
+                            new Date(a.shiftDate || 0) -
+                            new Date(b.shiftDate || 0)
+                        )
+                        .map((r) => formatDate(r.shiftDate))
+                        .join(", ")}
+                      )
+                    </Box>
+                  ) : clearance.airMonitoringShiftDate ? (
                     <Box component="span" sx={{ ml: 1 }}>
                       ({formatDate(clearance.airMonitoringShiftDate)})
                     </Box>
-                  )}
+                  ) : null}
                 </Typography>
               </Box>
             )}
-            {!clearance?.airMonitoringReport && (
+            {!clearance?.airMonitoringReport &&
+              !(clearance?.airMonitoringReports?.length > 0) && (
               <Typography
                 variant="body2"
                 color="warning.main"
@@ -3089,7 +3116,7 @@ const ClearanceItems = () => {
           open={airMonitoringReportsDialogOpen}
           onClose={() => {
             setAirMonitoringReportsDialogOpen(false);
-            setSelectedReport(null);
+            setSelectedReports([]);
           }}
           maxWidth="md"
           fullWidth
@@ -3126,14 +3153,14 @@ const ClearanceItems = () => {
               <DescriptionIcon sx={{ fontSize: 20 }} />
             </Box>
             <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
-              Select Air Monitoring Report
+              Select Air Monitoring Report(s)
             </Typography>
           </DialogTitle>
           <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
             <Box sx={{ mt: 2 }}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Select an air monitoring report from the list below. This will
-                be included in the clearance report appendices.
+                Select one or more air monitoring reports from the list below. They will
+                be included in the clearance PDF in chronological order (earliest to most recent).
               </Typography>
 
               {loadingReports ? (
@@ -3153,7 +3180,7 @@ const ClearanceItems = () => {
               ) : (
                 <Box sx={{ maxHeight: 400, overflow: "auto" }}>
                   {airMonitoringReports.map((report, index) => {
-                    const isSelected = selectedReport?._id === report._id;
+                    const isSelected = selectedReports.some((r) => r._id === report._id);
                     const isAuthorised = !!report.reportApprovedBy;
                     return (
                       <Card
@@ -3188,7 +3215,11 @@ const ClearanceItems = () => {
                         }}
                         onClick={() => {
                           if (isAuthorised) {
-                            setSelectedReport(report);
+                            setSelectedReports((prev) =>
+                              isSelected
+                                ? prev.filter((r) => r._id !== report._id)
+                                : [...prev, report]
+                            );
                           }
                         }}
                       >
@@ -3284,7 +3315,7 @@ const ClearanceItems = () => {
             <Button
               onClick={() => {
                 setAirMonitoringReportsDialogOpen(false);
-                setSelectedReport(null);
+                setSelectedReports([]);
               }}
               variant="outlined"
               sx={{
@@ -3298,14 +3329,15 @@ const ClearanceItems = () => {
             </Button>
             <Button
               onClick={() => {
-                if (selectedReport && selectedReport.reportApprovedBy) {
-                  handleSelectAirMonitoringReport(selectedReport);
+                const authorised = selectedReports.filter((r) => r.reportApprovedBy);
+                if (authorised.length > 0) {
+                  handleSelectAirMonitoringReport(authorised);
                 }
               }}
               variant="contained"
               disabled={
-                !selectedReport ||
-                !selectedReport.reportApprovedBy ||
+                selectedReports.length === 0 ||
+                selectedReports.some((r) => !r.reportApprovedBy) ||
                 generatingAirMonitoringPDF
               }
               startIcon={
@@ -3322,7 +3354,11 @@ const ClearanceItems = () => {
                 fontWeight: 500,
               }}
             >
-              {generatingAirMonitoringPDF ? "Attaching..." : "Attach Report"}
+              {generatingAirMonitoringPDF
+                ? "Attaching..."
+                : selectedReports.length > 1
+                  ? `Attach ${selectedReports.length} Reports`
+                  : "Attach Report"}
             </Button>
           </DialogActions>
         </Dialog>
@@ -3479,25 +3515,45 @@ const ClearanceItems = () => {
               <DescriptionIcon sx={{ fontSize: 20 }} />
             </Box>
             <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
-              Manage Air Monitoring Report
+              Manage Air Monitoring Report(s)
             </Typography>
           </DialogTitle>
           <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
             {/* Air Monitoring Section */}
             <Box sx={{ mb: 4 }}>
-              {clearance.airMonitoringReport && (
-                <Typography
-                  variant="body2"
-                  color="success.main"
-                  sx={{ mb: 2, fontWeight: "medium" }}
-                >
-                  ✓ Air Monitoring Report Currently Attached
-                  {clearance.airMonitoringShiftDate && (
-                    <Box component="span" sx={{ ml: 1 }}>
-                      Shift Date: {formatDate(clearance.airMonitoringShiftDate)}
-                    </Box>
-                  )}
-                </Typography>
+              {(clearance.airMonitoringReport ||
+                (clearance.airMonitoringReports?.length > 0)) && (
+                <>
+                  <Typography
+                    variant="body2"
+                    color="success.main"
+                    sx={{ mb: 2, fontWeight: "medium" }}
+                  >
+                    ✓ Air Monitoring Report
+                    {(clearance.airMonitoringReports?.length ?? 0) > 1
+                      ? "s"
+                      : ""}{" "}
+                    Currently Attached
+                    {(clearance.airMonitoringReports?.length ?? 0) > 0 ? (
+                      <Box component="span" sx={{ ml: 1 }}>
+                        —{" "}
+                        {clearance.airMonitoringReports
+                          .slice()
+                          .sort(
+                            (a, b) =>
+                              new Date(a.shiftDate || 0) -
+                              new Date(b.shiftDate || 0)
+                          )
+                          .map((r) => formatDate(r.shiftDate))
+                          .join(", ")}
+                      </Box>
+                    ) : clearance.airMonitoringShiftDate ? (
+                      <Box component="span" sx={{ ml: 1 }}>
+                        — {formatDate(clearance.airMonitoringShiftDate)}
+                      </Box>
+                    ) : null}
+                  </Typography>
+                </>
               )}
               <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
                 <Button
@@ -3506,31 +3562,34 @@ const ClearanceItems = () => {
                   onClick={handleOpenAirMonitoringReportsDialog}
                   startIcon={<DescriptionIcon />}
                 >
-                  {clearance.airMonitoringReport
-                    ? "Replace Air Monitoring Report"
-                    : "Select Air Monitoring Report"}
+                  {clearance.airMonitoringReport ||
+                  (clearance.airMonitoringReports?.length > 0)
+                    ? "Replace Air Monitoring Report(s)"
+                    : "Select Air Monitoring Report(s)"}
                 </Button>
-                {clearance.airMonitoringReport && (
+                {(clearance.airMonitoringReport ||
+                  (clearance.airMonitoringReports?.length > 0)) && (
                   <Button
                     variant="outlined"
                     color="error"
                     onClick={handleRemoveAirMonitoringReport}
                     startIcon={<DeleteIcon />}
                   >
-                    Remove Report
+                    Remove All Reports
                   </Button>
                 )}
               </Box>
-              {!clearance?.airMonitoringReport && (
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ mt: 2 }}
-                >
-                  No air monitoring report has been uploaded for this clearance
-                  yet. Use the button above to upload a report.
-                </Typography>
-              )}
+              {!clearance?.airMonitoringReport &&
+                !(clearance?.airMonitoringReports?.length > 0) && (
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ mt: 2 }}
+                  >
+                    No air monitoring report has been uploaded for this
+                    clearance yet. Use the button above to select report(s).
+                  </Typography>
+                )}
             </Box>
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
@@ -4710,13 +4769,14 @@ const ClearanceItems = () => {
               alignItems="center"
             >
               <Typography variant="h6">Site Plan Drawing</Typography>
-              <IconButton onClick={() => setSitePlanDrawingDialogOpen(false)}>
+              <IconButton onClick={handleSitePlanDrawingClose}>
                 <CloseIcon />
               </IconButton>
             </Box>
           </DialogTitle>
           <DialogContent sx={{ p: 2, height: "100%" }}>
             <SitePlanDrawing
+              ref={sitePlanDrawingRef}
               onSave={handleSitePlanSave}
               onCancel={() => setSitePlanDrawingDialogOpen(false)}
               existingSitePlan={clearance?.sitePlanFile}
