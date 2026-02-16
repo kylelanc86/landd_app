@@ -24,6 +24,7 @@ import StorageIcon from "@mui/icons-material/Storage";
 import MonitorIcon from "@mui/icons-material/Monitor";
 import DescriptionIcon from "@mui/icons-material/Description";
 import ConstructionIcon from "@mui/icons-material/Construction";
+import DangerousIcon from "@mui/icons-material/Dangerous";
 import SearchIcon from "@mui/icons-material/Search";
 import FolderCopyIcon from "@mui/icons-material/FolderCopy";
 import BiotechIcon from "@mui/icons-material/Biotech";
@@ -190,7 +191,7 @@ const Item = ({ title, to, icon }) => {
           color: "inherit",
           whiteSpace: "normal",
           wordBreak: "break-word",
-          fontSize: "1rem",
+          fontSize: "0.9rem",
           lineHeight: 1.2,
           textAlign: "left",
           flex: 1,
@@ -357,7 +358,7 @@ const CollapsibleSection = ({ title, to, icon, defaultExpanded = true }) => {
           color: "inherit",
           whiteSpace: "normal",
           wordBreak: "break-word",
-          fontSize: "1rem",
+          fontSize: "0.9rem",
           lineHeight: 1.2,
           textAlign: "left",
           flex: 1,
@@ -371,7 +372,7 @@ const CollapsibleSection = ({ title, to, icon, defaultExpanded = true }) => {
 
 const Sidebar = () => {
   const theme = useTheme();
-  const { isAdmin } = usePermissions();
+  const { isAdmin, isSuperAdmin } = usePermissions();
   const { currentUser } = useAuth();
 
   // Detect tablet and mobile screens - hide sidebar completely
@@ -582,17 +583,27 @@ const Sidebar = () => {
 
           {isFeatureEnabled("ADVANCED.ASBESTOS_REMOVAL") && (
             <CollapsibleSection
-              title="Air Mon & Clearances"
+              title="Asbestos Removal"
               to="/asbestos-removal"
               icon={<ConstructionIcon />}
             />
           )}
 
+
+
           {isFeatureEnabled("ADVANCED.SURVEYS") && (
             <CollapsibleSection
-              title="Surveys"
+              title="Asbestos Assessment"
               to="/surveys"
               icon={<SearchIcon />}
+            />
+          )}
+
+          {isSuperAdmin && (
+            <CollapsibleSection
+              title="Lead Removal"
+              to="/lead-removal"
+              icon={<DangerousIcon />}
             />
           )}
 

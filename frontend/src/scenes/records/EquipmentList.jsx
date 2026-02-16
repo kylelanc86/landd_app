@@ -1171,7 +1171,7 @@ const EquipmentList = () => {
             borderBottom: "none",
           },
           "& .MuiDataGrid-columnHeaders": {
-            backgroundColor: theme.palette.primary.main,
+            background: "linear-gradient(to right, #045E1F, #96CC78) !important",
             borderBottom: "none",
           },
           "& .MuiDataGrid-columnHeader": {
@@ -1184,7 +1184,7 @@ const EquipmentList = () => {
           },
           "& .MuiDataGrid-footerContainer": {
             borderTop: "none",
-            backgroundColor: theme.palette.primary.main,
+            background: "linear-gradient(to right, #045E1F, #96CC78) !important",
           },
           "& .MuiDataGrid-row:nth-of-type(even)": {
             backgroundColor: "#f8f9fa",
@@ -1756,7 +1756,7 @@ const EquipmentList = () => {
                   borderBottom: "none",
                 },
                 "& .MuiDataGrid-columnHeaders": {
-                  backgroundColor: theme.palette.primary.main,
+                  background: "linear-gradient(to right, #045E1F, #96CC78) !important",
                   borderBottom: "none",
                   color: theme.palette.common.white,
                 },
@@ -1770,7 +1770,7 @@ const EquipmentList = () => {
                 },
                 "& .MuiDataGrid-footerContainer": {
                   borderTop: "none",
-                  backgroundColor: theme.palette.primary.main,
+                  background: "linear-gradient(to right, #045E1F, #96CC78) !important",
                 },
                 "& .MuiDataGrid-row:nth-of-type(even)": {
                   backgroundColor: "#f8f9fa",

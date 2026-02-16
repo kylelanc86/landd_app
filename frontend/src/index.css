@@ -86,17 +86,23 @@ table {
 }
 
 .MuiDataGrid-root .MuiDataGrid-columnHeaders {
-  background-color: #4CAF50 !important;
+  background: linear-gradient(to right, #045E1F, #96CC78) !important;
   color: #FFFFFF !important;
 }
 
-.MuiDataGrid-root .MuiDataGrid-columnHeader {
+.MuiDataGrid-root .MuiDataGrid-columnHeader,
+.MuiDataGrid-root .MuiDataGrid-columnHeaderTitle,
+.MuiDataGrid-root .MuiDataGrid-sortIcon,
+.MuiDataGrid-root .MuiDataGrid-columnHeaders .MuiSvgIcon-root {
   color: #FFFFFF !important;
+}
+
+.MuiDataGrid-root .MuiDataGrid-columnHeaderTitle {
   font-weight: 600 !important;
 }
 
 .MuiDataGrid-root .MuiDataGrid-footerContainer {
-  background-color: #4CAF50 !important;
+  background: linear-gradient(to right, #045E1F, #96CC78) !important;
   color: #FFFFFF !important;
 }
 

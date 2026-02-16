@@ -97,8 +97,12 @@ const isAsbestosResultPart = (part) => {
   if (/^no asbestos detected$/i.test(p) || /^no fibres?\s*detected$/i.test(p))
     return false;
   if (/^trace\s+.+\s+detected$/i.test(p))
-    return /chrysotile|amosite|crocidolite|umf|unidentified\s+mineral\s+fibre/i.test(p);
-  return /chrysotile|amosite|crocidolite|umf|unidentified\s+mineral\s+fibre/i.test(p);
+    return /chrysotile|amosite|crocidolite|umf|unidentified\s+mineral\s+fibre/i.test(
+      p,
+    );
+  return /chrysotile|amosite|crocidolite|umf|unidentified\s+mineral\s+fibre/i.test(
+    p,
+  );
 };
 
 /**
@@ -123,7 +127,10 @@ const getEffectiveAsbestosDisplayForItem = (item, items) => {
     ""
   ).trim();
   if (!raw) return "No Asbestos Detected";
-  if (/^no asbestos detected$/i.test(raw) || /^no fibres?\s*detected$/i.test(raw))
+  if (
+    /^no asbestos detected$/i.test(raw) ||
+    /^no fibres?\s*detected$/i.test(raw)
+  )
     return "No Asbestos Detected";
   if (
     /Visually Assessed as Non-Asbestos/i.test(raw) ||
@@ -133,7 +140,10 @@ const getEffectiveAsbestosDisplayForItem = (item, items) => {
   if (raw === "Visually Assessed as Asbestos")
     return "Visually Assessed as Asbestos";
   // finalResult can be comma-separated (e.g. "Chrysotile Asbestos, Fibreglass") – show only asbestos parts
-  const parts = raw.split(/\s*,\s*/).map((s) => s.trim()).filter(Boolean);
+  const parts = raw
+    .split(/\s*,\s*/)
+    .map((s) => s.trim())
+    .filter(Boolean);
   const asbestosOnly = parts.filter(isAsbestosResultPart);
   if (asbestosOnly.length === 0) return "No Asbestos Detected";
   return asbestosOnly.join(", ");
@@ -226,9 +236,7 @@ const getDefaultDiscussionConclusions = (assessment, isResidential = false) => {
   }).length;
   if (asbestosCount > 0) {
     if (isResidential) {
-      return (
-        RESIDENTIAL_CEILING_SUBFLOOR_TEXT + "\n\n" + ACM_REMOVAL_SENTENCE
-      );
+      return RESIDENTIAL_CEILING_SUBFLOOR_TEXT + "\n\n" + ACM_REMOVAL_SENTENCE;
     }
     return ACM_REMOVAL_SENTENCE;
   }
@@ -1392,7 +1400,7 @@ const AssessmentItems = () => {
     if (sitePlanDrawingRef.current?.hasEmptyKey?.()) {
       if (
         window.confirm(
-          "You haven't added any items to the site plan key. Click OK to add key items, or Cancel to close anyway."
+          "You haven't added any items to the site plan key. Click OK to add key items, or Cancel to close anyway.",
         )
       ) {
         sitePlanDrawingRef.current?.openLegendDialog?.();
@@ -1641,6 +1649,7 @@ const AssessmentItems = () => {
 
   const handleTouchStart = (e) => {
     if (e.touches.length === 2) {
+      e.preventDefault();
       zoomPanRef.current = { zoom, panX, panY };
       const distance = getDistance(e.touches[0], e.touches[1]);
       setLastPinchDistance(distance);
@@ -2520,20 +2529,29 @@ const AssessmentItems = () => {
             >
               <Table>
                 <TableHead>
-                  <TableRow>
+                  <TableRow
+                    sx={{
+                      background:
+                        "linear-gradient(to right, #045E1F, #96CC78) !important",
+                      color: "white",
+                    }}
+                  >
                     {items &&
                       items.length > 0 &&
                       items.some(
                         (item) =>
                           item.levelFloor && item.levelFloor.trim() !== "",
                       ) && (
-                        <TableCell sx={{ fontWeight: "bold" }}>
+                        <TableCell
+                          sx={{ fontWeight: "bold", color: "inherit" }}
+                        >
                           Level/Floor
                         </TableCell>
                       )}
                     <TableCell
                       sx={{
                         fontWeight: "bold",
+                        color: "inherit",
                         display: "none",
                         "@media (orientation: portrait) and (max-width: 600px)":
                           {
@@ -2548,6 +2566,7 @@ const AssessmentItems = () => {
                     <TableCell
                       sx={{
                         fontWeight: "bold",
+                        color: "inherit",
                         display: "table-cell",
                         "@media (orientation: portrait) and (max-width: 600px)":
                           {
@@ -2560,6 +2579,7 @@ const AssessmentItems = () => {
                     <TableCell
                       sx={{
                         fontWeight: "bold",
+                        color: "inherit",
                         display: "table-cell",
                         "@media (orientation: portrait) and (max-width: 600px)":
                           {
@@ -2572,6 +2592,7 @@ const AssessmentItems = () => {
                     <TableCell
                       sx={{
                         fontWeight: "bold",
+                        color: "inherit",
                         "@media (orientation: portrait) and (max-width: 600px)":
                           {
                             width: "25%",
@@ -2584,6 +2605,7 @@ const AssessmentItems = () => {
                     <TableCell
                       sx={{
                         fontWeight: "bold",
+                        color: "inherit",
                         display: "table-cell",
                         "@media (orientation: portrait) and (max-width: 600px)":
                           {
@@ -2596,6 +2618,7 @@ const AssessmentItems = () => {
                     <TableCell
                       sx={{
                         fontWeight: "bold",
+                        color: "inherit",
                         display: "table-cell",
                         "@media (orientation: portrait) and (max-width: 600px)":
                           {
@@ -2605,7 +2628,9 @@ const AssessmentItems = () => {
                     >
                       Photograph
                     </TableCell>
-                    <TableCell sx={{ fontWeight: "bold" }}>Actions</TableCell>
+                    <TableCell sx={{ fontWeight: "bold", color: "inherit" }}>
+                      Actions
+                    </TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -3094,7 +3119,8 @@ const AssessmentItems = () => {
                             setIsNonACM(false);
                             setForm({
                               ...form,
-                              recommendations: "Maintain material in good condition",
+                              recommendations:
+                                "Maintain material in good condition",
                             });
                           }
                         }}
@@ -3908,375 +3934,404 @@ const AssessmentItems = () => {
                   </Box>
                 ) : (
                   <>
-                <Box
-                  sx={{
-                    mb: 3,
-                    ...(isMobileLandscape && {
-                      display: "flex",
-                      flexWrap: "wrap",
-                      alignItems: "center",
-                      gap: 1,
-                      "& .MuiTypography-root": { mb: 0 },
-                    }),
-                  }}
-                >
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    sx={{ mb: isMobileLandscape ? 0 : 1 }}
-                  >
-                    <strong>Location:</strong>{" "}
-                    {selectedItemForPhotos.locationDescription}
-                  </Typography>
-                  {isMobileLandscape && (
-                    <Typography variant="body2" color="text.secondary">
-                      |
-                    </Typography>
-                  )}
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    sx={{ mb: isMobileLandscape ? 0 : 1 }}
-                  >
-                    <strong>Room/Area:</strong>{" "}
-                    {selectedItemForPhotos.roomArea}
-                  </Typography>
-                  {isMobileLandscape && (
-                    <Typography variant="body2" color="text.secondary">
-                      |
-                    </Typography>
-                  )}
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    sx={{ mb: isMobileLandscape ? 0 : 0 }}
-                  >
-                    <strong>Material:</strong>{" "}
-                    {selectedItemForPhotos.materialType}
-                  </Typography>
-                </Box>
-
-                {!isMobileLandscape && (
-                <Box sx={{ mb: 3, p: 2, bgcolor: "grey.50", borderRadius: 2 }}>
-                  <Typography
-                    variant="subtitle1"
-                    sx={{ mb: 2, fontWeight: 600 }}
-                  >
-                    Add New Photo
-                  </Typography>
-                  <Box sx={{ display: "flex", gap: 1 }}>
-                    <Button
-                      variant="outlined"
-                      startIcon={<PhotoCameraIcon />}
-                      onClick={handleTakePhoto}
-                      size="small"
+                    <Box
+                      sx={{
+                        mb: 3,
+                        ...(isMobileLandscape && {
+                          display: "flex",
+                          flexWrap: "wrap",
+                          alignItems: "center",
+                          gap: 1,
+                          "& .MuiTypography-root": { mb: 0 },
+                        }),
+                      }}
                     >
-                      Take Photo
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      startIcon={<UploadIcon />}
-                      component="label"
-                      size="small"
-                    >
-                      Upload Photo
-                      <input
-                        type="file"
-                        hidden
-                        accept="image/*"
-                        onChange={handlePhotoUploadForGallery}
-                      />
-                    </Button>
-                  </Box>
-                  {compressionStatus && (
-                    <Alert severity={compressionStatus.type} sx={{ mt: 2 }}>
-                      {compressionStatus.message}
-                    </Alert>
-                  )}
-                </Box>
-                )}
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ mb: isMobileLandscape ? 0 : 1 }}
+                      >
+                        <strong>Location:</strong>{" "}
+                        {selectedItemForPhotos.locationDescription}
+                      </Typography>
+                      {isMobileLandscape && (
+                        <Typography variant="body2" color="text.secondary">
+                          |
+                        </Typography>
+                      )}
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ mb: isMobileLandscape ? 0 : 1 }}
+                      >
+                        <strong>Room/Area:</strong>{" "}
+                        {selectedItemForPhotos.roomArea}
+                      </Typography>
+                      {isMobileLandscape && (
+                        <Typography variant="body2" color="text.secondary">
+                          |
+                        </Typography>
+                      )}
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ mb: isMobileLandscape ? 0 : 0 }}
+                      >
+                        <strong>Material:</strong>{" "}
+                        {selectedItemForPhotos.materialType}
+                      </Typography>
+                    </Box>
 
-                <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 600 }}>
-                  Photos (
-                  {(selectedItemForPhotos.photographs?.length || 0) +
-                    (selectedItemForPhotos.photograph ? 1 : 0)}
-                  )
-                </Typography>
-
-                {(selectedItemForPhotos.photographs?.length || 0) +
-                  (selectedItemForPhotos.photograph ? 1 : 0) ===
-                0 ? (
-                  <Box sx={{ textAlign: "center", py: 4 }}>
-                    <Typography variant="body2" color="text.secondary">
-                      No photos yet. Add your first photo above.
-                    </Typography>
-                  </Box>
-                ) : (
-                  <Grid container spacing={2}>
-                    {selectedItemForPhotos.photographs?.map((photo, index) => (
-                      <Grid item xs={12} sm={6} md={4} key={photo._id}>
-                        <Card
-                          sx={{
-                            position: "relative",
-                            height: "100%",
-                            border: getCurrentPhotoState(photo._id)
-                              ? "3px solid #4caf50"
-                              : "3px solid transparent",
-                            borderRadius: 2,
-                            transition: "border-color 0.2s ease-in-out",
-                            opacity: isPhotoMarkedForDeletion(photo._id)
-                              ? 0.5
-                              : 1,
-                            filter: isPhotoMarkedForDeletion(photo._id)
-                              ? "grayscale(50%)"
-                              : "none",
-                          }}
+                    {!isMobileLandscape && (
+                      <Box
+                        sx={{
+                          mb: 3,
+                          p: 2,
+                          bgcolor: "grey.50",
+                          borderRadius: 2,
+                        }}
+                      >
+                        <Typography
+                          variant="subtitle1"
+                          sx={{ mb: 2, fontWeight: 600 }}
                         >
-                          <Box
-                            sx={{
-                              position: "relative",
-                              paddingTop: "75%",
-                              cursor: "pointer",
-                              "&:hover": {
-                                opacity: 0.9,
-                              },
-                            }}
-                            onClick={() => handleViewFullSizePhoto(photo.data)}
+                          Add New Photo
+                        </Typography>
+                        <Box sx={{ display: "flex", gap: 1 }}>
+                          <Button
+                            variant="outlined"
+                            startIcon={<PhotoCameraIcon />}
+                            onClick={handleTakePhoto}
+                            size="small"
                           >
-                            <img
-                              src={photo.data}
-                              alt={`${index + 1}`}
-                              style={{
-                                position: "absolute",
-                                top: 0,
-                                left: 0,
-                                width: "100%",
-                                height: "100%",
-                                objectFit: "cover",
-                              }}
+                            Take Photo
+                          </Button>
+                          <Button
+                            variant="outlined"
+                            startIcon={<UploadIcon />}
+                            component="label"
+                            size="small"
+                          >
+                            Upload Photo
+                            <input
+                              type="file"
+                              hidden
+                              accept="image/*"
+                              onChange={handlePhotoUploadForGallery}
                             />
+                          </Button>
+                        </Box>
+                        {compressionStatus && (
+                          <Alert
+                            severity={compressionStatus.type}
+                            sx={{ mt: 2 }}
+                          >
+                            {compressionStatus.message}
+                          </Alert>
+                        )}
+                      </Box>
+                    )}
 
-                            {isPhotoMarkedForDeletion(photo._id) && (
-                              <Box
+                    <Typography
+                      variant="subtitle1"
+                      sx={{ mb: 2, fontWeight: 600 }}
+                    >
+                      Photos (
+                      {(selectedItemForPhotos.photographs?.length || 0) +
+                        (selectedItemForPhotos.photograph ? 1 : 0)}
+                      )
+                    </Typography>
+
+                    {(selectedItemForPhotos.photographs?.length || 0) +
+                      (selectedItemForPhotos.photograph ? 1 : 0) ===
+                    0 ? (
+                      <Box sx={{ textAlign: "center", py: 4 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          No photos yet. Add your first photo above.
+                        </Typography>
+                      </Box>
+                    ) : (
+                      <Grid container spacing={2}>
+                        {selectedItemForPhotos.photographs?.map(
+                          (photo, index) => (
+                            <Grid item xs={12} sm={6} md={4} key={photo._id}>
+                              <Card
                                 sx={{
-                                  position: "absolute",
-                                  top: 0,
-                                  left: 0,
-                                  right: 0,
-                                  bottom: 0,
-                                  backgroundColor: "rgba(244, 67, 54, 0.3)",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  zIndex: 2,
+                                  position: "relative",
+                                  height: "100%",
+                                  border: getCurrentPhotoState(photo._id)
+                                    ? "3px solid #4caf50"
+                                    : "3px solid transparent",
+                                  borderRadius: 2,
+                                  transition: "border-color 0.2s ease-in-out",
+                                  opacity: isPhotoMarkedForDeletion(photo._id)
+                                    ? 0.5
+                                    : 1,
+                                  filter: isPhotoMarkedForDeletion(photo._id)
+                                    ? "grayscale(50%)"
+                                    : "none",
                                 }}
                               >
-                                <Typography
-                                  variant="h6"
-                                  sx={{
-                                    color: "white",
-                                    fontWeight: "bold",
-                                    textShadow: "2px 2px 4px rgba(0,0,0,0.8)",
-                                    textAlign: "center",
-                                  }}
-                                >
-                                  Marked for Deletion
-                                </Typography>
-                              </Box>
-                            )}
-
-                            <Box
-                              sx={{
-                                position: "absolute",
-                                top: 8,
-                                left: 8,
-                                backgroundColor: "rgba(0, 0, 0, 0.6)",
-                                borderRadius: 1,
-                                padding: 0.5,
-                                zIndex: 3,
-                              }}
-                            >
-                              <Checkbox
-                                checked={getCurrentPhotoState(photo._id)}
-                                size="small"
-                                sx={{
-                                  color: "white",
-                                  "&.Mui-checked": {
-                                    color: "#4caf50",
-                                  },
-                                }}
-                                onChange={(e) => {
-                                  e.stopPropagation();
-                                  handleTogglePhotoInReport(
-                                    selectedItemForPhotos._id,
-                                    photo._id,
-                                  );
-                                }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                }}
-                                title={
-                                  getCurrentPhotoState(photo._id)
-                                    ? "Remove from report"
-                                    : "Include in report"
-                                }
-                              />
-                            </Box>
-
-                            <IconButton
-                              size="small"
-                              sx={{
-                                position: "absolute",
-                                top: 8,
-                                right: 8,
-                                backgroundColor: isPhotoMarkedForDeletion(
-                                  photo._id,
-                                )
-                                  ? "rgba(76, 175, 80, 0.8)"
-                                  : "rgba(0, 0, 0, 0.6)",
-                                color: "white",
-                                "&:hover": {
-                                  backgroundColor: isPhotoMarkedForDeletion(
-                                    photo._id,
-                                  )
-                                    ? "rgba(76, 175, 80, 1)"
-                                    : "rgba(0, 0, 0, 0.8)",
-                                },
-                                zIndex: 3,
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (isPhotoMarkedForDeletion(photo._id)) {
-                                  setPhotosToDelete((prev) => {
-                                    const newSet = new Set(prev);
-                                    newSet.delete(photo._id);
-                                    return newSet;
-                                  });
-                                } else {
-                                  handleDeletePhotoFromItem(
-                                    selectedItemForPhotos._id,
-                                    photo._id,
-                                  );
-                                }
-                              }}
-                              title={
-                                isPhotoMarkedForDeletion(photo._id)
-                                  ? "Undo Deletion"
-                                  : "Remove Photo"
-                              }
-                            >
-                              {isPhotoMarkedForDeletion(photo._id) ? (
-                                <CheckIcon fontSize="small" />
-                              ) : (
-                                <CloseIcon fontSize="small" />
-                              )}
-                            </IconButton>
-                          </Box>
-                          <CardContent sx={{ py: 1 }}>
-                            <Box display="flex" flexDirection="column" gap={1}>
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                                sx={{ fontWeight: 500 }}
-                              >
-                                Photo {index + 1}
-                              </Typography>
-                              {editingDescriptionPhotoId === photo._id ? (
-                                <TextField
-                                  fullWidth
-                                  size="small"
-                                  value={getCurrentPhotoDescription(
-                                    photo._id,
-                                    selectedItemForPhotos,
-                                  )}
-                                  onChange={(e) =>
-                                    handleDescriptionChange(
-                                      photo._id,
-                                      e.target.value,
-                                    )
-                                  }
-                                  onBlur={() =>
-                                    setEditingDescriptionPhotoId(null)
-                                  }
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter" && !e.shiftKey) {
-                                      e.preventDefault();
-                                      setEditingDescriptionPhotoId(null);
-                                    }
-                                    if (e.key === "Escape") {
-                                      setEditingDescriptionPhotoId(null);
-                                      setLocalPhotoDescriptions((prev) => {
-                                        const newState = { ...prev };
-                                        delete newState[photo._id];
-                                        return newState;
-                                      });
-                                    }
-                                  }}
-                                  autoFocus
-                                  multiline
-                                  maxRows={3}
-                                  variant="outlined"
-                                  placeholder="Enter photo description..."
-                                  sx={{
-                                    "& .MuiOutlinedInput-root": {
-                                      fontSize: "0.75rem",
-                                    },
-                                  }}
-                                />
-                              ) : (
                                 <Box
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setEditingDescriptionPhotoId(photo._id);
-                                  }}
                                   sx={{
+                                    position: "relative",
+                                    paddingTop: "75%",
                                     cursor: "pointer",
-                                    p: 1,
-                                    borderRadius: 1,
-                                    backgroundColor: "grey.50",
                                     "&:hover": {
-                                      backgroundColor: "grey.100",
+                                      opacity: 0.9,
                                     },
                                   }}
+                                  onClick={() =>
+                                    handleViewFullSizePhoto(photo.data)
+                                  }
                                 >
-                                  <Typography
-                                    variant="caption"
-                                    color="text.secondary"
+                                  <img
+                                    src={photo.data}
+                                    alt={`${index + 1}`}
+                                    style={{
+                                      position: "absolute",
+                                      top: 0,
+                                      left: 0,
+                                      width: "100%",
+                                      height: "100%",
+                                      objectFit: "cover",
+                                    }}
+                                  />
+
+                                  {isPhotoMarkedForDeletion(photo._id) && (
+                                    <Box
+                                      sx={{
+                                        position: "absolute",
+                                        top: 0,
+                                        left: 0,
+                                        right: 0,
+                                        bottom: 0,
+                                        backgroundColor:
+                                          "rgba(244, 67, 54, 0.3)",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        zIndex: 2,
+                                      }}
+                                    >
+                                      <Typography
+                                        variant="h6"
+                                        sx={{
+                                          color: "white",
+                                          fontWeight: "bold",
+                                          textShadow:
+                                            "2px 2px 4px rgba(0,0,0,0.8)",
+                                          textAlign: "center",
+                                        }}
+                                      >
+                                        Marked for Deletion
+                                      </Typography>
+                                    </Box>
+                                  )}
+
+                                  <Box
                                     sx={{
-                                      display: "block",
-                                      wordBreak: "break-word",
-                                      fontStyle:
-                                        photo.description ||
-                                        localPhotoDescriptions[photo._id]
-                                          ? "normal"
-                                          : "italic",
+                                      position: "absolute",
+                                      top: 8,
+                                      left: 8,
+                                      backgroundColor: "rgba(0, 0, 0, 0.6)",
+                                      borderRadius: 1,
+                                      padding: 0.5,
+                                      zIndex: 3,
                                     }}
                                   >
-                                    {getCurrentPhotoDescription(
-                                      photo._id,
-                                      selectedItemForPhotos,
+                                    <Checkbox
+                                      checked={getCurrentPhotoState(photo._id)}
+                                      size="small"
+                                      sx={{
+                                        color: "white",
+                                        "&.Mui-checked": {
+                                          color: "#4caf50",
+                                        },
+                                      }}
+                                      onChange={(e) => {
+                                        e.stopPropagation();
+                                        handleTogglePhotoInReport(
+                                          selectedItemForPhotos._id,
+                                          photo._id,
+                                        );
+                                      }}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                      }}
+                                      title={
+                                        getCurrentPhotoState(photo._id)
+                                          ? "Remove from report"
+                                          : "Include in report"
+                                      }
+                                    />
+                                  </Box>
+
+                                  <IconButton
+                                    size="small"
+                                    sx={{
+                                      position: "absolute",
+                                      top: 8,
+                                      right: 8,
+                                      backgroundColor: isPhotoMarkedForDeletion(
+                                        photo._id,
+                                      )
+                                        ? "rgba(76, 175, 80, 0.8)"
+                                        : "rgba(0, 0, 0, 0.6)",
+                                      color: "white",
+                                      "&:hover": {
+                                        backgroundColor:
+                                          isPhotoMarkedForDeletion(photo._id)
+                                            ? "rgba(76, 175, 80, 1)"
+                                            : "rgba(0, 0, 0, 0.8)",
+                                      },
+                                      zIndex: 3,
+                                    }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (isPhotoMarkedForDeletion(photo._id)) {
+                                        setPhotosToDelete((prev) => {
+                                          const newSet = new Set(prev);
+                                          newSet.delete(photo._id);
+                                          return newSet;
+                                        });
+                                      } else {
+                                        handleDeletePhotoFromItem(
+                                          selectedItemForPhotos._id,
+                                          photo._id,
+                                        );
+                                      }
+                                    }}
+                                    title={
+                                      isPhotoMarkedForDeletion(photo._id)
+                                        ? "Undo Deletion"
+                                        : "Remove Photo"
+                                    }
+                                  >
+                                    {isPhotoMarkedForDeletion(photo._id) ? (
+                                      <CheckIcon fontSize="small" />
+                                    ) : (
+                                      <CloseIcon fontSize="small" />
                                     )}
-                                  </Typography>
-                                  <Typography
-                                    variant="caption"
-                                    color="text.disabled"
-                                    sx={{
-                                      fontSize: "0.65rem",
-                                      mt: 0.5,
-                                      display: "block",
-                                    }}
-                                  >
-                                    Click to edit
-                                  </Typography>
+                                  </IconButton>
                                 </Box>
-                              )}
-                            </Box>
-                          </CardContent>
-                        </Card>
+                                <CardContent sx={{ py: 1 }}>
+                                  <Box
+                                    display="flex"
+                                    flexDirection="column"
+                                    gap={1}
+                                  >
+                                    <Typography
+                                      variant="caption"
+                                      color="text.secondary"
+                                      sx={{ fontWeight: 500 }}
+                                    >
+                                      Photo {index + 1}
+                                    </Typography>
+                                    {editingDescriptionPhotoId === photo._id ? (
+                                      <TextField
+                                        fullWidth
+                                        size="small"
+                                        value={getCurrentPhotoDescription(
+                                          photo._id,
+                                          selectedItemForPhotos,
+                                        )}
+                                        onChange={(e) =>
+                                          handleDescriptionChange(
+                                            photo._id,
+                                            e.target.value,
+                                          )
+                                        }
+                                        onBlur={() =>
+                                          setEditingDescriptionPhotoId(null)
+                                        }
+                                        onKeyDown={(e) => {
+                                          if (
+                                            e.key === "Enter" &&
+                                            !e.shiftKey
+                                          ) {
+                                            e.preventDefault();
+                                            setEditingDescriptionPhotoId(null);
+                                          }
+                                          if (e.key === "Escape") {
+                                            setEditingDescriptionPhotoId(null);
+                                            setLocalPhotoDescriptions(
+                                              (prev) => {
+                                                const newState = { ...prev };
+                                                delete newState[photo._id];
+                                                return newState;
+                                              },
+                                            );
+                                          }
+                                        }}
+                                        autoFocus
+                                        multiline
+                                        maxRows={3}
+                                        variant="outlined"
+                                        placeholder="Enter photo description..."
+                                        sx={{
+                                          "& .MuiOutlinedInput-root": {
+                                            fontSize: "0.75rem",
+                                          },
+                                        }}
+                                      />
+                                    ) : (
+                                      <Box
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setEditingDescriptionPhotoId(
+                                            photo._id,
+                                          );
+                                        }}
+                                        sx={{
+                                          cursor: "pointer",
+                                          p: 1,
+                                          borderRadius: 1,
+                                          backgroundColor: "grey.50",
+                                          "&:hover": {
+                                            backgroundColor: "grey.100",
+                                          },
+                                        }}
+                                      >
+                                        <Typography
+                                          variant="caption"
+                                          color="text.secondary"
+                                          sx={{
+                                            display: "block",
+                                            wordBreak: "break-word",
+                                            fontStyle:
+                                              photo.description ||
+                                              localPhotoDescriptions[photo._id]
+                                                ? "normal"
+                                                : "italic",
+                                          }}
+                                        >
+                                          {getCurrentPhotoDescription(
+                                            photo._id,
+                                            selectedItemForPhotos,
+                                          )}
+                                        </Typography>
+                                        <Typography
+                                          variant="caption"
+                                          color="text.disabled"
+                                          sx={{
+                                            fontSize: "0.65rem",
+                                            mt: 0.5,
+                                            display: "block",
+                                          }}
+                                        >
+                                          Click to edit
+                                        </Typography>
+                                      </Box>
+                                    )}
+                                  </Box>
+                                </CardContent>
+                              </Card>
+                            </Grid>
+                          ),
+                        )}
                       </Grid>
-                    ))}
-                  </Grid>
-                )}
+                    )}
                   </>
                 )}
               </>
@@ -4963,8 +5018,16 @@ const AssessmentItems = () => {
               overflow: "hidden",
             }}
           >
-            <Typography variant="body2" color="#c30010" fontWeight={500} fontStyle="italic" sx={{ mb: 1 }}>
-              * A note outlining the number of asbestos items identified during the assessment, along with a list of asbestos and non-asbestos items will be added to the assessment report automatically.
+            <Typography
+              variant="body2"
+              color="#c30010"
+              fontWeight={500}
+              fontStyle="italic"
+              sx={{ mb: 1 }}
+            >
+              * A note outlining the number of asbestos items identified during
+              the assessment, along with a list of asbestos and non-asbestos
+              items will be added to the assessment report automatically.
             </Typography>
             <Box
               sx={{
@@ -4980,7 +5043,10 @@ const AssessmentItems = () => {
                 value={stripAsbestosCountLineForDisplay(
                   resolveAnalysisIncompleteForDisplay(
                     (assessment?.discussionConclusions || "").trim() ||
-                      getDefaultDiscussionConclusions(assessment, isResidential),
+                      getDefaultDiscussionConclusions(
+                        assessment,
+                        isResidential,
+                      ),
                     assessment,
                   ),
                 )}
@@ -5117,7 +5183,8 @@ const AssessmentItems = () => {
                     assessment,
                   );
                   // Save without the asbestos count line (it is hard-coded in the PDF)
-                  const valueToSave = stripAsbestosCountLineForDisplay(resolved);
+                  const valueToSave =
+                    stripAsbestosCountLineForDisplay(resolved);
                   await asbestosAssessmentService.update(id, {
                     projectId:
                       assessment?.projectId?._id || assessment?.projectId,

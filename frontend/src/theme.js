@@ -195,10 +195,11 @@ export const themeSettings = (mode) => {
             color: "#000000",
           },
           head: {
-            backgroundColor: tokens.primary[500],
-            color: "#FFFFFF",
+            backgroundColor: "transparent !important",
+            background: "none !important",
+            color: "#FFFFFF !important",
             fontWeight: 600,
-            borderBottom: "2px solid #E0E0E0",
+            borderBottom: "2px solid rgba(255,255,255,0.4) !important",
           },
           body: {
             backgroundColor: "#FFFFFF",
@@ -215,6 +216,13 @@ export const themeSettings = (mode) => {
             "&:hover": {
               backgroundColor: tokens.grey[50],
             },
+          },
+        },
+      },
+      MuiTableHead: {
+        styleOverrides: {
+          root: {
+            background: "linear-gradient(to right, #045E1F, #96CC78) !important",
           },
         },
       },
@@ -342,12 +350,14 @@ export const themeSettings = (mode) => {
               color: "#000000",
             },
             "& .MuiDataGrid-columnHeaders": {
-              backgroundColor: tokens.primary[500],
+              background: "linear-gradient(to right, #045E1F, #96CC78) !important",
               color: "#FFFFFF",
               borderBottom: "none",
             },
-            "& .MuiDataGrid-columnHeader": {
+            "& .MuiDataGrid-columnHeader, & .MuiDataGrid-columnHeaderTitle, & .MuiDataGrid-sortIcon, & .MuiSvgIcon-root": {
               color: "#FFFFFF",
+            },
+            "& .MuiDataGrid-columnHeaderTitle": {
               fontWeight: 600,
             },
             "& .MuiDataGrid-virtualScroller": {
@@ -355,7 +365,7 @@ export const themeSettings = (mode) => {
             },
             "& .MuiDataGrid-footerContainer": {
               borderTop: "none",
-              backgroundColor: tokens.primary[500],
+              background: "linear-gradient(to right, #045E1F, #96CC78) !important",
               color: "#FFFFFF",
             },
             "& .MuiCheckbox-root": {

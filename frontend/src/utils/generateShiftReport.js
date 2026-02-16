@@ -722,7 +722,7 @@ pdfMake.fonts = {
         },
         {
           stack: [
-            { text: 'SITE PLAN', style: 'header', margin: [0, -5, 0, 10], alignment: 'center' },
+            { text: 'SITE PLAN', style: 'header', margin: [-10, -5, 0, 10], alignment: 'center' },
             
             // Site plan diagram with North indicator overlay
             {

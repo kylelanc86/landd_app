@@ -865,17 +865,18 @@ const ResidentialAsbestosAssessment = () => {
           <TableContainer>
             <Table stickyHeader>
               <TableHead>
-                <TableRow>
-                  <TableCell sx={{ fontWeight: "bold", maxWidth: "90px" }}>
+                <TableRow sx={{ background: "linear-gradient(to right, #045E1F, #96CC78) !important", color: "white" }}>
+                  <TableCell sx={{ fontWeight: "bold", maxWidth: "90px", color: "inherit" }}>
                     Project ID
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", maxWidth: "195px" }}>
+                  <TableCell sx={{ fontWeight: "bold", maxWidth: "195px", color: "inherit" }}>
                     Project Name
                   </TableCell>
                   <TableCell
                     sx={{
                       fontWeight: "bold",
                       minWidth: "110px",
+                      color: "inherit",
                       display: "none",
                       "@media (orientation: landscape)": {
                         display: "table-cell",
@@ -888,6 +889,7 @@ const ResidentialAsbestosAssessment = () => {
                     sx={{
                       fontWeight: "bold",
                       maxWidth: "140px",
+                      color: "inherit",
                       display: { xs: "none", sm: "table-cell" },
                     }}
                   >
@@ -897,6 +899,7 @@ const ResidentialAsbestosAssessment = () => {
                     sx={{
                       fontWeight: "bold",
                       minWidth: "180px",
+                      color: "inherit",
                       display: "none",
                       "@media (min-width: 600px) and (orientation: portrait)": {
                         display: "table-cell",
@@ -909,6 +912,7 @@ const ResidentialAsbestosAssessment = () => {
                     sx={{
                       fontWeight: "bold",
                       minWidth: "120px",
+                      color: "inherit",
                       display: { xs: "none", sm: "table-cell" },
                     }}
                   >

@@ -547,7 +547,7 @@ const Clients = () => {
             color: "#000000",
           },
           "& .MuiDataGrid-columnHeaders": {
-            backgroundColor: theme.palette.primary.main,
+            background: "linear-gradient(to right, #045E1F, #96CC78) !important",
             borderBottom: "none",
             fontSize: "0.875rem",
             color: "#FFFFFF",
@@ -561,7 +561,7 @@ const Clients = () => {
           },
           "& .MuiDataGrid-footerContainer": {
             borderTop: "none",
-            backgroundColor: theme.palette.primary.main,
+            background: "linear-gradient(to right, #045E1F, #96CC78) !important",
             fontSize: "0.875rem",
             color: "#FFFFFF",
           },

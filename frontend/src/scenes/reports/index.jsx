@@ -19,8 +19,8 @@ import {
   InputAdornment,
   IconButton,
 } from "@mui/material";
+import FolderOpenRoundedIcon from '@mui/icons-material/FolderOpenRounded';
 import {
-  Folder as FolderIcon,
   Search as SearchIcon,
   Clear as ClearIcon,
 } from "@mui/icons-material";
@@ -427,7 +427,7 @@ const Reports = () => {
                       },
                     }}
                   >
-                    <FolderIcon
+                    <FolderOpenRoundedIcon
                       sx={{
                         fontSize: 50,
                         color: "primary.main",

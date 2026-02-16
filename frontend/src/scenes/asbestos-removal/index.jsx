@@ -598,7 +598,19 @@ const AsbestosRemoval = () => {
               </Typography>
             </Box>
           ) : (
-            <TableContainer>
+            <TableContainer
+              sx={{
+                // Override theme MuiTableCell head (backgroundColor: tokens.primary[500]) so gradient shows
+                "& thead": {
+                  background: "linear-gradient(to right, #045E1F, #96CC78) !important",
+                },
+                "& thead .MuiTableCell-root": {
+                  backgroundColor: "transparent !important",
+                  color: "#FFFFFF !important",
+                  borderBottom: "2px solid rgba(255,255,255,0.4) !important",
+                },
+              }}
+            >
               <Table stickyHeader>
                 <TableHead>
                   <TableRow>

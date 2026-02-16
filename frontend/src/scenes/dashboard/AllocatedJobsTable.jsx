@@ -595,15 +595,20 @@ const AllocatedJobsTable = () => {
           alignItems: "center",
         },
         "& .MuiDataGrid-columnHeaders": {
-          backgroundColor: theme.palette.primary.dark,
+          background: "linear-gradient(to right, #045E1F, #96CC78) !important",
           borderBottom: "none",
+          "& .MuiDataGrid-columnHeaderTitle, & .MuiDataGrid-sortIcon, & .MuiSvgIcon-root":
+            { color: "white" },
+        },
+        "& .MuiDataGrid-columnHeaderTitle": {
+          fontWeight: 600,
         },
         "& .MuiDataGrid-virtualScroller": {
           backgroundColor: theme.palette.background.default,
         },
         "& .MuiDataGrid-footerContainer": {
           borderTop: "none",
-          backgroundColor: theme.palette.primary.dark,
+          background: "linear-gradient(to right, #045E1F, #96CC78) !important",
           color: "white",
           "& .MuiTablePagination-root": {
             color: "white",
@@ -702,11 +707,12 @@ const AllocatedJobsTable = () => {
         sortingOrder={["desc", "asc"]}
         sx={{
           cursor: "pointer",
-          // Ensure proper footer positioning
+          // Ensure proper footer positioning and gradient (matches top bar)
           "& .MuiDataGrid-footerContainer": {
             position: "sticky",
             bottom: 0,
             zIndex: 1,
+            background: "linear-gradient(to right, #045E1F, #96CC78) !important",
             color: "white",
             "& .MuiTablePagination-root": {
               color: "white",

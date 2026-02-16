@@ -1979,14 +1979,14 @@ const IAQAnalysis = () => {
                     onChange={handleAnalysisDetailsChange}
                   >
                     <FormControlLabel
-                      value="5"
+                      value="Partial5"
                       control={<Radio />}
-                      label="5"
+                      label="Partial5"
                     />
                     <FormControlLabel
-                      value="Partial 6"
+                      value="6"
                       control={<Radio />}
-                      label="Partial 6"
+                      label="6"
                     />
                   </RadioGroup>
                 </FormControl>

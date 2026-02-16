@@ -755,13 +755,31 @@ const TimesheetReview = () => {
           </Box>
         )}
 
-        <TableContainer sx={{ maxHeight: "calc(100vh - 300px)" }}>
+        <TableContainer
+          sx={{
+            maxHeight: "calc(100vh - 300px)",
+            // One gradient across entire header row; no grey on hover
+            "& thead": {
+              background:
+                "linear-gradient(to right, #045E1F, #96CC78) !important",
+            },
+            "& thead tr": {
+              "&:hover": {
+                background:
+                  "linear-gradient(to right, #045E1F, #96CC78) !important",
+              },
+            },
+            "& thead td": {
+              backgroundColor: "transparent !important",
+              borderBottom: "2px solid rgba(255,255,255,0.4) !important",
+            },
+          }}
+        >
           <Table stickyHeader>
             <TableHead>
               <TableRow>
                 <TableCell
                   sx={{
-                    backgroundColor: theme.palette.primary.main,
                     color: theme.palette.primary.contrastText,
                     fontWeight: 700,
                     fontSize: "1rem",
@@ -782,10 +800,10 @@ const TimesheetReview = () => {
                       align="center"
                       sx={{
                         backgroundColor: isWeekend
-                          ? theme.palette.grey[400]
+                          ? `${theme.palette.grey[400]} !important`
                           : isToday
-                            ? theme.palette.warning.main
-                            : theme.palette.primary.main,
+                            ? `${theme.palette.warning.main} !important`
+                            : "transparent !important",
                         color: theme.palette.primary.contrastText,
                         fontWeight: 700,
                         fontSize: "0.9rem",
@@ -812,8 +830,7 @@ const TimesheetReview = () => {
                 <TableCell
                   align="center"
                   sx={{
-                    backgroundColor: theme.palette.success.main,
-                    color: theme.palette.success.contrastText,
+                    color: theme.palette.primary.contrastText,
                     fontWeight: 700,
                     fontSize: "1rem",
                     minWidth: "120px",
@@ -1072,7 +1089,8 @@ const TimesheetReview = () => {
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            backgroundColor: theme.palette.primary.main,
+            background:
+              "linear-gradient(to right, #045E1F, #96CC78) !important",
             color: theme.palette.primary.contrastText,
           }}
         >

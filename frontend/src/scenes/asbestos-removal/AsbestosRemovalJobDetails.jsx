@@ -1973,7 +1973,7 @@ const AsbestosRemovalJobDetails = () => {
                 <Table>
                   <TableHead>
                     <TableRow
-                      sx={{ backgroundColor: theme.palette.primary.dark }}
+                      sx={{ background: "linear-gradient(to right, #045E1F, #96CC78) !important", color: "white" }}
                     >
                       <TableCell sx={{ color: "white", fontWeight: "bold" }}>
                         Shift Date
@@ -2300,7 +2300,7 @@ const AsbestosRemovalJobDetails = () => {
                 <Table>
                   <TableHead>
                     <TableRow
-                      sx={{ backgroundColor: theme.palette.primary.dark }}
+                      sx={{ background: "linear-gradient(to right, #045E1F, #96CC78) !important", color: "white" }}
                     >
                       <TableCell sx={{ color: "white", fontWeight: "bold" }}>
                         Date

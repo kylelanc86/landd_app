@@ -10,6 +10,7 @@ const reportTemplateSchema = new mongoose.Schema(
         "asbestosClearanceFriableNonFriableConditions",
         "asbestosClearanceVehicle",
         "leadAssessment",
+        "leadClearance",
         "asbestosAssessment",
         "residentialAsbestosAssessment",
       ],
@@ -113,6 +114,10 @@ const reportTemplateSchema = new mongoose.Schema(
       recommendationsContent: String,
       conclusionTitle: String,
       conclusionContent: String,
+      // Lead Clearance specific
+      scopeContent: String,
+      resultsContent: String,
+      methodologyContent: String,
       
       // Version control and front cover (for clearance templates)
       frontCoverTitle: String,

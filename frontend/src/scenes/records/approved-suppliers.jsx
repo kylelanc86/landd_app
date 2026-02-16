@@ -341,7 +341,7 @@ const ApprovedSuppliers = () => {
               <Table>
                 <TableHead>
                   <TableRow
-                    sx={{ backgroundColor: theme.palette.primary.main }}
+                    sx={{ background: "linear-gradient(to right, #045E1F, #96CC78) !important", color: "white" }}
                   >
                     <TableCell sx={{ color: "white", fontWeight: "bold" }}>
                       Company Name

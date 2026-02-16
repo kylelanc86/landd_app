@@ -104,6 +104,10 @@ const getTemplateByType = async (templateType) => {
         title = "ASBESTOS MATERIAL ASSESSMENT REPORT";
       } else if (templateType === "residentialAsbestosAssessment") {
         title = "RESIDENTIAL ASBESTOS MATERIAL ASSESSMENT REPORT";
+      } else if (templateType === "leadAssessment") {
+        title = "Lead Assessment Report";
+      } else if (templateType === "leadClearance") {
+        title = "Lead Clearance Report";
       }
       
       // Create default template if it doesn't exist
@@ -327,6 +331,45 @@ const getTemplateByType = async (templateType) => {
             subtitle: "Specialist Clearance Certificate"
           },
           standardSections
+        });
+      } else if (templateType === "leadAssessment") {
+        standardSections = {
+          introductionContent: "",
+          surveyFindingsContent: "",
+          discussionContent: "",
+          recommendedControlMeasuresContent: "",
+          signOffContent: "",
+          assessmentMethodologyContent: "",
+          riskAssessmentContent: "",
+          legislationContent: "",
+          assessmentLimitationsContent: "",
+        };
+        template = new ReportTemplate({
+          templateType,
+          createdBy,
+          reportHeaders: {
+            title: title,
+            subtitle: "Assessment Report",
+          },
+          standardSections,
+        });
+      } else if (templateType === "leadClearance") {
+        standardSections = {
+          introductionContent: "",
+          scopeContent: "",
+          resultsContent: "",
+          signOffContent: "",
+          methodologyContent: "",
+          legislationContent: "",
+        };
+        template = new ReportTemplate({
+          templateType,
+          createdBy,
+          reportHeaders: {
+            title: title,
+            subtitle: "Clearance Report",
+          },
+          standardSections,
         });
       } else {
         // Non-friable clearance content

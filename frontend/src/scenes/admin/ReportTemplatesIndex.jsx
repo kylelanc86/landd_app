@@ -19,6 +19,7 @@ import {
 import {
   Description as DescriptionIcon,
   Assessment as AssessmentIcon,
+  Science as ScienceIcon,
   Edit as EditIcon,
   Save as SaveIcon,
   Cancel as CancelIcon,
@@ -209,6 +210,15 @@ const ReportTemplatesIndex = () => {
       icon: <AssessmentIcon sx={{ fontSize: 60 }} />,
       color: "#4ECDC4",
       route: "/admin/report-templates/surveys",
+    },
+    {
+      id: "lead",
+      title: "Lead Assessment and Clearances",
+      description:
+        "Manage report templates for lead assessment and lead clearance reports.",
+      icon: <ScienceIcon sx={{ fontSize: 60 }} />,
+      color: "#9B59B6",
+      route: "/admin/report-templates/lead",
     },
   ];
 

@@ -1568,7 +1568,7 @@ const Invoices = () => {
             color: "#000000",
           },
           "& .MuiDataGrid-columnHeaders": {
-            backgroundColor: theme.palette.primary.main,
+            background: "linear-gradient(to right, #045E1F, #96CC78) !important",
             borderBottom: "none",
             color: "#FFFFFF",
           },
@@ -1581,7 +1581,7 @@ const Invoices = () => {
           },
           "& .MuiDataGrid-footerContainer": {
             borderTop: "none",
-            backgroundColor: theme.palette.primary.main,
+            background: "linear-gradient(to right, #045E1F, #96CC78) !important",
             color: "#FFFFFF",
           },
           "& .MuiCheckbox-root": {

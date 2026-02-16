@@ -787,7 +787,7 @@ const AirMonitoring = () => {
             alignItems: "center",
           },
           "& .MuiDataGrid-columnHeaders": {
-            backgroundColor: theme.palette.primary.dark,
+            background: "linear-gradient(to right, #045E1F, #96CC78) !important",
             borderBottom: "none",
           },
           "& .MuiDataGrid-virtualScroller": {
@@ -795,7 +795,7 @@ const AirMonitoring = () => {
           },
           "& .MuiDataGrid-footerContainer": {
             borderTop: "none",
-            backgroundColor: theme.palette.primary.dark,
+            background: "linear-gradient(to right, #045E1F, #96CC78) !important",
           },
           "& .MuiCheckbox-root": {
             color: `${theme.palette.secondary.main} !important`,

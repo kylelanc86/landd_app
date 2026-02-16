@@ -1154,6 +1154,8 @@ const ClearanceItems = () => {
   // Handle touch start for pinch zoom
   const handleTouchStart = (e) => {
     if (e.touches.length === 2) {
+      e.preventDefault();
+      e.preventDefault();
       zoomPanRef.current = { zoom, panX, panY };
       const distance = getDistance(e.touches[0], e.touches[1]);
       setLastPinchDistance(distance);
@@ -2438,12 +2440,12 @@ const ClearanceItems = () => {
             <TableContainer component={Paper}>
               <Table>
                 <TableHead>
-                  <TableRow>
+                  <TableRow sx={{ background: "linear-gradient(to right, #045E1F, #96CC78) !important", color: "white" }}>
                     {clearance?.clearanceType === "Vehicle/Equipment" ? (
                       <>
-                        <TableCell>Item Description</TableCell>
-                        <TableCell>Photo No.</TableCell>
-                        <TableCell>Actions</TableCell>
+                        <TableCell sx={{ color: "inherit", fontWeight: "bold" }}>Item Description</TableCell>
+                        <TableCell sx={{ color: "inherit", fontWeight: "bold" }}>Photo No.</TableCell>
+                        <TableCell sx={{ color: "inherit", fontWeight: "bold" }}>Actions</TableCell>
                       </>
                     ) : (
                       <>
@@ -2452,13 +2454,13 @@ const ClearanceItems = () => {
                           items.some(
                             (item) =>
                               item.levelFloor && item.levelFloor.trim() !== "",
-                          ) && <TableCell>Level/Floor</TableCell>}
-                        <TableCell>Room/Area</TableCell>
-                        <TableCell>Location Description</TableCell>
-                        <TableCell>Materials Description</TableCell>
-                        <TableCell>Asbestos Type</TableCell>
-                        <TableCell>Photograph</TableCell>
-                        <TableCell>Actions</TableCell>
+                          ) && <TableCell sx={{ color: "inherit", fontWeight: "bold" }}>Level/Floor</TableCell>}
+                        <TableCell sx={{ color: "inherit", fontWeight: "bold" }}>Room/Area</TableCell>
+                        <TableCell sx={{ color: "inherit", fontWeight: "bold" }}>Location Description</TableCell>
+                        <TableCell sx={{ color: "inherit", fontWeight: "bold" }}>Materials Description</TableCell>
+                        <TableCell sx={{ color: "inherit", fontWeight: "bold" }}>Asbestos Type</TableCell>
+                        <TableCell sx={{ color: "inherit", fontWeight: "bold" }}>Photograph</TableCell>
+                        <TableCell sx={{ color: "inherit", fontWeight: "bold" }}>Actions</TableCell>
                       </>
                     )}
                   </TableRow>

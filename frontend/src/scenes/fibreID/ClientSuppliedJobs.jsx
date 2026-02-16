@@ -1168,24 +1168,24 @@ const ClientSuppliedJobs = () => {
           <TableContainer>
             <Table stickyHeader>
               <TableHead>
-                <TableRow>
-                  <TableCell sx={{ fontWeight: "bold", width: "115px" }}>
+                <TableRow sx={{ background: "linear-gradient(to right, #045E1F, #96CC78) !important", color: "white" }}>
+                  <TableCell sx={{ fontWeight: "bold", width: "115px", color: "inherit" }}>
                     Project ID
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", minWidth: "230px" }}>
+                  <TableCell sx={{ fontWeight: "bold", minWidth: "230px", color: "inherit" }}>
                     Project Name
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", width: "110px" }}>
+                  <TableCell sx={{ fontWeight: "bold", width: "110px", color: "inherit" }}>
                     Job Type
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", minWidth: "135px" }}>
+                  <TableCell sx={{ fontWeight: "bold", minWidth: "135px", color: "inherit" }}>
                     Sample Receipt Date
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold" }}>Status</TableCell>
-                  <TableCell sx={{ fontWeight: "bold", minWidth: "100px" }}>
+                  <TableCell sx={{ fontWeight: "bold", color: "inherit" }}>Status</TableCell>
+                  <TableCell sx={{ fontWeight: "bold", minWidth: "100px", color: "inherit" }}>
                     Analysis Due
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", minWidth: "290px" }}>
+                  <TableCell sx={{ fontWeight: "bold", minWidth: "290px", color: "inherit" }}>
                     Actions
                   </TableCell>
                 </TableRow>

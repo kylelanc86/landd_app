@@ -984,7 +984,7 @@ const CustomDataFields = () => {
               <Box
                 sx={{
                   p: 2,
-                  backgroundColor: theme.palette.primary.main,
+                  background: "linear-gradient(to right, #045E1F, #96CC78) !important",
                   color: theme.palette.primary.contrastText,
                 }}
               >
@@ -1213,7 +1213,7 @@ const CustomDataFields = () => {
                 <Box
                   sx={{
                     p: 2,
-                    backgroundColor: theme.palette.primary.main,
+                    background: "linear-gradient(to right, #045E1F, #96CC78) !important",
                     color: theme.palette.primary.contrastText,
                   }}
                 >

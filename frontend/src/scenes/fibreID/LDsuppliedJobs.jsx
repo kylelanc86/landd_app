@@ -906,23 +906,23 @@ const LDsuppliedJobs = () => {
               }}
             >
               <TableHead>
-                <TableRow>
-                  <TableCell sx={{ fontWeight: "bold", maxWidth: "80px" }}>
+                <TableRow sx={{ background: "linear-gradient(to right, #045E1F, #96CC78) !important", color: "white" }}>
+                  <TableCell sx={{ fontWeight: "bold", maxWidth: "80px", color: "inherit" }}>
                     Project ID
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", minWidth: "240px" }}>
+                  <TableCell sx={{ fontWeight: "bold", minWidth: "240px", color: "inherit" }}>
                     Project Name
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", maxWidth: "105px" }}>
+                  <TableCell sx={{ fontWeight: "bold", maxWidth: "105px", color: "inherit" }}>
                     Sample Receipt Date
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", maxWidth: "70px" }}>
+                  <TableCell sx={{ fontWeight: "bold", maxWidth: "70px", color: "inherit" }}>
                     No. of Samples
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", maxWidth: "80px" }}>
+                  <TableCell sx={{ fontWeight: "bold", maxWidth: "80px", color: "inherit" }}>
                     Status
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", Width: "110px" }}>
+                  <TableCell sx={{ fontWeight: "bold", Width: "110px", color: "inherit" }}>
                     Analysis Due
                   </TableCell>
                   <TableCell
@@ -930,6 +930,7 @@ const LDsuppliedJobs = () => {
                       fontWeight: "bold",
                       width: "1%",
                       whiteSpace: "nowrap",
+                      color: "inherit",
                     }}
                   >
                     Actions

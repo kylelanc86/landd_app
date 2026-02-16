@@ -2445,17 +2445,18 @@ const Analysis = () => {
                     onChange={handleAnalysisDetailsChange}
                   >
                     <FormControlLabel
-                      value="5"
+                      value="Partial 5"
                       control={<Radio />}
-                      label="5"
+                      label="Partial 5"
                       disabled={shiftStatus === "analysis_complete"}
                     />
                     <FormControlLabel
-                      value="Partial 6"
+                      value="6"
                       control={<Radio />}
-                      label="Partial 6"
+                      label="6"
                       disabled={shiftStatus === "analysis_complete"}
                     />
+
                   </RadioGroup>
                 </FormControl>
               </Stack>

@@ -17,6 +17,7 @@ import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import StorageIcon from "@mui/icons-material/Storage";
 import DescriptionIcon from "@mui/icons-material/Description";
 import ConstructionIcon from "@mui/icons-material/Construction";
+import DangerousIcon from "@mui/icons-material/Dangerous";
 import SearchIcon from "@mui/icons-material/Search";
 import FolderCopyIcon from "@mui/icons-material/FolderCopy";
 import ScienceIcon from "@mui/icons-material/Science";
@@ -31,7 +32,7 @@ const MobileDrawer = ({ open, onClose }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { currentUser } = useAuth();
-  const { isAdmin } = usePermissions();
+  const { isAdmin, isSuperAdmin } = usePermissions();
 
   const handleNavigation = (to) => {
     // Check for unsaved changes
@@ -272,6 +273,14 @@ const MobileDrawer = ({ open, onClose }) => {
                 title="Air Mon & Clearances"
                 to="/asbestos-removal"
                 icon={<ConstructionIcon />}
+              />
+            )}
+
+            {isSuperAdmin && (
+              <MenuItem
+                title="Lead Removal"
+                to="/lead-removal"
+                icon={<DangerousIcon />}
               />
             )}
 

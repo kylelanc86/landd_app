@@ -84,6 +84,9 @@ const ClearanceReportTemplates = lazy(
 const SurveyReportTemplates = lazy(
   () => import("./scenes/admin/SurveyReportTemplates"),
 );
+const LeadAssessmentReportTemplates = lazy(
+  () => import("./scenes/admin/LeadAssessmentReportTemplates"),
+);
 
 const TemplateTestPage = lazy(() => import("./scenes/admin/TemplateTestPage"));
 const InvoiceItems = lazy(() => import("./scenes/admin/InvoiceItems"));
@@ -124,6 +127,7 @@ const SurveysDashboard = lazy(() => import("./scenes/surveys"));
 const Reports = lazy(() => import("./scenes/reports"));
 const Records = lazy(() => import("./scenes/records"));
 const AsbestosRemoval = lazy(() => import("./scenes/asbestos-removal"));
+const LeadRemoval = lazy(() => import("./scenes/lead-removal"));
 const LaboratoryServices = lazy(() => import("./scenes/laboratory-services"));
 const AsbestosRemovalJobDetails = lazy(
   () => import("./scenes/asbestos-removal/AsbestosRemovalJobDetails"),
@@ -230,7 +234,9 @@ function App() {
                               />
                               <Route
                                 path="/air-monitoring"
-                                element={<Navigate to="/asbestos-removal" replace />}
+                                element={
+                                  <Navigate to="/asbestos-removal" replace />
+                                }
                               />
                               <Route
                                 path="/air-monitoring/shift/:shiftId/samples"
@@ -1028,6 +1034,18 @@ function App() {
                                       </PermissionRoute>
                                     }
                                   />
+                                  <Route
+                                    path="/admin/report-templates/lead"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["admin.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <LeadAssessmentReportTemplates />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
                                 </>
                               )}
 
@@ -1500,6 +1518,14 @@ function App() {
                                   }
                                 />
                               )}
+                              <Route
+                                path="/lead-removal"
+                                element={
+                                  <Suspense fallback={<LoadingSpinner />}>
+                                    <LeadRemoval />
+                                  </Suspense>
+                                }
+                              />
                               {isFeatureEnabled(
                                 "ADVANCED.ASBESTOS_REMOVAL",
                               ) && (
