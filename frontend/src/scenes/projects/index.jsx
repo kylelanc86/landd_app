@@ -1869,7 +1869,12 @@ const Projects = ({ initialFilters = {} }) => {
                     handleDeleteClick(params.row);
                   }}
                   size="small"
-                  color="error"
+                  sx={{
+                    color: "rgba(95, 87, 87, 0.87) !important",
+                    "& .MuiSvgIcon-root": {
+                      color: "rgba(95, 89, 89, 0.87) !important",
+                    },
+                  }}
                 >
                   <DeleteIcon />
                 </IconButton>
@@ -1886,7 +1891,10 @@ const Projects = ({ initialFilters = {} }) => {
                   }}
                   size="small"
                   sx={{
-                    color: "text.secondary",
+                    color: "rgba(97, 93, 93, 0.87) !important",
+                    "& .MuiSvgIcon-root": {
+                      color: "rgba(95, 84, 84, 0.87) !important",
+                    },
                     "&:hover": {
                       backgroundColor: "rgba(0, 0, 0, 0.04)",
                     },
@@ -2576,6 +2584,10 @@ const Projects = ({ initialFilters = {} }) => {
               display: "flex",
               alignItems: "center",
               padding: isTablet ? "4px 8px" : "4px 16px",
+            },
+            "& .MuiDataGrid-cell[data-field='actions'] .MuiIconButton-root, & .MuiDataGrid-cell[data-field='actions'] .MuiSvgIcon-root": {
+              color: "rgba(77, 69, 69, 0.87) !important",
+              fill: "rgba(97, 90, 90, 0.87) !important",
             },
             "& .MuiDataGrid-columnHeader": {
               padding: isTablet ? "8px" : "16px",
