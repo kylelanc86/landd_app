@@ -991,7 +991,7 @@ const AsbestosAssessment = () => {
           <TableContainer>
             <Table stickyHeader>
               <TableHead>
-                <TableRow>
+                <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                   <TableCell sx={{ fontWeight: "bold", maxWidth: "90px" }}>
                     Project ID
                   </TableCell>

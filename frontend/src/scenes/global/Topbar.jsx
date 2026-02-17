@@ -31,7 +31,7 @@ const Topbar = () => {
   // Detect tablet and mobile screens - show hamburger menu
   // iPads in landscape can be up to ~1366px wide (iPad Pro 12.9"), so we use 1280px breakpoint
   const isMobileOrTablet = useMediaQuery("(max-width: 1280px)");
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm")); // true below 600px
+  const isMobile = useMediaQuery(theme.breakpoints.down("md")); // true below 900px (layout breakpoint)
 
   // Check if sidebar is collapsed
   useEffect(() => {
@@ -150,7 +150,7 @@ const Topbar = () => {
         <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
           <Box
             sx={{
-              display: { xs: "none", sm: "flex" },
+              display: { xs: "none", md: "flex" },
               alignItems: "center",
               gap: 2,
               mr: 2,
@@ -173,7 +173,7 @@ const Topbar = () => {
                 fontStyle: "bold",
                 color: "black",
                 textTransform: "capitalize",
-                display: { xs: "none", sm: "block" },
+                display: { xs: "none", md: "block" },
               }}
             >
               {currentUser
@@ -189,7 +189,7 @@ const Topbar = () => {
             sx={{
               mx: 2,
               borderColor: "rgba(255,255,255,0.3)",
-              display: { xs: "none", sm: "block" },
+              display: { xs: "none", md: "block" },
             }}
           />
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
@@ -198,7 +198,7 @@ const Topbar = () => {
                 onClick={handleRefresh}
                 sx={{
                   color: "#FFF",
-                  display: { xs: "none", sm: "inline-flex" },
+                  display: { xs: "none", md: "inline-flex" },
                 }}
               >
                 <RefreshIcon />

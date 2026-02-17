@@ -1786,7 +1786,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
             <TableContainer sx={{ maxWidth: "fit-content" }}>
               <Table size="small">
                 <TableHead>
-                  <TableRow>
+                  <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                     <TableCell sx={{ width: "170px" }}>Field</TableCell>
                     {fibres.map((fibre, index) => (
                       <TableCell key={fibre.id} sx={{ width: "230px" }}>

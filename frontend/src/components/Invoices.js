@@ -104,7 +104,7 @@ const Invoices = () => {
             <TableContainer component={Paper} sx={{ mt: 2 }}>
               <Table>
                 <TableHead>
-                  <TableRow>
+                  <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                     <TableCell>Invoice Number</TableCell>
                     <TableCell>Date</TableCell>
                     <TableCell>Due Date</TableCell>

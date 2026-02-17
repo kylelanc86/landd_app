@@ -272,7 +272,7 @@ const ImpartialityRisks = () => {
               <Table>
                 <TableHead>
                   <TableRow
-                    sx={{ background: "linear-gradient(to right, #045E1F, #96CC78) !important", color: "white" }}
+                    sx={{ background: "linear-gradient(to right, #045E1F, #96CC78) !important", color: "white", "&:hover": { backgroundColor: "transparent" } }}
                   >
                     <TableCell sx={{ color: "white", fontWeight: "bold" }}>
                       Activity

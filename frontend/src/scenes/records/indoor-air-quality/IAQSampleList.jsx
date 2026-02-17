@@ -448,7 +448,7 @@ const IAQSampleList = () => {
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
-            <TableRow>
+            <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
               <TableCell
                 sx={{ width: "161px", minWidth: "161px", maxWidth: "161px" }}
                 onClick={() => handleSort("sampleNumber")}
@@ -633,7 +633,7 @@ const IAQSampleList = () => {
             {samples.length > 0 ? (
               <Table size="small">
                 <TableHead>
-                  <TableRow>
+                  <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                     <TableCell>Sample Number</TableCell>
                     <TableCell>Cowl Number</TableCell>
                     <TableCell>Location</TableCell>

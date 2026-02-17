@@ -125,7 +125,7 @@ const ArchivedDataDialog = ({ open, onClose, projectId }) => {
           <TableContainer component={Paper} variant="outlined">
             <Table size="small">
               <TableHead>
-                <TableRow sx={{ backgroundColor: "action.hover" }}>
+                <TableRow sx={{ backgroundColor: "action.hover", "&:hover": { backgroundColor: "transparent" } }}>
                   <TableCell sx={{ fontWeight: "bold" }}>Report Type</TableCell>
                   <TableCell sx={{ fontWeight: "bold" }}>Date</TableCell>
                   <TableCell sx={{ fontWeight: "bold" }}>Client</TableCell>

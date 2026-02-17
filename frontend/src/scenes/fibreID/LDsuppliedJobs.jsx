@@ -489,6 +489,13 @@ const LDsuppliedJobs = () => {
         );
       }
       setReportViewedAssessmentIds((prev) => new Set(prev).add(assessment._id));
+      if (pdfDataUrl) {
+        try {
+          await asbestosAssessmentService.recordReportViewed(assessment._id);
+        } catch (e) {
+          console.warn("Failed to persist report viewed:", e);
+        }
+      }
     } catch (error) {
       console.error("Error generating PDF:", error);
       showSnackbar("Failed to generate report.", "error");
@@ -525,40 +532,40 @@ const LDsuppliedJobs = () => {
       setAuthorisingReports((prev) => ({ ...prev, [assessment._id]: true }));
 
       const now = new Date().toISOString();
-      const authoriser =
+      const approver =
         currentUser?.firstName && currentUser?.lastName
           ? `${currentUser.firstName} ${currentUser.lastName}`
           : currentUser?.name || currentUser?.email || "Unknown";
 
-      // Update the assessment with authorisation, set report approved by to the authoriser, and set status to "complete"
+      // Approve the Fibre ID report and set assessment status to report-ready-for-review.
+      // The asbestos/residential assessment report then needs separate approval (Authorise Report on Surveys page).
       await asbestosAssessmentService.updateAsbestosAssessment(assessment._id, {
         ...assessment,
-        reportApprovedBy: authoriser,
-        reportAuthorisedBy: authoriser,
-        reportAuthorisedAt: now,
-        status: "complete",
+        reportApprovedBy: approver,
+        reportIssueDate: now,
+        status: "report-ready-for-review",
       });
 
       // Refresh the assessments list
       await fetchAsbestosAssessments();
 
-      // Generate the authorised report, save it to the assessment (so it attaches to asbestos assessment PDF), and download
+      // Generate the approved Fibre ID report, save to assessment (so it attaches to asbestos assessment PDF), and download
       try {
         await handleGeneratePDF(assessment, { uploadToAssessment: true });
         showSnackbar(
-          "Report authorised and downloaded successfully.",
+          "Fibre ID report approved. Assessment is now ready for review.",
           "success",
         );
       } catch (reportError) {
-        console.error("Error generating authorised report:", reportError);
+        console.error("Error generating Fibre ID report:", reportError);
         showSnackbar(
-          "Report authorised but failed to generate download.",
+          "Fibre ID report approved but failed to generate download.",
           "warning",
         );
       }
     } catch (error) {
-      console.error("Error authorising report:", error);
-      showSnackbar("Failed to authorise report. Please try again.", "error");
+      console.error("Error approving Fibre ID report:", error);
+      showSnackbar("Failed to approve report. Please try again.", "error");
     } finally {
       setAuthorisingReports((prev) => ({ ...prev, [assessment._id]: false }));
     }
@@ -652,6 +659,13 @@ const LDsuppliedJobs = () => {
         reportIssueDate: fullJob.reportIssueDate || null,
       });
       setReportViewedJobIds((prev) => new Set(prev).add(job._id));
+      try {
+        await clientSuppliedJobsService.update(job._id, {
+          reportViewedAt: new Date().toISOString(),
+        });
+      } catch (e) {
+        console.warn("Failed to persist report viewed:", e);
+      }
     } catch (error) {
       console.error("Error generating PDF:", error);
       showSnackbar("Failed to generate report.", "error");
@@ -906,7 +920,7 @@ const LDsuppliedJobs = () => {
               }}
             >
               <TableHead>
-                <TableRow sx={{ background: "linear-gradient(to right, #045E1F, #96CC78) !important", color: "white" }}>
+                <TableRow sx={{ background: "linear-gradient(to right, #045E1F, #96CC78) !important", color: "white", "&:hover": { backgroundColor: "transparent" } }}>
                   <TableCell sx={{ fontWeight: "bold", maxWidth: "80px", color: "inherit" }}>
                     Project ID
                   </TableCell>
@@ -1096,9 +1110,11 @@ const LDsuppliedJobs = () => {
                             {(() => {
                               const conditions = {
                                 notAuthorised: !assessment.reportAuthorisedBy,
-                                reportViewed: reportViewedAssessmentIds.has(
-                                  assessment._id,
-                                ),
+                                fibreIdNotApproved: !assessment.reportApprovedBy,
+                                reportViewed:
+                                  reportViewedAssessmentIds.has(assessment._id) ||
+                                  !!assessment.reportViewedAt,
+                                alreadySentForAuthorisation: !!assessment.authorisationRequestedBy,
                                 labComplete: labStatus === "analysis-complete",
                                 hasAdminPermission: hasPermission(
                                   currentUser,
@@ -1118,10 +1134,11 @@ const LDsuppliedJobs = () => {
                               const canAuthorise =
                                 conditions.isReportProofer ||
                                 conditions.isLabSignatory;
-                              // Authorise/Send: after viewing, when lab complete and assessment not yet authorised
+                              // Authorise/Send: after viewing, when lab complete, Fibre ID not yet approved, and assessment not yet authorised
                               const baseVisibleAuthorise =
                                 conditions.reportViewed &&
                                 conditions.labComplete &&
+                                conditions.fibreIdNotApproved &&
                                 conditions.notAuthorised;
                               const visibility = {
                                 showAuthorise:
@@ -1165,7 +1182,7 @@ const LDsuppliedJobs = () => {
                                     <Button
                                       variant="outlined"
                                       size="small"
-                                      color="primary"
+                                      color={conditions.alreadySentForAuthorisation ? "inherit" : "primary"}
                                       startIcon={<MailIcon />}
                                       onClick={(e) => {
                                         e.stopPropagation();
@@ -1176,12 +1193,19 @@ const LDsuppliedJobs = () => {
                                           assessment._id
                                         ]
                                       }
+                                      sx={
+                                        conditions.alreadySentForAuthorisation
+                                          ? { color: "text.secondary", borderColor: "action.disabled" }
+                                          : undefined
+                                      }
                                     >
                                       {sendingAuthorisationRequests[
                                         assessment._id
                                       ]
                                         ? "Sending..."
-                                        : "Send for Authorisation"}
+                                        : conditions.alreadySentForAuthorisation
+                                          ? "Re-send for Authorisation"
+                                          : "Send for Authorisation"}
                                     </Button>
                                   )}
                                 </>
@@ -1287,7 +1311,9 @@ const LDsuppliedJobs = () => {
                           {(() => {
                             const conditions = {
                               notApproved: !job.reportApprovedBy,
-                              reportViewed: reportViewedJobIds.has(job._id),
+                              reportViewed:
+                                reportViewedJobIds.has(job._id) || !!job.reportViewedAt,
+                              alreadySentForAuthorisation: !!job.authorisationRequestedBy,
                               hasAdminPermission: hasPermission(currentUser, "admin.view"),
                               hasEditPermission: hasPermission(currentUser, "clientSup.edit"),
                               isReportProofer: Boolean(currentUser?.reportProofer),
@@ -1322,15 +1348,24 @@ const LDsuppliedJobs = () => {
                                   <Button
                                     variant="outlined"
                                     size="small"
-                                    color="primary"
+                                    color={conditions.alreadySentForAuthorisation ? "inherit" : "primary"}
                                     startIcon={<MailIcon />}
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       handleSendForAuthorisationForJob(job);
                                     }}
                                     disabled={sendingAuthorisationRequests[job._id]}
+                                    sx={
+                                      conditions.alreadySentForAuthorisation
+                                        ? { color: "text.secondary", borderColor: "action.disabled" }
+                                        : undefined
+                                    }
                                   >
-                                    {sendingAuthorisationRequests[job._id] ? "Sending..." : "Send for Authorisation"}
+                                    {sendingAuthorisationRequests[job._id]
+                                      ? "Sending..."
+                                      : conditions.alreadySentForAuthorisation
+                                        ? "Re-send for Authorisation"
+                                        : "Send for Authorisation"}
                                   </Button>
                                 )}
                               </>

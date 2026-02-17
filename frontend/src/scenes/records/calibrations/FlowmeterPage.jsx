@@ -709,7 +709,7 @@ const FlowmeterPage = () => {
         <TableContainer component={Paper}>
           <Table>
             <TableHead>
-              <TableRow>
+              <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                 <TableCell>Equipment Reference</TableCell>
                 <TableCell>Brand/Model</TableCell>
                 <TableCell>Section</TableCell>
@@ -1389,7 +1389,7 @@ const FlowmeterPage = () => {
             <TableContainer component={Paper}>
               <Table>
                 <TableHead>
-                  <TableRow>
+                  <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                     <TableCell>Calibration Date</TableCell>
                     <TableCell>Flowrate (L/min)</TableCell>
                     <TableCell>Bubbleflow Volume</TableCell>

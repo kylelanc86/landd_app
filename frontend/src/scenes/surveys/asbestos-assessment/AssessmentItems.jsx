@@ -107,8 +107,9 @@ const isAsbestosResultPart = (part) => {
 
 /**
  * Get the effective asbestos display for an item (matches backend logic for discussion count).
- * Shows only asbestos types (Chrysotile, Amosite, Crocidolite, UMF) or "No Asbestos Detected";
- * non-asbestos fibres are not shown in this column.
+ * Shows only asbestos types (Chrysotile, Amosite, Crocidolite, UMF), "No Asbestos Detected"
+ * when analysed with no asbestos, or "TBC" until the sample has been analysed.
+ * Non-asbestos fibres are not shown in this column.
  */
 const getEffectiveAsbestosDisplayForItem = (item, items) => {
   const findSampled = (ref) => {
@@ -120,6 +121,11 @@ const getEffectiveAsbestosDisplayForItem = (item, items) => {
   };
   const sampled = findSampled(item.sampleReference);
   const source = sampled && sampled !== item ? sampled : item;
+  const requiresAnalysis = (i) =>
+    (i.sampleReference || "").trim() && !isVisuallyAssessedContent(i.asbestosContent);
+  const notYetAnalysed =
+    requiresAnalysis(source) && source.analysisData?.isAnalysed !== true;
+  if (notYetAnalysed) return "To Be Analysed";
   const raw = (
     source.analysisData?.finalResult ||
     source.asbestosContent ||
@@ -1299,6 +1305,7 @@ const AssessmentItems = () => {
         samplesReceivedDate: currentDate,
         labSamplesStatus: "samples-in-lab",
         submittedBy: submittedBySignature,
+        samplesSubmittedById: currentUser?._id || undefined,
         turnaroundTime: finalTurnaroundTime,
         analysisDueDate: analysisDueDate ? analysisDueDate.toISOString() : null,
         reportApprovedBy: null,
@@ -2534,6 +2541,7 @@ const AssessmentItems = () => {
                       background:
                         "linear-gradient(to right, #045E1F, #96CC78) !important",
                       color: "white",
+                      "&:hover": { backgroundColor: "transparent" },
                     }}
                   >
                     {items &&

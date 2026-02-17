@@ -928,7 +928,7 @@ const AirPumpPage = () => {
         <TableContainer component={Paper}>
           <Table>
             <TableHead>
-              <TableRow>
+              <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                 <TableCell>Equipment Ref</TableCell>
                 <TableCell>Brand/Model</TableCell>
                 <TableCell>Status</TableCell>

@@ -262,6 +262,7 @@ router.put('/:id', async (req, res) => {
       assessmentScope,
       samplesReceivedDate,
       submittedBy,
+      samplesSubmittedById,
       turnaroundTime,
       analysisDueDate,
       labSamplesStatus,
@@ -309,6 +310,9 @@ router.put('/:id', async (req, res) => {
     }
     if (submittedBy !== undefined) {
       updateData.submittedBy = submittedBy;
+    }
+    if (samplesSubmittedById !== undefined) {
+      updateData.samplesSubmittedById = samplesSubmittedById;
     }
     if (turnaroundTime !== undefined) {
       updateData.turnaroundTime = turnaroundTime;
@@ -362,9 +366,9 @@ router.put('/:id', async (req, res) => {
       updateData.intrusiveness = intrusiveness;
     }
 
-    // Fetch existing doc to detect newly set authorisation (for requester notification email)
+    // Fetch existing doc to detect newly set authorisation (for requester notification email) and Fibre ID approval (for sample submitter email)
     const existing = await AsbestosAssessment.findById(req.params.id)
-      .select('reportAuthorisedBy authorisationRequestedBy')
+      .select('reportAuthorisedBy reportApprovedBy authorisationRequestedBy')
       .lean();
 
     const job = await AsbestosAssessment.findByIdAndUpdate(
@@ -436,9 +440,76 @@ View the report at: ${jobUrl}
       }
     }
 
+    // Send notification to the user who submitted samples when Fibre ID report is newly authorised (samples analysed)
+    const fibreIdWasNotApproved = !(existing && existing.reportApprovedBy);
+    const fibreIdNowApproved = !!job.reportApprovedBy;
+    if (existing && fibreIdWasNotApproved && fibreIdNowApproved && job.samplesSubmittedById) {
+      try {
+        const submitter = await User.findById(job.samplesSubmittedById)
+          .select('firstName lastName email');
+        if (submitter && submitter.email) {
+          const projectName = job.projectId?.name || 'Unknown Project';
+          const projectID = job.projectId?.projectID || 'N/A';
+          const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+          const surveyPath = job.jobType === 'residential-asbestos' ? 'residential-asbestos' : 'asbestos-assessment';
+          const jobUrl = `${frontendUrl}/surveys/${surveyPath}/${job._id}/items`;
+          await sendMail({
+            to: submitter.email,
+            subject: `Samples Analysed - ${projectID}: Fibre ID Report Ready`,
+            text: `
+The samples you submitted to the lab have been analysed.
+
+Project: ${projectName} (${projectID})
+
+You can view the assessment and Fibre ID report at: ${jobUrl}
+            `.trim(),
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+                <div style="margin-bottom: 30px;">
+                  <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
+                  <p style="color: #666; font-size: 16px; margin: 10px 0 0 0;">Environmental Services</p>
+                </div>
+                <div style="color: #333; line-height: 1.6;">
+                  <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Samples Analysed</h2>
+                  <p>Hello ${submitter.firstName},</p>
+                  <p>The samples you submitted to the lab have been analysed and the Fibre ID report has been authorised.</p>
+                  <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
+                    <p style="margin: 5px 0;"><strong>Project:</strong> ${projectName}</p>
+                    <p style="margin: 5px 0;"><strong>Project ID:</strong> ${projectID}</p>
+                  </div>
+                  <div style="text-align: center; margin: 30px 0;">
+                    <a href="${jobUrl}" style="background-color: rgb(25, 138, 44); color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">View Assessment</a>
+                  </div>
+                  <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;">
+                  <p style="color: #666; font-size: 12px;">This is an automated message, please do not reply to this email.</p>
+                </div>
+              </div>
+            `,
+          });
+        }
+      } catch (emailError) {
+        console.error('Error sending sample submitter notification email:', emailError);
+      }
+    }
+
     res.json(job);
   } catch (err) {
     res.status(400).json({ message: 'Failed to update assessment job', error: err.message });
+  }
+});
+
+// PATCH /api/assessments/:id/report-viewed - record that Fibre ID report was viewed (persists so Authorise/Send for Authorisation stays visible after refresh)
+router.patch('/:id/report-viewed', auth, async (req, res) => {
+  try {
+    const job = await AsbestosAssessment.findByIdAndUpdate(
+      req.params.id,
+      { reportViewedAt: new Date(), updatedAt: new Date() },
+      { new: true }
+    ).select('_id reportViewedAt');
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+    res.json(job);
+  } catch (err) {
+    res.status(400).json({ message: 'Failed to record report viewed', error: err.message });
   }
 });
 

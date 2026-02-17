@@ -687,7 +687,7 @@ const DraftInvoicePage = () => {
         <TableContainer className="invoice-table-container">
           <Table sx={{ tableLayout: "fixed" }}>
             <TableHead>
-              <TableRow>
+              <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                 <TableCell sx={{ width: "80px", minWidth: "80px" }}>
                   Item No
                 </TableCell>

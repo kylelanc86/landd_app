@@ -1130,7 +1130,7 @@ const SampleList = () => {
       >
         <Table>
           <TableHead>
-            <TableRow>
+            <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
               <TableCell
                 sx={{
                   width: "140px",
@@ -1743,7 +1743,7 @@ const SampleList = () => {
             {samples.length > 0 ? (
               <Table size="small">
                 <TableHead>
-                  <TableRow>
+                  <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                     <TableCell>Sample ID</TableCell>
                     <TableCell>Type</TableCell>
                     <TableCell>Location</TableCell>

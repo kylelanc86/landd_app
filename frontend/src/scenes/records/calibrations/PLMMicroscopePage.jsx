@@ -613,7 +613,7 @@ const PLMMicroscopePage = () => {
         <TableContainer component={Paper}>
           <Table>
             <TableHead>
-              <TableRow>
+              <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                 <TableCell>Equipment Reference</TableCell>
                 <TableCell>Brand/Model</TableCell>
                 <TableCell>Section</TableCell>
@@ -970,7 +970,7 @@ const PLMMicroscopePage = () => {
             <TableContainer component={Paper}>
               <Table>
                 <TableHead>
-                  <TableRow>
+                  <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                     <TableCell>Servicing Date</TableCell>
                     <TableCell>Servicing Company</TableCell>
                     <TableCell>Calibrated By</TableCell>

@@ -158,6 +158,7 @@ const AsbestosAssessmentSchema = new mongoose.Schema({
   },
   samplesReceivedDate: { type: Date }, // Date when samples were submitted to lab (set when "Submit samples to lab" modal is confirmed)
   submittedBy: { type: String }, // Name of person who submitted samples to lab
+  samplesSubmittedById: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // User who submitted samples (for notification when analysis complete)
   turnaroundTime: { type: String }, // Turnaround time for analysis (e.g., "3 day", "24 hours", or custom value)
   analysisDueDate: { type: Date }, // Date and time when analysis is due (calculated from turnaround time)
   labSamplesStatus: { type: String, enum: ['samples-in-lab', 'analysis-complete'] }, // L&D supplied jobs table status only (independent of assessment workflow status)
@@ -197,6 +198,7 @@ const AsbestosAssessmentSchema = new mongoose.Schema({
   reportAuthorisedBy: { type: String }, // Assessment report authorisation (final sign-off) - distinct from reportApprovedBy
   reportAuthorisedAt: { type: Date }, // Date when report was authorised
   authorisationRequestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // User who requested authorisation (send-for-authorisation)
+  reportViewedAt: { type: Date }, // When Fibre ID report was viewed (L&D Supplied Jobs – used to show Authorise / Send for Authorisation)
   archived: { type: Boolean, default: false }, // When true, job is removed from the assessment table (completed)
   revision: { type: Number, default: 0 }, // Report revision number
   // Legislation snapshot at job creation (state-specific, from report template); used for {LEGISLATION} in PDFs

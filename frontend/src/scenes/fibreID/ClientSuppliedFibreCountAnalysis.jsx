@@ -1940,7 +1940,7 @@ const ClientSuppliedFibreCountAnalysis = () => {
                 >
                   <Table size="small" sx={{ tableLayout: "fixed" }}>
                     <TableHead>
-                      <TableRow>
+                      <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                         <TableCell sx={{ width: "80px", position: "relative" }}>
                           <Box
                             sx={{

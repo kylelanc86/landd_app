@@ -94,7 +94,7 @@ const LeadRemoval = () => {
             >
               <Table stickyHeader>
                 <TableHead>
-                  <TableRow>
+                  <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                     <TableCell
                       sx={{
                         fontWeight: "bold",

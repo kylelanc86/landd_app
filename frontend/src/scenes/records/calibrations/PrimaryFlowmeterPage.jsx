@@ -82,7 +82,7 @@ const PrimaryFlowmeterPage = () => {
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
-            <TableRow>
+            <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
               <TableCell>Flowmeter ID</TableCell>
               <TableCell>Calibration Date</TableCell>
               <TableCell>Reading</TableCell>

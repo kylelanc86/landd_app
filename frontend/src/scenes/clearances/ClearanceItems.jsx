@@ -2440,7 +2440,7 @@ const ClearanceItems = () => {
             <TableContainer component={Paper}>
               <Table>
                 <TableHead>
-                  <TableRow sx={{ background: "linear-gradient(to right, #045E1F, #96CC78) !important", color: "white" }}>
+                  <TableRow sx={{ background: "linear-gradient(to right, #045E1F, #96CC78) !important", color: "white", "&:hover": { backgroundColor: "transparent" } }}>
                     {clearance?.clearanceType === "Vehicle/Equipment" ? (
                       <>
                         <TableCell sx={{ color: "inherit", fontWeight: "bold" }}>Item Description</TableCell>

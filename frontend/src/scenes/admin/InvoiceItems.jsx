@@ -195,7 +195,7 @@ const InvoiceItems = () => {
         <TableContainer>
           <Table>
             <TableHead>
-              <TableRow>
+              <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                 <TableCell sx={{ width: "15%" }}>Item No</TableCell>
                 <TableCell sx={{ width: "40%" }}>Description</TableCell>
                 <TableCell sx={{ width: "15%" }}>Unit Price (AUD$)</TableCell>

@@ -865,7 +865,7 @@ const ResidentialAsbestosAssessment = () => {
           <TableContainer>
             <Table stickyHeader>
               <TableHead>
-                <TableRow sx={{ background: "linear-gradient(to right, #045E1F, #96CC78) !important", color: "white" }}>
+                <TableRow sx={{ background: "linear-gradient(to right, #045E1F, #96CC78) !important", color: "white", "&:hover": { backgroundColor: "transparent" } }}>
                   <TableCell sx={{ fontWeight: "bold", maxWidth: "90px", color: "inherit" }}>
                     Project ID
                   </TableCell>
@@ -900,10 +900,7 @@ const ResidentialAsbestosAssessment = () => {
                       fontWeight: "bold",
                       minWidth: "180px",
                       color: "inherit",
-                      display: "none",
-                      "@media (min-width: 600px) and (orientation: portrait)": {
-                        display: "table-cell",
-                      },
+                      display: { xs: "none", sm: "table-cell" },
                     }}
                   >
                     Sample Analysis
@@ -1028,10 +1025,7 @@ const ResidentialAsbestosAssessment = () => {
                         onClick={(e) => e.stopPropagation()}
                         sx={{
                           maxWidth: "140px",
-                          display: "none",
-                          "@media (min-width: 600px) and (orientation: portrait)": {
-                            display: "table-cell",
-                          },
+                          display: { xs: "none", sm: "table-cell" },
                         }}
                       >
                         <Box

@@ -613,7 +613,7 @@ const AsbestosRemoval = () => {
             >
               <Table stickyHeader>
                 <TableHead>
-                  <TableRow>
+                  <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                     <TableCell sx={{ fontWeight: "bold", minWidth: showPortraitColumnsOnly ? "80px" : "120px" }}>
                       Project ID
                     </TableCell>

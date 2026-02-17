@@ -100,7 +100,7 @@ const CalibrationsList = () => {
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
-            <TableRow>
+            <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
               <TableCell>Equipment Name</TableCell>
               <TableCell>Serial Number</TableCell>
               <TableCell>Last Calibration</TableCell>

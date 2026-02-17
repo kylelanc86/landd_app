@@ -436,7 +436,7 @@ const CalibrationFrequency = () => {
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
-            <TableRow>
+            <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
               <TableCell>Equipment Type</TableCell>
               <TableCell>Calibration Frequency</TableCell>
               <TableCell>Actions</TableCell>
@@ -665,7 +665,7 @@ const CalibrationFrequency = () => {
         <TableContainer component={Paper}>
           <Table>
             <TableHead>
-              <TableRow>
+              <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                 <TableCell>Equipment Type</TableCell>
                 <TableCell>Calibration Requirements</TableCell>
                 <TableCell>Actions</TableCell>

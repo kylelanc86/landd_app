@@ -541,7 +541,7 @@ const ProjectLogModal = ({ open, onClose, project }) => {
                 <TableContainer component={Paper} sx={{ mb: 4 }}>
                   <Table>
                     <TableHead>
-                      <TableRow>
+                      <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                         <TableCell>Date</TableCell>
                         <TableCell>Employee</TableCell>
                         <TableCell>Start Time</TableCell>
@@ -640,7 +640,7 @@ const ProjectLogModal = ({ open, onClose, project }) => {
                 <TableContainer component={Paper}>
                   <Table>
                     <TableHead>
-                      <TableRow>
+                      <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                         <TableCell>Date</TableCell>
                         <TableCell>Report Type</TableCell>
                         <TableCell>Status</TableCell>

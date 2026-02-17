@@ -2922,7 +2922,7 @@ const ProjectInformation = () => {
               <TableContainer>
                 <Table size="small">
                   <TableHead>
-                    <TableRow>
+                    <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                       <TableCell sx={{ fontWeight: "bold" }}>Event</TableCell>
                       <TableCell sx={{ fontWeight: "bold" }}>Date</TableCell>
                       <TableCell sx={{ fontWeight: "bold" }}>Details</TableCell>

@@ -1049,7 +1049,7 @@ const AirMonitoring = () => {
           <TableContainer component={Paper} sx={{ mt: 1 }}>
             <Table size="small">
               <TableHead>
-                <TableRow>
+                <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                   <TableCell>Status</TableCell>
                   <TableCell>Start Date</TableCell>
                   <TableCell>Asbestos Removalist</TableCell>

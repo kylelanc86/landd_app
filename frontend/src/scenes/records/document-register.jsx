@@ -493,7 +493,7 @@ const DocumentRegister = () => {
               <TableContainer>
                 <Table>
                   <TableHead>
-                    <TableRow sx={{ background: "linear-gradient(to right, #045E1F, #96CC78) !important" }}>
+                    <TableRow sx={{ background: "linear-gradient(to right, #045E1F, #96CC78) !important", "&:hover": { backgroundColor: "transparent" } }}>
                       <TableCell sx={{ color: "white", fontWeight: "bold" }}>
                         Document Ref
                       </TableCell>
@@ -600,7 +600,7 @@ const DocumentRegister = () => {
             <TableContainer>
               <Table>
                 <TableHead>
-                  <TableRow sx={{ background: "linear-gradient(to right, #045E1F, #96CC78) !important" }}>
+                  <TableRow sx={{ background: "linear-gradient(to right, #045E1F, #96CC78) !important", "&:hover": { backgroundColor: "transparent" } }}>
                     <TableCell sx={{ color: "white", fontWeight: "bold" }}>
                       Document Ref
                     </TableCell>
@@ -930,7 +930,7 @@ const DocumentRegister = () => {
             <TableContainer>
               <Table size="small">
                 <TableHead>
-                  <TableRow sx={{ backgroundColor: theme.palette.grey[200] }}>
+                  <TableRow sx={{ backgroundColor: theme.palette.grey[200], "&:hover": { backgroundColor: "transparent" } }}>
                     <TableCell sx={{ fontWeight: "bold" }}>Revision</TableCell>
                     <TableCell sx={{ fontWeight: "bold" }}>Date</TableCell>
                     <TableCell sx={{ fontWeight: "bold" }}>Updated By</TableCell>
@@ -992,7 +992,7 @@ const DocumentRegister = () => {
             <TableContainer>
               <Table size="small">
                 <TableHead>
-                  <TableRow sx={{ backgroundColor: theme.palette.grey[200] }}>
+                  <TableRow sx={{ backgroundColor: theme.palette.grey[200], "&:hover": { backgroundColor: "transparent" } }}>
                     <TableCell sx={{ fontWeight: "bold" }}>Type</TableCell>
                     <TableCell sx={{ fontWeight: "bold" }}>Document Ref</TableCell>
                     <TableCell sx={{ fontWeight: "bold" }}>Document Title</TableCell>

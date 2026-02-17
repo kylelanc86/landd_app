@@ -300,7 +300,7 @@ const AssetRegister = () => {
             <TableContainer>
               <Table>
                 <TableHead>
-                  <TableRow sx={{ background: "linear-gradient(to right, #045E1F, #96CC78) !important" }}>
+                  <TableRow sx={{ background: "linear-gradient(to right, #045E1F, #96CC78) !important", "&:hover": { backgroundColor: "transparent" } }}>
                     <TableCell sx={{ color: "white", fontWeight: "bold" }}>
                       Asset Reference
                     </TableCell>

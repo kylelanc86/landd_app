@@ -151,7 +151,7 @@ const ReportsList = ({
       <TableContainer>
         <Table>
           <TableHead>
-            <TableRow>
+            <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
               <TableCell>Date</TableCell>
               <TableCell>Description</TableCell>
               <TableCell>Status</TableCell>

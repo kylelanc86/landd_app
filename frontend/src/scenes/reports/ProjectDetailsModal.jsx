@@ -226,7 +226,7 @@ const ProjectDetailsModal = ({ open, onClose, project }) => {
         <TableContainer component={Paper} sx={{ mb: 4 }}>
           <Table>
             <TableHead>
-              <TableRow>
+              <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                 <TableCell>Date</TableCell>
                 <TableCell>Employee</TableCell>
                 <TableCell>Start Time</TableCell>
@@ -308,7 +308,7 @@ const ProjectDetailsModal = ({ open, onClose, project }) => {
         <TableContainer component={Paper}>
           <Table>
             <TableHead>
-              <TableRow>
+              <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                 <TableCell>Job ID</TableCell>
                 <TableCell>Name</TableCell>
                 <TableCell>Created Date</TableCell>

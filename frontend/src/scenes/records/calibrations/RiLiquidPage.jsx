@@ -474,7 +474,7 @@ const RiLiquidPage = () => {
         <TableContainer component={Paper}>
           <Table>
             <TableHead>
-              <TableRow>
+              <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                 <TableCell>Bottle ID</TableCell>
                 <TableCell>Date Opened</TableCell>
                 <TableCell>Status</TableCell>

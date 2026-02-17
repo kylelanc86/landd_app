@@ -359,7 +359,7 @@ const HAZMATSurveys = () => {
           <TableContainer>
             <Table stickyHeader>
               <TableHead>
-                <TableRow>
+                <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                   <TableCell sx={{ fontWeight: "bold", width: "115px" }}>
                     Project ID
                   </TableCell>

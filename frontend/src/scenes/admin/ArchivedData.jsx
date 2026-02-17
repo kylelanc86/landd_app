@@ -182,7 +182,7 @@ const ArchivedData = () => {
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
-            <TableRow>
+            <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
               <TableCell>Name</TableCell>
               <TableCell>Contact Person</TableCell>
               <TableCell>Email</TableCell>

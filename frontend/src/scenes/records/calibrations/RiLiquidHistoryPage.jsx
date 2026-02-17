@@ -154,7 +154,7 @@ const RiLiquidHistoryPage = () => {
         <TableContainer component={Paper}>
           <Table>
             <TableHead>
-              <TableRow>
+              <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                 <TableCell>Bottle ID</TableCell>
                 <TableCell>Batch Number</TableCell>
                 <TableCell>Date Opened</TableCell>

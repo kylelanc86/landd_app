@@ -484,7 +484,7 @@ const HSETestSlidePage = () => {
         <TableContainer component={Paper}>
           <Table>
             <TableHead>
-              <TableRow>
+              <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                 <TableCell>Equipment Reference</TableCell>
                 <TableCell>Brand/Model</TableCell>
                 <TableCell>Section</TableCell>
@@ -857,7 +857,7 @@ const HSETestSlidePage = () => {
             <TableContainer component={Paper}>
               <Table>
                 <TableHead>
-                  <TableRow>
+                  <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                     <TableCell>Calibration Date</TableCell>
                     <TableCell>Calibration Company</TableCell>
                     <TableCell>Certificate Number</TableCell>

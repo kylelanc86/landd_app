@@ -804,15 +804,17 @@ const NewSample = () => {
       return;
     }
 
-    // Handle cowlNo to ensure "C" prefix is always present but not editable
-    // Store value without "C" in state (InputAdornment displays "C" visually)
+    // Handle cowlNo: allow a number (digits) OR a single letter. "C" prefix shown via InputAdornment.
     if (name === "cowlNo") {
-      // Remove any "C" prefix if user types it (since InputAdornment shows it as non-editable prefix)
       const cleanedValue = value.replace(/^C+/i, "");
-      setForm((prev) => ({
-        ...prev,
-        [name]: cleanedValue,
-      }));
+      // Allow only digits (any length) or exactly one letter
+      const allowed = cleanedValue === "" || /^\d+$/.test(cleanedValue) || /^[A-Za-z]$/.test(cleanedValue);
+      if (allowed) {
+        setForm((prev) => ({
+          ...prev,
+          [name]: cleanedValue,
+        }));
+      }
       return;
     }
 

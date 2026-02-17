@@ -777,7 +777,7 @@ const TimesheetReview = () => {
         >
           <Table stickyHeader>
             <TableHead>
-              <TableRow>
+              <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                 <TableCell
                   sx={{
                     color: theme.palette.primary.contrastText,
@@ -1206,7 +1206,7 @@ const TimesheetReview = () => {
               <TableContainer>
                 <Table size="small">
                   <TableHead>
-                    <TableRow>
+                    <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                       <TableCell sx={{ fontWeight: 700 }}>Start</TableCell>
                       <TableCell sx={{ fontWeight: 700 }}>End</TableCell>
                       <TableCell sx={{ fontWeight: 700 }}>Duration</TableCell>

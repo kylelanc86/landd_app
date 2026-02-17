@@ -2180,7 +2180,7 @@ const ProjectReports = () => {
             <TableContainer>
               <Table>
                 <TableHead>
-                  <TableRow>
+                  <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                     <TableCell>Job Type</TableCell>
                     <TableCell>Date(s)</TableCell>
                     <TableCell>Status</TableCell>

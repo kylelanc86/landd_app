@@ -179,7 +179,7 @@ const AcetoneVaporiserHistoryPage = () => {
         <TableContainer component={Paper}>
           <Table>
             <TableHead>
-              <TableRow>
+              <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                 <TableCell>Calibration Date</TableCell>
                 <TableCell>Temperature (°C)</TableCell>
                 <TableCell>Status</TableCell>

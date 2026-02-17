@@ -1168,7 +1168,7 @@ const ClientSuppliedJobs = () => {
           <TableContainer>
             <Table stickyHeader>
               <TableHead>
-                <TableRow sx={{ background: "linear-gradient(to right, #045E1F, #96CC78) !important", color: "white" }}>
+                <TableRow sx={{ background: "linear-gradient(to right, #045E1F, #96CC78) !important", color: "white", "&:hover": { backgroundColor: "transparent" } }}>
                   <TableCell sx={{ fontWeight: "bold", width: "115px", color: "inherit" }}>
                     Project ID
                   </TableCell>

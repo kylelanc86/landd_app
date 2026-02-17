@@ -2421,6 +2421,7 @@ router.post('/generate-asbestos-assessment-v3', auth, async (req, res) => {
 
 const generateAssessmentHTML = async (assessmentData) => {
   try {
+    const isResidential = assessmentData.jobType === 'residential-asbestos';
     // Load DocRaptor-optimized templates
     const templateDir = path.join(__dirname, '../templates/DocRaptor/AsbestosAssessment');
     const coverTemplate = fs.readFileSync(path.join(templateDir, 'CoverPage.html'), 'utf8');
@@ -2456,8 +2457,9 @@ const generateAssessmentHTML = async (assessmentData) => {
     const watermarkBase64 = fs.existsSync(watermarkPath) ? fs.readFileSync(watermarkPath).toString('base64') : '';
     
     // Different cover background per assessment type: asbestos (commercial) = ma.jpg, residential = res.jpg
+    // Use backend assets (same as clearance) so images are available in deployed backend where frontend folder may not exist
     const assessmentCoverImage = isResidential ? 'res.jpg' : 'ma.jpg';
-    const backgroundPath = path.join(__dirname, '../../frontend/public/images', assessmentCoverImage);
+    const backgroundPath = path.join(__dirname, '../assets', assessmentCoverImage);
     const backgroundBase64 = fs.existsSync(backgroundPath) ? fs.readFileSync(backgroundPath).toString('base64') : '';
 
     // Use residential template when isResidential (has Background section and "Summary of Identified ACM")
@@ -2515,7 +2517,8 @@ const generateAssessmentHTML = async (assessmentData) => {
     // Generate first assessment register item for the main page
     const assessmentItems = assessmentData.items || [];
     const scopeBulletCount = assessmentItems.length;
-    const shouldMoveFirstItemToNewPage = scopeBulletCount > 5;
+    // Residential: first item always on next page. Asbestos: first item beneath SUMMARY if it will fit (move when 6+ items).
+    const shouldMoveFirstItemToNewPage = isResidential || scopeBulletCount > 5;
     const firstSampleItem = assessmentItems.length > 0 ? assessmentItems[0] : null;
     const getCommentsValue = (item) => {
       if (hasNoAsbestosContent(item)) return 'No action required';
@@ -2946,7 +2949,7 @@ const generateAssessmentHTML = async (assessmentData) => {
       },
       {
         title: templateContent?.standardSections?.recommendedControlMeasuresTitle || 'RECOMMENDED CONTROL MEASURES',
-        content: templateContent?.standardSections?.recommendedControlMeasuresContent ? await replacePlaceholders(templateContent.standardSections.recommendedControlMeasuresContent, templateData) : ''
+        content: isResidential && templateContent?.standardSections?.recommendedControlMeasuresContent ? await replacePlaceholders(templateContent.standardSections.recommendedControlMeasuresContent, templateData) : ''
       },
       {
         title: templateContent?.standardSections?.riskAssessmentTitle || 'RISK ASSESSMENT',
@@ -3264,8 +3267,9 @@ const generateAssessmentCoverVersionHTMLV3 = async (assessmentData, isResidentia
   const watermarkBase64 = fs.existsSync(watermarkPath) ? fs.readFileSync(watermarkPath).toString('base64') : '';
 
   // Different cover background per assessment type: asbestos (commercial) = ma.jpg, residential = res.jpg
+  // Use backend assets (same as clearance) so images are available in deployed backend where frontend folder may not exist
   const assessmentCoverImage = isResidential ? 'res.jpg' : 'ma.jpg';
-  const backgroundPath = path.join(__dirname, '../../frontend/public/images', assessmentCoverImage);
+  const backgroundPath = path.join(__dirname, '../assets', assessmentCoverImage);
   const backgroundBase64 = fs.existsSync(backgroundPath) ? fs.readFileSync(backgroundPath).toString('base64') : '';
 
   const templateType = isResidential ? 'residentialAsbestosAssessment' : 'asbestosAssessment';
@@ -3501,7 +3505,7 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
   assessmentItems.forEach((item, idx) => {
     getIncludedPhotoSourcesFlow(item).forEach(photoSrc => flowTableBlocks.push({ item, idx, photoSrc }));
   });
-  const sampleTablesHtml = flowTableBlocks.map((block, blockIndex) => {
+  const buildBlockHtml = (block, blockIndex, addContinuationHeader) => {
     const { item, idx, photoSrc } = block;
     const n = idx + 1;
     const sampleTable = asbestosSampleItemTemplateWithUrl
@@ -3515,11 +3519,19 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
       .replace(/\[CONDITION\]/g, getConditionDisplay(item))
       .replace(/\[RISK\]/g, getRiskDisplay(item))
       .replace(/\[COMMENTS\]/g, getCommentsValue(item));
-
-    const continuationHeader = blockIndex >= 2 && blockIndex % 2 === 0
+    const continuationHeader = addContinuationHeader
       ? '<div class="page-break"></div><div class="section-header">TABLE 1: ASSESSMENT REGISTER cont.</div>'
       : '';
     return `${continuationHeader}<div class="sample-block">${sampleTable}</div>`;
+  };
+  // Residential: all items after a page break. Asbestos: first item beneath SUMMARY (if it fits), rest on following pages.
+  const firstTableBlockHtml = !isResidential && flowTableBlocks.length > 0
+    ? buildBlockHtml(flowTableBlocks[0], 0, false)
+    : '';
+  const remainingTableBlocks = isResidential ? flowTableBlocks : flowTableBlocks.slice(1);
+  const sampleTablesHtml = remainingTableBlocks.map((block, blockIndex) => {
+    const addContinuationHeader = blockIndex >= 2 && blockIndex % 2 === 0;
+    return buildBlockHtml(block, isResidential ? blockIndex : blockIndex + 1, addContinuationHeader);
   }).join('');
 
   // Discussion & Conclusions: asbestos items, then non-asbestos items (build early so flowTemplateData can be used in replacePlaceholders)
@@ -3639,11 +3651,13 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
   const jobSpecificExclusionsRaw = (assessmentData.jobSpecificExclusions || '').trim();
   const inspectionExclusionsHtml = toJustifiedParagraphsHtml(jobSpecificExclusionsRaw);
 
-  // Recommended Control Measures is rendered between Discussion and Conclusions and sign-off (see flow HTML)
-  const recommendedControlMeasuresContentFlow = templateContent?.standardSections?.recommendedControlMeasuresContent
+  // Recommended Control Measures: only for residential asbestos assessment reports
+  const recommendedControlMeasuresContentFlow = isResidential && templateContent?.standardSections?.recommendedControlMeasuresContent
     ? await replacePlaceholders(templateContent.standardSections.recommendedControlMeasuresContent, flowTemplateData)
     : '';
-  const recommendedControlMeasuresHtml = `<div class="section-header">${escapeHtml(templateContent?.standardSections?.recommendedControlMeasuresTitle || 'RECOMMENDED CONTROL MEASURES')}</div><div class="section-body">${recommendedControlMeasuresContentFlow || ''}</div>`;
+  const recommendedControlMeasuresHtml = isResidential
+    ? `<div class="section-header">${escapeHtml(templateContent?.standardSections?.recommendedControlMeasuresTitle || 'RECOMMENDED CONTROL MEASURES')}</div><div class="section-body">${recommendedControlMeasuresContentFlow || ''}</div>`
+    : '';
 
   const additionalSections = [
     { title: templateContent?.standardSections?.assessmentMethodologyTitle || 'ASSESSMENT METHODOLOGY', content: templateContent?.standardSections?.assessmentMethodologyContent ? await replacePlaceholders(templateContent.standardSections.assessmentMethodologyContent, flowTemplateData) : '' },
@@ -3822,8 +3836,10 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
         <div class="section-header">${escapeHtml(templateContent?.standardSections?.surveyFindingsTitle || 'SUMMARY OF IDENTIFIED ACM')}</div>
         <div class="section-body">${surveyFindingsHtml}</div>
 
-        <div class="page-break"></div>
-        <div class="section-header">Table 1: Assessment Register</div>
+        ${isResidential ? '<div class="page-break"></div>' : ''}
+        ${(isResidential || firstTableBlockHtml || flowTableBlocks.length === 0) ? `<div class="section-header">Table 1: Assessment Register</div>` : ''}
+        ${firstTableBlockHtml}
+        ${!isResidential && remainingTableBlocks.length > 0 ? '<div class="page-break"></div><div class="section-header">TABLE 1: ASSESSMENT REGISTER cont.</div>' : ''}
         ${sampleTablesHtml || '<div class="section-body">No items</div>'}
 
         <div class="page-break"></div>

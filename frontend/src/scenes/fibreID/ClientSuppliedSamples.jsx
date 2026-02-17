@@ -630,7 +630,7 @@ const ClientSuppliedSamples = () => {
           <TableContainer>
             <Table stickyHeader>
               <TableHead>
-                <TableRow>
+                <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                   <TableCell sx={{ fontWeight: "bold" }}>
                     Lab Reference
                   </TableCell>
@@ -1043,7 +1043,7 @@ const ClientSuppliedSamples = () => {
             <TableContainer component={Paper}>
               <Table>
                 <TableHead>
-                  <TableRow>
+                  <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                     <TableCell sx={{ fontWeight: "bold" }}>
                       L&D Lab Reference
                     </TableCell>

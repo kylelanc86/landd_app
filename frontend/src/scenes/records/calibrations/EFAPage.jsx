@@ -582,7 +582,7 @@ const EFAPage = () => {
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
-            <TableRow>
+            <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
               <TableCell>Calibration Date</TableCell>
               <TableCell>Filter Holder Model</TableCell>
               <TableCell>Avg Diameter(mm)</TableCell>

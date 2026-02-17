@@ -971,7 +971,7 @@ const GraticulePage = () => {
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
-            <TableRow>
+            <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
               <TableCell>Graticule ID</TableCell>
               <TableCell>Calibration Date</TableCell>
               <TableCell>Diameter (µm)</TableCell>
