@@ -3840,14 +3840,13 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
         ${(isResidential || firstTableBlockHtml || flowTableBlocks.length === 0) ? `<div class="section-header">Table 1: Assessment Register</div>` : ''}
         ${firstTableBlockHtml}
         ${!isResidential && remainingTableBlocks.length > 0 ? '<div class="page-break"></div><div class="section-header">TABLE 1: ASSESSMENT REGISTER cont.</div>' : ''}
-        ${sampleTablesHtml || '<div class="section-body">No items</div>'}
+        ${sampleTablesHtml || (flowTableBlocks.length === 0 ? '<div class="section-body">No items</div>' : '')}
 
         <div class="page-break"></div>
         <div class="section-header">${escapeHtml(templateContent?.standardSections?.discussionTitle || 'DISCUSSION AND CONCLUSIONS')}</div>
         <div class="section-body">
           ${asbestosCountLineHtml}
           <p style="margin: 0; padding-bottom: 8px;">The following is a summary of asbestos materials identified during this assessment:</p>
-          <p style="margin: 0; padding-bottom: 4px; text-decoration: underline; font-weight: 600; font-size: 0.8rem;">Asbestos Items</p>
           ${asbestosItemsSectionFlow}
           ${discussionConclusionsHtml ? `<div class="section-body discussion-conclusions-content" style="margin-top: 12px; text-align: justify !important; width: 100%;">${discussionConclusionsHtml}</div>` : ''}
           ${inspectionExclusionsHtml ? `<div class="section-body discussion-conclusions-content" style="margin-top: 12px; text-align: justify !important; width: 100%;">${inspectionExclusionsHtml}</div>` : ''}
