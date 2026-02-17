@@ -547,7 +547,7 @@ export async function generateIAQReport({ record, allRecords, samples, openInNew
                   { text: 'Ave flow (L/min)', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
                   { text: 'Field Count', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
                   { text: 'Fibre Count', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' },
-                  { text: 'Reported Conc. (fibres/ml)', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' }
+                  { text: 'Reported AFC', style: 'tableHeader', fontSize: 8, bold: true, fillColor: '#f0f0f0' }
                 ],
                 ...sortedSamples.map(sample => {
                   const uncountableDueToDust = sample.analysis?.uncountableDueToDust === true || sample.analysis?.uncountableDueToDust === 'true';

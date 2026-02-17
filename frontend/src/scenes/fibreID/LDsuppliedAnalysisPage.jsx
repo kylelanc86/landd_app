@@ -40,8 +40,9 @@ import {
   Add as AddIcon,
 } from "@mui/icons-material";
 import { useNavigate, useParams } from "react-router-dom";
-import { asbestosAssessmentService, userService } from "../../services/api";
+import { asbestosAssessmentService } from "../../services/api";
 import customDataFieldGroupService from "../../services/customDataFieldGroupService";
+import { useUserLists } from "../../context/UserListsContext";
 
 const LDsuppliedAnalysisPage = () => {
   const navigate = useNavigate();
@@ -70,7 +71,7 @@ const LDsuppliedAnalysisPage = () => {
   const [traceAsbestosContent, setTraceAsbestosContent] = useState("");
   const [traceCount, setTraceCount] = useState("");
   const [analysisDate, setAnalysisDate] = useState(new Date());
-  const [analysts, setAnalysts] = useState([]);
+  const { activeIdentifiers } = useUserLists();
   const [analyst, setAnalyst] = useState("");
   const [comments, setComments] = useState("");
   const { showSnackbar } = useSnackbar();
@@ -89,7 +90,6 @@ const LDsuppliedAnalysisPage = () => {
     if (assessmentId && itemNumber) {
       fetchAssessmentDetails();
     }
-    fetchAnalysts();
   }, [assessmentId, itemNumber]);
 
   useEffect(() => {
@@ -106,18 +106,6 @@ const LDsuppliedAnalysisPage = () => {
     };
     loadFibreIdSampleDescriptions();
   }, []);
-
-  const fetchAnalysts = async () => {
-    try {
-      const response = await userService.getAll(true); // Get all users including inactive
-      const fibreIdentificationAnalysts = response.data.filter(
-        (user) => user.labApprovals?.fibreIdentification === true,
-      );
-      setAnalysts(fibreIdentificationAnalysts);
-    } catch (error) {
-      console.error("Error fetching analysts:", error);
-    }
-  };
 
   useEffect(() => {
     // Ensure there's always at least one fibre when the component loads
@@ -684,7 +672,7 @@ const LDsuppliedAnalysisPage = () => {
       // Get analyst user object if analyst is selected
       let analystUser = null;
       if (analyst) {
-        analystUser = analysts.find((a) => a._id === analyst);
+        analystUser = activeIdentifiers.find((a) => a._id === analyst);
       }
 
       console.log("Saving analysis - Analyst ID:", analyst);
@@ -958,7 +946,7 @@ const LDsuppliedAnalysisPage = () => {
               <MenuItem value="">
                 <em>Select Analyst</em>
               </MenuItem>
-              {analysts.map((analystOption) => (
+              {activeIdentifiers.map((analystOption) => (
                 <MenuItem key={analystOption._id} value={analystOption._id}>
                   {analystOption.firstName} {analystOption.lastName}
                 </MenuItem>
@@ -986,7 +974,7 @@ const LDsuppliedAnalysisPage = () => {
             sx={{ minWidth: 200 }}
           />
         </Stack>
-        {analysts.length === 0 && (
+        {activeIdentifiers.length === 0 && (
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             No analysts found - check lab approvals
           </Typography>

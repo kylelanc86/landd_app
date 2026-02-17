@@ -39,7 +39,6 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ClearIcon from "@mui/icons-material/Clear";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { sampleService, shiftService } from "../../services/api";
-import { userService } from "../../services/api";
 import pcmMicroscopeService from "../../services/pcmMicroscopeService";
 import { equipmentService } from "../../services/equipmentService";
 import hseTestSlideService from "../../services/hseTestSlideService";
@@ -47,6 +46,7 @@ import { graticuleService } from "../../services/graticuleService";
 import { FixedSizeList as List } from "react-window";
 import AutoSizer from "react-virtualized-auto-sizer";
 import { useAuth } from "../../context/AuthContext";
+import { useUserLists } from "../../context/UserListsContext";
 import { useSnackbar } from "../../context/SnackbarContext";
 
 const SAMPLES_KEY = "ldc_samples";
@@ -509,7 +509,7 @@ const Analysis = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isRendered, setIsRendered] = useState(false);
-  const [users, setUsers] = useState([]);
+  const { activeCounters } = useUserLists();
   const [analysedBy, setAnalysedBy] = useState("");
   const [shiftStatus, setShiftStatus] = useState("");
   const [fibreCountModalOpen, setFibreCountModalOpen] = useState(false);
@@ -1122,30 +1122,6 @@ const Analysis = () => {
 
     fetchActiveEquipment();
   }, [calculateStatus]);
-
-  // Fetch users for analyst dropdown - only those with fibre counting approval
-  useEffect(() => {
-    userService.getAll().then((res) => {
-      const allUsers = res.data || [];
-
-      // Filter users who have fibre counting ticked in lab approvals
-      const fibreCountingUsers = allUsers.filter(
-        (user) =>
-          user.isActive &&
-          user.labApprovals &&
-          user.labApprovals.fibreCounting === true
-      );
-
-      // Sort alphabetically by name
-      const sortedUsers = fibreCountingUsers.sort((a, b) => {
-        const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
-        const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
-        return nameA.localeCompare(nameB);
-      });
-
-      setUsers(sortedUsers);
-    });
-  }, []);
 
   const handleAnalysisDetailsChange = (e) => {
     setAnalysisDetails({
@@ -2356,7 +2332,7 @@ const Analysis = () => {
             }}
             disabled={shiftStatus === "analysis_complete"}
           >
-            {users.map((user) => (
+            {activeCounters.map((user) => (
               <MenuItem
                 key={user._id}
                 value={user.firstName + " " + user.lastName}

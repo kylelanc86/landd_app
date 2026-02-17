@@ -41,7 +41,6 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ClearIcon from "@mui/icons-material/Clear";
 import { iaqSampleService } from "../../../services/iaqSampleService";
 import { iaqRecordService } from "../../../services/iaqRecordService";
-import { userService } from "../../../services/api";
 import pcmMicroscopeService from "../../../services/pcmMicroscopeService";
 import { equipmentService } from "../../../services/equipmentService";
 import hseTestSlideService from "../../../services/hseTestSlideService";
@@ -49,6 +48,7 @@ import { graticuleService } from "../../../services/graticuleService";
 import { FixedSizeList as List } from "react-window";
 import AutoSizer from "react-virtualized-auto-sizer";
 import { useAuth } from "../../../context/AuthContext";
+import { useUserLists } from "../../../context/UserListsContext";
 import { useSnackbar } from "../../../context/SnackbarContext";
 
 const SAMPLES_KEY = "ldc_iaq_samples";
@@ -388,7 +388,7 @@ const IAQAnalysis = () => {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [users, setUsers] = useState([]);
+  const { activeCounters } = useUserLists();
   const [analysedBy, setAnalysedBy] = useState("");
   const [iaqRecord, setIaqRecord] = useState(null);
   const [fibreCountModalOpen, setFibreCountModalOpen] = useState(false);
@@ -516,10 +516,8 @@ const IAQAnalysis = () => {
                 : parsed.analysedBy;
               // If it's a name string, try to find the user ID
               if (analysedById && !analysedById.match(/^[0-9a-fA-F]{24}$/)) {
-                // It's not a valid ObjectId, might be a name - find the user
-                const userResponse = await userService.getAll();
-                const allUsers = userResponse.data || [];
-                const matchingUser = allUsers.find(
+                // It's not a valid ObjectId, might be a name - find the user from active analysts
+                const matchingUser = activeCounters.find(
                   (u) => `${u.firstName} ${u.lastName}` === analysedById
                 );
                 if (matchingUser) {
@@ -556,10 +554,6 @@ const IAQAnalysis = () => {
         const graticuleData =
           graticuleResponse.data || graticuleResponse || [];
         setGraticuleCalibrations(graticuleData);
-
-        // Fetch users for analyst dropdown
-        const usersResponse = await userService.getAll();
-        setUsers(usersResponse.data || []);
 
         setSamples(sortedSamples);
         setError(null);
@@ -1895,7 +1889,7 @@ const IAQAnalysis = () => {
             label="Analyst"
             onChange={(e) => setAnalysedBy(e.target.value)}
           >
-            {users.map((user) => (
+            {activeCounters.map((user) => (
               <MenuItem
                 key={user._id}
                 value={user._id}

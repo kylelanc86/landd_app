@@ -35,12 +35,12 @@ import { useParams, useNavigate } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ClearIcon from "@mui/icons-material/Clear";
 import { blankService } from "../../../services/blankService";
-import { userService } from "../../../services/api";
 import pcmMicroscopeService from "../../../services/pcmMicroscopeService";
 import { equipmentService } from "../../../services/equipmentService";
 import hseTestSlideService from "../../../services/hseTestSlideService";
 import { graticuleService } from "../../../services/graticuleService";
 import { useAuth } from "../../../context/AuthContext";
+import { useUserLists } from "../../../context/UserListsContext";
 import { useSnackbar } from "../../../context/SnackbarContext";
 import { formatDate } from "../../../utils/dateFormat";
 
@@ -73,7 +73,7 @@ const BlankAnalysis = () => {
   });
 
   const [analysedBy, setAnalysedBy] = useState(null);
-  const [users, setUsers] = useState([]);
+  const { activeCounters } = useUserLists();
   const [pcmCalibrations, setPcmCalibrations] = useState([]);
   const [graticuleCalibrations, setGraticuleCalibrations] = useState([]);
   const [activeMicroscopes, setActiveMicroscopes] = useState([]);
@@ -364,9 +364,6 @@ const BlankAnalysis = () => {
         setActiveTestSlides(activeTestSlides);
 
         // Fetch users
-        const usersResponse = await userService.getAll();
-        setUsers(usersResponse.data || []);
-
         setError(null);
       } catch (err) {
         if (!isMounted) return;
@@ -894,7 +891,7 @@ const BlankAnalysis = () => {
               disabled={isReadOnly}
               label="Analysed By"
             >
-              {users.map((user) => (
+              {activeCounters.map((user) => (
                 <MenuItem key={user._id} value={user._id}>
                   {user.firstName} {user.lastName}
                 </MenuItem>

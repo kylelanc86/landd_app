@@ -22,13 +22,13 @@ import {
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import { userService } from "../../../services/api";
 import { equipmentService } from "../../../services/equipmentService";
 import { flowmeterCalibrationService } from "../../../services/flowmeterCalibrationService";
 import { airPumpCalibrationService } from "../../../services/airPumpCalibrationService";
 import { iaqRecordService } from "../../../services/iaqRecordService";
 import { iaqSampleService } from "../../../services/iaqSampleService";
 import { useAuth } from "../../../context/AuthContext";
+import { useUserLists } from "../../../context/UserListsContext";
 import { useSnackbar } from "../../../context/SnackbarContext";
 
 const FIELD_BLANK_LOCATION = "Field blank";
@@ -46,7 +46,7 @@ const IAQNewSample = () => {
   const location = useLocation();
   const { currentUser } = useAuth();
   const { showSnackbar } = useSnackbar();
-  const [asbestosAssessors, setAsbestosAssessors] = useState([]);
+  const { activeLAAs } = useUserLists();
   const [airPumps, setAirPumps] = useState([]);
   const [airPumpsLoaded, setAirPumpsLoaded] = useState(false);
   const [flowmeters, setFlowmeters] = useState([]);
@@ -98,38 +98,6 @@ const IAQNewSample = () => {
       return availableFlowrates.filter(flowrate => Math.abs(flowrate - 1.5) > 0.01);
     }
   }, [availableFlowrates, form.filterSize]);
-
-  // Fetch asbestos assessors when component mounts
-  useEffect(() => {
-    const fetchAsbestosAssessors = async () => {
-      try {
-        const response = await userService.getAll();
-        const users = response.data;
-
-        const assessors = users.filter(
-          (user) =>
-            user.isActive &&
-            user.licences &&
-            user.licences.some(
-              (licence) =>
-                licence.licenceType &&
-                licence.licenceType.toLowerCase().includes("asbestos assessor")
-            )
-        );
-
-        const sortedAssessors = assessors.sort((a, b) => {
-          const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
-          const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
-          return nameA.localeCompare(nameB);
-        });
-
-        setAsbestosAssessors(sortedAssessors);
-      } catch (error) {
-        console.error("Error fetching asbestos assessors:", error);
-      }
-    };
-    fetchAsbestosAssessors();
-  }, []);
 
   // Calculate days until calibration is due
   const calculateDaysUntilCalibration = useCallback((calibrationDue) => {
@@ -1053,7 +1021,7 @@ const IAQNewSample = () => {
               label="Sampler"
               required
             >
-              {asbestosAssessors.map((assessor) => (
+              {activeLAAs.map((assessor) => (
                 <MenuItem key={assessor._id} value={assessor._id}>
                   {assessor.firstName} {assessor.lastName}
                 </MenuItem>

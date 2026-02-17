@@ -18,13 +18,14 @@ import {
 import { useParams, useNavigate } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import { sampleService, shiftService, userService } from "../../services/api";
+import { sampleService, shiftService } from "../../services/api";
 import asbestosRemovalJobService from "../../services/asbestosRemovalJobService";
 import airPumpService from "../../services/airPumpService";
 import { equipmentService } from "../../services/equipmentService";
 import { flowmeterCalibrationService } from "../../services/flowmeterCalibrationService";
 import { airPumpCalibrationService } from "../../services/airPumpCalibrationService";
 import { useAuth } from "../../context/AuthContext";
+import { useUserLists } from "../../context/UserListsContext";
 import { formatDateForInput } from "../../utils/dateUtils";
 
 const FIELD_BLANK_LOCATION = "Field blank";
@@ -35,7 +36,7 @@ const EditSample = () => {
   const { shiftId, sampleId } = useParams();
   const navigate = useNavigate();
   const { currentUser } = useAuth();
-  const [asbestosAssessors, setAsbestosAssessors] = useState([]);
+  const { activeLAAs } = useUserLists();
   const [airPumps, setAirPumps] = useState([]);
   const [airPumpsLoaded, setAirPumpsLoaded] = useState(false);
   const [flowmeters, setFlowmeters] = useState([]);
@@ -100,40 +101,6 @@ const EditSample = () => {
       return availableFlowrates.filter(flowrate => Math.abs(flowrate - 1.5) > 0.01);
     }
   }, [availableFlowrates, form.filterSize]);
-
-  // Fetch asbestos assessors when component mounts
-  useEffect(() => {
-    const fetchAsbestosAssessors = async () => {
-      try {
-        const response = await userService.getAll();
-        const users = response.data;
-
-        // Filter users who have Asbestos Assessor licenses
-        const assessors = users.filter(
-          (user) =>
-            user.isActive &&
-            user.licences &&
-            user.licences.some(
-              (licence) =>
-                licence.licenceType &&
-                licence.licenceType.toLowerCase().includes("asbestos assessor")
-            )
-        );
-
-        // Sort alphabetically by name
-        const sortedAssessors = assessors.sort((a, b) => {
-          const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
-          const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
-          return nameA.localeCompare(nameB);
-        });
-
-        setAsbestosAssessors(sortedAssessors);
-      } catch (error) {
-        console.error("Error fetching asbestos assessors:", error);
-      }
-    };
-    fetchAsbestosAssessors();
-  }, []);
 
   // Calculate days until calibration is due
   const calculateDaysUntilCalibration = useCallback((calibrationDue) => {
@@ -1289,7 +1256,7 @@ const EditSample = () => {
                   label="Sampler"
                   required
                 >
-                  {asbestosAssessors.map((assessor) => (
+                  {activeLAAs.map((assessor) => (
                     <MenuItem key={assessor._id} value={assessor._id}>
                       {assessor.firstName} {assessor.lastName}
                     </MenuItem>

@@ -55,7 +55,6 @@ import {
   sampleService,
   projectService,
   clientService,
-  userService,
   clientSuppliedJobsService,
 } from "../../services/api";
 import asbestosClearanceService from "../../services/asbestosClearanceService";
@@ -65,6 +64,7 @@ import { generateHTMLTemplatePDF } from "../../utils/templatePDFGenerator";
 import { generateShiftReport } from "../../utils/generateShiftReport";
 import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
 import { useAuth } from "../../context/AuthContext";
+import { useUserLists } from "../../context/UserListsContext";
 import { formatDate } from "../../utils/dateFormat";
 import { getTodayInSydney } from "../../utils/dateUtils";
 import { hasPermission } from "../../config/permissions";
@@ -89,6 +89,7 @@ const AsbestosRemovalJobDetails = () => {
   const navigate = useNavigate();
   const { jobId } = useParams();
   const { currentUser } = useAuth();
+  const { activeLAAs } = useUserLists();
 
   const logDebug = useCallback((stage, details) => {
     // Debug logging disabled
@@ -103,7 +104,6 @@ const AsbestosRemovalJobDetails = () => {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
   const [asbestosRemovalists, setAsbestosRemovalists] = useState([]);
-  const [asbestosAssessors, setAsbestosAssessors] = useState([]);
   const [creating, setCreating] = useState(false);
 
   // Clearance modal state
@@ -565,66 +565,6 @@ const AsbestosRemovalJobDetails = () => {
     }
   }, [asbestosRemovalists.length, logDebug]);
 
-  const fetchAsbestosAssessors = useCallback(async () => {
-    // Only fetch if not already loaded (lazy loading)
-    if (asbestosAssessors.length > 0) {
-      logDebug("fetchAsbestosAssessors skipped - already loaded", {
-        assessorCount: asbestosAssessors.length,
-      });
-      return asbestosAssessors;
-    }
-
-    const startTs = getTimestamp();
-    logDebug("fetchAsbestosAssessors start");
-
-    try {
-      const requestStart = getTimestamp();
-      const response = await userService.getAsbestosAssessors();
-      const data = response.data || [];
-      const requestDuration = Math.round(getTimestamp() - requestStart);
-      const dataSize = JSON.stringify(data || []).length;
-      logDebug("fetchAsbestosAssessors - response received", {
-        assessorCount: Array.isArray(data) ? data.length : 0,
-        dataSizeBytes: dataSize,
-        dataSizeKB: Math.round((dataSize / 1024) * 100) / 100,
-        requestDurationMs: requestDuration,
-      });
-
-      const sortStart = getTimestamp();
-      const sortedData = (data || []).sort((a, b) => {
-        const nameA = `${a.lastName || ""} ${a.firstName || ""}`.trim();
-        const nameB = `${b.lastName || ""} ${b.firstName || ""}`.trim();
-        return nameA.localeCompare(nameB);
-      });
-      const sortDuration = Math.round(getTimestamp() - sortStart);
-      logDebug("fetchAsbestosAssessors - sorting complete", {
-        sortDurationMs: sortDuration,
-      });
-
-      const setStart = getTimestamp();
-      setAsbestosAssessors(sortedData);
-      const setDuration = Math.round(getTimestamp() - setStart);
-      logDebug("fetchAsbestosAssessors success", {
-        assessorCount: sortedData.length,
-        durationMs: Math.round(getTimestamp() - startTs),
-        breakdown: {
-          requestMs: requestDuration,
-          sortMs: sortDuration,
-          setStateMs: setDuration,
-        },
-      });
-      return sortedData;
-    } catch (error) {
-      console.error("Error fetching asbestos assessors:", error);
-      logDebug("fetchAsbestosAssessors error", {
-        durationMs: Math.round(getTimestamp() - startTs),
-        message: error?.message,
-      });
-      setAsbestosAssessors([]);
-      return [];
-    }
-  }, [asbestosAssessors, logDebug]);
-
   useEffect(() => {
     if (jobId) {
       const effectStart = getTimestamp();
@@ -712,7 +652,7 @@ const AsbestosRemovalJobDetails = () => {
 
   // Open clearance edit dialog once assessors are loaded
   useEffect(() => {
-    if (pendingClearanceEdit && asbestosAssessors.length > 0) {
+    if (pendingClearanceEdit && activeLAAs.length > 0) {
       const clearance = pendingClearanceEdit;
       setPendingClearanceEdit(null); // Clear pending
 
@@ -722,7 +662,7 @@ const AsbestosRemovalJobDetails = () => {
       // Find the matching LAA value from the assessors list
       // This ensures the value format matches exactly what the Select expects
       const storedLAA = clearance.LAA || "";
-      const matchingAssessor = asbestosAssessors.find(
+      const matchingAssessor = activeLAAs.find(
         (assessor) =>
           `${assessor.firstName} ${assessor.lastName}` === storedLAA,
       );
@@ -751,7 +691,7 @@ const AsbestosRemovalJobDetails = () => {
       // Now open the dialog - assessors are loaded and form is set
       setClearanceDialogOpen(true);
     }
-  }, [pendingClearanceEdit, asbestosAssessors]);
+  }, [pendingClearanceEdit, activeLAAs]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -1090,9 +1030,8 @@ const AsbestosRemovalJobDetails = () => {
   };
 
   const handleCreateClearance = () => {
-    // Lazy load removalists, assessors and clearances if not already loaded or loading
+    // Lazy load removalists and clearances if not already loaded or loading
     fetchAsbestosRemovalists();
-    fetchAsbestosAssessors();
     if (clearances.length === 0 && !clearancesLoadingRef.current) {
       fetchClearances();
     }
@@ -1499,9 +1438,8 @@ const AsbestosRemovalJobDetails = () => {
     // Store the clearance to edit - we'll set up the form once assessors are loaded
     setPendingClearanceEdit(clearance);
 
-    // Lazy load removalists and assessors only when needed
-    // Await these to ensure options are available before opening modal
-    await Promise.all([fetchAsbestosAssessors(), fetchAsbestosRemovalists()]);
+    // Lazy load removalists only when needed (assessors come from UserListsContext)
+    await fetchAsbestosRemovalists();
   };
 
   const handleDeleteClearance = (clearance, event) => {
@@ -2168,10 +2106,6 @@ const AsbestosRemovalJobDetails = () => {
                                       reportViewedShiftIds.has(shift._id) ||
                                       !!shift.reportViewedAt,
                                     alreadySentForAuthorisation: !!shift.authorisationRequestedBy,
-                                    hasAdminPermission: hasPermission(
-                                      currentUser,
-                                      "admin.view",
-                                    ),
                                     hasEditPermission: hasPermission(
                                       currentUser,
                                       "jobs.edit",
@@ -2460,10 +2394,6 @@ const AsbestosRemovalJobDetails = () => {
                                     !!clearance.reportViewedAt) && (
                                     <>
                                       {currentUser?.reportProofer &&
-                                        hasPermission(
-                                          currentUser,
-                                          "admin.view",
-                                        ) &&
                                         !clearance.reportApprovedBy && (
                                           <Button
                                             variant="contained"
@@ -2513,11 +2443,7 @@ const AsbestosRemovalJobDetails = () => {
                                               : "Authorise Report"}
                                           </Button>
                                         )}
-                                      {(!currentUser?.reportProofer ||
-                                        !hasPermission(
-                                          currentUser,
-                                          "admin.view",
-                                        )) &&
+                                      {!currentUser?.reportProofer &&
                                         hasPermission(
                                           currentUser,
                                           "asbestos.edit",
@@ -2775,14 +2701,14 @@ const AsbestosRemovalJobDetails = () => {
                       })
                     }
                     label="LAA (Licensed Asbestos Assessor)"
-                    key={`laa-select-${asbestosAssessors.length}-${clearanceForm.LAA}`}
+                    key={`laa-select-${activeLAAs.length}-${clearanceForm.LAA}`}
                   >
-                    {asbestosAssessors.length === 0 ? (
+                    {activeLAAs.length === 0 ? (
                       <MenuItem value="" disabled>
                         Loading assessors...
                       </MenuItem>
                     ) : (
-                      asbestosAssessors.map((assessor) => {
+                      activeLAAs.map((assessor) => {
                         const assessorValue = `${assessor.firstName} ${assessor.lastName}`;
                         return (
                           <MenuItem key={assessor._id} value={assessorValue}>

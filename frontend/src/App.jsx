@@ -4,6 +4,7 @@ import { ColorModeContext, useMode } from "./theme";
 import { AuthProvider } from "./context/AuthContext";
 import { PermissionDeniedProvider } from "./context/PermissionDeniedContext";
 import { ProjectStatusesProvider } from "./context/ProjectStatusesContext";
+import { UserListsProvider } from "./context/UserListsContext";
 import { SnackbarProvider } from "./context/SnackbarContext";
 
 import { Suspense, lazy, useState, useEffect } from "react";
@@ -204,7 +205,8 @@ function App() {
                     path="/*"
                     element={
                       <ProtectedRoute>
-                        <ProjectStatusesProvider>
+                        <UserListsProvider>
+                          <ProjectStatusesProvider>
                           <Layout>
                             <Routes>
                               <Route path="/" element={<Dashboard />} />
@@ -1575,6 +1577,7 @@ function App() {
                             </Routes>
                           </Layout>
                         </ProjectStatusesProvider>
+                        </UserListsProvider>
                       </ProtectedRoute>
                     }
                   />

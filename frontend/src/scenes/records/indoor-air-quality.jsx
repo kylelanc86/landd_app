@@ -599,10 +599,6 @@ const IndoorAirQuality = () => {
                                     record._id || record.id,
                                   ) || !!record.reportViewedAt,
                                 alreadySentForAuthorisation: !!record.authorisationRequestedBy,
-                                hasAdminPermission: hasPermission(
-                                  currentUser,
-                                  "admin.view",
-                                ),
                                 hasEditPermission: hasPermission(
                                   currentUser,
                                   "projects.edit",

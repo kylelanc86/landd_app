@@ -351,7 +351,7 @@ router.get(
         "Filter Size",
         "Field Count",
         "Fibre Count",
-        "Reported Conc. (fibres/ml)",
+        "Reported AFC",
         "Microscope",
         "Test Slide",
         "Edges Distribution",

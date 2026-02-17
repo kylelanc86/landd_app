@@ -42,7 +42,7 @@ import CancelIcon from "@mui/icons-material/Cancel";
 import { airPumpCalibrationService } from "../../../services/airPumpCalibrationService";
 import { equipmentService } from "../../../services/equipmentService";
 import { flowmeterCalibrationService } from "../../../services/flowmeterCalibrationService";
-import userService from "../../../services/userService";
+import { useUserLists } from "../../../context/UserListsContext";
 import { formatDate, formatDateForInput } from "../../../utils/dateFormat";
 import { useAuth } from "../../../context/AuthContext";
 
@@ -54,8 +54,7 @@ const AirPumpPage = () => {
   const [pumpsLoading, setPumpsLoading] = useState(false);
   const [flowmeters, setFlowmeters] = useState([]);
   const [flowmetersLoading, setFlowmetersLoading] = useState(false);
-  const [labSignatories, setLabSignatories] = useState([]);
-  const [labSignatoriesLoading, setLabSignatoriesLoading] = useState(false);
+  const { activeTechnicians, loading: userListsLoading } = useUserLists();
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showOutOfService, setShowOutOfService] = useState(false);
@@ -329,26 +328,6 @@ const AirPumpPage = () => {
     }
   }, []);
 
-  // Fetch lab signatories (users with signatory=true OR calibration approval=true)
-  const fetchLabSignatories = useCallback(async () => {
-    try {
-      setLabSignatoriesLoading(true);
-      const response = await userService.getAll();
-      const users = response.data || response || [];
-      const signatories = users.filter(
-        (user) =>
-          user.isActive &&
-          (user.labSignatory === true || user.labApprovals?.calibrations === true)
-      );
-      setLabSignatories(signatories);
-    } catch (err) {
-      console.error("Error fetching lab signatories:", err);
-      setLabSignatories([]);
-    } finally {
-      setLabSignatoriesLoading(false);
-    }
-  }, []);
-
   // Fetch calibrated site flowmeters
   const fetchFlowmeters = useCallback(async () => {
     try {
@@ -444,9 +423,8 @@ const AirPumpPage = () => {
 
   useEffect(() => {
     fetchPumps();
-    fetchLabSignatories();
     fetchFlowmeters();
-  }, [fetchPumps, fetchLabSignatories, fetchFlowmeters]);
+  }, [fetchPumps, fetchFlowmeters]);
 
   // Listen for equipment data updates
   useEffect(() => {
@@ -534,7 +512,7 @@ const AirPumpPage = () => {
   };
 
   const handleTechnicianChange = (technicianId) => {
-    const selectedTechnician = labSignatories.find(
+    const selectedTechnician = activeTechnicians.find(
       (t) => t._id === technicianId
     );
     setStaticFormData((prev) => ({
@@ -1215,20 +1193,20 @@ const AirPumpPage = () => {
                       value={staticFormData.technicianId}
                       onChange={(e) => handleTechnicianChange(e.target.value)}
                       label="Technician"
-                      disabled={labSignatoriesLoading}
+                      disabled={userListsLoading}
                     >
                       <MenuItem value="">
                         <em>Select a technician</em>
                       </MenuItem>
-                      {labSignatories.length > 0 ? (
-                        labSignatories.map((technician) => (
+                      {activeTechnicians.length > 0 ? (
+                        activeTechnicians.map((technician) => (
                           <MenuItem key={technician._id} value={technician._id}>
                             {technician.firstName} {technician.lastName}
                           </MenuItem>
                         ))
                       ) : (
                         <MenuItem disabled>
-                          {labSignatoriesLoading
+                          {userListsLoading
                             ? "Loading..."
                             : "No technicians found"}
                         </MenuItem>

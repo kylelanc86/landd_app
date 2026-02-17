@@ -1116,10 +1116,6 @@ const LDsuppliedJobs = () => {
                                   !!assessment.reportViewedAt,
                                 alreadySentForAuthorisation: !!assessment.authorisationRequestedBy,
                                 labComplete: labStatus === "analysis-complete",
-                                hasAdminPermission: hasPermission(
-                                  currentUser,
-                                  "admin.view",
-                                ),
                                 hasEditPermission: hasPermission(
                                   currentUser,
                                   "asbestos.edit",
@@ -1127,13 +1123,9 @@ const LDsuppliedJobs = () => {
                                 isReportProofer: Boolean(
                                   currentUser?.reportProofer,
                                 ),
-                                isLabSignatory: Boolean(
-                                  currentUser?.labSignatory,
-                                ),
                               };
                               const canAuthorise =
-                                conditions.isReportProofer ||
-                                conditions.isLabSignatory;
+                                conditions.isReportProofer;
                               // Authorise/Send: after viewing, when lab complete, Fibre ID not yet approved, and assessment not yet authorised
                               const baseVisibleAuthorise =
                                 conditions.reportViewed &&
@@ -1143,7 +1135,6 @@ const LDsuppliedJobs = () => {
                               const visibility = {
                                 showAuthorise:
                                   baseVisibleAuthorise &&
-                                  conditions.hasAdminPermission &&
                                   canAuthorise,
                                 showSend:
                                   baseVisibleAuthorise &&
@@ -1314,14 +1305,13 @@ const LDsuppliedJobs = () => {
                               reportViewed:
                                 reportViewedJobIds.has(job._id) || !!job.reportViewedAt,
                               alreadySentForAuthorisation: !!job.authorisationRequestedBy,
-                              hasAdminPermission: hasPermission(currentUser, "admin.view"),
                               hasEditPermission: hasPermission(currentUser, "clientSup.edit"),
-                              isReportProofer: Boolean(currentUser?.reportProofer),
+                              isLabSignatory: Boolean(currentUser?.labSignatory),
                             };
                             const baseVisible = conditions.notApproved && conditions.reportViewed;
                             const visibility = {
-                              showAuthorise: baseVisible && conditions.hasAdminPermission && conditions.isReportProofer,
-                              showSend: baseVisible && !conditions.isReportProofer && conditions.hasEditPermission,
+                              showAuthorise: baseVisible && conditions.isLabSignatory && conditions.hasEditPermission,
+                              showSend: baseVisible && !conditions.isLabSignatory && conditions.hasEditPermission,
                             };
                             return (
                               <>

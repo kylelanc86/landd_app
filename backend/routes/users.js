@@ -101,6 +101,69 @@ router.get('/asbestos-assessors', auth, checkPermission(['users.view']), async (
   }
 });
 
+// Get active technicians (calibration signatories / lab signatory approval)
+router.get('/technicians', auth, checkPermission(['users.view']), async (req, res) => {
+  try {
+    const startTime = Date.now();
+    const technicians = await User.find({
+      isActive: true,
+      $or: [
+        { labSignatory: true },
+        { 'labApprovals.calibrations': true }
+      ]
+    })
+      .select('firstName lastName _id')
+      .sort({ lastName: 1, firstName: 1 })
+      .lean();
+    const queryTime = Date.now() - startTime;
+    console.log(`[USERS] Fetched ${technicians.length} technicians in ${queryTime}ms`);
+    res.json(technicians);
+  } catch (err) {
+    console.error('Error fetching technicians:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Get active fibre counters (users with fibre counting approval)
+router.get('/fibre-counters', auth, checkPermission(['users.view']), async (req, res) => {
+  try {
+    const startTime = Date.now();
+    const counters = await User.find({
+      isActive: true,
+      'labApprovals.fibreCounting': true
+    })
+      .select('firstName lastName _id')
+      .sort({ lastName: 1, firstName: 1 })
+      .lean();
+    const queryTime = Date.now() - startTime;
+    console.log(`[USERS] Fetched ${counters.length} fibre counters in ${queryTime}ms`);
+    res.json(counters);
+  } catch (err) {
+    console.error('Error fetching fibre counters:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Get active fibre identifiers (users with fibre identification approval)
+router.get('/fibre-identifiers', auth, checkPermission(['users.view']), async (req, res) => {
+  try {
+    const startTime = Date.now();
+    const identifiers = await User.find({
+      isActive: true,
+      'labApprovals.fibreIdentification': true
+    })
+      .select('firstName lastName _id')
+      .sort({ lastName: 1, firstName: 1 })
+      .lean();
+    const queryTime = Date.now() - startTime;
+    console.log(`[USERS] Fetched ${identifiers.length} fibre identifiers in ${queryTime}ms`);
+    res.json(identifiers);
+  } catch (err) {
+    console.error('Error fetching fibre identifiers:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // Get user by ID
 router.get('/:id', auth, async (req, res) => {
   try {

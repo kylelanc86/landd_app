@@ -35,6 +35,7 @@ import { userService } from "../../services/api";
 import { useParams, useNavigate } from "react-router-dom";
 import { hasPermission } from "../../config/permissions";
 import { useAuth } from "../../context/AuthContext";
+import { useUserLists } from "../../context/UserListsContext";
 import {
   validateSignatureFile,
   compressSignatureImage,
@@ -72,6 +73,7 @@ const EditUserPage = () => {
   const navigate = useNavigate();
   const { userId } = useParams();
   const { currentUser } = useAuth();
+  const { refreshUserLists } = useUserLists();
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -361,6 +363,7 @@ const EditUserPage = () => {
 
       console.log("Updating user with data:", updateData);
       await userService.update(userId, updateData);
+      await refreshUserLists();
 
       // Reset unsaved changes flag and update original form
       setHasUnsavedChanges(false);

@@ -38,8 +38,9 @@ import {
   Add as AddIcon,
 } from "@mui/icons-material";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { clientSuppliedJobsService, userService } from "../../services/api";
+import { clientSuppliedJobsService } from "../../services/api";
 import customDataFieldGroupService from "../../services/customDataFieldGroupService";
+import { useUserLists } from "../../context/UserListsContext";
 
 const ClientSuppliedFibreIDAnalysis = () => {
   const navigate = useNavigate();
@@ -76,7 +77,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
   const [traceAsbestosContent, setTraceAsbestosContent] = useState("");
   const [traceCount, setTraceCount] = useState("");
   const [analysisDate, setAnalysisDate] = useState(new Date());
-  const [analysts, setAnalysts] = useState([]);
+  const { activeIdentifiers } = useUserLists();
   const [analyst, setAnalyst] = useState("");
   const [comments, setComments] = useState("");
   const { showSnackbar } = useSnackbar();
@@ -100,7 +101,6 @@ const ClientSuppliedFibreIDAnalysis = () => {
     if (jobId && sampleIndex !== undefined && sampleIndex !== null) {
       fetchJobAndSampleDetails();
     }
-    fetchAnalysts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId, sampleIndex]);
 
@@ -124,18 +124,6 @@ const ClientSuppliedFibreIDAnalysis = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noFibreDetected, fibres.length]);
-
-  const fetchAnalysts = async () => {
-    try {
-      const response = await userService.getAll(true); // Get all users including inactive
-      const fibreIdentificationAnalysts = response.data.filter(
-        (user) => user.labApprovals?.fibreIdentification === true
-      );
-      setAnalysts(fibreIdentificationAnalysts);
-    } catch (error) {
-      console.error("Error fetching analysts:", error);
-    }
-  };
 
   const fetchJobAndSampleDetails = async () => {
     try {
@@ -245,8 +233,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
         setAnalysisDate(new Date());
 
         // Set default analyst if available
-        if (analysts.length > 0 && !analyst) {
-          setAnalyst(analysts[0]._id);
+        if (activeIdentifiers.length > 0 && !analyst) {
+          setAnalyst(activeIdentifiers[0]._id);
         }
 
         // Mark that we're starting initialization
@@ -621,7 +609,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
       // Get analyst user object if analyst is selected
       let analystUser = null;
       if (analyst) {
-        analystUser = analysts.find((a) => a._id === analyst);
+        analystUser = activeIdentifiers.find((a) => a._id === analyst);
       }
 
       // Update the sample in the job's samples array - create deep copy to avoid reference sharing
@@ -774,7 +762,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
       // Get analyst user object if analyst is selected
       let analystUser = null;
       if (analyst) {
-        analystUser = analysts.find((a) => a._id === analyst);
+        analystUser = activeIdentifiers.find((a) => a._id === analyst);
       }
 
       // Update the sample in the job's samples array - create deep copy to avoid reference sharing
@@ -880,7 +868,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
       // Get analyst user object if analyst is selected
       let analystUser = null;
       if (analyst) {
-        analystUser = analysts.find((a) => a._id === analyst);
+        analystUser = activeIdentifiers.find((a) => a._id === analyst);
       }
 
       // Update the sample in the job's samples array - create deep copy to avoid reference sharing
@@ -1394,7 +1382,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
               <MenuItem value="">
                 <em>Select Analyst</em>
               </MenuItem>
-              {analysts.map((analystOption) => (
+              {activeIdentifiers.map((analystOption) => (
                 <MenuItem key={analystOption._id} value={analystOption._id}>
                   {analystOption.firstName} {analystOption.lastName}
                 </MenuItem>
@@ -1418,7 +1406,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
             sx={{ minWidth: 200 }}
           />
         </Stack>
-        {analysts.length === 0 && (
+        {activeIdentifiers.length === 0 && (
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             No analysts found - check lab approvals
           </Typography>

@@ -27,10 +27,12 @@ import TruncatedCell from "../../components/TruncatedCell";
 import { useNavigate } from "react-router-dom";
 import { hasPermission } from "../../config/permissions";
 import { useAuth } from "../../context/AuthContext";
+import { useUserLists } from "../../context/UserListsContext";
 
 const Users = () => {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
+  const { refreshUserLists } = useUserLists();
   const [users, setUsers] = useState([]);
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
   const [statusChangeId, setStatusChangeId] = useState(null);
@@ -111,6 +113,7 @@ const Users = () => {
       setUsers(
         users.map((u) => (u._id === statusChangeId ? response.data : u)),
       );
+      await refreshUserLists();
       setStatusDialogOpen(false);
       setStatusChangeId(null);
       setStatusChangeType(null);

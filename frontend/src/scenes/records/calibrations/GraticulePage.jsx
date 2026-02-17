@@ -36,7 +36,7 @@ import { formatDate, formatDateForInput } from "../../../utils/dateFormat";
 import { equipmentService } from "../../../services/equipmentService";
 import { graticuleService } from "../../../services/graticuleService";
 import { efaService } from "../../../services/efaService";
-import userService from "../../../services/userService";
+import { useUserLists } from "../../../context/UserListsContext";
 
 const GraticulePage = () => {
   const theme = useTheme();
@@ -52,8 +52,7 @@ const GraticulePage = () => {
   const [tableData, setTableData] = useState([]);
 
   // Lab signatories state
-  const [labSignatories, setLabSignatories] = useState([]);
-  const [labSignatoriesLoading, setLabSignatoriesLoading] = useState(false);
+  const { activeTechnicians, loading: userListsLoading } = useUserLists();
 
   // PCM microscopes state
   const [pcmMicroscopes, setPcmMicroscopes] = useState([]);
@@ -136,7 +135,6 @@ const GraticulePage = () => {
   useEffect(() => {
     fetchCalibrations();
     fetchGraticules();
-    fetchLabSignatories();
     fetchPcmMicroscopes();
     fetchEffectiveFilterAreas();
   }, []);
@@ -188,37 +186,6 @@ const GraticulePage = () => {
       setError("Failed to load graticules");
     } finally {
       setGraticulesLoading(false);
-    }
-  };
-
-  const fetchLabSignatories = async () => {
-    try {
-      setLabSignatoriesLoading(true);
-
-      const response = await userService.getAll();
-      const allUsers = response.data || response || [];
-
-      // Filter users who have signatory=true OR calibration approval=true
-      const labSignatoryUsers = allUsers.filter(
-        (user) =>
-          user.isActive &&
-          (user.labSignatory === true ||
-            user.labApprovals?.calibrations === true),
-      );
-
-      // Sort alphabetically by name
-      const sortedUsers = labSignatoryUsers.sort((a, b) => {
-        const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
-        const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
-        return nameA.localeCompare(nameB);
-      });
-
-      setLabSignatories(sortedUsers);
-    } catch (err) {
-      console.error("Error fetching lab signatories:", err);
-      setError("Failed to load lab signatories");
-    } finally {
-      setLabSignatoriesLoading(false);
     }
   };
 
@@ -456,7 +423,7 @@ const GraticulePage = () => {
       // Find the technician ID by matching the technician name
       const technicianName =
         calibration.technicianName || calibration.technician || "";
-      const matchingTechnician = labSignatories.find(
+      const matchingTechnician = activeTechnicians.find(
         (tech) => `${tech.firstName} ${tech.lastName}` === technicianName,
       );
 
@@ -716,7 +683,7 @@ const GraticulePage = () => {
   };
 
   const handleTechnicianChange = (technicianId) => {
-    const selectedTechnician = labSignatories.find(
+    const selectedTechnician = activeTechnicians.find(
       (t) => t._id === technicianId,
     );
     setFormData((prev) => ({
@@ -1233,20 +1200,20 @@ const GraticulePage = () => {
                 value={formData.technicianId}
                 onChange={(e) => handleTechnicianChange(e.target.value)}
                 label="Technician"
-                disabled={labSignatoriesLoading}
+                disabled={userListsLoading}
               >
                 <MenuItem value="">
                   <em>Select a technician</em>
                 </MenuItem>
-                {labSignatories.length > 0 ? (
-                  labSignatories.map((technician) => (
+                {activeTechnicians.length > 0 ? (
+                  activeTechnicians.map((technician) => (
                     <MenuItem key={technician._id} value={technician._id}>
                       {technician.firstName} {technician.lastName}
                     </MenuItem>
                   ))
                 ) : (
                   <MenuItem disabled>
-                    {labSignatoriesLoading
+                    {userListsLoading
                       ? "Loading..."
                       : "No lab signatories found"}
                   </MenuItem>

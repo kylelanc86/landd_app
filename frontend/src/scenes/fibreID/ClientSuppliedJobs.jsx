@@ -1340,10 +1340,6 @@ const ClientSuppliedJobs = () => {
                                 reportViewedJobIds.has(job._id) ||
                                 !!job.reportViewedAt,
                               alreadySentForAuthorisation: !!job.authorisationRequestedBy,
-                              hasAdminPermission: hasPermission(
-                                currentUser,
-                                "admin.view",
-                              ),
                               hasEditPermission: hasPermission(
                                 currentUser,
                                 "clientSup.edit",

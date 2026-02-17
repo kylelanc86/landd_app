@@ -1316,8 +1316,8 @@ const AssessmentItems = () => {
       // Close dialog
       setShowSamplesSubmittedDialog(false);
       showSnackbar("Samples submitted to lab successfully", "success");
-      // Navigate to the assessment items page
-      navigate(itemsPathForId(id));
+      // Navigate to the survey list (index) for this job type
+      navigate(listPath);
     } catch (error) {
       console.error("Error submitting samples to lab:", error);
       showSnackbar("Failed to submit samples to lab", "error");

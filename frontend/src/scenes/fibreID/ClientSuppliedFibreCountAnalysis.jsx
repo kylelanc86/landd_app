@@ -30,7 +30,6 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ClearIcon from "@mui/icons-material/Clear";
 import { clientSuppliedJobsService } from "../../services/api";
-import { userService } from "../../services/api";
 import pcmMicroscopeService from "../../services/pcmMicroscopeService";
 import { equipmentService } from "../../services/equipmentService";
 import hseTestSlideService from "../../services/hseTestSlideService";
@@ -38,6 +37,7 @@ import { graticuleService } from "../../services/graticuleService";
 import { FixedSizeList as List } from "react-window";
 import AutoSizer from "react-virtualized-auto-sizer";
 import { useAuth } from "../../context/AuthContext";
+import { useUserLists } from "../../context/UserListsContext";
 import { useSnackbar } from "../../context/SnackbarContext";
 import { getTodayInSydney } from "../../utils/dateUtils";
 
@@ -276,7 +276,7 @@ const ClientSuppliedFibreCountAnalysis = () => {
   const inputRefs = useRef({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [users, setUsers] = useState([]);
+  const { activeCounters } = useUserLists();
   const [analysedBy, setAnalysedBy] = useState("");
   const [analysisDate, setAnalysisDate] = useState(getTodayInSydney());
   const [fibreCountModalOpen, setFibreCountModalOpen] = useState(false);
@@ -865,25 +865,6 @@ const ClientSuppliedFibreCountAnalysis = () => {
   const cancelRefresh = () => {
     setRefreshDialogOpen(false);
   };
-
-  // Fetch users for analyst dropdown
-  useEffect(() => {
-    userService.getAll().then((res) => {
-      const allUsers = res.data || [];
-      const fibreCountingUsers = allUsers.filter(
-        (user) =>
-          user.isActive &&
-          user.labApprovals &&
-          user.labApprovals.fibreCounting === true
-      );
-      const sortedUsers = fibreCountingUsers.sort((a, b) => {
-        const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
-        const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
-        return nameA.localeCompare(nameB);
-      });
-      setUsers(sortedUsers);
-    });
-  }, []);
 
   const handleAnalysisDetailsChange = (e) => {
     setAnalysisDetails({
@@ -1660,7 +1641,7 @@ const ClientSuppliedFibreCountAnalysis = () => {
             label="Analyst"
             onChange={(e) => setAnalysedBy(e.target.value)}
           >
-            {users.map((user) => (
+            {activeCounters.map((user) => (
               <MenuItem
                 key={user._id}
                 value={user.firstName + " " + user.lastName}

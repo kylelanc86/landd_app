@@ -35,6 +35,7 @@ import { userService } from "../../services/api";
 import { useNavigate } from "react-router-dom";
 import { hasPermission } from "../../config/permissions";
 import { useAuth } from "../../context/AuthContext";
+import { useUserLists } from "../../context/UserListsContext";
 import {
   validateSignatureFile,
   compressSignatureImage,
@@ -71,6 +72,7 @@ const emptyForm = {
 const AddUserPage = () => {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
+  const { refreshUserLists } = useUserLists();
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const { showSnackbar } = useSnackbar();
@@ -280,6 +282,7 @@ const AddUserPage = () => {
 
       console.log("Creating user with data:", userData);
       await userService.create(userData);
+      await refreshUserLists();
 
       // Show success message and navigate back to users list
       showSnackbar(

@@ -45,9 +45,9 @@ import { useTheme } from "@mui/material/styles";
 import {
   projectService,
   asbestosAssessmentService,
-  userService,
 } from "../../../services/api";
 import { useAuth } from "../../../context/AuthContext";
+import { useUserLists } from "../../../context/UserListsContext";
 import { hasPermission } from "../../../config/permissions";
 import { getTodaySydney } from "../../../utils/dateUtils";
 import { useSnackbar } from "../../../context/SnackbarContext";
@@ -122,9 +122,9 @@ const AsbestosAssessment = () => {
   const { currentUser } = useAuth();
   const { showSnackbar } = useSnackbar();
 
+  const { activeLAAs } = useUserLists();
   const [jobs, setJobs] = useState([]);
   const [projects, setProjects] = useState([]);
-  const [asbestosAssessors, setAsbestosAssessors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -301,24 +301,6 @@ const AsbestosAssessment = () => {
     }
   }, []);
 
-  const fetchAsbestosAssessors = useCallback(async () => {
-    try {
-      const response = await userService.getAsbestosAssessors();
-      const assessors = response.data || [];
-
-      const sortedAssessors = assessors.sort((a, b) => {
-        const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
-        const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
-        return nameA.localeCompare(nameB);
-      });
-
-      setAsbestosAssessors(sortedAssessors);
-    } catch (error) {
-      console.error("Error fetching asbestos assessors:", error);
-      setAsbestosAssessors([]);
-    }
-  }, []);
-
   useEffect(() => {
     const cached = loadJobsCache();
 
@@ -330,8 +312,7 @@ const AsbestosAssessment = () => {
     } else {
       fetchJobs();
     }
-    fetchAsbestosAssessors();
-  }, [fetchJobs, fetchAsbestosAssessors]);
+  }, [fetchJobs]);
 
   const getStatusColor = useCallback(
     (status) => {
@@ -402,9 +383,6 @@ const AsbestosAssessment = () => {
     setSelectedLAA("");
     if (projects.length === 0) {
       fetchProjects();
-    }
-    if (asbestosAssessors.length === 0) {
-      fetchAsbestosAssessors();
     }
   };
 
@@ -1352,10 +1330,7 @@ const AsbestosAssessment = () => {
                             const reportViewed = reportViewedAssessmentIds.has(
                               job.id,
                             );
-                            const canAuthorise =
-                              (currentUser?.reportProofer ||
-                                currentUser?.labSignatory) &&
-                              hasPermission(currentUser, "admin.view");
+                            const canAuthorise = currentUser?.reportProofer;
                             const canSendForApproval =
                               hasPermission(currentUser, "asbestos.edit") &&
                               !canAuthorise;
@@ -1581,7 +1556,7 @@ const AsbestosAssessment = () => {
               <MenuItem value="">
                 <em>None</em>
               </MenuItem>
-              {asbestosAssessors.map((assessor) => {
+              {activeLAAs.map((assessor) => {
                 const assessorValue = `${assessor.firstName} ${assessor.lastName}`;
                 return (
                   <MenuItem key={assessor._id} value={assessorValue}>
@@ -1713,7 +1688,7 @@ const AsbestosAssessment = () => {
               <MenuItem value="">
                 <em>None</em>
               </MenuItem>
-              {asbestosAssessors.map((assessor) => {
+              {activeLAAs.map((assessor) => {
                 const assessorValue = `${assessor.firstName} ${assessor.lastName}`;
                 return (
                   <MenuItem key={assessor._id} value={assessorValue}>

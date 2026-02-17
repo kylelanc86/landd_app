@@ -1253,7 +1253,7 @@ const ProjectReports = () => {
         "Ave Flow (L/min)",
         "Field Count",
         "Fibre Count",
-        "Reported Conc. (fibres/ml)",
+        "Reported AFC",
         "Sampler",
         "Analyst",
       ];

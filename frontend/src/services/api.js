@@ -339,7 +339,10 @@ export const userService = {
   update: (id, data) => api.put(`/users/${id}`, data),
   delete: (id) => api.delete(`/users/${id}`),
   sendPasswordResetEmail: (email) => api.post('/auth/admin-reset-password', { email }),
-  getAsbestosAssessors: () => api.get('/users/asbestos-assessors')
+  getAsbestosAssessors: () => api.get('/users/asbestos-assessors'),
+  getTechnicians: () => api.get('/users/technicians'),
+  getFibreCounters: () => api.get('/users/fibre-counters'),
+  getFibreIdentifiers: () => api.get('/users/fibre-identifiers')
 };
 
 // User preferences service

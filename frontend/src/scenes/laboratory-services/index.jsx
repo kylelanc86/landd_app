@@ -34,7 +34,7 @@ const LaboratoryServices = () => {
       id: "ld-supplied",
       title: "L&D Supplied",
       description:
-        "Manage and analyse L&D supplied samples for laboratory services",
+        "Manage and analyse L&D supplied samples for fibre identification analysis",
       icon: <BusinessIcon />,
       color: "#2e7d32",
       route: "/laboratory-services/ld-supplied",
