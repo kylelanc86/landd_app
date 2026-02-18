@@ -119,7 +119,7 @@ const getTemplateByType = async (templateType) => {
           introductionTitle: "INTRODUCTION",
           introductionContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
           
-          surveyFindingsTitle: "SUMMARY OF IDENTIFIED ACM",
+          surveyFindingsTitle: "ASSESSMENT FINDINGS",
           surveyFindingsContent: "[DYNAMIC_CONTENT_NOT_LOADED]",
           surveyFindingsContentNoSamples: "[DYNAMIC_CONTENT_NOT_LOADED]",
           

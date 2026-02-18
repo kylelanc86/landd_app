@@ -73,10 +73,10 @@ const SurveyReportTemplates = () => {
   // Template sections in the specified order (Asbestos Assessment tab)
   const asbestosTemplateSections = [
     { key: "introductionContent", label: "Introduction" },
-    { key: "surveyFindingsContent", label: "Summary of Identified ACM" },
+    { key: "surveyFindingsContent", label: "Assessment Findings" },
     {
       key: "surveyFindingsContentNoSamples",
-      label: "Summary of Identified ACM (No Asbestos)",
+      label: "Assessment Findings (No Asbestos)",
     },
     { key: "discussionContent", label: "Discussion & Conclusions" },
     {

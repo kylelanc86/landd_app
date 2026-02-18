@@ -129,8 +129,8 @@ const stripAsbestosCountLineFromDiscussion = (text) => {
   if (!trimmed) return '';
   // Match: "No asbestos containing materials were identified during the assessment conducted at ..." (full first line)
   const noAcmPattern = /^No asbestos containing materials were identified during the assessment conducted at [^\n]+(\s*\n)?/i;
-  // Match: "X asbestos items were identified during the assessment of ..." (full first line; X = "Two (2)", "**Analysis incomplete**", etc.)
-  const withCountPattern = /^[^\n]*asbestos items were identified during the assessment of [^\n]+(\s*\n)?/i;
+  // Match: "X asbestos item(s) was/were identified during the assessment of ..." (full first line; X = "One (1)", "Two (2)", etc.)
+  const withCountPattern = /^[^\n]*asbestos items? (?:were|was) identified during the assessment of [^\n]+(\s*\n)?/i;
   let result = trimmed
     .replace(noAcmPattern, '')
     .replace(withCountPattern, '');
@@ -2712,7 +2712,7 @@ const generateAssessmentHTML = async (assessmentData) => {
         const pageBlocks = blocksForPages.slice(i, i + 2);
         const pageContent = pageBlocks.map(block => buildTableBlock(block)).join('<div style="margin-bottom: 20px;"></div>');
         const continuationHeader = i >= 2 && i % 2 === 0
-          ? '<div class="section-header">TABLE 1: ASSESSMENT REGISTER cont.</div>'
+          ? '<div class="section-header">Table 1: Assessment Register cont.</div>'
           : '';
         const pageNumber = 2 + pages.length;
         pages.push(`
@@ -2749,7 +2749,7 @@ const generateAssessmentHTML = async (assessmentData) => {
       for (let i = 0; i < remainingBlocks.length; i += 2) {
         const pageBlocks = remainingBlocks.slice(i, i + 2);
         const pageContent = pageBlocks.map(block => buildTableBlock(block)).join('<div style="margin-bottom: 20px;"></div>');
-        const continuationHeader = '<div class="section-header">TABLE 1: ASSESSMENT REGISTER cont.</div>';
+        const continuationHeader = '<div class="section-header">Table 1: Assessment Register cont.</div>';
         const pageNumber = 2 + pages.length;
         pages.push(`
           <div class="assessment-page">
@@ -2818,7 +2818,7 @@ const generateAssessmentHTML = async (assessmentData) => {
       .replace(/\[BACKGROUND_SECTION\]/g, backgroundSectionHtmlResolved)
       .replace(/\[INTRODUCTION_TITLE\]/g, templateContent?.standardSections?.introductionTitle || 'INTRODUCTION')
       .replace(/\[INTRODUCTION_CONTENT\]/g, templateContent?.standardSections?.introductionContent ? await replacePlaceholders(templateContent.standardSections.introductionContent, { ...assessmentData, selectedLegislation }) : 'Introduction content not found')
-      .replace(/\[SURVEY_FINDINGS_TITLE\]/g, templateContent?.standardSections?.surveyFindingsTitle || 'SUMMARY OF IDENTIFIED ACM')
+      .replace(/\[SURVEY_FINDINGS_TITLE\]/g, templateContent?.standardSections?.surveyFindingsTitle || (isResidential ? 'SUMMARY OF IDENTIFIED ACM' : 'ASSESSMENT FINDINGS'))
       .replace(/\[SURVEY_FINDINGS_CONTENT\]/g, surveyFindingsContentPopulated)
       .replace(/\[SAMPLE_REGISTER_ITEMS\]/g, shouldMoveFirstItemToNewPage ? '' : firstSampleTable); // Conditionally include the first sample table
 
@@ -2903,7 +2903,9 @@ const generateAssessmentHTML = async (assessmentData) => {
     const discussionConclusionsHtml = toJustifiedParagraphsHtml(discussionConclusionsRaw);
     const asbestosCountLineLegacy = asbestosCount === 0
       ? `No asbestos containing materials were identified during the assessment conducted at ${siteName}.`
-      : `${asbestosCountDisplay} asbestos items were identified during the assessment of ${siteName}.`;
+      : asbestosCount === 1
+        ? `${asbestosCountDisplay} asbestos item was identified during the assessment of ${siteName}.`
+        : `${asbestosCountDisplay} asbestos items were identified during the assessment of ${siteName}.`;
 
     // Page numbers: cover=1, version=2, item1=3, then assessment register pages, then discussion, then optional RCM page, then additional 1 & 2
     const sampleRegisterPageCount = shouldMoveFirstItemToNewPage
@@ -3171,7 +3173,7 @@ const generateAssessmentHTML = async (assessmentData) => {
       .assessment-page .sample-ref-value { width: 11.25%; }
       .assessment-page .sample-value { width: 12.5%; }
       .assessment-page .sample-asbestos-content-cell { font-weight: bold; }
-      .assessment-page .sample-risk-cell { line-height: 1; height: 1.2em; padding: 4px 8px; vertical-align: middle; }
+      .assessment-page .sample-risk-cell { line-height: 1; height: 1.2em; padding: 4px 8px; vertical-align: top; }
       .assessment-page .sample-location-content { height: 60px; vertical-align: top; padding: 8px; background: #fafafa; border: 1.5px solid #888; font-size: 0.64rem; line-height: 1.4; }
       .assessment-page .comments-row td { background: #eaeaea; font-size: 0.64rem; font-style: italic; width: 100%; line-height: 1.4; }
       .assessment-page .comments-cell-inner { min-height: 2.7rem; display: block; }
@@ -3520,7 +3522,7 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
       .replace(/\[RISK\]/g, getRiskDisplay(item))
       .replace(/\[COMMENTS\]/g, getCommentsValue(item));
     const continuationHeader = addContinuationHeader
-      ? '<div class="page-break"></div><div class="section-header">TABLE 1: ASSESSMENT REGISTER cont.</div>'
+      ? '<div class="page-break"></div><div class="section-header">Table 1: Assessment Register cont.</div>'
       : '';
     return `${continuationHeader}<div class="sample-block">${sampleTable}</div>`;
   };
@@ -3645,7 +3647,9 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
   // Hard-coded first line: asbestos count (always shown, not in discussion text box)
   const asbestosCountLineFlow = asbestosCountFlow === 0
     ? `No asbestos containing materials were identified during the assessment conducted at ${assessmentSiteAddress}.`
-    : `${asbestosCountDisplayFlow} asbestos items were identified during the assessment of ${assessmentSiteAddress}.`;
+    : asbestosCountFlow === 1
+      ? `${asbestosCountDisplayFlow} asbestos item was identified during the assessment of ${assessmentSiteAddress}.`
+      : `${asbestosCountDisplayFlow} asbestos items were identified during the assessment of ${assessmentSiteAddress}.`;
   const asbestosCountLineHtml = `<p style="margin: 0 0 8px 0; text-align: justify;">${escapeHtml(asbestosCountLineFlow)}</p>`;
 
   const jobSpecificExclusionsRaw = (assessmentData.jobSpecificExclusions || '').trim();
@@ -3786,7 +3790,7 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
           .sample-asbestos-content-cell { font-weight: 700; }
           /* Recommendation Actions/Comments row fixed (3-line minimum height) */
           .comments-cell-inner { min-height: 2.7rem; display: block; }
-          .sample-risk-cell { line-height: 1; height: 1.2em; padding: 4px 4px; vertical-align: middle; }
+          .sample-risk-cell { line-height: 1; height: 1.2em; padding: 4px 4px; vertical-align: top; }
           .sample-location-content { height: 60px; vertical-align: top; padding: 8px; background: #fafafa; border: 1.5px solid #888; font-size: 0.64rem; line-height: 1.4; }
           .sample-photo-cell { width: 71% !important; height: 340px !important; overflow: hidden !important; box-sizing: border-box !important; text-align: center; vertical-align: middle; background: #fff; padding: 0 !important; margin: 0 !important; }
           .sample-photo-cell-inner { display: block; width: 100%; height: 340px; overflow: hidden; box-sizing: border-box; padding: 0; margin: 0; }
@@ -3833,13 +3837,13 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
         <div class="section-header">${escapeHtml(templateContent?.standardSections?.introductionTitle || 'INTRODUCTION')}</div>
         <div class="section-body">${introductionHtml}</div>
 
-        <div class="section-header">${escapeHtml(templateContent?.standardSections?.surveyFindingsTitle || 'SUMMARY OF IDENTIFIED ACM')}</div>
+        <div class="section-header">${escapeHtml(templateContent?.standardSections?.surveyFindingsTitle || (isResidential ? 'SUMMARY OF IDENTIFIED ACM' : 'ASSESSMENT FINDINGS'))}</div>
         <div class="section-body">${surveyFindingsHtml}</div>
 
         ${isResidential ? '<div class="page-break"></div>' : ''}
         ${(isResidential || firstTableBlockHtml || flowTableBlocks.length === 0) ? `<div class="section-header">Table 1: Assessment Register</div>` : ''}
         ${firstTableBlockHtml}
-        ${!isResidential && remainingTableBlocks.length > 0 ? '<div class="page-break"></div><div class="section-header">TABLE 1: ASSESSMENT REGISTER cont.</div>' : ''}
+        ${!isResidential && remainingTableBlocks.length > 0 ? '<div class="page-break"></div><div class="section-header">Table 1: Assessment Register cont.</div>' : ''}
         ${sampleTablesHtml || (flowTableBlocks.length === 0 ? '<div class="section-body">No items</div>' : '')}
 
         <div class="page-break"></div>
