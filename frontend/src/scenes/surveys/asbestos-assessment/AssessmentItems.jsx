@@ -429,6 +429,8 @@ const AssessmentItems = () => {
   const [uploadingSitePlan, setUploadingSitePlan] = useState(false);
   const [sitePlanDrawingDialogOpen, setSitePlanDrawingDialogOpen] =
     useState(false);
+  const [sitePlanKeyReminderOpen, setSitePlanKeyReminderOpen] = useState(false);
+  const [pendingSitePlanData, setPendingSitePlanData] = useState(null);
   const sitePlanDrawingRef = useRef(null);
 
   // Dictation state (for recommendations)
@@ -1356,47 +1358,60 @@ const AssessmentItems = () => {
   };
 
   // Site Plan handlers
+  const performSitePlanSave = async (sitePlanData) => {
+    const imageData =
+      typeof sitePlanData === "string"
+        ? sitePlanData
+        : sitePlanData?.imageData;
+    const legendEntries = Array.isArray(sitePlanData?.legend)
+      ? sitePlanData.legend.map((entry) => ({
+          color: entry.color,
+          description: entry.description,
+        }))
+      : [];
+    const legendTitle =
+      sitePlanData?.legendTitle && sitePlanData.legendTitle.trim()
+        ? sitePlanData.legendTitle.trim()
+        : "Key";
+    const figureTitle =
+      sitePlanData?.figureTitle && sitePlanData.figureTitle.trim()
+        ? sitePlanData.figureTitle.trim()
+        : "Asbestos Assessment Site Plan";
+
+    if (!imageData) {
+      showSnackbar("No site plan image data was provided", "error");
+      return;
+    }
+
+    await asbestosAssessmentService.update(id, {
+      projectId: assessment.projectId?._id || assessment.projectId,
+      assessmentDate: assessment.assessmentDate,
+      sitePlan: true,
+      sitePlanFile: imageData,
+      sitePlanLegend: legendEntries,
+      sitePlanLegendTitle: legendTitle,
+      sitePlanFigureTitle: figureTitle,
+      sitePlanSource: "drawn",
+    });
+
+    showSnackbar("Drawn site plan saved successfully!", "success");
+    setSitePlanDrawingDialogOpen(false);
+    await fetchData();
+  };
+
   const handleSitePlanSave = async (sitePlanData) => {
+    const hasMissingDescriptions =
+      Array.isArray(sitePlanData?.legend) &&
+      sitePlanData.legend.some((e) => !(e.description || "").trim());
+
+    if (hasMissingDescriptions) {
+      setPendingSitePlanData(sitePlanData);
+      setSitePlanKeyReminderOpen(true);
+      return;
+    }
+
     try {
-      const imageData =
-        typeof sitePlanData === "string"
-          ? sitePlanData
-          : sitePlanData?.imageData;
-      const legendEntries = Array.isArray(sitePlanData?.legend)
-        ? sitePlanData.legend.map((entry) => ({
-            color: entry.color,
-            description: entry.description,
-          }))
-        : [];
-      const legendTitle =
-        sitePlanData?.legendTitle && sitePlanData.legendTitle.trim()
-          ? sitePlanData.legendTitle.trim()
-          : "Key";
-      const figureTitle =
-        sitePlanData?.figureTitle && sitePlanData.figureTitle.trim()
-          ? sitePlanData.figureTitle.trim()
-          : "Asbestos Assessment Site Plan";
-
-      if (!imageData) {
-        showSnackbar("No site plan image data was provided", "error");
-        return;
-      }
-
-      // Save the drawn site plan to the assessment (preserve status; clear approval if changed)
-      await asbestosAssessmentService.update(id, {
-        projectId: assessment.projectId?._id || assessment.projectId,
-        assessmentDate: assessment.assessmentDate,
-        sitePlan: true,
-        sitePlanFile: imageData,
-        sitePlanLegend: legendEntries,
-        sitePlanLegendTitle: legendTitle,
-        sitePlanFigureTitle: figureTitle,
-        sitePlanSource: "drawn",
-      });
-
-      showSnackbar("Drawn site plan saved successfully!", "success");
-      setSitePlanDrawingDialogOpen(false);
-      await fetchData(); // Refresh assessment data to show the new site plan
+      await performSitePlanSave(sitePlanData);
     } catch (error) {
       console.error("Error saving site plan:", error);
       showSnackbar("Error saving site plan", "error");
@@ -1404,17 +1419,27 @@ const AssessmentItems = () => {
   };
 
   const handleSitePlanDrawingClose = () => {
-    if (sitePlanDrawingRef.current?.hasEmptyKey?.()) {
-      if (
-        window.confirm(
-          "You haven't added any items to the site plan key. Click OK to add key items, or Cancel to close anyway.",
-        )
-      ) {
-        sitePlanDrawingRef.current?.openLegendDialog?.();
-        return;
+    setSitePlanDrawingDialogOpen(false);
+  };
+
+  const handleSitePlanKeyReminderAddDescriptions = () => {
+    setSitePlanKeyReminderOpen(false);
+    setPendingSitePlanData(null);
+    sitePlanDrawingRef.current?.openLegendDialog?.();
+  };
+
+  const handleSitePlanKeyReminderSaveAnyway = async () => {
+    setSitePlanKeyReminderOpen(false);
+    const data = pendingSitePlanData;
+    setPendingSitePlanData(null);
+    if (data) {
+      try {
+        await performSitePlanSave(data);
+      } catch (error) {
+        console.error("Error saving site plan:", error);
+        showSnackbar("Error saving site plan", "error");
       }
     }
-    setSitePlanDrawingDialogOpen(false);
   };
 
   const handleSitePlanFileUpload = (event) => {
@@ -5668,6 +5693,50 @@ const AssessmentItems = () => {
               existingFigureTitle={assessment?.sitePlanFigureTitle}
             />
           </DialogContent>
+        </Dialog>
+
+        {/* Site plan key descriptions reminder */}
+        <Dialog
+          open={sitePlanKeyReminderOpen}
+          onClose={() => {
+            setSitePlanKeyReminderOpen(false);
+            setPendingSitePlanData(null);
+          }}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 2,
+              boxShadow: "0 12px 40px rgba(0, 0, 0, 0.12)",
+            },
+          }}
+        >
+          <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+            <DescriptionIcon color="primary" />
+            <span>Add key descriptions</span>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 0, pb: 1 }}>
+            <Typography variant="body1" color="text.secondary">
+              Some key items don&apos;t have descriptions. Add descriptions so
+              the site plan key is clear, or save without adding them.
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2 }}>
+            <Button
+              onClick={handleSitePlanKeyReminderSaveAnyway}
+              variant="outlined"
+              color="inherit"
+            >
+              Save anyway
+            </Button>
+            <Button
+              onClick={handleSitePlanKeyReminderAddDescriptions}
+              variant="contained"
+              startIcon={<DescriptionIcon />}
+            >
+              Add descriptions
+            </Button>
+          </DialogActions>
         </Dialog>
 
         {/* Samples Submitted to Lab Confirmation Dialog */}

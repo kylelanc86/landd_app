@@ -156,7 +156,7 @@ pdfMake.fonts = {
               hLineColor: function(i) { return i === 0 ? '#16b12b' : 'white'; }, // Only top border green
               vLineColor: function() { return 'white'; }
             },
-            margin: [0, 0, 0, 20]
+            margin: [0, 0, 0, 12]
           },
           
                     { text: 'ASBESTOS FIBRE CERTIFICATE OF ANALYSIS', style: 'header', margin: [0, 0, 0, 10], alignment: 'center' },
@@ -400,7 +400,7 @@ pdfMake.fonts = {
               hLineColor: function(i) { return i === 0 ? '#16b12b' : 'white'; }, // Only top border green
               vLineColor: function() { return 'white'; }
             },
-            margin: [0, 0, 0, 20]
+            margin: [0, 0, 0, 12]
           },
           
           // Sample Analysis Table with fixed row heights

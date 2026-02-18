@@ -1163,9 +1163,9 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
             page: site-plan-landscape;
           }
 
-          /* Reduce content padding for site plan pages */
+          /* Reduce content padding for site plan pages - 48px horizontal to stay within page margins */
           .site-plan-page .content {
-            padding: 5px 0 10px 0 !important;
+            padding: 5px 48px 10px 48px !important;
             min-height: auto !important;
             height: auto !important;
             max-height: calc(100vh - 150px) !important;
@@ -1299,8 +1299,8 @@ const generateSitePlanContentPage = (
     const legendColumn =
       legendEntries.length > 0
         ? `
-          <div class="site-plan-legend-container" style="flex: 0 0 15%; max-width: 180px; border: none; border-radius: 0; background-color: #ffffff; padding: 16px 20px; box-shadow: none;">
-            <div style="font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; color: #1f2937;">
+          <div class="site-plan-legend-container" style="flex: 0 0 21%; max-width: 378px; border: none; border-radius: 0; background-color: #ffffff; padding: 16px 20px; box-shadow: none;">
+            <div style="font-weight: 600; font-size 13px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; color: #1f2937;">
               ${escapeHtml(legendHeading)}
             </div>
             ${legendEntries
@@ -1311,8 +1311,8 @@ const generateSitePlanContentPage = (
                     : '<span style="color:#9ca3af;">(-)</span>';
               return `
                 <div style="display:flex; align-items:center; margin-bottom:10px;">
-                  <span style="display:inline-block; width:18px; height:18px; min-width:18px; max-width:18px; min-height:18px; max-height:18px; border-radius:4px; border:1px solid rgba(55,65,81,0.45); background:${normalizeColorForDisplay(entry.color)}; flex-shrink:0; box-sizing:border-box;"></span>
-                  <span style="font-size:8.4px; color:#334155; line-height:1.4; flex:1; margin-left:16px;">${description}</span>
+                  <span style="display:inline-block; width:29px; height:29px; min-width:29px; max-width:29px; min-height:29px; max-height:29px; border-radius:4px; border:1px solid rgba(55,65,81,0.45); background:${normalizeColorForDisplay(entry.color)}; flex-shrink:0; box-sizing:border-box;"></span>
+                  <span style="font-size:10px; color:#334155; line-height:1.4; flex:1; margin-left:16px;">${description}</span>
                 </div>
               `;
               })
@@ -1372,8 +1372,8 @@ const generateSitePlanContentPage = (
   const legendColumn =
     legendEntries.length > 0
         ? `
-          <div class="site-plan-legend-container" style="flex: 0 0 12%; max-width: 140px; border: 3px; border-radius: 0; background-color: #ffffff; padding: 12px 16px; align-self: stretch; box-shadow: none;">
-            <div style="font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; color: #1f2937;">
+          <div class="site-plan-legend-container" style="flex: 0 0 17%; max-width: 378px; border: 3px; border-radius: 0; background-color: #ffffff; padding: 12px 16px; align-self: stretch; box-shadow: none;">
+            <div style="font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; color: #1f2937;">
               ${escapeHtml(
                 (data[legendTitleField] && data[legendTitleField].trim()) ||
                   "Key"
@@ -1387,8 +1387,8 @@ const generateSitePlanContentPage = (
                     : '<span style="color:#9ca3af;">(-)</span>';
                 return `
                   <div style="display:flex; align-items:center; margin-bottom:8px;">
-                    <span style="display:inline-block; width:18px; height:18px; min-width:18px; max-width:18px; min-height:18px; max-height:18px; border-radius:4px; border:1px solid rgba(55,65,81,0.45); background:${normalizeColorForDisplay(entry.color)}; flex-shrink:0; box-sizing:border-box;"></span>
-                    <span style="font-size:8.4px; color:#334155; margin-left:16px;">${description}</span>
+                    <span style="display:inline-block; width:29px; height:29px; min-width:29px; max-width:29px; min-height:29px; max-height:29px; border-radius:4px; border:1px solid rgba(55,65,81,0.45); background:${normalizeColorForDisplay(entry.color)}; flex-shrink:0; box-sizing:border-box;"></span>
+                    <span style="font-size:10px; color:#334155; margin-left:16px; line-height:1.4;">${description}</span>
                   </div>
                 `;
               })
@@ -2380,7 +2380,7 @@ router.post('/generate-asbestos-assessment-v3', auth, async (req, res) => {
           .site-plan-page { height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden; page-break-after: avoid; page-break-inside: avoid; }
           .site-plan-page .header { flex-shrink: 0; display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 48px 0 48px; margin: 0; font-family: "Gothic", Arial, sans-serif; }
           .site-plan-page .green-line { flex-shrink: 0; width: calc(100% - 96px); height: 1.5px; background: #16b12b; margin: 8px auto 0 auto; border-radius: 0; }
-          .site-plan-page .content { flex: 1; min-height: 0; overflow: hidden; padding: 5px 0 10px 0; display: flex; flex-direction: column; }
+          .site-plan-page .content { flex: 1; min-height: 0; overflow: hidden; padding: 5px 48px 10px 48px; display: flex; flex-direction: column; }
           .site-plan-page .footer { flex-shrink: 0; position: relative; left: 0; right: 0; bottom: 0; width: 100%; padding: 0 48px 16px 48px; text-align: justify; font-size: 0.75rem; color: #222; font-family: "Gothic", Arial, sans-serif; }
           .logo { width: 243px; height: auto; display: block; background: #fff; margin: 0; }
           .company-details { text-align: right; font-size: 0.75rem; color: #222; line-height: 1.5; margin-top: 8px; margin: 0; }
@@ -3180,6 +3180,18 @@ const generateAssessmentHTML = async (assessmentData) => {
       .assessment-page .sample-no-photo { display: flex; align-items: center; justify-content: center; min-height: 340px; height: 100%; color: #666; font-style: italic; font-size: 0.64rem; }
       .assessment-page .asbestos-content-asbestos { color: #c62828; }
       .assessment-page .asbestos-content-non-asbestos { color: #2e7d32; }
+      /* Site plan page styles (for appendix site plan when embedded in legacy assessment) */
+      .site-plan-page { width: 100%; min-height: 100vh; position: relative; background: #fff; margin: 0; padding: 0; }
+      .site-plan-page .header { display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 48px 0 48px; margin: 0; }
+      .site-plan-page .green-line { width: calc(100% - 96px); height: 1.5px; background: #16b12b; margin: 8px auto 0 auto; border-radius: 0; }
+      .site-plan-page .content { padding: 5px 48px 10px 48px; flex: 1; display: flex; flex-direction: column; margin: 0; min-height: 0; overflow: hidden; }
+      .site-plan-page .footer { position: relative; left: 0; right: 0; bottom: 0; width: 100%; padding: 0 48px 16px 48px; text-align: justify; font-size: 0.75rem; color: #222; }
+      .site-plan-page .footer-border-line { width: 100%; height: 1.5px; background: #16b12b; margin-bottom: 6px; border-radius: 0; }
+      .site-plan-page .footer-content { width: 100%; display: flex; justify-content: space-between; align-items: flex-end; }
+      .site-plan-page .footer-text { flex: 1; }
+      .site-plan-layout { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: row; justify-content: center; gap: 8px; align-items: flex-start; margin: 0; width: 100%; padding: 0; }
+      .site-plan-container { flex: 0 0 auto; width: fit-content; max-width: 85%; min-width: 0; overflow: hidden; display: flex; flex-direction: column; padding: 0; margin: 12px 0 0 0; border: none; background: transparent; border-radius: 0; box-shadow: none; }
+      .site-plan-legend-container { flex-shrink: 0; }
     `;
 
     // Create complete HTML document

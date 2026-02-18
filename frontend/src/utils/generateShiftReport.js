@@ -64,7 +64,6 @@ async function loadImageAsBase64(imagePath) {
     if (blob.size < 1000) {
       console.warn(`Small blob size (${blob.size} bytes) - might be an error response`);
       // Try to read as text to see what error message we're getting
-      const text = await blob.text();
     }
     
     return new Promise((resolve, reject) => {

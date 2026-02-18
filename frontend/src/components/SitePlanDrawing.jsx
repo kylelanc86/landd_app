@@ -184,6 +184,10 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
     ref,
     () => ({
       hasEmptyKey: () => legendEntries.length === 0,
+      /** True when there are key items but one or more have no description (for close/save reminders). */
+      hasKeyItemsWithMissingDescriptions: () =>
+        legendEntries.length > 0 &&
+        legendEntries.some((e) => !(e.description || "").trim()),
       openLegendDialog: () => setLegendDialogOpen(true),
     }),
     [legendEntries]

@@ -37,8 +37,7 @@ const Users = () => {
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
   const [statusChangeId, setStatusChangeId] = useState(null);
   const [statusChangeType, setStatusChangeType] = useState(null);
-  const [sortBy, setSortBy] = useState("lastName");
-  const [sortDir, setSortDir] = useState("asc");
+
   const [showInactive, setShowInactive] = useState(false);
   const theme = useTheme();
 

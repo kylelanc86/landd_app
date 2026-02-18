@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useSnackbar } from "../../context/SnackbarContext";
 import {
   Box,
@@ -8,9 +8,6 @@ import {
   Breadcrumbs,
   Link,
   Grid,
-  Card,
-  CardContent,
-  Divider,
   TextField,
   Autocomplete,
   Select,
@@ -27,10 +24,7 @@ import {
   Radio,
   RadioGroup,
   FormControlLabel,
-  FormLabel,
-  Chip,
   Checkbox,
-  Alert,
   IconButton,
   Menu,
   Stack,
@@ -86,35 +80,7 @@ const LDsuppliedAnalysisPage = () => {
     setHasSampleBeenEditedSinceFinalise,
   ] = useState(false);
 
-  useEffect(() => {
-    if (assessmentId && itemNumber) {
-      fetchAssessmentDetails();
-    }
-  }, [assessmentId, itemNumber]);
-
-  useEffect(() => {
-    const loadFibreIdSampleDescriptions = async () => {
-      try {
-        const data = await customDataFieldGroupService.getFieldsByType(
-          "fibre_id_samples_description",
-        );
-        setFibreIdSampleDescriptions(Array.isArray(data) ? data : []);
-      } catch (err) {
-        console.warn("Could not load fibre ID sample descriptions:", err);
-        setFibreIdSampleDescriptions([]);
-      }
-    };
-    loadFibreIdSampleDescriptions();
-  }, []);
-
-  useEffect(() => {
-    // Ensure there's always at least one fibre when the component loads
-    if (!noFibreDetected && fibres.length === 0) {
-      ensureOneFibre();
-    }
-  }, [noFibreDetected, fibres.length]);
-
-  const fetchAssessmentDetails = async () => {
+  const fetchAssessmentDetails = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -320,14 +286,59 @@ const LDsuppliedAnalysisPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [assessmentId, itemNumber, navigate]);
 
-  const handleBackToJobs = () => {
-    navigate("/surveys/asbestos-assessment");
-  };
+  const ensureOneFibre = useCallback(() => {
+    if (fibres.length === 0) {
+      const newFibre = {
+        id: Date.now(),
+        name: "Fibre A",
+        morphology: "",
+        disintegrates: "",
+        riLiquid: "",
+        colour: "",
+        pleochrism: "None",
+        birefringence: "",
+        extinction: "",
+        signOfElongation: "",
+        fibreParallel: "",
+        fibrePerpendicular: "",
+        result: "",
+      };
+      setFibres([newFibre]);
+    }
+  }, [fibres.length]);
 
-  const handleBackToHome = () => {
-    navigate("/surveys/asbestos-assessment");
+  useEffect(() => {
+    if (assessmentId && itemNumber) {
+      fetchAssessmentDetails();
+    }
+  }, [assessmentId, itemNumber, fetchAssessmentDetails]);
+
+  useEffect(() => {
+    const loadFibreIdSampleDescriptions = async () => {
+      try {
+        const data = await customDataFieldGroupService.getFieldsByType(
+          "fibre_id_samples_description",
+        );
+        setFibreIdSampleDescriptions(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.warn("Could not load fibre ID sample descriptions:", err);
+        setFibreIdSampleDescriptions([]);
+      }
+    };
+    loadFibreIdSampleDescriptions();
+  }, []);
+
+  useEffect(() => {
+    // Ensure there's always at least one fibre when the component loads
+    if (!noFibreDetected && fibres.length === 0) {
+      ensureOneFibre();
+    }
+  }, [noFibreDetected, fibres.length, ensureOneFibre]);
+
+  const handleBackToLDSuppliedJobs = () => {
+    navigate("/laboratory-services/ld-supplied");
   };
 
   const addFibre = () => {
@@ -351,27 +362,6 @@ const LDsuppliedAnalysisPage = () => {
       result: "",
     };
     setFibres([...fibres, newFibre]);
-  };
-
-  const ensureOneFibre = () => {
-    if (fibres.length === 0) {
-      const newFibre = {
-        id: Date.now(),
-        name: "Fibre A",
-        morphology: "",
-        disintegrates: "",
-        riLiquid: "",
-        colour: "",
-        pleochrism: "None",
-        birefringence: "",
-        extinction: "",
-        signOfElongation: "",
-        fibreParallel: "",
-        fibrePerpendicular: "",
-        result: "",
-      };
-      setFibres([newFibre]);
-    }
   };
 
   const updateFibre = (fibreId, field, value) => {
@@ -483,7 +473,7 @@ const LDsuppliedAnalysisPage = () => {
     handleAsbestosMenuClose();
   };
 
-  const calculateFinalResult = () => {
+  const calculateFinalResult = useCallback(() => {
     // Check if trace analysis has been completed
     if (traceAsbestos === "yes" && traceCount && traceAsbestosContent) {
       // Determine result based on trace count
@@ -520,7 +510,7 @@ const LDsuppliedAnalysisPage = () => {
     }
 
     return uniqueResults.join(", ");
-  };
+  }, [fibres, traceAsbestos, traceAsbestosContent, traceCount, noFibreDetected]);
 
   const isMassDimensionsValid = () => {
     if (sampleType === "mass") {
@@ -843,7 +833,7 @@ const LDsuppliedAnalysisPage = () => {
         "Analysis finalised successfully! Job status updated.",
         "success",
       );
-      navigate("/surveys/asbestos-assessment");
+      navigate("/laboratory-services/ld-supplied");
     } catch (error) {
       console.error("Error finalising analysis:", error);
       console.error("Error details:", error.response?.data);
@@ -859,6 +849,7 @@ const LDsuppliedAnalysisPage = () => {
     traceAsbestosContent,
     traceCount,
     noFibreDetected,
+    calculateFinalResult,
   ]);
 
   useEffect(() => {
@@ -869,7 +860,7 @@ const LDsuppliedAnalysisPage = () => {
       // Ensure there's always at least one fibre when analysis is active
       ensureOneFibre();
     }
-  }, [noFibreDetected]);
+  }, [noFibreDetected, ensureOneFibre]);
 
   if (loading) {
     return (
@@ -892,7 +883,7 @@ const LDsuppliedAnalysisPage = () => {
           </Typography>
           <Button
             variant="outlined"
-            onClick={() => navigate("/surveys/asbestos-assessment")}
+            onClick={() => navigate("/laboratory-services/ld-supplied")}
             sx={{ mt: 2, display: "block", mx: "auto" }}
           >
             Return to Asbestos Assessment
@@ -910,11 +901,11 @@ const LDsuppliedAnalysisPage = () => {
           <Link
             component="button"
             variant="body1"
-            onClick={handleBackToHome}
+            onClick={handleBackToLDSuppliedJobs}
             sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
           >
             <ArrowBackIcon sx={{ mr: 1 }} />
-            Asbestos Assessment
+            L&D Supplied Jobs
           </Link>
           <Typography color="text.primary">
             {assessmentItem.sampleReference || `Item ${itemNumber}`}

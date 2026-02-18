@@ -118,6 +118,8 @@ const ClearanceItems = () => {
   const [uploadingSitePlan, setUploadingSitePlan] = useState(false);
   const [sitePlanDrawingDialogOpen, setSitePlanDrawingDialogOpen] =
     useState(false);
+  const [sitePlanKeyReminderOpen, setSitePlanKeyReminderOpen] = useState(false);
+  const [pendingSitePlanData, setPendingSitePlanData] = useState(null);
   const sitePlanDrawingRef = useRef(null);
   const [generatingAirMonitoringPDF, setGeneratingAirMonitoringPDF] =
     useState(false);
@@ -175,27 +177,6 @@ const ClearanceItems = () => {
       .split("_")
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
       .join(" ");
-  };
-
-  const getProjectFolderName = () => {
-    const project = clearance?.projectId;
-
-    if (project) {
-      if (typeof project === "string") {
-        return project;
-      }
-      return (
-        project.projectID ||
-        project.projectId ||
-        project.externalId ||
-        project._id ||
-        project.name ||
-        clearanceId ||
-        "clearance-photos"
-      );
-    }
-
-    return clearanceId || "clearance-photos";
   };
 
   // Dictation functions
@@ -1308,47 +1289,58 @@ const ClearanceItems = () => {
   };
 
   // Handle site plan save
+  const performSitePlanSave = async (sitePlanData) => {
+    const imageData =
+      typeof sitePlanData === "string"
+        ? sitePlanData
+        : sitePlanData?.imageData;
+    const legendEntries = Array.isArray(sitePlanData?.legend)
+      ? sitePlanData.legend.map((entry) => ({
+          color: entry.color,
+          description: entry.description,
+        }))
+      : [];
+    const legendTitle =
+      sitePlanData?.legendTitle && sitePlanData.legendTitle.trim()
+        ? sitePlanData.legendTitle.trim()
+        : "Key";
+    const figureTitle =
+      sitePlanData?.figureTitle && sitePlanData.figureTitle.trim()
+        ? sitePlanData.figureTitle.trim()
+        : "Asbestos Removal Site Plan";
+
+    if (!imageData) {
+      showSnackbar("No site plan image data was provided", "error");
+      return;
+    }
+
+    await asbestosClearanceService.update(clearanceId, {
+      sitePlan: true,
+      sitePlanFile: imageData,
+      sitePlanLegend: legendEntries,
+      sitePlanLegendTitle: legendTitle,
+      sitePlanFigureTitle: figureTitle,
+      sitePlanSource: "drawn",
+    });
+
+    showSnackbar("Drawn site plan saved successfully!", "success");
+    setSitePlanDrawingDialogOpen(false);
+    fetchData();
+  };
+
   const handleSitePlanSave = async (sitePlanData) => {
+    const hasMissingDescriptions =
+      Array.isArray(sitePlanData?.legend) &&
+      sitePlanData.legend.some((e) => !(e.description || "").trim());
+
+    if (hasMissingDescriptions) {
+      setPendingSitePlanData(sitePlanData);
+      setSitePlanKeyReminderOpen(true);
+      return;
+    }
+
     try {
-      const imageData =
-        typeof sitePlanData === "string"
-          ? sitePlanData
-          : sitePlanData?.imageData;
-      const legendEntries = Array.isArray(sitePlanData?.legend)
-        ? sitePlanData.legend.map((entry) => ({
-            color: entry.color,
-            description: entry.description,
-          }))
-        : [];
-      const legendTitle =
-        sitePlanData?.legendTitle && sitePlanData.legendTitle.trim()
-          ? sitePlanData.legendTitle.trim()
-          : "Key";
-      const figureTitle =
-        sitePlanData?.figureTitle && sitePlanData.figureTitle.trim()
-          ? sitePlanData.figureTitle.trim()
-          : "Asbestos Removal Site Plan";
-
-      if (!imageData) {
-        showSnackbar("No site plan image data was provided", "error");
-        return;
-      }
-
-      // Save the drawn site plan to the clearance
-      const response = await asbestosClearanceService.update(clearanceId, {
-        sitePlan: true, // Enable site plan functionality
-        sitePlanFile: imageData, // Base64 image data
-        sitePlanLegend: legendEntries,
-        sitePlanLegendTitle: legendTitle,
-        sitePlanFigureTitle: figureTitle,
-        sitePlanSource: "drawn", // Mark it as a drawn site plan
-      });
-
-      console.log("Site plan save response:", response);
-
-      showSnackbar("Drawn site plan saved successfully!", "success");
-      setSitePlanDrawingDialogOpen(false);
-      fetchData(); // Refresh clearance data to show the new site plan
+      await performSitePlanSave(sitePlanData);
     } catch (error) {
       console.error("Error saving site plan:", error);
       showSnackbar("Error saving site plan", "error");
@@ -1357,17 +1349,27 @@ const ClearanceItems = () => {
 
   // Handle site plan drawing dialog close (X button, backdrop click)
   const handleSitePlanDrawingClose = () => {
-    if (sitePlanDrawingRef.current?.hasEmptyKey?.()) {
-      if (
-        window.confirm(
-          "You haven't added any items to the site plan key. Click OK to add key items, or Cancel to close anyway."
-        )
-      ) {
-        sitePlanDrawingRef.current?.openLegendDialog?.();
-        return;
+    setSitePlanDrawingDialogOpen(false);
+  };
+
+  const handleSitePlanKeyReminderAddDescriptions = () => {
+    setSitePlanKeyReminderOpen(false);
+    setPendingSitePlanData(null);
+    sitePlanDrawingRef.current?.openLegendDialog?.();
+  };
+
+  const handleSitePlanKeyReminderSaveAnyway = async () => {
+    setSitePlanKeyReminderOpen(false);
+    const data = pendingSitePlanData;
+    setPendingSitePlanData(null);
+    if (data) {
+      try {
+        await performSitePlanSave(data);
+      } catch (error) {
+        console.error("Error saving site plan:", error);
+        showSnackbar("Error saving site plan", "error");
       }
     }
-    setSitePlanDrawingDialogOpen(false);
   };
 
   // Add photo to existing item
@@ -2248,7 +2250,18 @@ const ClearanceItems = () => {
           >
             Job Details
           </Link>
-          <Typography color="text.primary">
+        </Breadcrumbs>
+
+        {/* Project Info */}
+        <Typography         variant="h6"
+        sx={{
+          fontSize: { xs: "0.9rem", sm: "1rem", md: "1.25rem" },
+          color:
+            theme.palette.mode === "dark"
+              ? "#fff"
+              : theme.palette.secondary[200],
+          mb: 1,
+        }}>
             {clearance.projectId?.name || "Unknown Project"}:{" "}
             {clearance.clearanceDate
               ? new Date(clearance.clearanceDate).toLocaleDateString("en-GB", {
@@ -2258,11 +2271,9 @@ const ClearanceItems = () => {
                 })
               : "Unknown Date"}
           </Typography>
-        </Breadcrumbs>
+          
 
-        {/* Project Info */}
-
-        <Box display="flex" justifyContent="space-between" sx={{ mb: 2 }}>
+        <Box display="flex" justifyContent="space-between" sx={{ mt: 2, mb: 2 }}>
           <Box display="flex" gap={2} alignItems="center">
             <Button
               variant="outlined"
@@ -4787,6 +4798,50 @@ const ClearanceItems = () => {
               existingFigureTitle={clearance?.sitePlanFigureTitle}
             />
           </DialogContent>
+        </Dialog>
+
+        {/* Site plan key descriptions reminder */}
+        <Dialog
+          open={sitePlanKeyReminderOpen}
+          onClose={() => {
+            setSitePlanKeyReminderOpen(false);
+            setPendingSitePlanData(null);
+          }}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 2,
+              boxShadow: "0 12px 40px rgba(0, 0, 0, 0.12)",
+            },
+          }}
+        >
+          <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+            <DescriptionIcon color="primary" />
+            <span>Add key descriptions</span>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 0, pb: 1 }}>
+            <Typography variant="body1" color="text.secondary">
+              Some key items don&apos;t have descriptions. Add descriptions so
+              the site plan key is clear, or save without adding them.
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2 }}>
+            <Button
+              onClick={handleSitePlanKeyReminderSaveAnyway}
+              variant="outlined"
+              color="inherit"
+            >
+              Save anyway
+            </Button>
+            <Button
+              onClick={handleSitePlanKeyReminderAddDescriptions}
+              variant="contained"
+              startIcon={<DescriptionIcon />}
+            >
+              Add descriptions
+            </Button>
+          </DialogActions>
         </Dialog>
       </Box>
     </PermissionGate>

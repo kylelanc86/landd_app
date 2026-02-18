@@ -38,16 +38,13 @@ import {
 import DeleteIcon from "@mui/icons-material/Delete";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import CloseIcon from "@mui/icons-material/Close";
-import EditIcon from "@mui/icons-material/Edit";
 import FileDownloadIcon from "@mui/icons-material/FileDownload";
 import InfoIcon from "@mui/icons-material/Info";
 import ClearIcon from "@mui/icons-material/Clear";
 
-import { StatusChip } from "../../components/JobStatus";
 import { useProjectStatuses } from "../../context/ProjectStatusesContext";
 import { useSnackbar } from "../../context/SnackbarContext";
 import { useLocation, useNavigate } from "react-router-dom";
-import LoadingSpinner from "../../components/LoadingSpinner";
 import { useTheme, useMediaQuery } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import {
@@ -60,7 +57,6 @@ import { useJobStatus } from "../../hooks/useJobStatus";
 import SearchIcon from "@mui/icons-material/Search";
 import { usePermissions } from "../../hooks/usePermissions";
 import { useAuth } from "../../context/AuthContext";
-import { Visibility, Visibility as VisibilityIcon } from "@mui/icons-material";
 import ViewColumnIcon from "@mui/icons-material/ViewColumn";
 import AddIcon from "@mui/icons-material/Add";
 
@@ -163,9 +159,6 @@ const calculateDaysDifference = (dueDate) => {
 const Projects = ({ initialFilters = {} }) => {
   const theme = useTheme();
   const navigate = useNavigate();
-  const location = useLocation();
-  const { renderStatusCell, renderStatusSelect, renderEditStatusCell } =
-    useJobStatus() || {};
   const { isAdmin, isManager, can } = usePermissions();
   const { currentUser } = useAuth();
 
@@ -189,7 +182,6 @@ const Projects = ({ initialFilters = {} }) => {
     activeStatuses,
     inactiveStatuses,
     statusColors,
-    loading: statusesLoading,
   } = useProjectStatuses();
 
   // Debug logging for status colors
@@ -272,12 +264,6 @@ const Projects = ({ initialFilters = {} }) => {
   // Column width model for resizing
   const [columnWidthModel, setColumnWidthModel] = useState({});
 
-  // Memoize column visibility model to prevent unnecessary re-renders
-  const memoizedColumnVisibilityModel = useMemo(
-    () => columnVisibilityModel,
-    [columnVisibilityModel]
-  );
-
   // Effective visibility: portrait = only projectID and project (actions hidden, row tap opens details); landscape mobile = hide users
   const effectiveColumnVisibilityModel = useMemo(() => {
     if (isPortraitMobile) {
@@ -339,7 +325,6 @@ const Projects = ({ initialFilters = {} }) => {
 
     // Read status and active from URL
     const urlStatus = urlParams.get("status");
-    const urlActive = urlParams.get("active");
 
     // Apply initial filters from props
     const appliedFilters = {
