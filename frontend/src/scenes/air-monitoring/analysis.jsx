@@ -1428,18 +1428,21 @@ const Analysis = () => {
     );
   };
 
-  const calculateDuration = (startTime, endTime) => {
+  const calculateDuration = (startTime, endTime, nextDay = false) => {
     if (!startTime || !endTime) return 0;
 
-    const start = new Date(`2000-01-01T${startTime}`);
-    const end = new Date(`2000-01-01T${endTime}`);
+    const [startHours, startMinutes] = startTime.split(":").map(Number);
+    const [endHours, endMinutes] = endTime.split(":").map(Number);
 
-    // Handle case where end time is on the next day
-    if (end < start) {
-      end.setDate(end.getDate() + 1);
+    const startTotalMinutes = startHours * 60 + startMinutes;
+    const endTotalMinutes = endHours * 60 + endMinutes;
+
+    let diffMinutes = endTotalMinutes - startTotalMinutes;
+    if (nextDay) {
+      diffMinutes += 24 * 60;
     }
 
-    return Math.round((end - start) / (1000 * 60));
+    return diffMinutes < 0 ? 0 : Math.round(diffMinutes);
   };
 
   // Get the appropriate microscope constant based on microscope and filter size
@@ -1665,7 +1668,11 @@ const Analysis = () => {
     const fibresCounted = parseFloat(analysis.fibresCounted) || 0;
     const fieldsCounted = parseInt(analysis.fieldsCounted) || 0;
     const averageFlowrate = parseFloat(sample.averageFlowrate) || 0;
-    const minutes = calculateDuration(sample.startTime, sample.endTime);
+    const minutes = calculateDuration(
+      sample.startTime,
+      sample.endTime,
+      sample.nextDay
+    );
 
     if (fieldsCounted === 0 || averageFlowrate === 0 || minutes === 0)
       return null;
