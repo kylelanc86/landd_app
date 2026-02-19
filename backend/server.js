@@ -1,4 +1,6 @@
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const connectDB = require('./config/db');
@@ -8,6 +10,7 @@ const authRoutes = require('./routes/auth');
 const projectRoutes = require('./routes/projects');
 const clientRoutes = require('./routes/clients');
 const sampleRoutes = require('./routes/samples');
+const leadAirSampleRoutes = require('./routes/leadAirSamples');
 const invoiceRoutes = require('./routes/invoices');
 const usersRouter = require('./routes/users');
 const xeroRoutes = require('./routes/xero');
@@ -29,7 +32,9 @@ const calibrationFrequencyRoutes = require('./routes/calibrationFrequency');
 const equipmentRoutes = require('./routes/equipment');
 const asbestosClearanceRoutes = require('./routes/asbestosClearances');
 const asbestosClearanceReportRoutes = require('./routes/asbestosClearanceReports');
+const leadClearanceRoutes = require('./routes/leadClearances');
 const asbestosRemovalJobRoutes = require('./routes/asbestosRemovalJobs');
+const leadRemovalJobRoutes = require('./routes/leadRemovalJobs');
 const reportsRoutes = require('./routes/reports');
 
 const reportTemplateRoutes = require('./routes/reportTemplates');
@@ -147,6 +152,24 @@ app.get('/health', (req, res) => {
   res.status(200).json(healthData);
 });
 
+// Serve L&D logo for PDF generation (e.g. Chain of Custody)
+app.get('/api/logo', (req, res) => {
+  const logoPath = path.join(__dirname, 'assets', 'logo.png');
+  if (!fs.existsSync(logoPath)) {
+    return res.status(404).send('Logo not found');
+  }
+  res.sendFile(logoPath, { headers: { 'Content-Type': 'image/png' } });
+});
+
+// Serve L&D small logo for PDF watermark (e.g. Lead shift report page 2)
+app.get('/api/logo-watermark', (req, res) => {
+  const logoPath = path.join(__dirname, 'assets', 'logo_small hi-res.png');
+  if (!fs.existsSync(logoPath)) {
+    return res.status(404).send('Watermark logo not found');
+  }
+  res.sendFile(logoPath, { headers: { 'Content-Type': 'image/png' } });
+});
+
 // Connect to database
 connectDB()
   .then(async () => {
@@ -198,6 +221,8 @@ connectDB()
     
     app.use('/api/samples', requireAuth, checkTokenBlacklist, sampleRoutes);
     app.use('/samples', requireAuth, checkTokenBlacklist, sampleRoutes);
+    app.use('/api/lead-air-samples', requireAuth, checkTokenBlacklist, leadAirSampleRoutes);
+    app.use('/lead-air-samples', requireAuth, checkTokenBlacklist, leadAirSampleRoutes);
     
     app.use('/api/invoices', requireAuth, checkTokenBlacklist, invoiceRoutes);
     app.use('/invoices', requireAuth, checkTokenBlacklist, invoiceRoutes);
@@ -256,12 +281,17 @@ connectDB()
     
     app.use('/api/asbestos-clearances', requireAuth, checkTokenBlacklist, asbestosClearanceRoutes);
     app.use('/asbestos-clearances', requireAuth, checkTokenBlacklist, asbestosClearanceRoutes);
+    app.use('/api/lead-clearances', requireAuth, checkTokenBlacklist, leadClearanceRoutes);
+    app.use('/lead-clearances', requireAuth, checkTokenBlacklist, leadClearanceRoutes);
     
     app.use('/api/asbestos-clearance-reports', requireAuth, checkTokenBlacklist, asbestosClearanceReportRoutes);
     app.use('/asbestos-clearance-reports', requireAuth, checkTokenBlacklist, asbestosClearanceReportRoutes);
     
     app.use('/api/asbestos-removal-jobs', requireAuth, checkTokenBlacklist, asbestosRemovalJobRoutes);
     app.use('/asbestos-removal-jobs', requireAuth, checkTokenBlacklist, asbestosRemovalJobRoutes);
+    
+    app.use('/api/lead-removal-jobs', requireAuth, checkTokenBlacklist, leadRemovalJobRoutes);
+    app.use('/lead-removal-jobs', requireAuth, checkTokenBlacklist, leadRemovalJobRoutes);
     
     app.use('/api/reports', requireAuth, checkTokenBlacklist, reportsRoutes);
     app.use('/reports', requireAuth, checkTokenBlacklist, reportsRoutes);

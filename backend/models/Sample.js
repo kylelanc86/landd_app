@@ -13,7 +13,7 @@ const sampleSchema = new mongoose.Schema({
   },
   jobModel: {
     type: String,
-    enum: ['AsbestosRemovalJob'],
+    enum: ['AsbestosRemovalJob', 'LeadRemovalJob'],
     default: 'AsbestosRemovalJob',
     required: true
   },
@@ -110,6 +110,10 @@ const sampleSchema = new mongoose.Schema({
   analysedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
+  },
+  leadContent: {
+    type: String,
+    required: false
   },
   createdAt: {
     type: Date,

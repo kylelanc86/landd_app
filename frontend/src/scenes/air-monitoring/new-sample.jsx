@@ -1275,7 +1275,7 @@ const NewSample = () => {
       setShiftSamples((prev) => [...prev, sampleData]);
       setProjectSamples((prev) => [...prev, sampleData]);
 
-      // Navigate immediately after successful creation
+      // Navigate back to air monitoring sample list
       navigate(`/air-monitoring/shift/${shiftId}/samples`);
     } catch (error) {
       if (console.timeLog) {

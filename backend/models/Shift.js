@@ -8,7 +8,7 @@ const shiftSchema = new mongoose.Schema({
   },
   jobModel: {
     type: String,
-    enum: ['AsbestosRemovalJob'],
+    enum: ['AsbestosRemovalJob', 'LeadRemovalJob'],
     default: 'AsbestosRemovalJob',
     required: true
   },
@@ -95,8 +95,24 @@ const shiftSchema = new mongoose.Schema({
     type: String,
     required: false
   },
+  analysisTurnaroundDate: {
+    type: String,
+    required: false
+  },
+  analysisTurnaroundType: {
+    type: String,
+    required: false
+  },
   notes: {
     type: String
+  },
+  analysisReportPath: {
+    type: String,
+    required: false
+  },
+  analysisReportOriginalName: {
+    type: String,
+    required: false
   },
   revision: {
     type: Number,

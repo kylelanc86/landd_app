@@ -9,6 +9,9 @@ const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const mongoose = require('mongoose');
 const axios = require('axios');
+const path = require('path');
+const fs = require('fs');
+const fileUpload = require('express-fileupload');
 const {
   syncAirMonitoringForJob,
 } = require("../services/asbestosRemovalJobSyncService");
@@ -18,6 +21,13 @@ const { sendMail } = require("../services/mailer");
 router.use((req, res, next) => {
   next();
 });
+
+// File upload for analysis report (lead)
+router.use(fileUpload({
+  limits: { fileSize: 20 * 1024 * 1024 },
+  abortOnLimit: true,
+  responseOnLimit: 'File size limit (20MB) exceeded',
+}));
 
 // Get all shifts
 router.get('/', auth, checkPermission(['jobs.view']), async (req, res) => {
@@ -31,21 +41,29 @@ router.get('/', auth, checkPermission(['jobs.view']), async (req, res) => {
   }
 });
 
-// Get shifts by job ID
+// Get shifts by job ID (supports both AsbestosRemovalJob and LeadRemovalJob; returns only shifts for that job type)
 router.get('/job/:jobId', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
     const AsbestosRemovalJob = require('../models/AsbestosRemovalJob');
-    const job = await AsbestosRemovalJob.findById(req.params.jobId);
+    const LeadRemovalJob = require('../models/LeadRemovalJob');
+    const jobId = req.params.jobId;
 
-    if (!job) {
+    const asbestosJob = await AsbestosRemovalJob.findById(jobId).lean();
+    const leadJob = await LeadRemovalJob.findById(jobId).lean();
+
+    let jobModel = null;
+    if (asbestosJob) jobModel = 'AsbestosRemovalJob';
+    else if (leadJob) jobModel = 'LeadRemovalJob';
+
+    if (!jobModel) {
       return res.status(404).json({ message: 'Job not found' });
     }
 
-    // Fetch the shifts for this asbestos removal job
-    const shifts = await Shift.find({ job: req.params.jobId })
+    const shiftFilter = { job: jobId, jobModel };
+    const shifts = await Shift.find(shiftFilter)
       .populate({
         path: 'job',
-        select: 'projectId projectName client asbestosRemovalist status',
+        select: 'projectId projectName client asbestosRemovalist leadAbatementContractor status',
         populate: {
           path: 'projectId',
           select: 'projectID name'
@@ -194,6 +212,7 @@ router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
     ) {
       await syncAirMonitoringForJob(newShift.job);
     }
+    // LeadRemovalJob shifts are not synced to job flags (lead has its own flow)
     
     res.status(201).json(newShift);
   } catch (error) {
@@ -227,12 +246,17 @@ router.patch('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports
       'analysedBy',
       'analysisDate',
       'samplesReceivedDate',
+      'submittedBy',
       'descriptionOfWorks',
+      'analysisTurnaroundDate',
+      'analysisTurnaroundType',
       'notes',
       'defaultSampler',
       'revision',
       'sitePlan',
-      'sitePlanData'
+      'sitePlanData',
+      'analysisReportPath',
+      'analysisReportOriginalName'
     ];
 
     // Filter out any fields that aren't in allowedUpdates
@@ -320,7 +344,8 @@ router.put('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports']
     }
 
     const previousJobId = shift.job ? shift.job.toString() : null;
-    
+    const previousJobModel = shift.jobModel || 'AsbestosRemovalJob';
+
     // Check if report was already authorised before update
     const wasAlreadyAuthorised = Boolean(shift.reportApprovedBy);
     const hasAuthorisationRequester = Boolean(shift.authorisationRequestedBy);
@@ -468,7 +493,8 @@ View the report at: ${jobUrl}
       if (
         previousJobId &&
         updatedJobId &&
-        previousJobId !== updatedJobId
+        previousJobId !== updatedJobId &&
+        previousJobModel === 'AsbestosRemovalJob'
       ) {
         await syncAirMonitoringForJob(previousJobId);
       }
@@ -626,6 +652,62 @@ router.get('/:id/site-plan', auth, checkPermission(['jobs.view']), async (req, r
     });
   } catch (error) {
     console.error('Error fetching site plan:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Upload lead analysis report PDF for a shift
+router.post('/:id/upload-analysis-report', auth, checkPermission(['jobs.edit']), async (req, res) => {
+  try {
+    const shift = await Shift.findById(req.params.id);
+    if (!shift) {
+      return res.status(404).json({ message: 'Shift not found' });
+    }
+    if (!req.files || !req.files.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+    const file = req.files.file;
+    if (!file.mimetype || !file.mimetype.toLowerCase().includes('pdf')) {
+      return res.status(400).json({ error: 'File must be a PDF' });
+    }
+    const uploadDir = path.join(__dirname, '../uploads/lead-analysis-reports');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    const ext = path.extname(file.name) || '.pdf';
+    const fileName = `${req.params.id}${ext}`;
+    const filePath = path.join(uploadDir, fileName);
+    await file.mv(filePath);
+    shift.analysisReportPath = path.join('lead-analysis-reports', fileName);
+    shift.analysisReportOriginalName = file.name;
+    await shift.save();
+    res.json({
+      message: 'Analysis report uploaded successfully',
+      analysisReportOriginalName: shift.analysisReportOriginalName,
+    });
+  } catch (error) {
+    console.error('Error uploading analysis report:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Download lead analysis report PDF for a shift
+router.get('/:id/analysis-report', auth, checkPermission(['jobs.view']), async (req, res) => {
+  try {
+    const shift = await Shift.findById(req.params.id).select('analysisReportPath analysisReportOriginalName');
+    if (!shift || !shift.analysisReportPath) {
+      return res.status(404).json({ message: 'Analysis report not found' });
+    }
+    const fullPath = path.join(__dirname, '../uploads', shift.analysisReportPath);
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ message: 'Analysis report file not found' });
+    }
+    const name = shift.analysisReportOriginalName || 'analysis-report.pdf';
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+    res.sendFile(path.resolve(fullPath));
+  } catch (error) {
+    console.error('Error downloading analysis report:', error);
     res.status(500).json({ message: error.message });
   }
 });

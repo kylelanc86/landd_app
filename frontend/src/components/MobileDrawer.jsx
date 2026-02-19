@@ -105,10 +105,12 @@ const MobileDrawer = ({ open, onClose }) => {
       location.pathname === to || location.pathname.startsWith(`${to}/`);
 
     const menuItem = (
-      <ListItem disablePadding>
+      <ListItem disablePadding sx={{ margin: "1px 8px" }}>
         <ListItemButton
           onClick={() => handleNavigation(to)}
           sx={{
+            padding: "12px 10px",
+            borderRadius: "4px",
             backgroundColor: isActive ? tokens.primary[50] : "transparent",
             "&:hover": {
               backgroundColor: isActive ? tokens.primary[100] : tokens.grey[50],
@@ -118,7 +120,8 @@ const MobileDrawer = ({ open, onClose }) => {
           <ListItemIcon
             sx={{
               color: isActive ? tokens.primary[700] : tokens.grey[600],
-              minWidth: 40,
+              minWidth: 24,
+              marginRight: "8px",
             }}
           >
             {icon}
@@ -128,6 +131,11 @@ const MobileDrawer = ({ open, onClose }) => {
             primaryTypographyProps={{
               fontWeight: isActive ? "bold" : "normal",
               color: isActive ? tokens.primary[700] : tokens.grey[700],
+              fontSize: "0.9rem",
+              lineHeight: 1.2,
+              whiteSpace: "normal",
+              wordBreak: "break-word",
+              textAlign: "left",
             }}
           />
         </ListItemButton>
@@ -169,10 +177,12 @@ const MobileDrawer = ({ open, onClose }) => {
               requiredPermissions={["admin.view"]}
               fallback={null}
             >
-              <ListItem disablePadding>
+              <ListItem disablePadding sx={{ margin: "1px 8px" }}>
                 <ListItemButton
                   onClick={() => handleNavigation("/admin")}
                   sx={{
+                    padding: "12px 10px",
+                    borderRadius: "4px",
                     backgroundColor:
                       location.pathname === "/admin" ||
                       location.pathname.startsWith("/admin/")
@@ -194,7 +204,8 @@ const MobileDrawer = ({ open, onClose }) => {
                         location.pathname.startsWith("/admin/")
                           ? tokens.primary[700]
                           : tokens.grey[600],
-                      minWidth: 40,
+                      minWidth: 24,
+                      marginRight: "8px",
                     }}
                   >
                     <SettingsIcon />
@@ -212,6 +223,11 @@ const MobileDrawer = ({ open, onClose }) => {
                         location.pathname.startsWith("/admin/")
                           ? tokens.primary[700]
                           : tokens.grey[700],
+                      fontSize: "0.9rem",
+                      lineHeight: 1.2,
+                      whiteSpace: "normal",
+                      wordBreak: "break-word",
+                      textAlign: "left",
                     }}
                   />
                 </ListItemButton>
@@ -220,8 +236,8 @@ const MobileDrawer = ({ open, onClose }) => {
 
             <PermissionGate requiredPermissions={["timesheets.view"]}>
               <MenuItem
-                title="Daily Timesheet"
-                to="/timesheets"
+                title="Timesheets"
+                to="/timesheets/monthly"
                 icon={<AccessTimeIcon />}
               />
 
@@ -232,7 +248,9 @@ const MobileDrawer = ({ open, onClose }) => {
               />
             </PermissionGate>
 
-            <Divider sx={{ my: 1 }} />
+            <Box sx={{ my: 1, px: 2 }}>
+              <Divider sx={{ width: "100%", borderColor: tokens.grey[300] }} />
+            </Box>
 
             <MenuItem title="Projects" to="/projects" icon={<StorageIcon />} />
 
@@ -262,17 +280,23 @@ const MobileDrawer = ({ open, onClose }) => {
                 />
               )}
 
-            <Divider sx={{ my: 1 }} />
-
-            {isFeatureEnabled("ADVANCED.SURVEYS") && (
-              <MenuItem title="Surveys" to="/surveys" icon={<SearchIcon />} />
-            )}
+            <Box sx={{ my: 1, px: 2 }}>
+              <Divider sx={{ width: "100%", borderColor: tokens.grey[300] }} />
+            </Box>
 
             {isFeatureEnabled("ADVANCED.ASBESTOS_REMOVAL") && (
               <MenuItem
-                title="Air Mon & Clearances"
+                title="Asbestos Removal"
                 to="/asbestos-removal"
                 icon={<ConstructionIcon />}
+              />
+            )}
+
+            {isFeatureEnabled("ADVANCED.SURVEYS") && (
+              <MenuItem
+                title="Asbestos Assessment"
+                to="/surveys"
+                icon={<SearchIcon />}
               />
             )}
 
@@ -292,7 +316,9 @@ const MobileDrawer = ({ open, onClose }) => {
               />
             )}
 
-            <Divider sx={{ my: 1 }} />
+            <Box sx={{ my: 1, px: 2 }}>
+              <Divider sx={{ width: "100%", borderColor: tokens.grey[300] }} />
+            </Box>
 
             {isFeatureEnabled("ADVANCED.ASBESTOS_REMOVAL") && (
               <MenuItem

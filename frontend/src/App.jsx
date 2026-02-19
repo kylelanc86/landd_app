@@ -63,6 +63,15 @@ const EditInvoicePage = lazy(() => import("./scenes/invoices/EditInvoicePage"));
 const SampleList = lazy(
   () => import("./scenes/air-monitoring/air-monitoring-sample-list"),
 );
+const LeadMonitoringSampleList = lazy(
+  () => import("./scenes/lead-removal/LeadMonitoringSampleList"),
+);
+const LeadNewSample = lazy(
+  () => import("./scenes/lead-removal/LeadNewSample"),
+);
+const LeadEditSample = lazy(
+  () => import("./scenes/lead-removal/LeadEditSample"),
+);
 const NewSample = lazy(() => import("./scenes/air-monitoring/new-sample"));
 const EditSample = lazy(() => import("./scenes/air-monitoring/edit-sample"));
 const Analysis = lazy(() => import("./scenes/air-monitoring/analysis"));
@@ -129,6 +138,9 @@ const Reports = lazy(() => import("./scenes/reports"));
 const Records = lazy(() => import("./scenes/records"));
 const AsbestosRemoval = lazy(() => import("./scenes/asbestos-removal"));
 const LeadRemoval = lazy(() => import("./scenes/lead-removal"));
+const LeadRemovalJobDetails = lazy(
+  () => import("./scenes/lead-removal/LeadRemovalJobDetails"),
+);
 const LaboratoryServices = lazy(() => import("./scenes/laboratory-services"));
 const AsbestosRemovalJobDetails = lazy(
   () => import("./scenes/asbestos-removal/AsbestosRemovalJobDetails"),
@@ -284,6 +296,42 @@ function App() {
                                   >
                                     <Suspense fallback={<LoadingSpinner />}>
                                       <Analysis />
+                                    </Suspense>
+                                  </PermissionRoute>
+                                }
+                              />
+                              <Route
+                                path="/lead-removal/shift/:shiftId/samples"
+                                element={
+                                  <PermissionRoute
+                                    requiredPermissions={["jobs.view"]}
+                                  >
+                                    <Suspense fallback={<LoadingSpinner />}>
+                                      <LeadMonitoringSampleList />
+                                    </Suspense>
+                                  </PermissionRoute>
+                                }
+                              />
+                              <Route
+                                path="/lead-removal/shift/:shiftId/samples/new"
+                                element={
+                                  <PermissionRoute
+                                    requiredPermissions={["jobs.create"]}
+                                  >
+                                    <Suspense fallback={<LoadingSpinner />}>
+                                      <LeadNewSample />
+                                    </Suspense>
+                                  </PermissionRoute>
+                                }
+                              />
+                              <Route
+                                path="/lead-removal/shift/:shiftId/samples/edit/:sampleId"
+                                element={
+                                  <PermissionRoute
+                                    requiredPermissions={["jobs.edit"]}
+                                  >
+                                    <Suspense fallback={<LoadingSpinner />}>
+                                      <LeadEditSample />
                                     </Suspense>
                                   </PermissionRoute>
                                 }
@@ -1525,6 +1573,14 @@ function App() {
                                 element={
                                   <Suspense fallback={<LoadingSpinner />}>
                                     <LeadRemoval />
+                                  </Suspense>
+                                }
+                              />
+                              <Route
+                                path="/lead-removal/jobs/:jobId/details"
+                                element={
+                                  <Suspense fallback={<LoadingSpinner />}>
+                                    <LeadRemovalJobDetails />
                                   </Suspense>
                                 }
                               />

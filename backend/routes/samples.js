@@ -51,9 +51,10 @@ router.get('/project/:projectId', auth, checkPermission(['jobs.view']), async (r
     }
 
     // Query samples by fullSampleID pattern to include ALL samples for this project,
-    // including orphaned samples (where job/shift may have been deleted)
-    // This ensures we don't create duplicate sample numbers
-    const fullSampleIDPattern = new RegExp(`^${req.params.projectId}-AM\\d+$`);
+    // including orphaned samples (where job/shift may have been deleted).
+    // Match both air monitoring (AM1, AM2...) and lead (LP1, LP2...) sample IDs.
+    const escaped = req.params.projectId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const fullSampleIDPattern = new RegExp(`^${escaped}-(AM|LP)\\d+$`);
     const allSamples = await Sample.find({ fullSampleID: fullSampleIDPattern })
       .populate('collectedBy')
       .populate('sampler')

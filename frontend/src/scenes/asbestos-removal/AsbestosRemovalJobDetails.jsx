@@ -1683,7 +1683,6 @@ const AsbestosRemovalJobDetails = () => {
               gutterBottom
               sx={{
                 display: { xs: "none", md: "block" },
-                fontSize: { xs: "1.25rem", md: "2.125rem" },
                 fontWeight: 600,
               }}
             >
@@ -1692,9 +1691,6 @@ const AsbestosRemovalJobDetails = () => {
             <Typography
               variant="h5"
               color="text.secondary"
-              sx={{
-                fontSize: { xs: "0.95rem", md: "1.5rem" },
-              }}
             >
               Project: {job?.projectId?.projectID || "Loading..."} -{" "}
               {job?.projectName || "Loading..."}

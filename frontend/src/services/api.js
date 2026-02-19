@@ -36,6 +36,10 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    // Let the browser set Content-Type (with boundary) for FormData so file uploads work
+    if (typeof FormData !== "undefined" && config.data instanceof FormData) {
+      delete config.headers["Content-Type"];
+    }
     return config;
   },
   (error) => {
@@ -281,6 +285,16 @@ export const sampleService = {
   delete: (id) => api.delete(`/samples/${id}`)
 };
 
+// Lead air sample service (separate collection for lead monitoring)
+export const leadAirSampleService = {
+  getById: (id) => api.get(`/lead-air-samples/${id}`),
+  getByShift: (shiftId) => api.get(`/lead-air-samples/shift/${shiftId}`),
+  getByProject: (projectId) => api.get(`/lead-air-samples/project/${projectId}`),
+  create: (data) => api.post('/lead-air-samples', data),
+  update: (id, data) => api.patch(`/lead-air-samples/${id}`, data),
+  delete: (id) => api.delete(`/lead-air-samples/${id}`)
+};
+
 // Sample Items service (for fibre ID analysis)
 export const sampleItemsService = {
   getAll: (params = {}) => {
@@ -308,7 +322,14 @@ export const shiftService = {
     api.post(`/air-monitoring-shifts/${id}/send-for-authorisation`),
   // Site plan methods
   getSitePlan: (id) => api.get(`/air-monitoring-shifts/${id}/site-plan`),
-  saveSitePlan: (id, data) => api.patch(`/air-monitoring-shifts/${id}/site-plan`, data)
+  saveSitePlan: (id, data) => api.patch(`/air-monitoring-shifts/${id}/site-plan`, data),
+  // Lead analysis report
+  uploadAnalysisReport: (id, file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post(`/air-monitoring-shifts/${id}/upload-analysis-report`, formData);
+  },
+  getAnalysisReportUrl: (id) => `${api.defaults.baseURL}/air-monitoring-shifts/${id}/analysis-report`,
 };
 
 // Invoice service
