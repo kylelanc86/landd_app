@@ -111,6 +111,23 @@ const LeadRemoval = () => {
     [theme]
   );
 
+  const getJobTypeColor = useCallback(
+    (jobTypeRaw) => {
+      switch (jobTypeRaw) {
+        case "air_monitoring_and_clearance":
+          return theme.palette.info.main;
+        case "air_monitoring":
+          return theme.palette.primary.main;
+        case "clearance":
+          return theme.palette.secondary.main;
+        case "none":
+        default:
+          return theme.palette.grey[500];
+      }
+    },
+    [theme]
+  );
+
   const fetchLeadRemovalJobs = useCallback(
     async ({ force = false, silent = false } = {}) => {
       if (!silent) setLoading(true);
@@ -139,6 +156,8 @@ const LeadRemoval = () => {
             leadRemovalist:
               job.leadAbatementContractor || "Not assigned",
             status: job.status || "in_progress",
+            jobTypeLabel: job.jobTypeLabel || "None",
+            jobTypeRaw: job.jobType || "none",
           };
         });
         const sorted = processed.sort((a, b) => {
@@ -405,6 +424,13 @@ const LeadRemoval = () => {
                         </TableCell>
                       </>
                     )}
+                    {!isMobile && (
+                      <TableCell
+                        sx={{ fontWeight: "bold", minWidth: "100px" }}
+                      >
+                        Job Type
+                      </TableCell>
+                    )}
                     {!isMobile && hasPermission(currentUser, "asbestos.delete") && (
                       <TableCell
                         sx={{ fontWeight: "bold", width: "120px" }}
@@ -454,6 +480,18 @@ const LeadRemoval = () => {
                             />
                           </TableCell>
                         </>
+                      )}
+                      {!isMobile && (
+                        <TableCell>
+                          <Chip
+                            label={job.jobTypeLabel}
+                            size="small"
+                            sx={{
+                              backgroundColor: getJobTypeColor(job.jobTypeRaw),
+                              color: "white",
+                            }}
+                          />
+                        </TableCell>
                       )}
                       {!isMobile && hasPermission(currentUser, "asbestos.delete") && (
                         <TableCell align="center">
