@@ -3027,9 +3027,9 @@ const generateAssessmentHTML = async (assessmentData) => {
       remediationContentPage2 = remediationSection.content.substring(splitIndex);
     }
 
-    // First additional page: Assessment Methodology, Risk Assessment, first part of Remediation
+    // First additional page: Assessment Methodology (residential only), Risk Assessment, first part of Remediation
     const firstPageContent = [
-      `<div class="section-header">${sections[0].title}</div>${convertContentToHtml(sections[0].content)}`,
+      ...(isResidential ? [`<div class="section-header">${sections[0].title}</div>${convertContentToHtml(sections[0].content)}`] : []),
       `<div class="section-header">${sections[2].title}</div>${convertContentToHtml(sections[2].content)}`,
       `<div class="section-header">${remediationSection.title}</div>${convertContentToHtml(remediationContentPage1)}`
     ].join('');
@@ -3676,7 +3676,9 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
     : '';
 
   const additionalSections = [
-    { title: templateContent?.standardSections?.assessmentMethodologyTitle || 'ASSESSMENT METHODOLOGY', content: templateContent?.standardSections?.assessmentMethodologyContent ? await replacePlaceholders(templateContent.standardSections.assessmentMethodologyContent, flowTemplateData) : '' },
+    ...(isResidential && templateContent?.standardSections?.assessmentMethodologyContent
+      ? [{ title: templateContent?.standardSections?.assessmentMethodologyTitle || 'ASSESSMENT METHODOLOGY', content: await replacePlaceholders(templateContent.standardSections.assessmentMethodologyContent, flowTemplateData) }]
+      : []),
     { title: templateContent?.standardSections?.riskAssessmentTitle || 'RISK ASSESSMENT', content: templateContent?.standardSections?.riskAssessmentContent ? await replacePlaceholders(templateContent.standardSections.riskAssessmentContent, flowTemplateData) : '' },
     { title: templateContent?.standardSections?.controlMeasuresTitle || 'DETERMINING SUITABLE CONTROL MEASURES', content: templateContent?.standardSections?.controlMeasuresContent ? await replacePlaceholders(templateContent.standardSections.controlMeasuresContent, flowTemplateData) : '' },
     { title: templateContent?.standardSections?.remediationRequirementsTitle || 'REQUIREMENTS FOR REMEDIATION/REMOVAL WORKS INVOLVING ACM', content: templateContent?.standardSections?.remediationRequirementsContent ? await replacePlaceholders(templateContent.standardSections.remediationRequirementsContent, flowTemplateData) : '' },
@@ -3684,10 +3686,11 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
     { title: templateContent?.standardSections?.assessmentLimitationsTitle || 'ASSESSMENT LIMITATIONS/CAVEATS', content: templateContent?.standardSections?.assessmentLimitationsContent ? await replacePlaceholders(templateContent.standardSections.assessmentLimitationsContent, flowTemplateData) : '' }
   ];
 
-  const bodySectionsHtml = additionalSections.map((s, i) => {
+  const bodySectionsHtml = additionalSections.map((s) => {
     const sectionHtml = `<div class="section-header">${escapeHtml(s.title)}</div><div class="section-body">${s.content || ''}</div>`;
-    // Page break after DETERMINING SUITABLE CONTROL MEASURES (3rd section, index 2)
-    return i === 2 ? `${sectionHtml}<div class="page-break"></div>` : sectionHtml;
+    // Page break after DETERMINING SUITABLE CONTROL MEASURES (index varies: 2 for residential, 1 for non-residential)
+    const isControlMeasuresSection = (s.title || '').toUpperCase().includes('DETERMINING SUITABLE') && (s.title || '').toUpperCase().includes('CONTROL MEASURES');
+    return isControlMeasuresSection ? `${sectionHtml}<div class="page-break"></div>` : sectionHtml;
   }).join('');
 
   const discussionSignOffContent = templateContent?.standardSections?.signOffContent
