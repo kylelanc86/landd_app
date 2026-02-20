@@ -67,6 +67,73 @@ router.get("/", auth, checkPermission(permView), async (req, res) => {
 
       const count = await LeadRemovalJob.countDocuments(filter);
 
+      // Enrich with job type (lead monitoring shifts + clearances) for table display
+      if (jobs.length > 0) {
+        const jobIds = jobs.map((j) => j._id);
+
+        const [shiftCounts, clearanceCounts] = await Promise.all([
+          Shift.aggregate([
+            {
+              $match: {
+                jobModel: "LeadRemovalJob",
+                job: { $in: jobIds },
+              },
+            },
+            { $group: { _id: "$job", count: { $sum: 1 } } },
+          ]),
+          LeadClearance.aggregate([
+            { $match: { leadRemovalJobId: { $in: jobIds } } },
+            { $group: { _id: "$leadRemovalJobId", count: { $sum: 1 } } },
+          ]),
+        ]);
+
+        const shiftMap = new Map(
+          shiftCounts.map((r) => [r._id.toString(), r.count])
+        );
+        const clearanceMap = new Map(
+          clearanceCounts.map((r) => [r._id.toString(), r.count])
+        );
+
+        const deriveJobType = (hasAirMonitoring, hasClearance) => {
+          if (hasAirMonitoring && hasClearance) return "air_monitoring_and_clearance";
+          if (hasAirMonitoring) return "air_monitoring";
+          if (hasClearance) return "clearance";
+          return "none";
+        };
+
+        const resolveJobTypeLabel = (jobTypeRaw, airMonitoringFlag, clearanceFlag) => {
+          switch (jobTypeRaw) {
+            case "air_monitoring_and_clearance":
+              return "Air Monitoring & Clearance";
+            case "air_monitoring":
+              return "Air Monitoring";
+            case "clearance":
+              return "Clearance";
+            default: {
+              if (airMonitoringFlag && clearanceFlag) return "Air Monitoring & Clearance";
+              if (airMonitoringFlag) return "Air Monitoring";
+              if (clearanceFlag) return "Clearance";
+              return "None";
+            }
+          }
+        };
+
+        jobs.forEach((job) => {
+          const idStr = job._id.toString();
+          const hasLeadMonitoringShifts = (shiftMap.get(idStr) || 0) > 0;
+          const hasClearances = (clearanceMap.get(idStr) || 0) > 0;
+          const jobTypeRaw = deriveJobType(hasLeadMonitoringShifts, hasClearances);
+          job.airMonitoring = hasLeadMonitoringShifts;
+          job.clearance = hasClearances;
+          job.jobType = jobTypeRaw;
+          job.jobTypeLabel = resolveJobTypeLabel(
+            jobTypeRaw,
+            hasLeadMonitoringShifts,
+            hasClearances
+          );
+        });
+      }
+
       return res.json({
         jobs,
         totalPages: Math.ceil(count / limit),
