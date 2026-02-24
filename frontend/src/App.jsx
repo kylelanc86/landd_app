@@ -66,9 +66,7 @@ const SampleList = lazy(
 const LeadMonitoringSampleList = lazy(
   () => import("./scenes/lead-removal/LeadMonitoringSampleList"),
 );
-const LeadNewSample = lazy(
-  () => import("./scenes/lead-removal/LeadNewSample"),
-);
+const LeadNewSample = lazy(() => import("./scenes/lead-removal/LeadNewSample"));
 const LeadEditSample = lazy(
   () => import("./scenes/lead-removal/LeadEditSample"),
 );
@@ -140,6 +138,12 @@ const AsbestosRemoval = lazy(() => import("./scenes/asbestos-removal"));
 const LeadRemoval = lazy(() => import("./scenes/lead-removal"));
 const LeadRemovalJobDetails = lazy(
   () => import("./scenes/lead-removal/LeadRemovalJobDetails"),
+);
+const LeadClearanceItems = lazy(
+  () => import("./scenes/lead-removal/LeadClearanceItems"),
+);
+const LeadClearanceSampling = lazy(
+  () => import("./scenes/lead-removal/LeadClearanceSampling"),
 );
 const LaboratoryServices = lazy(() => import("./scenes/laboratory-services"));
 const AsbestosRemovalJobDetails = lazy(
@@ -219,281 +223,884 @@ function App() {
                       <ProtectedRoute>
                         <UserListsProvider>
                           <ProjectStatusesProvider>
-                          <Layout>
-                            <Routes>
-                              <Route path="/" element={<Dashboard />} />
-                              <Route
-                                path="/clients"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["clients.view"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <Clients />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/clients/:id"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["clients.view"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <ClientDetails />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/air-monitoring"
-                                element={
-                                  <Navigate to="/asbestos-removal" replace />
-                                }
-                              />
-                              <Route
-                                path="/air-monitoring/shift/:shiftId/samples"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["jobs.view"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <SampleList />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/air-monitoring/shift/:shiftId/samples/new"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["jobs.create"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <NewSample />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/air-monitoring/shift/:shiftId/samples/edit/:sampleId"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["jobs.edit"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <EditSample />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/air-monitoring/shift/:shiftId/analysis"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["jobs.view"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <Analysis />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/lead-removal/shift/:shiftId/samples"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["jobs.view"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <LeadMonitoringSampleList />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/lead-removal/shift/:shiftId/samples/new"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["jobs.create"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <LeadNewSample />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/lead-removal/shift/:shiftId/samples/edit/:sampleId"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["jobs.edit"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <LeadEditSample />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/projects"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["projects.view"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <Projects />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/projects/new"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["projects.create"]}
-                                  >
-                                    <ProjectInformation />
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/projects/add-new"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["projects.create"]}
-                                  >
-                                    <ProjectInformation />
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/projects/:id"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["projects.view"]}
-                                  >
-                                    <ProjectInformation />
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/invoices"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["invoices.view"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <Invoices />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/invoices/draft"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["invoices.create"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <DraftInvoicePage />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/invoices/edit/:invoiceId"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["invoices.edit"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <EditInvoicePage />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/users"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["users.view"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <Users />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/users/edit/:userId"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["users.edit"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <EditUserPage />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/users/add"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["users.create"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <AddUserPage />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/profile"
-                                element={
-                                  <Suspense fallback={<LoadingSpinner />}>
-                                    <Profile />
-                                  </Suspense>
-                                }
-                              />
-                              <Route
-                                path="/user-manual"
-                                element={<UserManual />}
-                              />
-
-                              {isFeatureEnabled("ADVANCED.SURVEYS") && (
+                            <Layout>
+                              <Routes>
+                                <Route path="/" element={<Dashboard />} />
                                 <Route
-                                  path="/surveys"
+                                  path="/clients"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["clients.view"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <Clients />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/clients/:id"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["clients.view"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <ClientDetails />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/air-monitoring"
+                                  element={
+                                    <Navigate to="/asbestos-removal" replace />
+                                  }
+                                />
+                                <Route
+                                  path="/air-monitoring/shift/:shiftId/samples"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["jobs.view"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <SampleList />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/air-monitoring/shift/:shiftId/samples/new"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["jobs.create"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <NewSample />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/air-monitoring/shift/:shiftId/samples/edit/:sampleId"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["jobs.edit"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <EditSample />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/air-monitoring/shift/:shiftId/analysis"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["jobs.view"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <Analysis />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/lead-removal/shift/:shiftId/samples"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["jobs.view"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <LeadMonitoringSampleList />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/lead-removal/shift/:shiftId/samples/new"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["jobs.create"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <LeadNewSample />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/lead-removal/shift/:shiftId/samples/edit/:sampleId"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["jobs.edit"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <LeadEditSample />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/lead-clearances/:clearanceId/items"
                                   element={
                                     <PermissionRoute
                                       requiredPermissions={["asbestos.view"]}
                                     >
                                       <Suspense fallback={<LoadingSpinner />}>
-                                        <SurveysDashboard />
+                                        <LeadClearanceItems />
                                       </Suspense>
                                     </PermissionRoute>
                                   }
                                 />
-                              )}
+                                <Route
+                                  path="/lead-clearances/:clearanceId/sampling"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["asbestos.view"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <LeadClearanceSampling />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/projects"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["projects.view"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <Projects />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/projects/new"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["projects.create"]}
+                                    >
+                                      <ProjectInformation />
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/projects/add-new"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["projects.create"]}
+                                    >
+                                      <ProjectInformation />
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/projects/:id"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["projects.view"]}
+                                    >
+                                      <ProjectInformation />
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/invoices"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["invoices.view"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <Invoices />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/invoices/draft"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["invoices.create"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <DraftInvoicePage />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/invoices/edit/:invoiceId"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["invoices.edit"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <EditInvoicePage />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/users"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["users.view"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <Users />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/users/edit/:userId"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["users.edit"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <EditUserPage />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/users/add"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["users.create"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <AddUserPage />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/profile"
+                                  element={
+                                    <Suspense fallback={<LoadingSpinner />}>
+                                      <Profile />
+                                    </Suspense>
+                                  }
+                                />
+                                <Route
+                                  path="/user-manual"
+                                  element={<UserManual />}
+                                />
 
-                              {isFeatureEnabled("ADVANCED.SURVEYS") && (
-                                <>
+                                {isFeatureEnabled("ADVANCED.SURVEYS") && (
                                   <Route
-                                    path="/surveys/asbestos-assessment"
+                                    path="/surveys"
                                     element={
                                       <PermissionRoute
                                         requiredPermissions={["asbestos.view"]}
                                       >
                                         <Suspense fallback={<LoadingSpinner />}>
-                                          <AsbestosAssessment />
+                                          <SurveysDashboard />
                                         </Suspense>
                                       </PermissionRoute>
                                     }
                                   />
+                                )}
+
+                                {isFeatureEnabled("ADVANCED.SURVEYS") && (
+                                  <>
+                                    <Route
+                                      path="/surveys/asbestos-assessment"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={[
+                                            "asbestos.view",
+                                          ]}
+                                        >
+                                          <Suspense
+                                            fallback={<LoadingSpinner />}
+                                          >
+                                            <AsbestosAssessment />
+                                          </Suspense>
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                    <Route
+                                      path="/surveys/asbestos-assessment/:id/items"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={[
+                                            "asbestos.view",
+                                          ]}
+                                        >
+                                          <Suspense
+                                            fallback={<LoadingSpinner />}
+                                          >
+                                            <AssessmentItems />
+                                          </Suspense>
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                  </>
+                                )}
+
+                                {isFeatureEnabled("ADVANCED.SURVEYS") && (
+                                  <>
+                                    <Route
+                                      path="/surveys/residential-asbestos"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={[
+                                            "asbestos.view",
+                                          ]}
+                                        >
+                                          <Suspense
+                                            fallback={<LoadingSpinner />}
+                                          >
+                                            <ResidentialAsbestosAssessment />
+                                          </Suspense>
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                    <Route
+                                      path="/surveys/residential-asbestos/:id/items"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={[
+                                            "asbestos.view",
+                                          ]}
+                                        >
+                                          <Suspense
+                                            fallback={<LoadingSpinner />}
+                                          >
+                                            <AssessmentItems />
+                                          </Suspense>
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                  </>
+                                )}
+
+                                {isFeatureEnabled("ADVANCED.SURVEYS") && (
                                   <Route
-                                    path="/surveys/asbestos-assessment/:id/items"
+                                    path="/surveys/commercial-asbestos"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["asbestos.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <CommercialAsbestosAssessment />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+
+                                {isFeatureEnabled("ADVANCED.SURVEYS") && (
+                                  <Route
+                                    path="/surveys/hazmat"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["asbestos.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <HAZMATSurveys />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+
+                                {isFeatureEnabled("ADVANCED.SURVEYS") && (
+                                  <Route
+                                    path="/surveys/lead"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["asbestos.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <LeadAssessment />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled("ADVANCED.SURVEYS") && (
+                                  <Route
+                                    path="/surveys/mould-moisture"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["asbestos.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <MouldMoistureAssessment />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled("ADVANCED.SURVEYS") && (
+                                  <Route
+                                    path="/clearances/lead"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["asbestos.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <LeadClearance />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled("ADVANCED.SURVEYS") && (
+                                  <Route
+                                    path="/clearances/mould"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["asbestos.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <MouldValidation />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled(
+                                  "ADVANCED.ASBESTOS_REMOVAL",
+                                ) && (
+                                  <Route
+                                    path="/clearances/:clearanceId/items"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["asbestos.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <ClearanceItems />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+
+                                <Route
+                                  path="/timesheets"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["timesheets.view"]}
+                                    >
+                                      <Timesheets />
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/timesheets/review"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={[
+                                        "timesheets.review",
+                                      ]}
+                                    >
+                                      <TimesheetReview />
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/timesheets/monthly"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["timesheets.view"]}
+                                    >
+                                      <MonthlyTimesheet />
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/list"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <Calibrations />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/air-pump"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <AirPumpPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/pump/:pumpId"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <AirPumpCalibrationPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/flowmeter"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <FlowmeterPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/efa"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <EFAPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/microscope"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <PCMMicroscopePage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/plm-microscope"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <PLMMicroscopePage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/stereomicroscope"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <StereomicroscopePage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/hse-test-slide"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <HSETestSlidePage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/acetone-vaporiser"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <AcetoneVaporiserPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/acetone-vaporiser/:equipmentId"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <AcetoneVaporiserHistoryPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/ri-liquid"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <RiLiquidPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/ri-liquid/history"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <RiLiquidHistoryPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/graticule"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <GraticulePage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/graticule/history"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <GraticuleHistoryPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/frequency"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={["admin.access"]}
+                                    >
+                                      <CalibrationFrequency />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/primary-flowmeter"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <PrimaryFlowmeterPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/laboratory-equipment"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <EquipmentList />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
+                                  <Route
+                                    path="/fibre-id"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["clientSup.view"]}
+                                      >
+                                        <FibreIdIndex />
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
+                                  <Route
+                                    path="/fibre-id/client-supplied"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["clientSup.view"]}
+                                      >
+                                        <ClientSuppliedJobs />
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
+                                  <Route
+                                    path="/fibre-id/ldjobs"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["clientSup.view"]}
+                                      >
+                                        <LDsuppliedJobs />
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                <Route
+                                  path="/fibre-id/assessment/:assessmentId/item/:itemNumber/analysis"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["clientSup.view"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <LDsuppliedAnalysisPage />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                                {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
+                                  <Route
+                                    path="/fibre-id/client-supplied/:jobId/samples"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["clientSup.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <ClientSuppliedSamples />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
+                                  <Route
+                                    path="/fibre-id/ld-supplied/:jobId/samples"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["clientSup.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <ClientSuppliedSamples />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {(isFeatureEnabled("ADVANCED.FIBRE_ID") ||
+                                  isFeatureEnabled(
+                                    "ADVANCED.ASBESTOS_REMOVAL",
+                                  )) && (
+                                  <Route
+                                    path="/client-supplied/:jobId/sample/:sampleIndex/analysis"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={
+                                          isFeatureEnabled("ADVANCED.FIBRE_ID")
+                                            ? ["clientSup.view"]
+                                            : ["projects.view"]
+                                        }
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <ClientSuppliedFibreIDAnalysis />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled(
+                                  "ADVANCED.ASBESTOS_REMOVAL",
+                                ) && (
+                                  <Route
+                                    path="/client-supplied/:jobId/analysis"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["projects.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <ClientSuppliedFibreCountAnalysis />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
+                                  <Route
+                                    path="/fibre-id/client-supplied/:jobId/sample/:sampleIndex/analysis"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["clientSup.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <ClientSuppliedFibreIDAnalysis />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
+                                  <Route
+                                    path="/fibre-id/client-supplied/:jobId/analysis"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["clientSup.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <ClientSuppliedFibreCountAnalysis />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
+                                  <Route
+                                    path="/fibre-id/ld-supplied/:jobId/sample/:sampleIndex/analysis"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["clientSup.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <ClientSuppliedFibreIDAnalysis />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
+                                  <Route
+                                    path="/fibre-id/ld-supplied/:jobId/analysis"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["clientSup.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <ClientSuppliedFibreCountAnalysis />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled("ADVANCED.SURVEYS") && (
+                                  <Route
+                                    path="/assessments/:id/items"
                                     element={
                                       <PermissionRoute
                                         requiredPermissions={["asbestos.view"]}
@@ -504,378 +1111,148 @@ function App() {
                                       </PermissionRoute>
                                     }
                                   />
-                                </>
-                              )}
+                                )}
+                                <Route
+                                  path="/admin"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["admin.view"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <AdminDashboard />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                                {isFeatureEnabled(
+                                  "ADMIN.TEMPLATE_MANAGEMENT",
+                                ) && (
+                                  <>
+                                    <Route
+                                      path="/admin/report-templates"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={["admin.view"]}
+                                        >
+                                          <Suspense
+                                            fallback={<LoadingSpinner />}
+                                          >
+                                            <ReportTemplatesIndex />
+                                          </Suspense>
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                    <Route
+                                      path="/admin/report-templates/clearances"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={["admin.view"]}
+                                        >
+                                          <Suspense
+                                            fallback={<LoadingSpinner />}
+                                          >
+                                            <ClearanceReportTemplates />
+                                          </Suspense>
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                    <Route
+                                      path="/admin/report-templates/surveys"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={["admin.view"]}
+                                        >
+                                          <Suspense
+                                            fallback={<LoadingSpinner />}
+                                          >
+                                            <SurveyReportTemplates />
+                                          </Suspense>
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                    <Route
+                                      path="/admin/report-templates/lead"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={["admin.view"]}
+                                        >
+                                          <Suspense
+                                            fallback={<LoadingSpinner />}
+                                          >
+                                            <LeadAssessmentReportTemplates />
+                                          </Suspense>
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                  </>
+                                )}
 
-                              {isFeatureEnabled("ADVANCED.SURVEYS") && (
-                                <>
+                                {isFeatureEnabled(
+                                  "ADMIN.TEMPLATE_MANAGEMENT",
+                                ) && (
                                   <Route
-                                    path="/surveys/residential-asbestos"
+                                    path="/admin/template-test"
                                     element={
                                       <PermissionRoute
-                                        requiredPermissions={["asbestos.view"]}
+                                        requiredPermissions={["admin.view"]}
                                       >
                                         <Suspense fallback={<LoadingSpinner />}>
-                                          <ResidentialAsbestosAssessment />
+                                          <TemplateTestPage />
                                         </Suspense>
                                       </PermissionRoute>
                                     }
                                   />
-                                  <Route
-                                    path="/surveys/residential-asbestos/:id/items"
-                                    element={
-                                      <PermissionRoute
-                                        requiredPermissions={["asbestos.view"]}
-                                      >
-                                        <Suspense fallback={<LoadingSpinner />}>
-                                          <AssessmentItems />
-                                        </Suspense>
-                                      </PermissionRoute>
-                                    }
-                                  />
-                                </>
-                              )}
-
-                              {isFeatureEnabled("ADVANCED.SURVEYS") && (
+                                )}
                                 <Route
-                                  path="/surveys/commercial-asbestos"
+                                  path="/admin/invoice-items"
                                   element={
                                     <PermissionRoute
-                                      requiredPermissions={["asbestos.view"]}
+                                      requiredPermissions={["admin.view"]}
                                     >
                                       <Suspense fallback={<LoadingSpinner />}>
-                                        <CommercialAsbestosAssessment />
+                                        <InvoiceItems />
                                       </Suspense>
                                     </PermissionRoute>
                                   }
                                 />
-                              )}
-
-                              {isFeatureEnabled("ADVANCED.SURVEYS") && (
                                 <Route
-                                  path="/surveys/hazmat"
+                                  path="/admin/custom-data-fields"
                                   element={
                                     <PermissionRoute
-                                      requiredPermissions={["asbestos.view"]}
+                                      requiredPermissions={["admin.view"]}
                                     >
                                       <Suspense fallback={<LoadingSpinner />}>
-                                        <HAZMATSurveys />
+                                        <CustomDataFields />
                                       </Suspense>
                                     </PermissionRoute>
                                   }
                                 />
-                              )}
-
-                              {isFeatureEnabled("ADVANCED.SURVEYS") && (
                                 <Route
-                                  path="/surveys/lead"
+                                  path="/admin/archived-data"
                                   element={
                                     <PermissionRoute
-                                      requiredPermissions={["asbestos.view"]}
+                                      requiredPermissions={["admin.view"]}
                                     >
                                       <Suspense fallback={<LoadingSpinner />}>
-                                        <LeadAssessment />
+                                        <ArchivedData />
                                       </Suspense>
                                     </PermissionRoute>
                                   }
                                 />
-                              )}
-                              {isFeatureEnabled("ADVANCED.SURVEYS") && (
                                 <Route
-                                  path="/surveys/mould-moisture"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["asbestos.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <MouldMoistureAssessment />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              {isFeatureEnabled("ADVANCED.SURVEYS") && (
-                                <Route
-                                  path="/clearances/lead"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["asbestos.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <LeadClearance />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              {isFeatureEnabled("ADVANCED.SURVEYS") && (
-                                <Route
-                                  path="/clearances/mould"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["asbestos.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <MouldValidation />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              {isFeatureEnabled(
-                                "ADVANCED.ASBESTOS_REMOVAL",
-                              ) && (
-                                <Route
-                                  path="/clearances/:clearanceId/items"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["asbestos.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <ClearanceItems />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-
-                              <Route
-                                path="/timesheets"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["timesheets.view"]}
-                                  >
-                                    <Timesheets />
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/timesheets/review"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["timesheets.review"]}
-                                  >
-                                    <TimesheetReview />
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/timesheets/monthly"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["timesheets.view"]}
-                                  >
-                                    <MonthlyTimesheet />
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/records/laboratory/calibrations/list"
-                                element={
-                                  <ProtectedRoute
-                                    requiredPermissions={["calibrations.view"]}
-                                  >
-                                    <Calibrations />
-                                  </ProtectedRoute>
-                                }
-                              />
-                              <Route
-                                path="/records/laboratory/calibrations/air-pump"
-                                element={
-                                  <ProtectedRoute
-                                    requiredPermissions={["calibrations.view"]}
-                                  >
-                                    <AirPumpPage />
-                                  </ProtectedRoute>
-                                }
-                              />
-                              <Route
-                                path="/records/laboratory/calibrations/pump/:pumpId"
-                                element={
-                                  <ProtectedRoute
-                                    requiredPermissions={["calibrations.view"]}
-                                  >
-                                    <AirPumpCalibrationPage />
-                                  </ProtectedRoute>
-                                }
-                              />
-                              <Route
-                                path="/records/laboratory/calibrations/flowmeter"
-                                element={
-                                  <ProtectedRoute
-                                    requiredPermissions={["calibrations.view"]}
-                                  >
-                                    <FlowmeterPage />
-                                  </ProtectedRoute>
-                                }
-                              />
-                              <Route
-                                path="/records/laboratory/calibrations/efa"
-                                element={
-                                  <ProtectedRoute
-                                    requiredPermissions={["calibrations.view"]}
-                                  >
-                                    <EFAPage />
-                                  </ProtectedRoute>
-                                }
-                              />
-                              <Route
-                                path="/records/laboratory/calibrations/microscope"
-                                element={
-                                  <ProtectedRoute
-                                    requiredPermissions={["calibrations.view"]}
-                                  >
-                                    <PCMMicroscopePage />
-                                  </ProtectedRoute>
-                                }
-                              />
-                              <Route
-                                path="/records/laboratory/calibrations/plm-microscope"
-                                element={
-                                  <ProtectedRoute
-                                    requiredPermissions={["calibrations.view"]}
-                                  >
-                                    <PLMMicroscopePage />
-                                  </ProtectedRoute>
-                                }
-                              />
-                              <Route
-                                path="/records/laboratory/calibrations/stereomicroscope"
-                                element={
-                                  <ProtectedRoute
-                                    requiredPermissions={["calibrations.view"]}
-                                  >
-                                    <StereomicroscopePage />
-                                  </ProtectedRoute>
-                                }
-                              />
-                              <Route
-                                path="/records/laboratory/calibrations/hse-test-slide"
-                                element={
-                                  <ProtectedRoute
-                                    requiredPermissions={["calibrations.view"]}
-                                  >
-                                    <HSETestSlidePage />
-                                  </ProtectedRoute>
-                                }
-                              />
-                              <Route
-                                path="/records/laboratory/calibrations/acetone-vaporiser"
-                                element={
-                                  <ProtectedRoute
-                                    requiredPermissions={["calibrations.view"]}
-                                  >
-                                    <AcetoneVaporiserPage />
-                                  </ProtectedRoute>
-                                }
-                              />
-                              <Route
-                                path="/records/laboratory/calibrations/acetone-vaporiser/:equipmentId"
-                                element={
-                                  <ProtectedRoute
-                                    requiredPermissions={["calibrations.view"]}
-                                  >
-                                    <AcetoneVaporiserHistoryPage />
-                                  </ProtectedRoute>
-                                }
-                              />
-                              <Route
-                                path="/records/laboratory/calibrations/ri-liquid"
-                                element={
-                                  <ProtectedRoute
-                                    requiredPermissions={["calibrations.view"]}
-                                  >
-                                    <RiLiquidPage />
-                                  </ProtectedRoute>
-                                }
-                              />
-                              <Route
-                                path="/records/laboratory/calibrations/ri-liquid/history"
-                                element={
-                                  <ProtectedRoute
-                                    requiredPermissions={["calibrations.view"]}
-                                  >
-                                    <RiLiquidHistoryPage />
-                                  </ProtectedRoute>
-                                }
-                              />
-                              <Route
-                                path="/records/laboratory/calibrations/graticule"
-                                element={
-                                  <ProtectedRoute
-                                    requiredPermissions={["calibrations.view"]}
-                                  >
-                                    <GraticulePage />
-                                  </ProtectedRoute>
-                                }
-                              />
-                              <Route
-                                path="/records/laboratory/calibrations/graticule/history"
-                                element={
-                                  <ProtectedRoute
-                                    requiredPermissions={["calibrations.view"]}
-                                  >
-                                    <GraticuleHistoryPage />
-                                  </ProtectedRoute>
-                                }
-                              />
-                              <Route
-                                path="/records/laboratory/calibrations/frequency"
-                                element={
-                                  <ProtectedRoute
-                                    requiredPermissions={["admin.access"]}
-                                  >
-                                    <CalibrationFrequency />
-                                  </ProtectedRoute>
-                                }
-                              />
-                              <Route
-                                path="/records/laboratory/calibrations/primary-flowmeter"
-                                element={
-                                  <ProtectedRoute
-                                    requiredPermissions={["calibrations.view"]}
-                                  >
-                                    <PrimaryFlowmeterPage />
-                                  </ProtectedRoute>
-                                }
-                              />
-                              <Route
-                                path="/laboratory-equipment"
-                                element={
-                                  <ProtectedRoute
-                                    requiredPermissions={["calibrations.view"]}
-                                  >
-                                    <EquipmentList />
-                                  </ProtectedRoute>
-                                }
-                              />
-                              {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
-                                <Route
-                                  path="/fibre-id"
+                                  path="/laboratory-services"
                                   element={
                                     <PermissionRoute
                                       requiredPermissions={["clientSup.view"]}
                                     >
-                                      <FibreIdIndex />
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <LaboratoryServices />
+                                      </Suspense>
                                     </PermissionRoute>
                                   }
                                 />
-                              )}
-                              {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
                                 <Route
-                                  path="/fibre-id/client-supplied"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["clientSup.view"]}
-                                    >
-                                      <ClientSuppliedJobs />
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
-                                <Route
-                                  path="/fibre-id/ldjobs"
+                                  path="/laboratory-services/ld-supplied"
                                   element={
                                     <PermissionRoute
                                       requiredPermissions={["clientSup.view"]}
@@ -884,22 +1261,8 @@ function App() {
                                     </PermissionRoute>
                                   }
                                 />
-                              )}
-                              <Route
-                                path="/fibre-id/assessment/:assessmentId/item/:itemNumber/analysis"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["clientSup.view"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <LDsuppliedAnalysisPage />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-                              {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
                                 <Route
-                                  path="/fibre-id/client-supplied/:jobId/samples"
+                                  path="/laboratory-services/ld-supplied/:jobId/samples"
                                   element={
                                     <PermissionRoute
                                       requiredPermissions={["clientSup.view"]}
@@ -910,729 +1273,474 @@ function App() {
                                     </PermissionRoute>
                                   }
                                 />
-                              )}
-                              {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
                                 <Route
-                                  path="/fibre-id/ld-supplied/:jobId/samples"
+                                  path="/laboratory-services/ld-supplied/:jobId/sample/:sampleIndex/analysis"
                                   element={
                                     <PermissionRoute
                                       requiredPermissions={["clientSup.view"]}
                                     >
                                       <Suspense fallback={<LoadingSpinner />}>
-                                        <ClientSuppliedSamples />
+                                        <ClientSuppliedFibreIDAnalysis />
                                       </Suspense>
                                     </PermissionRoute>
                                   }
                                 />
-                              )}
-                              {(isFeatureEnabled("ADVANCED.FIBRE_ID") ||
-                                isFeatureEnabled(
-                                  "ADVANCED.ASBESTOS_REMOVAL",
-                                )) && (
                                 <Route
-                                  path="/client-supplied/:jobId/sample/:sampleIndex/analysis"
+                                  path="/laboratory-services/ld-supplied/:jobId/analysis"
                                   element={
                                     <PermissionRoute
-                                      requiredPermissions={
-                                        isFeatureEnabled("ADVANCED.FIBRE_ID")
-                                          ? ["clientSup.view"]
-                                          : ["projects.view"]
+                                      requiredPermissions={["clientSup.view"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <ClientSuppliedFibreCountAnalysis />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+
+                                {isFeatureEnabled("ADVANCED.REPORTS") && (
+                                  <Route
+                                    path="/reports"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["projects.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <Reports />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled("ADVANCED.REPORTS") && (
+                                  <Route
+                                    path="/reports/project/:projectId"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["projects.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <ProjectReports />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled("ADVANCED.RECORDS") && (
+                                  <Route
+                                    path="/records"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["projects.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <Records />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled("ADVANCED.RECORDS") && (
+                                  <>
+                                    <Route
+                                      path="/records/laboratory/equipment"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={[
+                                            "calibrations.view",
+                                          ]}
+                                        >
+                                          <EquipmentList />
+                                        </PermissionRoute>
                                       }
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <ClientSuppliedFibreIDAnalysis />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              {isFeatureEnabled(
-                                "ADVANCED.ASBESTOS_REMOVAL",
-                              ) && (
-                                <Route
-                                  path="/client-supplied/:jobId/analysis"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["projects.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <ClientSuppliedFibreCountAnalysis />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
-                                <Route
-                                  path="/fibre-id/client-supplied/:jobId/sample/:sampleIndex/analysis"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["clientSup.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <ClientSuppliedFibreIDAnalysis />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
-                                <Route
-                                  path="/fibre-id/client-supplied/:jobId/analysis"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["clientSup.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <ClientSuppliedFibreCountAnalysis />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
-                                <Route
-                                  path="/fibre-id/ld-supplied/:jobId/sample/:sampleIndex/analysis"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["clientSup.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <ClientSuppliedFibreIDAnalysis />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
-                                <Route
-                                  path="/fibre-id/ld-supplied/:jobId/analysis"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["clientSup.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <ClientSuppliedFibreCountAnalysis />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              {isFeatureEnabled("ADVANCED.SURVEYS") && (
-                                <Route
-                                  path="/assessments/:id/items"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["asbestos.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <AssessmentItems />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              <Route
-                                path="/admin"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["admin.view"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <AdminDashboard />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-                              {isFeatureEnabled(
-                                "ADMIN.TEMPLATE_MANAGEMENT",
-                              ) && (
-                                <>
+                                    />
+                                    <Route
+                                      path="/records/laboratory/equipment/archived"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={[
+                                            "calibrations.view",
+                                          ]}
+                                        >
+                                          <ArchivedEquipmentList />
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                  </>
+                                )}
+                                {isFeatureEnabled("ADVANCED.RECORDS") && (
+                                  <>
+                                    <Route
+                                      path="/records/laboratory/calibrations"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={[
+                                            "calibrations.view",
+                                          ]}
+                                        >
+                                          <Calibrations />
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                    <Route
+                                      path="/records/laboratory/calibrations/frequency"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={["admin.access"]}
+                                        >
+                                          <CalibrationFrequency />
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                  </>
+                                )}
+                                {isFeatureEnabled("ADVANCED.RECORDS") && (
                                   <Route
-                                    path="/admin/report-templates"
-                                    element={
-                                      <PermissionRoute
-                                        requiredPermissions={["admin.view"]}
-                                      >
-                                        <Suspense fallback={<LoadingSpinner />}>
-                                          <ReportTemplatesIndex />
-                                        </Suspense>
-                                      </PermissionRoute>
-                                    }
-                                  />
-                                  <Route
-                                    path="/admin/report-templates/clearances"
-                                    element={
-                                      <PermissionRoute
-                                        requiredPermissions={["admin.view"]}
-                                      >
-                                        <Suspense fallback={<LoadingSpinner />}>
-                                          <ClearanceReportTemplates />
-                                        </Suspense>
-                                      </PermissionRoute>
-                                    }
-                                  />
-                                  <Route
-                                    path="/admin/report-templates/surveys"
-                                    element={
-                                      <PermissionRoute
-                                        requiredPermissions={["admin.view"]}
-                                      >
-                                        <Suspense fallback={<LoadingSpinner />}>
-                                          <SurveyReportTemplates />
-                                        </Suspense>
-                                      </PermissionRoute>
-                                    }
-                                  />
-                                  <Route
-                                    path="/admin/report-templates/lead"
-                                    element={
-                                      <PermissionRoute
-                                        requiredPermissions={["admin.view"]}
-                                      >
-                                        <Suspense fallback={<LoadingSpinner />}>
-                                          <LeadAssessmentReportTemplates />
-                                        </Suspense>
-                                      </PermissionRoute>
-                                    }
-                                  />
-                                </>
-                              )}
-
-                              {isFeatureEnabled(
-                                "ADMIN.TEMPLATE_MANAGEMENT",
-                              ) && (
-                                <Route
-                                  path="/admin/template-test"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["admin.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <TemplateTestPage />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              <Route
-                                path="/admin/invoice-items"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["admin.view"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <InvoiceItems />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/admin/custom-data-fields"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["admin.view"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <CustomDataFields />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/admin/archived-data"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["admin.view"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <ArchivedData />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/laboratory-services"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["clientSup.view"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <LaboratoryServices />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/laboratory-services/ld-supplied"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["clientSup.view"]}
-                                  >
-                                    <LDsuppliedJobs />
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/laboratory-services/ld-supplied/:jobId/samples"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["clientSup.view"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <ClientSuppliedSamples />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/laboratory-services/ld-supplied/:jobId/sample/:sampleIndex/analysis"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["clientSup.view"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <ClientSuppliedFibreIDAnalysis />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-                              <Route
-                                path="/laboratory-services/ld-supplied/:jobId/analysis"
-                                element={
-                                  <PermissionRoute
-                                    requiredPermissions={["clientSup.view"]}
-                                  >
-                                    <Suspense fallback={<LoadingSpinner />}>
-                                      <ClientSuppliedFibreCountAnalysis />
-                                    </Suspense>
-                                  </PermissionRoute>
-                                }
-                              />
-
-                              {isFeatureEnabled("ADVANCED.REPORTS") && (
-                                <Route
-                                  path="/reports"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["projects.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <Reports />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              {isFeatureEnabled("ADVANCED.REPORTS") && (
-                                <Route
-                                  path="/reports/project/:projectId"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["projects.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <ProjectReports />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              {isFeatureEnabled("ADVANCED.RECORDS") && (
-                                <Route
-                                  path="/records"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["projects.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <Records />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              {isFeatureEnabled("ADVANCED.RECORDS") && (
-                                <>
-                                  <Route
-                                    path="/records/laboratory/equipment"
-                                    element={
-                                      <PermissionRoute
-                                        requiredPermissions={[
-                                          "calibrations.view",
-                                        ]}
-                                      >
-                                        <EquipmentList />
-                                      </PermissionRoute>
-                                    }
-                                  />
-                                  <Route
-                                    path="/records/laboratory/equipment/archived"
-                                    element={
-                                      <PermissionRoute
-                                        requiredPermissions={[
-                                          "calibrations.view",
-                                        ]}
-                                      >
-                                        <ArchivedEquipmentList />
-                                      </PermissionRoute>
-                                    }
-                                  />
-                                </>
-                              )}
-                              {isFeatureEnabled("ADVANCED.RECORDS") && (
-                                <>
-                                  <Route
-                                    path="/records/laboratory/calibrations"
-                                    element={
-                                      <PermissionRoute
-                                        requiredPermissions={[
-                                          "calibrations.view",
-                                        ]}
-                                      >
-                                        <Calibrations />
-                                      </PermissionRoute>
-                                    }
-                                  />
-                                  <Route
-                                    path="/records/laboratory/calibrations/frequency"
-                                    element={
-                                      <PermissionRoute
-                                        requiredPermissions={["admin.access"]}
-                                      >
-                                        <CalibrationFrequency />
-                                      </PermissionRoute>
-                                    }
-                                  />
-                                </>
-                              )}
-                              {isFeatureEnabled("ADVANCED.RECORDS") && (
-                                <Route
-                                  path="/records/training"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["projects.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <TrainingRecords />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              {isFeatureEnabled("ADVANCED.RECORDS") && (
-                                <Route
-                                  path="/records/staff-meetings"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["projects.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <StaffMeetings />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              {isFeatureEnabled("ADVANCED.RECORDS") && (
-                                <Route
-                                  path="/records/document-register"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["projects.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <DocumentRegister />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              {isFeatureEnabled("ADVANCED.RECORDS") && (
-                                <Route
-                                  path="/records/approved-suppliers"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["projects.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <ApprovedSuppliers />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              {isFeatureEnabled("ADVANCED.RECORDS") && (
-                                <Route
-                                  path="/records/asset-register"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["projects.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <AssetRegister />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              {isFeatureEnabled("ADVANCED.RECORDS") && (
-                                <Route
-                                  path="/records/incidents"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["projects.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <Incidents />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              {isFeatureEnabled("ADVANCED.RECORDS") && (
-                                <Route
-                                  path="/records/ohs-environmental"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["projects.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <OHSEnvironmental />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              {isFeatureEnabled("ADVANCED.RECORDS") && (
-                                <Route
-                                  path="/records/impartiality-risks"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["projects.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <ImpartialityRisks />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              {isFeatureEnabled("ADVANCED.RECORDS") && (
-                                <Route
-                                  path="/records/feedback"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["projects.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <Feedback />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              {isFeatureEnabled("ADVANCED.RECORDS") && (
-                                <Route
-                                  path="/records/quality-control"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["projects.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <QualityControl />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              {isFeatureEnabled("ADVANCED.RECORDS") && (
-                                <>
-                                  <Route
-                                    path="/records/indoor-air-quality"
+                                    path="/records/training"
                                     element={
                                       <PermissionRoute
                                         requiredPermissions={["projects.view"]}
                                       >
                                         <Suspense fallback={<LoadingSpinner />}>
-                                          <IndoorAirQuality />
+                                          <TrainingRecords />
                                         </Suspense>
                                       </PermissionRoute>
                                     }
                                   />
+                                )}
+                                {isFeatureEnabled("ADVANCED.RECORDS") && (
                                   <Route
-                                    path="/records/indoor-air-quality/:iaqRecordId/samples"
+                                    path="/records/staff-meetings"
                                     element={
                                       <PermissionRoute
                                         requiredPermissions={["projects.view"]}
                                       >
                                         <Suspense fallback={<LoadingSpinner />}>
-                                          <IAQSampleList />
+                                          <StaffMeetings />
                                         </Suspense>
                                       </PermissionRoute>
                                     }
                                   />
+                                )}
+                                {isFeatureEnabled("ADVANCED.RECORDS") && (
                                   <Route
-                                    path="/records/indoor-air-quality/:iaqRecordId/samples/new"
-                                    element={
-                                      <PermissionRoute
-                                        requiredPermissions={["jobs.create"]}
-                                      >
-                                        <Suspense fallback={<LoadingSpinner />}>
-                                          <IAQNewSample />
-                                        </Suspense>
-                                      </PermissionRoute>
-                                    }
-                                  />
-                                  <Route
-                                    path="/records/indoor-air-quality/:iaqRecordId/samples/edit/:sampleId"
-                                    element={
-                                      <PermissionRoute
-                                        requiredPermissions={["jobs.edit"]}
-                                      >
-                                        <Suspense fallback={<LoadingSpinner />}>
-                                          <IAQEditSample />
-                                        </Suspense>
-                                      </PermissionRoute>
-                                    }
-                                  />
-                                  <Route
-                                    path="/records/indoor-air-quality/:iaqRecordId/analysis"
-                                    element={
-                                      <PermissionRoute
-                                        requiredPermissions={["jobs.view"]}
-                                      >
-                                        <Suspense fallback={<LoadingSpinner />}>
-                                          <IAQAnalysis />
-                                        </Suspense>
-                                      </PermissionRoute>
-                                    }
-                                  />
-                                </>
-                              )}
-                              {isFeatureEnabled("ADVANCED.RECORDS") && (
-                                <>
-                                  <Route
-                                    path="/records/blanks"
+                                    path="/records/document-register"
                                     element={
                                       <PermissionRoute
                                         requiredPermissions={["projects.view"]}
                                       >
                                         <Suspense fallback={<LoadingSpinner />}>
-                                          <Blanks />
+                                          <DocumentRegister />
                                         </Suspense>
                                       </PermissionRoute>
                                     }
                                   />
+                                )}
+                                {isFeatureEnabled("ADVANCED.RECORDS") && (
                                   <Route
-                                    path="/records/blanks/:blankId/analysis"
+                                    path="/records/approved-suppliers"
                                     element={
                                       <PermissionRoute
-                                        requiredPermissions={["jobs.view"]}
+                                        requiredPermissions={["projects.view"]}
                                       >
                                         <Suspense fallback={<LoadingSpinner />}>
-                                          <BlankAnalysis />
+                                          <ApprovedSuppliers />
                                         </Suspense>
                                       </PermissionRoute>
                                     }
                                   />
-                                </>
-                              )}
-                              {isFeatureEnabled("ADVANCED.RECORDS") && (
+                                )}
+                                {isFeatureEnabled("ADVANCED.RECORDS") && (
+                                  <Route
+                                    path="/records/asset-register"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["projects.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <AssetRegister />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled("ADVANCED.RECORDS") && (
+                                  <Route
+                                    path="/records/incidents"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["projects.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <Incidents />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled("ADVANCED.RECORDS") && (
+                                  <Route
+                                    path="/records/ohs-environmental"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["projects.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <OHSEnvironmental />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled("ADVANCED.RECORDS") && (
+                                  <Route
+                                    path="/records/impartiality-risks"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["projects.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <ImpartialityRisks />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled("ADVANCED.RECORDS") && (
+                                  <Route
+                                    path="/records/feedback"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["projects.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <Feedback />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled("ADVANCED.RECORDS") && (
+                                  <Route
+                                    path="/records/quality-control"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["projects.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <QualityControl />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled("ADVANCED.RECORDS") && (
+                                  <>
+                                    <Route
+                                      path="/records/indoor-air-quality"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={[
+                                            "projects.view",
+                                          ]}
+                                        >
+                                          <Suspense
+                                            fallback={<LoadingSpinner />}
+                                          >
+                                            <IndoorAirQuality />
+                                          </Suspense>
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                    <Route
+                                      path="/records/indoor-air-quality/:iaqRecordId/samples"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={[
+                                            "projects.view",
+                                          ]}
+                                        >
+                                          <Suspense
+                                            fallback={<LoadingSpinner />}
+                                          >
+                                            <IAQSampleList />
+                                          </Suspense>
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                    <Route
+                                      path="/records/indoor-air-quality/:iaqRecordId/samples/new"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={["jobs.create"]}
+                                        >
+                                          <Suspense
+                                            fallback={<LoadingSpinner />}
+                                          >
+                                            <IAQNewSample />
+                                          </Suspense>
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                    <Route
+                                      path="/records/indoor-air-quality/:iaqRecordId/samples/edit/:sampleId"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={["jobs.edit"]}
+                                        >
+                                          <Suspense
+                                            fallback={<LoadingSpinner />}
+                                          >
+                                            <IAQEditSample />
+                                          </Suspense>
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                    <Route
+                                      path="/records/indoor-air-quality/:iaqRecordId/analysis"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={["jobs.view"]}
+                                        >
+                                          <Suspense
+                                            fallback={<LoadingSpinner />}
+                                          >
+                                            <IAQAnalysis />
+                                          </Suspense>
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                  </>
+                                )}
+                                {isFeatureEnabled("ADVANCED.RECORDS") && (
+                                  <>
+                                    <Route
+                                      path="/records/blanks"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={[
+                                            "projects.view",
+                                          ]}
+                                        >
+                                          <Suspense
+                                            fallback={<LoadingSpinner />}
+                                          >
+                                            <Blanks />
+                                          </Suspense>
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                    <Route
+                                      path="/records/blanks/:blankId/analysis"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={["jobs.view"]}
+                                        >
+                                          <Suspense
+                                            fallback={<LoadingSpinner />}
+                                          >
+                                            <BlankAnalysis />
+                                          </Suspense>
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                  </>
+                                )}
+                                {isFeatureEnabled("ADVANCED.RECORDS") && (
+                                  <Route
+                                    path="/records/audits"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["projects.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <Audits />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled(
+                                  "ADVANCED.ASBESTOS_REMOVAL",
+                                ) && (
+                                  <Route
+                                    path="/asbestos-removal"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["projects.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <AsbestosRemoval />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
                                 <Route
-                                  path="/records/audits"
+                                  path="/lead-removal"
                                   element={
-                                    <PermissionRoute
-                                      requiredPermissions={["projects.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <Audits />
-                                      </Suspense>
-                                    </PermissionRoute>
+                                    <Suspense fallback={<LoadingSpinner />}>
+                                      <LeadRemoval />
+                                    </Suspense>
                                   }
                                 />
-                              )}
-                              {isFeatureEnabled(
-                                "ADVANCED.ASBESTOS_REMOVAL",
-                              ) && (
                                 <Route
-                                  path="/asbestos-removal"
+                                  path="/lead-removal/jobs/:jobId/details"
                                   element={
-                                    <PermissionRoute
-                                      requiredPermissions={["projects.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <AsbestosRemoval />
-                                      </Suspense>
-                                    </PermissionRoute>
+                                    <Suspense fallback={<LoadingSpinner />}>
+                                      <LeadRemovalJobDetails />
+                                    </Suspense>
                                   }
                                 />
-                              )}
-                              <Route
-                                path="/lead-removal"
-                                element={
-                                  <Suspense fallback={<LoadingSpinner />}>
-                                    <LeadRemoval />
-                                  </Suspense>
-                                }
-                              />
-                              <Route
-                                path="/lead-removal/jobs/:jobId/details"
-                                element={
-                                  <Suspense fallback={<LoadingSpinner />}>
-                                    <LeadRemovalJobDetails />
-                                  </Suspense>
-                                }
-                              />
-                              {isFeatureEnabled(
-                                "ADVANCED.ASBESTOS_REMOVAL",
-                              ) && (
-                                <Route
-                                  path="/asbestos-removal/jobs/:jobId/details"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["projects.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <AsbestosRemovalJobDetails />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              {isFeatureEnabled(
-                                "ADVANCED.ASBESTOS_REMOVAL",
-                              ) && (
-                                <Route
-                                  path="/client-supplied"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["projects.view"]}
-                                    >
-                                      <ClientSuppliedJobs />
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                              {isFeatureEnabled(
-                                "ADVANCED.ASBESTOS_REMOVAL",
-                              ) && (
-                                <Route
-                                  path="/client-supplied/:jobId/samples"
-                                  element={
-                                    <PermissionRoute
-                                      requiredPermissions={["projects.view"]}
-                                    >
-                                      <Suspense fallback={<LoadingSpinner />}>
-                                        <ClientSuppliedSamples />
-                                      </Suspense>
-                                    </PermissionRoute>
-                                  }
-                                />
-                              )}
-                            </Routes>
-                          </Layout>
-                        </ProjectStatusesProvider>
+                                {isFeatureEnabled(
+                                  "ADVANCED.ASBESTOS_REMOVAL",
+                                ) && (
+                                  <Route
+                                    path="/asbestos-removal/jobs/:jobId/details"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["projects.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <AsbestosRemovalJobDetails />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled(
+                                  "ADVANCED.ASBESTOS_REMOVAL",
+                                ) && (
+                                  <Route
+                                    path="/client-supplied"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["projects.view"]}
+                                      >
+                                        <ClientSuppliedJobs />
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled(
+                                  "ADVANCED.ASBESTOS_REMOVAL",
+                                ) && (
+                                  <Route
+                                    path="/client-supplied/:jobId/samples"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["projects.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <ClientSuppliedSamples />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                              </Routes>
+                            </Layout>
+                          </ProjectStatusesProvider>
                         </UserListsProvider>
                       </ProtectedRoute>
                     }

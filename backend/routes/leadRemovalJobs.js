@@ -206,7 +206,7 @@ router.get(
         clearances = await LeadClearance.find({
           leadRemovalJobId: job._id,
         })
-          .select("_id projectId clearanceDate clearanceType status inspectionTime leadAbatementContractor LAA jurisdiction secondaryHeader vehicleEquipmentDescription notes jobSpecificExclusions reportApprovedBy reportIssueDate reportViewedAt authorisationRequestedBy")
+          .select("_id projectId clearanceDate status inspectionTime leadAbatementContractor consultant secondaryHeader descriptionOfWorks vehicleEquipmentDescription notes jobSpecificExclusions reportApprovedBy reportIssueDate reportViewedAt authorisationRequestedBy")
           .populate({
             path: "projectId",
             select: "projectID name",
@@ -286,7 +286,7 @@ router.get(
       const clearances = await LeadClearance.find({
         leadRemovalJobId: req.params.id,
       })
-        .select("_id projectId clearanceDate clearanceType status inspectionTime leadAbatementContractor LAA jurisdiction secondaryHeader vehicleEquipmentDescription notes jobSpecificExclusions reportApprovedBy reportIssueDate")
+        .select("_id projectId clearanceDate status inspectionTime leadAbatementContractor consultant secondaryHeader descriptionOfWorks vehicleEquipmentDescription notes jobSpecificExclusions reportApprovedBy reportIssueDate")
         .populate({
           path: "projectId",
           select: "projectID name",
@@ -336,6 +336,7 @@ router.post("/", auth, checkPermission(permCreate), async (req, res) => {
       projectName,
       client,
       leadAbatementContractor,
+      jurisdiction,
       status,
     } = req.body;
 
@@ -344,6 +345,7 @@ router.post("/", auth, checkPermission(permCreate), async (req, res) => {
       projectName,
       client,
       leadAbatementContractor,
+      jurisdiction: jurisdiction || "ACT",
       status: status || "in_progress",
       createdBy: req.user.id,
     });
@@ -378,6 +380,7 @@ router.put("/:id", auth, checkPermission(permEdit), async (req, res) => {
       projectName,
       client,
       leadAbatementContractor,
+      jurisdiction,
       status,
     } = req.body;
 
@@ -393,6 +396,7 @@ router.put("/:id", auth, checkPermission(permEdit), async (req, res) => {
     if (client !== undefined) job.client = client;
     if (leadAbatementContractor !== undefined)
       job.leadAbatementContractor = leadAbatementContractor;
+    if (jurisdiction !== undefined) job.jurisdiction = jurisdiction;
     if (status !== undefined) job.status = status;
     job.updatedBy = req.user.id;
 

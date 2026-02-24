@@ -32,6 +32,7 @@ import { useNavigate } from "react-router-dom";
 import CloseIcon from "@mui/icons-material/Close";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
+import EditIcon from "@mui/icons-material/Edit";
 import { tokens } from "../../theme/tokens";
 import { useTheme } from "@mui/material/styles";
 import { projectService } from "../../services/api";
@@ -125,6 +126,7 @@ const AsbestosRemoval = () => {
   const [selectedRemovalist, setSelectedRemovalist] = useState("");
 
   // Delete confirmation state
+  const [jobToEdit, setJobToEdit] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [jobToDelete, setJobToDelete] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -440,6 +442,7 @@ const AsbestosRemoval = () => {
   }, []);
 
   const handleCreateAsbestosRemovalJob = () => {
+    setJobToEdit(null);
     setModalOpen(true);
     setSelectedProject(null);
     setSelectedRemovalist("");
@@ -455,9 +458,37 @@ const AsbestosRemoval = () => {
 
   const handleCloseModal = () => {
     setModalOpen(false);
+    setJobToEdit(null);
     setSelectedProject(null);
     setSelectedRemovalist("");
     setModalError(null);
+  };
+
+  const handleEditClick = async (event, job) => {
+    event.stopPropagation();
+    setModalLoading(true);
+    setModalError(null);
+    try {
+      const res = await asbestosRemovalJobService.getById(job.id);
+      const data = res.data;
+      setJobToEdit(data);
+      setSelectedProject(
+        data.projectId && typeof data.projectId === "object"
+          ? data.projectId
+          : null
+      );
+      setSelectedRemovalist(data.asbestosRemovalist || "");
+      if (projects.length === 0) fetchProjects();
+      if (asbestosRemovalists.length === 0) fetchAsbestosRemovalists();
+      setModalOpen(true);
+    } catch (err) {
+      console.error("Error fetching job for edit:", err);
+      setModalError(
+        err.response?.data?.message || err.message || "Failed to load job"
+      );
+    } finally {
+      setModalLoading(false);
+    }
   };
 
   const handleSubmitModal = async () => {
@@ -469,31 +500,48 @@ const AsbestosRemoval = () => {
     setModalLoading(true);
     setModalError(null);
 
+    const payload = {
+      projectId: selectedProject._id,
+      projectName: selectedProject.name,
+      client:
+        typeof selectedProject.client === "string"
+          ? selectedProject.client
+          : selectedProject.client?.name || "Not specified",
+      asbestosRemovalist: selectedRemovalist,
+      status: jobToEdit ? jobToEdit.status : "in_progress",
+      airMonitoring: jobToEdit ? jobToEdit.airMonitoring : false,
+      clearance: jobToEdit ? jobToEdit.clearance : false,
+    };
+
     try {
-      const newJobData = {
-        projectId: selectedProject._id,
-        projectName: selectedProject.name,
-        client:
-          typeof selectedProject.client === "string"
-            ? selectedProject.client
-            : selectedProject.client?.name || "Not specified",
-        asbestosRemovalist: selectedRemovalist,
-        status: "in_progress",
-        airMonitoring: false,
-        clearance: false,
-      };
-
-      const response = await asbestosRemovalJobService.create(newJobData);
-
-      if (response.data) {
-        // Refresh the jobs list
+      if (jobToEdit) {
+        await asbestosRemovalJobService.update(jobToEdit._id, payload);
         await fetchAsbestosRemovalJobs({ force: true });
+        clearJobsCache();
         handleCloseModal();
+      } else {
+        const response = await asbestosRemovalJobService.create({
+          ...payload,
+          status: "in_progress",
+          airMonitoring: false,
+          clearance: false,
+        });
+        if (response.data) {
+          await fetchAsbestosRemovalJobs({ force: true });
+          handleCloseModal();
+        }
       }
     } catch (err) {
-      console.error("Error creating asbestos removal job:", err);
+      console.error(
+        jobToEdit
+          ? "Error updating asbestos removal job:"
+          : "Error creating asbestos removal job:",
+        err
+      );
       setModalError(
-        err.response?.data?.message || err.message || "Failed to create job"
+        err.response?.data?.message ||
+          err.message ||
+          (jobToEdit ? "Failed to update job" : "Failed to create job")
       );
     } finally {
       setModalLoading(false);
@@ -635,7 +683,7 @@ const AsbestosRemoval = () => {
                         Job Type
                       </TableCell>
                     )}
-                    {!isMobile && hasPermission(currentUser, "asbestos.delete") && (
+                    {!isMobile && (hasPermission(currentUser, "asbestos.edit") || hasPermission(currentUser, "asbestos.delete")) && (
                       <TableCell
                         sx={{ fontWeight: "bold", width: "120px" }}
                         align="center"
@@ -697,23 +745,40 @@ const AsbestosRemoval = () => {
                           />
                         </TableCell>
                       )}
-                      {!isMobile && hasPermission(currentUser, "asbestos.delete") && (
+                      {!isMobile && (hasPermission(currentUser, "asbestos.edit") || hasPermission(currentUser, "asbestos.delete")) && (
                         <TableCell align="center">
-                          <Tooltip title="Delete Job">
+                          <Tooltip title="Edit Job">
                             <IconButton
-                              onClick={(event) => handleDeleteClick(event, job)}
+                              onClick={(event) => handleEditClick(event, job)}
                               size="small"
                               sx={{
-                                color: theme.palette.error.main,
+                                color: theme.palette.primary.main,
                                 "&:hover": {
-                                  backgroundColor: theme.palette.error.light,
+                                  backgroundColor: theme.palette.primary.light,
                                   color: "white",
                                 },
                               }}
                             >
-                              <DeleteIcon fontSize="small" />
+                              <EditIcon fontSize="small" />
                             </IconButton>
                           </Tooltip>
+                          {hasPermission(currentUser, "asbestos.delete") && (
+                            <Tooltip title="Delete Job">
+                              <IconButton
+                                onClick={(event) => handleDeleteClick(event, job)}
+                                size="small"
+                                sx={{
+                                  color: theme.palette.error.main,
+                                  "&:hover": {
+                                    backgroundColor: theme.palette.error.light,
+                                    color: "white",
+                                  },
+                                }}
+                              >
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          )}
                         </TableCell>
                       )}
                     </TableRow>
@@ -738,7 +803,9 @@ const AsbestosRemoval = () => {
             justifyContent="space-between"
             alignItems="center"
           >
-            <Typography variant="h6">New Asbestos Removal Job</Typography>
+            <Typography variant="h6">
+              {jobToEdit ? "Edit Asbestos Removal Job" : "New Asbestos Removal Job"}
+            </Typography>
             <IconButton onClick={handleCloseModal}>
               <CloseIcon />
             </IconButton>
@@ -816,7 +883,13 @@ const AsbestosRemoval = () => {
               },
             }}
           >
-            {modalLoading ? "Creating..." : "Create Job"}
+            {modalLoading
+              ? jobToEdit
+                ? "Updating..."
+                : "Creating..."
+              : jobToEdit
+                ? "Update Job"
+                : "Create Job"}
           </Button>
         </DialogActions>
       </Dialog>

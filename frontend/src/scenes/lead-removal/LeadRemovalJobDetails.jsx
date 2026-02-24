@@ -29,16 +29,15 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  FormControlLabel,
   Checkbox,
   Grid,
-  Radio,
-  RadioGroup,
   FormLabel,
   Autocomplete,
   IconButton,
+  InputAdornment,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import MicIcon from "@mui/icons-material/Mic";
 import MonitorIcon from "@mui/icons-material/Monitor";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import AddIcon from "@mui/icons-material/Add";
@@ -56,6 +55,7 @@ import {
   projectService,
   clientService,
   clientSuppliedJobsService,
+  userService,
 } from "../../services/api";
 import leadClearanceService from "../../services/leadClearanceService";
 import leadRemovalJobService from "../../services/leadRemovalJobService";
@@ -65,7 +65,6 @@ import { generateShiftReport } from "../../utils/generateShiftReport";
 import { generateLeadMonitoringShiftReport } from "../../utils/generateLeadMonitoringShiftReport";
 import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
 import { useAuth } from "../../context/AuthContext";
-import { useUserLists } from "../../context/UserListsContext";
 import { formatDate } from "../../utils/dateFormat";
 import { getTodayInSydney } from "../../utils/dateUtils";
 import { hasPermission } from "../../config/permissions";
@@ -92,10 +91,19 @@ function parseLeadContentForCalculation(str) {
 }
 
 function calculateLeadConcentration(leadContent, flowrate, minutes) {
-  const { value: content, hasLessThan } = parseLeadContentForCalculation(leadContent);
+  const { value: content, hasLessThan } =
+    parseLeadContentForCalculation(leadContent);
   const flow = parseFloat(flowrate);
-  if (isNaN(content) || content < 0 || isNaN(flow) || flow <= 0 || !minutes || minutes <= 0) return { concentration: null, hasLessThan: false };
-  const concentration = (content / 1000) / ((flow * minutes) / 1000);
+  if (
+    isNaN(content) ||
+    content < 0 ||
+    isNaN(flow) ||
+    flow <= 0 ||
+    !minutes ||
+    minutes <= 0
+  )
+    return { concentration: null, hasLessThan: false };
+  const concentration = content / 1000 / ((flow * minutes) / 1000);
   return { concentration, hasLessThan };
 }
 
@@ -123,7 +131,7 @@ const LeadRemovalJobDetails = () => {
   const navigate = useNavigate();
   const { jobId } = useParams();
   const { currentUser } = useAuth();
-  const { activeLAAs } = useUserLists();
+  const [activeUsers, setActiveUsers] = useState([]);
 
   const logDebug = useCallback((stage, details) => {
     // Debug logging disabled
@@ -188,11 +196,11 @@ const LeadRemovalJobDetails = () => {
     projectId: "",
     clearanceDate: "",
     inspectionTime: "09:00 AM",
-    clearanceType: "Non-friable",
     asbestosRemovalist: "",
-    LAA: "",
+    consultant: "",
     jurisdiction: "ACT",
     secondaryHeader: "",
+    descriptionOfWorks: "",
     vehicleEquipmentDescription: "",
     airMonitoring: false,
     airMonitoringReport: null,
@@ -201,6 +209,11 @@ const LeadRemovalJobDetails = () => {
     useComplexTemplate: false,
     jobSpecificExclusions: "",
   });
+
+  const [isDictatingDescription, setIsDictatingDescription] = useState(false);
+  const [dictationErrorDescription, setDictationErrorDescription] =
+    useState("");
+  const recognitionDescRef = useRef(null);
 
   const latestFetchIdRef = useRef(0);
   const clearancesBackgroundFetchTriggeredRef = useRef(false);
@@ -663,25 +676,48 @@ const LeadRemovalJobDetails = () => {
     });
   }, [job, logDebug]);
 
-  // Open clearance edit dialog once assessors are loaded
+  // Fetch active users for consultant dropdown
   useEffect(() => {
-    if (pendingClearanceEdit && activeLAAs.length > 0) {
+    let cancelled = false;
+    userService
+      .getAll(false)
+      .then((res) => {
+        if (!cancelled && Array.isArray(res?.data)) {
+          const sorted = [...res.data].sort((a, b) => {
+            const nameA =
+              `${a.firstName || ""} ${a.lastName || ""}`.toLowerCase();
+            const nameB =
+              `${b.firstName || ""} ${b.lastName || ""}`.toLowerCase();
+            return nameA.localeCompare(nameB);
+          });
+          setActiveUsers(sorted);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) console.error("Error fetching active users:", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Open clearance edit dialog once users are loaded
+  useEffect(() => {
+    if (pendingClearanceEdit && activeUsers.length > 0) {
       const clearance = pendingClearanceEdit;
       setPendingClearanceEdit(null); // Clear pending
 
       setEditingClearance(clearance);
-      const clearanceType = clearance.clearanceType || "Non-friable";
 
-      // Find the matching LAA value from the assessors list
-      // This ensures the value format matches exactly what the Select expects
-      const storedLAA = clearance.LAA || "";
-      const matchingAssessor = activeLAAs.find(
-        (assessor) =>
-          `${assessor.firstName} ${assessor.lastName}` === storedLAA,
+      const storedConsultant = clearance.consultant || clearance.LAA || "";
+      const matchingUser = activeUsers.find(
+        (u) =>
+          `${u.firstName || ""} ${u.lastName || ""}`.trim() ===
+          storedConsultant,
       );
-      const laaValue = matchingAssessor
-        ? `${matchingAssessor.firstName} ${matchingAssessor.lastName}`
-        : storedLAA; // Fallback to stored value if no exact match found
+      const consultantValue = matchingUser
+        ? `${matchingUser.firstName || ""} ${matchingUser.lastName || ""}`.trim()
+        : storedConsultant;
 
       setClearanceForm({
         projectId: clearance.projectId._id || clearance.projectId,
@@ -689,14 +725,14 @@ const LeadRemovalJobDetails = () => {
           ? new Date(clearance.clearanceDate).toISOString().split("T")[0]
           : "",
         inspectionTime: formatTimeForDisplay(clearance.inspectionTime),
-        clearanceType: clearanceType,
         asbestosRemovalist:
           clearance.leadAbatementContractor ||
           clearance.asbestosRemovalist ||
           "",
-        LAA: laaValue,
-        jurisdiction: clearance.jurisdiction || "ACT",
+        consultant: consultantValue,
+        jurisdiction: clearance.jurisdiction || job?.jurisdiction || "ACT",
         secondaryHeader: clearance.secondaryHeader || "",
+        descriptionOfWorks: clearance.descriptionOfWorks || "",
         vehicleEquipmentDescription:
           clearance.vehicleEquipmentDescription || "",
         notes: clearance.notes || "",
@@ -704,10 +740,9 @@ const LeadRemovalJobDetails = () => {
         jobSpecificExclusions: clearance.jobSpecificExclusions || "",
       });
 
-      // Now open the dialog - assessors are loaded and form is set
       setClearanceDialogOpen(true);
     }
-  }, [pendingClearanceEdit, activeLAAs]);
+  }, [pendingClearanceEdit, activeUsers]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -835,8 +870,7 @@ const LeadRemovalJobDetails = () => {
       const latestShift = shiftResponse.data;
 
       // For lead shifts on this page: always generate the Lead Monitoring Shift Report (never open attached PDF for View Report)
-      const isLeadShift =
-        latestShift.jobModel === "LeadRemovalJob" || !!jobId; // jobId from params = we're on a lead removal job
+      const isLeadShift = latestShift.jobModel === "LeadRemovalJob" || !!jobId; // jobId from params = we're on a lead removal job
 
       if (isLeadShift) {
         const jobResponse = await leadRemovalJobService.getById(
@@ -912,12 +946,16 @@ const LeadRemovalJobDetails = () => {
       const jobResponse = await clientSuppliedJobsService.getById(
         latestShift.job?._id || latestShift.job,
       );
-      const samplesResponse = await leadAirSampleService.getByShift(latestShift._id);
+      const samplesResponse = await leadAirSampleService.getByShift(
+        latestShift._id,
+      );
 
       const samplesWithAnalysis = await Promise.all(
         (samplesResponse.data || []).map(async (sample) => {
           if (!sample.analysis) {
-            const completeSample = await leadAirSampleService.getById(sample._id);
+            const completeSample = await leadAirSampleService.getById(
+              sample._id,
+            );
             return completeSample.data;
           }
           return sample;
@@ -1003,14 +1041,18 @@ const LeadRemovalJobDetails = () => {
             shift.job?._id || shift.job,
           );
         }
-        const samplesResponse = await leadAirSampleService.getByShift(shift._id);
+        const samplesResponse = await leadAirSampleService.getByShift(
+          shift._id,
+        );
 
         // Ensure we have the complete sample data including analysis
         const samplesWithAnalysis = await Promise.all(
           samplesResponse.data.map(async (sample) => {
             if (!sample.analysis) {
               // If analysis data is missing, fetch the complete sample data
-              const completeSample = await leadAirSampleService.getById(sample._id);
+              const completeSample = await leadAirSampleService.getById(
+                sample._id,
+              );
               return completeSample.data;
             }
             return sample;
@@ -1156,7 +1198,10 @@ const LeadRemovalJobDetails = () => {
         if (!leadContentToSave) continue; // Nothing to save if no lead content
 
         const flowrate = parseFloat(sample.averageFlowrate) || 0;
-        const minutes = calculateDurationMinutes(sample.startTime, sample.endTime);
+        const minutes = calculateDurationMinutes(
+          sample.startTime,
+          sample.endTime,
+        );
         const { concentration, hasLessThan } = calculateLeadConcentration(
           contentStr || sample.leadContent,
           flowrate,
@@ -1180,7 +1225,9 @@ const LeadRemovalJobDetails = () => {
           (s) => String(attachAnalysisLeadContent[s._id] ?? "").trim() !== "",
         );
         await shiftService.update(attachAnalysisShift._id, {
-          status: allLeadContentEntered ? "shift_complete" : "analysis_complete",
+          status: allLeadContentEntered
+            ? "shift_complete"
+            : "analysis_complete",
         });
         showSnackbar(
           allLeadContentEntered
@@ -1335,8 +1382,7 @@ const LeadRemovalJobDetails = () => {
   };
 
   const handleClearanceRowClick = (clearance) => {
-    // Navigate to clearance items page
-    navigate(`/clearances/${clearance._id}/items`);
+    navigate(`/lead-clearances/${clearance._id}/items`);
   };
 
   const handleShiftRowClick = (shift) => {
@@ -1471,11 +1517,11 @@ const LeadRemovalJobDetails = () => {
       // Get the full clearance data with populated project
       const fullClearance = await leadClearanceService.getById(clearance._id);
 
-      // Use the new HTML template-based PDF generation
+      // Use lead clearance report template
       const fileName = await generateHTMLTemplatePDF(
-        "asbestos-clearance", // template type
-        fullClearance, // clearance data
-        { openInNewTab: true }, // open in new tab instead of downloading
+        "lead-clearance",
+        fullClearance,
+        { openInNewTab: true },
       );
 
       showSnackbar("PDF opened in new tab", "success");
@@ -1504,10 +1550,10 @@ const LeadRemovalJobDetails = () => {
       // Get the full clearance data with populated project
       const fullClearance = await leadClearanceService.getById(clearance._id);
 
-      // Use the new HTML template-based PDF generation
+      // Use lead clearance report template
       const fileName = await generateHTMLTemplatePDF(
-        "asbestos-clearance", // template type
-        fullClearance, // clearance data
+        "lead-clearance",
+        fullClearance,
       );
 
       showSnackbar(
@@ -1563,7 +1609,7 @@ const LeadRemovalJobDetails = () => {
       try {
         const fullClearance = await leadClearanceService.getById(clearance._id);
 
-        await generateHTMLTemplatePDF("asbestos-clearance", fullClearance);
+        await generateHTMLTemplatePDF("lead-clearance", fullClearance);
         showSnackbar(
           "Report authorised and downloaded successfully.",
           "success",
@@ -1736,18 +1782,108 @@ const LeadRemovalJobDetails = () => {
       projectId: job?.projectId._id || job?.projectId || "",
       clearanceDate: getTodayInSydney(),
       inspectionTime: "09:00 AM",
-      clearanceType: "Non-friable",
       asbestosRemovalist:
         job?.leadAbatementContractor || job?.asbestosRemovalist || "",
-      LAA: "",
-      jurisdiction: "ACT",
+      consultant: "",
+      jurisdiction: job?.jurisdiction || "ACT",
       secondaryHeader: "",
+      descriptionOfWorks: "",
       vehicleEquipmentDescription: "",
       notes: "",
       useComplexTemplate: false,
       jobSpecificExclusions: "",
     });
   };
+
+  const stopDictationDescription = () => {
+    if (recognitionDescRef.current) {
+      try {
+        recognitionDescRef.current.stop();
+      } catch (e) {
+        // ignore
+      }
+      recognitionDescRef.current = null;
+    }
+    setIsDictatingDescription(false);
+  };
+
+  const startDictationDescription = () => {
+    if (isDictatingDescription && recognitionDescRef.current) {
+      stopDictationDescription();
+      return;
+    }
+    if (
+      !("webkitSpeechRecognition" in window) &&
+      !("SpeechRecognition" in window)
+    ) {
+      setDictationErrorDescription(
+        "Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.",
+      );
+      return;
+    }
+    setDictationErrorDescription("");
+    try {
+      const SpeechRecognition =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "en-AU";
+      recognition.onstart = () => {
+        setIsDictatingDescription(true);
+        setDictationErrorDescription("");
+      };
+      recognition.onresult = (event) => {
+        let finalTranscript = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) finalTranscript += transcript;
+        }
+        if (finalTranscript) {
+          setClearanceForm((prev) => {
+            const current = prev.descriptionOfWorks || "";
+            const isFirst = !current || !current.trim();
+            const newText = isFirst
+              ? finalTranscript.charAt(0).toUpperCase() +
+                finalTranscript.slice(1)
+              : finalTranscript;
+            return {
+              ...prev,
+              descriptionOfWorks: current + (current ? " " : "") + newText,
+            };
+          });
+        }
+      };
+      recognition.onerror = (event) => {
+        setDictationErrorDescription(`Dictation error: ${event.error}`);
+        setIsDictatingDescription(false);
+        recognitionDescRef.current = null;
+      };
+      recognition.onend = () => {
+        setIsDictatingDescription(false);
+        recognitionDescRef.current = null;
+      };
+      recognitionDescRef.current = recognition;
+      recognition.start();
+    } catch (err) {
+      setDictationErrorDescription(
+        "Failed to start dictation. Please try again.",
+      );
+      recognitionDescRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (recognitionDescRef.current) {
+        try {
+          recognitionDescRef.current.stop();
+        } catch (e) {
+          // ignore
+        }
+      }
+    };
+  }, []);
 
   const handleClearanceSubmit = async (e) => {
     e.preventDefault();
@@ -1757,17 +1893,8 @@ const LeadRemovalJobDetails = () => {
       return;
     }
 
-    if (!clearanceForm.LAA.trim()) {
-      setError("LAA (Licensed Asbestos Assessor) is required");
-      return;
-    }
-
-    // Validate Vehicle/Equipment Description when Vehicle/Equipment is selected
-    if (
-      clearanceForm.clearanceType === "Vehicle/Equipment" &&
-      !clearanceForm.vehicleEquipmentDescription.trim()
-    ) {
-      setError("Vehicle/Equipment Description is required");
+    if (!clearanceForm.consultant.trim()) {
+      setError("Consultant is required");
       return;
     }
 
@@ -1780,11 +1907,11 @@ const LeadRemovalJobDetails = () => {
         leadRemovalJobId: jobId,
         clearanceDate: clearanceForm.clearanceDate,
         inspectionTime: clearanceForm.inspectionTime,
-        clearanceType: clearanceForm.clearanceType,
         leadAbatementContractor: clearanceForm.asbestosRemovalist,
-        LAA: clearanceForm.LAA,
-        jurisdiction: clearanceForm.jurisdiction,
+        consultant: clearanceForm.consultant,
+        jurisdiction: clearanceForm.jurisdiction || job?.jurisdiction || "ACT",
         secondaryHeader: clearanceForm.secondaryHeader,
+        descriptionOfWorks: clearanceForm.descriptionOfWorks,
         vehicleEquipmentDescription: clearanceForm.vehicleEquipmentDescription,
         notes: clearanceForm.notes,
         jobSpecificExclusions: clearanceForm.jobSpecificExclusions,
@@ -1929,6 +2056,9 @@ const LeadRemovalJobDetails = () => {
             >
               Lead abatement contractor:{" "}
               {job?.leadAbatementContractor || "Loading..."}
+              {job?.jurisdiction && (
+                <> &bull; Jurisdiction: {job.jurisdiction}</>
+              )}
             </Typography>
           </Box>
           {job && hasShiftsOrClearances && (
@@ -2465,8 +2595,14 @@ const LeadRemovalJobDetails = () => {
                       <TableCell sx={{ color: "white", fontWeight: "bold" }}>
                         Date
                       </TableCell>
-                      <TableCell sx={{ color: "white", fontWeight: "bold" }}>
-                        Type
+                      <TableCell
+                        sx={{
+                          color: "white",
+                          fontWeight: "bold",
+                          display: { xs: "none", md: "table-cell" },
+                        }}
+                      >
+                        Description of works
                       </TableCell>
                       <TableCell
                         sx={{
@@ -2501,8 +2637,17 @@ const LeadRemovalJobDetails = () => {
                             ? formatDate(clearance.clearanceDate)
                             : "N/A"}
                         </TableCell>
-                        <TableCell>
-                          {clearance.clearanceType || "N/A"}
+                        <TableCell
+                          sx={{
+                            display: { xs: "none", md: "table-cell" },
+                            maxWidth: 280,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                          title={clearance.descriptionOfWorks || ""}
+                        >
+                          {clearance.descriptionOfWorks || "—"}
                         </TableCell>
                         <TableCell
                           sx={{ display: { xs: "none", md: "table-cell" } }}
@@ -2733,7 +2878,11 @@ const LeadRemovalJobDetails = () => {
       {/* Clearance Modal */}
       <Dialog
         open={clearanceDialogOpen}
-        onClose={() => setClearanceDialogOpen(false)}
+        onClose={() => {
+          stopDictationDescription();
+          setDictationErrorDescription("");
+          setClearanceDialogOpen(false);
+        }}
         maxWidth="md"
         fullWidth
       >
@@ -2866,52 +3015,6 @@ const LeadRemovalJobDetails = () => {
                 </Box>
               </Grid>
               <Grid item xs={12} sm={6}>
-                <FormControl fullWidth required>
-                  <InputLabel>Clearance Type</InputLabel>
-                  <Select
-                    value={clearanceForm.clearanceType}
-                    onChange={(e) => {
-                      const clearanceType = e.target.value;
-                      const newForm = {
-                        ...clearanceForm,
-                        clearanceType,
-                      };
-
-                      // Add default text to job specific exclusions for Friable (Non-Friable Conditions)
-                      if (
-                        clearanceType === "Friable (Non-Friable Conditions)"
-                      ) {
-                        newForm.jobSpecificExclusions =
-                          "The friable asbestos was removed using methods which kept the asbestos enclosed and therefore without disturbance of the material. As a result, the removal was undertaken under non-friable asbestos removal conditions.";
-                      }
-
-                      // Set asbestos removalist to "-" when Vehicle/Equipment is selected
-                      if (clearanceType === "Vehicle/Equipment") {
-                        newForm.asbestosRemovalist = "-";
-                      } else if (clearanceForm.asbestosRemovalist === "-") {
-                        // Reset to job's lead abatement contractor if switching away from Vehicle/Equipment
-                        newForm.asbestosRemovalist =
-                          job?.leadAbatementContractor ||
-                          job?.asbestosRemovalist ||
-                          "";
-                      }
-
-                      setClearanceForm(newForm);
-                    }}
-                    label="Clearance Type"
-                  >
-                    <MenuItem value="Non-friable">Non-friable</MenuItem>
-                    <MenuItem value="Friable">Friable</MenuItem>
-                    <MenuItem value="Friable (Non-Friable Conditions)">
-                      Friable (Non-Friable Conditions)
-                    </MenuItem>
-                    <MenuItem value="Vehicle/Equipment">
-                      Vehicle/Equipment
-                    </MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
                   label="Lead Abatement Contractor"
@@ -2927,28 +3030,29 @@ const LeadRemovalJobDetails = () => {
               </Grid>
               <Grid item xs={12} sm={6}>
                 <FormControl fullWidth required>
-                  <InputLabel>LAA (Licensed Asbestos Assessor)</InputLabel>
+                  <InputLabel>Consultant</InputLabel>
                   <Select
-                    value={clearanceForm.LAA || ""}
+                    value={clearanceForm.consultant || ""}
                     onChange={(e) =>
                       setClearanceForm({
                         ...clearanceForm,
-                        LAA: e.target.value,
+                        consultant: e.target.value,
                       })
                     }
-                    label="LAA (Licensed Asbestos Assessor)"
-                    key={`laa-select-${activeLAAs.length}-${clearanceForm.LAA}`}
+                    label="Consultant"
+                    key={`consultant-select-${activeUsers.length}-${clearanceForm.consultant}`}
                   >
-                    {activeLAAs.length === 0 ? (
+                    {activeUsers.length === 0 ? (
                       <MenuItem value="" disabled>
-                        Loading assessors...
+                        Loading users...
                       </MenuItem>
                     ) : (
-                      activeLAAs.map((assessor) => {
-                        const assessorValue = `${assessor.firstName} ${assessor.lastName}`;
+                      activeUsers.map((user) => {
+                        const userValue =
+                          `${user.firstName || ""} ${user.lastName || ""}`.trim();
                         return (
-                          <MenuItem key={assessor._id} value={assessorValue}>
-                            {assessor.firstName} {assessor.lastName}
+                          <MenuItem key={user._id} value={userValue}>
+                            {userValue || user.email || "Unknown"}
                           </MenuItem>
                         );
                       })
@@ -2957,74 +3061,23 @@ const LeadRemovalJobDetails = () => {
                 </FormControl>
               </Grid>
               <Grid item xs={12} sm={6}>
-                <Box sx={{ minWidth: 150 }}>
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      fontSize: "0.75rem",
-                      color: "text.secondary",
-                      display: "block",
-                      mb: 1,
-                    }}
-                  >
-                    Jurisdiction
-                  </Typography>
-                  <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
-                    <FormControlLabel
-                      value="ACT"
-                      control={
-                        <Radio
-                          size="small"
-                          checked={clearanceForm.jurisdiction === "ACT"}
-                          onChange={(e) =>
-                            setClearanceForm({
-                              ...clearanceForm,
-                              jurisdiction: e.target.value,
-                            })
-                          }
-                        />
-                      }
-                      label="ACT"
-                      sx={{ margin: 0 }}
-                    />
-                    <FormControlLabel
-                      value="NSW"
-                      control={
-                        <Radio
-                          size="small"
-                          checked={clearanceForm.jurisdiction === "NSW"}
-                          onChange={(e) =>
-                            setClearanceForm({
-                              ...clearanceForm,
-                              jurisdiction: e.target.value,
-                            })
-                          }
-                        />
-                      }
-                      label="NSW"
-                      sx={{ margin: 0 }}
-                    />
-                  </Box>
-                </Box>
-              </Grid>
-              {clearanceForm.clearanceType === "Vehicle/Equipment" && (
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Vehicle/Equipment Description"
-                    value={clearanceForm.vehicleEquipmentDescription}
+                <FormControl fullWidth>
+                  <InputLabel>Jurisdiction</InputLabel>
+                  <Select
+                    value={clearanceForm.jurisdiction || "ACT"}
                     onChange={(e) =>
                       setClearanceForm({
                         ...clearanceForm,
-                        vehicleEquipmentDescription: e.target.value,
+                        jurisdiction: e.target.value,
                       })
                     }
-                    placeholder="Enter vehicle/equipment description"
-                    helperText="This will replace the project name on the cover page"
-                    required
-                  />
-                </Grid>
-              )}
+                    label="Jurisdiction"
+                  >
+                    <MenuItem value="ACT">ACT</MenuItem>
+                    <MenuItem value="NSW">NSW</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
               <Grid item xs={12}>
                 <TextField
                   fullWidth
@@ -3039,6 +3092,53 @@ const LeadRemovalJobDetails = () => {
                   placeholder="Enter secondary header text"
                   helperText="This will appear as a smaller header beneath the site name on the cover page"
                 />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Description of works"
+                  multiline
+                  rows={3}
+                  value={clearanceForm.descriptionOfWorks}
+                  onChange={(e) =>
+                    setClearanceForm({
+                      ...clearanceForm,
+                      descriptionOfWorks: e.target.value,
+                    })
+                  }
+                  placeholder="Describe the works completed"
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          onClick={
+                            isDictatingDescription
+                              ? stopDictationDescription
+                              : startDictationDescription
+                          }
+                          color={isDictatingDescription ? "error" : "default"}
+                          title={
+                            isDictatingDescription
+                              ? "Stop dictation"
+                              : "Dictate"
+                          }
+                          aria-label={
+                            isDictatingDescription
+                              ? "Stop dictation"
+                              : "Start dictation"
+                          }
+                        >
+                          <MicIcon />
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+                {dictationErrorDescription && (
+                  <Alert severity="warning" sx={{ mt: 1 }}>
+                    {dictationErrorDescription}
+                  </Alert>
+                )}
               </Grid>
               <Grid item xs={12}>
                 <TextField
@@ -3058,7 +3158,13 @@ const LeadRemovalJobDetails = () => {
             </Grid>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setClearanceDialogOpen(false)}>
+            <Button
+              onClick={() => {
+                stopDictationDescription();
+                setDictationErrorDescription("");
+                setClearanceDialogOpen(false);
+              }}
+            >
               Cancel
             </Button>
             <Button
@@ -3327,8 +3433,8 @@ const LeadRemovalJobDetails = () => {
         <DialogContent sx={{ px: 3, pt: 1, pb: 2 }}>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Upload a PDF analysis report and enter lead content (μg/filter) for
-            each sample. Lead concentration (mg/m³) is calculated as lead content
-            ÷ (flowrate × minutes).
+            each sample. Lead concentration (mg/m³) is calculated as lead
+            content ÷ (flowrate × minutes).
           </Typography>
           <Box sx={{ mb: 3 }}>
             <Typography variant="subtitle2" sx={{ mb: 1 }}>
@@ -3411,21 +3517,21 @@ const LeadRemovalJobDetails = () => {
                       (μg/filter)
                     </Typography>
                     {(() => {
-                      const content = attachAnalysisLeadContent[sample._id] ?? "";
+                      const content =
+                        attachAnalysisLeadContent[sample._id] ?? "";
                       const flowrate = parseFloat(sample.averageFlowrate) || 0;
                       const minutes = calculateDurationMinutes(
                         sample.startTime,
                         sample.endTime,
                       );
-                      const { concentration: conc, hasLessThan } = calculateLeadConcentration(
-                        content,
-                        flowrate,
-                        minutes,
-                      );
+                      const { concentration: conc, hasLessThan } =
+                        calculateLeadConcentration(content, flowrate, minutes);
                       return (
                         <Typography
                           variant="body2"
-                          color={conc != null ? "text.secondary" : "text.disabled"}
+                          color={
+                            conc != null ? "text.secondary" : "text.disabled"
+                          }
                           sx={{ whiteSpace: "nowrap", fontStyle: "italic" }}
                         >
                           {conc != null
@@ -3520,8 +3626,10 @@ const LeadRemovalJobDetails = () => {
                       : "Not specified"}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    <strong>Type:</strong>{" "}
-                    {itemToDelete.clearanceType || "Not specified"}
+                    <strong>Consultant:</strong>{" "}
+                    {itemToDelete.consultant ||
+                      itemToDelete.LAA ||
+                      "Not specified"}
                   </Typography>
                 </>
               ) : (

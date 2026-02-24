@@ -109,6 +109,8 @@ export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
     if (useDocRaptor) {
       if (type === 'asbestos-clearance') {
         endpoint = '/pdf-docraptor-v2/generate-asbestos-clearance-v2';  // Use V2 endpoint
+      } else if (type === 'lead-clearance') {
+        endpoint = '/pdf-docraptor-v2/generate-lead-clearance-v2';
       } else if (type === 'asbestos-assessment') {
         endpoint = '/pdf-docraptor-v2/generate-asbestos-assessment-v3';  // Use experimental flow-based endpoint
       } else if (type === 'client-supplied-fibre-id') {
@@ -119,6 +121,8 @@ export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
     } else {
       if (type === 'asbestos-clearance') {
         endpoint = '/pdf/generate-asbestos-clearance';
+      } else if (type === 'lead-clearance') {
+        endpoint = '/pdf-docraptor-v2/generate-lead-clearance-v2'; // Lead always uses DocRaptor
       } else if (type === 'asbestos-assessment') {
         endpoint = '/pdf/generate-asbestos-assessment';
       } else if (type === 'client-supplied-fibre-id') {
@@ -138,6 +142,7 @@ export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
       },
       body: JSON.stringify({
         clearanceData: type === 'asbestos-clearance' ? data : undefined,
+        leadClearanceData: type === 'lead-clearance' ? data : undefined,
         assessmentData: type === 'asbestos-assessment' ? data : undefined,
         jobData: type === 'client-supplied-fibre-id' ? data : undefined,
       }),

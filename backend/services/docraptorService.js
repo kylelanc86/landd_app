@@ -18,6 +18,10 @@ class DocRaptorService {
         throw new Error('DOCRAPTOR_API_KEY environment variable is not set');
       }
 
+      const { timeoutMs: optionsTimeout, ...docraptorOptions } = options;
+      const envTimeout = parseInt(process.env.DOCRAPTOR_TIMEOUT_MS, 10);
+      const timeoutMs = optionsTimeout != null ? optionsTimeout : (isNaN(envTimeout) ? 90000 : envTimeout);
+
       // Clean HTML content to remove only problematic file system references
       const cleanedHtml = htmlContent
         .replace(/file:\/\/[^\s"']+/g, '') // Remove file:// URLs
@@ -67,12 +71,10 @@ class DocRaptorService {
         footer_html: null,
         // Ensure content fills the page properly
         javascript: false, // Disable JavaScript for better compatibility
-        ...options
+        ...docraptorOptions
       };
-
-      // Add timeout to prevent hanging
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
       try {
         const response = await fetch(this.apiUrl, {
@@ -94,15 +96,15 @@ class DocRaptorService {
       }
 
       const pdfBuffer = await response.buffer();
-      
+
       console.log('DocRaptor PDF generated successfully, size:', pdfBuffer.length, 'bytes');
       return pdfBuffer;
-      
+
       } catch (fetchError) {
         clearTimeout(timeoutId);
         if (fetchError.name === 'AbortError') {
-          console.error('DocRaptor API request timed out after 30 seconds');
-          throw new Error('DocRaptor API request timed out. Please try again.');
+          console.error(`DocRaptor API request timed out after ${timeoutMs / 1000} seconds`);
+          throw new Error(`DocRaptor API request timed out after ${timeoutMs / 1000} seconds. Please try again.`);
         }
         throw fetchError;
       }

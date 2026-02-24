@@ -1,5 +1,11 @@
 const mongoose = require("mongoose");
 
+/**
+ * Lead-specific clearance schema.
+ * Differs from AsbestosClearance: uses leadRemovalJobId, leadAbatementContractor,
+ * leadMonitoring/leadMonitoringReports, and lead-specific clearance types.
+ * Items do not have asbestosType (friable/non-friable).
+ */
 const leadClearanceSchema = new mongoose.Schema(
   {
     projectId: {
@@ -25,26 +31,23 @@ const leadClearanceSchema = new mongoose.Schema(
       enum: ["in progress", "complete", "Site Work Complete", "closed"],
       default: "in progress",
     },
-    clearanceType: {
-      type: String,
-      required: true,
-    },
-    jurisdiction: {
-      type: String,
-      enum: ["ACT", "NSW"],
-      required: true,
-    },
     secondaryHeader: {
       type: String,
       required: false,
     },
-    LAA: {
+    consultant: {
       type: String,
       required: true,
     },
     leadAbatementContractor: {
       type: String,
       required: true,
+    },
+    /** ACT or NSW - used to filter {LEGISLATION} in report template */
+    jurisdiction: {
+      type: String,
+      enum: ["ACT", "NSW"],
+      required: false,
     },
     leadMonitoring: {
       type: Boolean,
@@ -78,13 +81,30 @@ const leadClearanceSchema = new mongoose.Schema(
     sitePlanFigureTitle: { type: String },
     jobSpecificExclusions: { type: String },
     notes: { type: String },
+    /** Description of works (free text, optional) */
+    descriptionOfWorks: { type: String, required: false },
     vehicleEquipmentDescription: { type: String, required: false },
+    /** Used for PDF generation when clearance requires custom content */
+    useComplexTemplate: {
+      type: Boolean,
+      default: false,
+    },
+    /** Pre-works and validation samples from Clearance Sampling page (persisted for use on Items page) */
+    sampling: {
+      preWorksSamples: [{ type: mongoose.Schema.Types.Mixed }],
+      validationSamples: [{ type: mongoose.Schema.Types.Mixed }],
+    },
+    /** Embedded lead clearance items - no asbestosType (friable/non-friable) */
     items: [
       {
         locationDescription: { type: String, required: true },
         levelFloor: { type: String, required: false },
         roomArea: { type: String, required: true },
-        materialDescription: { type: String, required: true },
+        worksCompleted: { type: String, required: true },
+        /** One of: 'Visual inspection' | 'Visual inspection and validation sampling' */
+        leadValidationType: { type: String, required: false },
+        /** Sample refs (e.g. LD-1) linking to Lead Clearance Sampling */
+        samples: [{ type: String }],
         photographs: [
           {
             data: { type: String, required: true },
@@ -136,6 +156,6 @@ const leadClearanceSchema = new mongoose.Schema(
 leadClearanceSchema.index({ projectId: 1, status: 1 });
 leadClearanceSchema.index({ clearanceDate: 1 });
 leadClearanceSchema.index({ leadRemovalJobId: 1 });
-leadClearanceSchema.index({ projectId: 1, clearanceType: 1, clearanceDate: 1 });
+leadClearanceSchema.index({ projectId: 1, clearanceDate: 1 });
 
 module.exports = mongoose.model("LeadClearance", leadClearanceSchema);

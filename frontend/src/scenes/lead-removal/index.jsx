@@ -32,6 +32,7 @@ import { useNavigate } from "react-router-dom";
 import CloseIcon from "@mui/icons-material/Close";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
+import EditIcon from "@mui/icons-material/Edit";
 import { tokens } from "../../theme/tokens";
 import { useTheme } from "@mui/material/styles";
 import { usePermissions } from "../../hooks/usePermissions";
@@ -65,6 +66,10 @@ const LeadRemoval = () => {
   const [modalError, setModalError] = useState(null);
   const [selectedProject, setSelectedProject] = useState(null);
   const [selectedContractor, setSelectedContractor] = useState("");
+  const [selectedJurisdiction, setSelectedJurisdiction] = useState("ACT");
+
+  // Edit job state (reuse create modal)
+  const [jobToEdit, setJobToEdit] = useState(null);
 
   // Delete confirmation state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -227,6 +232,7 @@ const LeadRemoval = () => {
     setModalOpen(true);
     setSelectedProject(null);
     setSelectedContractor("");
+    setSelectedJurisdiction("ACT");
     setModalError(null);
     if (projects.length === 0) {
       fetchProjects();
@@ -238,9 +244,39 @@ const LeadRemoval = () => {
 
   const handleCloseModal = () => {
     setModalOpen(false);
+    setJobToEdit(null);
     setSelectedProject(null);
     setSelectedContractor("");
+    setSelectedJurisdiction("ACT");
     setModalError(null);
+  };
+
+  const handleEditClick = async (event, job) => {
+    event.stopPropagation();
+    setModalLoading(true);
+    setModalError(null);
+    try {
+      const res = await leadRemovalJobService.getById(job.id);
+      const data = res.data;
+      setJobToEdit(data);
+      setSelectedProject(
+        data.projectId && typeof data.projectId === "object"
+          ? data.projectId
+          : null
+      );
+      setSelectedContractor(data.leadAbatementContractor || "");
+      setSelectedJurisdiction(data.jurisdiction || "ACT");
+      if (projects.length === 0) fetchProjects();
+      if (leadAbatementContractors.length === 0) fetchLeadAbatementContractors();
+      setModalOpen(true);
+    } catch (err) {
+      console.error("Error fetching job for edit:", err);
+      setModalError(
+        err.response?.data?.message || err.message || "Failed to load job"
+      );
+    } finally {
+      setModalLoading(false);
+    }
   };
 
   const handleSubmitModal = async () => {
@@ -254,28 +290,42 @@ const LeadRemoval = () => {
     setModalLoading(true);
     setModalError(null);
 
+    const payload = {
+      projectId: selectedProject._id,
+      projectName: selectedProject.name,
+      client:
+        typeof selectedProject.client === "string"
+          ? selectedProject.client
+          : selectedProject.client?.name || "Not specified",
+      leadAbatementContractor: selectedContractor,
+      jurisdiction: selectedJurisdiction,
+      status: jobToEdit ? jobToEdit.status : "in_progress",
+    };
+
     try {
-      const newJobData = {
-        projectId: selectedProject._id,
-        projectName: selectedProject.name,
-        client:
-          typeof selectedProject.client === "string"
-            ? selectedProject.client
-            : selectedProject.client?.name || "Not specified",
-        leadAbatementContractor: selectedContractor,
-        status: "in_progress",
-      };
-
-      const response = await leadRemovalJobService.create(newJobData);
-
-      if (response.data) {
+      if (jobToEdit) {
+        await leadRemovalJobService.update(jobToEdit._id, payload);
         await fetchLeadRemovalJobs({ force: true, silent: true });
         handleCloseModal();
+      } else {
+        const response = await leadRemovalJobService.create({
+          ...payload,
+          status: "in_progress",
+        });
+        if (response.data) {
+          await fetchLeadRemovalJobs({ force: true, silent: true });
+          handleCloseModal();
+        }
       }
     } catch (err) {
-      console.error("Error creating lead removal job:", err);
+      console.error(
+        jobToEdit ? "Error updating lead removal job:" : "Error creating lead removal job:",
+        err
+      );
       setModalError(
-        err.response?.data?.message || err.message || "Failed to create job"
+        err.response?.data?.message ||
+          err.message ||
+          (jobToEdit ? "Failed to update job" : "Failed to create job")
       );
     } finally {
       setModalLoading(false);
@@ -431,11 +481,11 @@ const LeadRemoval = () => {
                         Job Type
                       </TableCell>
                     )}
-                    {!isMobile && hasPermission(currentUser, "asbestos.delete") && (
-                      <TableCell
-                        sx={{ fontWeight: "bold", width: "120px" }}
-                        align="center"
-                      >
+                    {!isMobile && (hasPermission(currentUser, "asbestos.edit") || hasPermission(currentUser, "asbestos.delete")) && (
+                        <TableCell
+                          sx={{ fontWeight: "bold", width: "120px" }}
+                          align="center"
+                        >
                         Actions
                       </TableCell>
                     )}
@@ -493,23 +543,40 @@ const LeadRemoval = () => {
                           />
                         </TableCell>
                       )}
-                      {!isMobile && hasPermission(currentUser, "asbestos.delete") && (
+                      {!isMobile && (hasPermission(currentUser, "asbestos.edit") || hasPermission(currentUser, "asbestos.delete")) && (
                         <TableCell align="center">
-                          <Tooltip title="Delete Job">
+                          <Tooltip title="Edit Job">
                             <IconButton
-                              onClick={(event) => handleDeleteClick(event, job)}
+                              onClick={(event) => handleEditClick(event, job)}
                               size="small"
                               sx={{
-                                color: theme.palette.error.main,
+                                color: theme.palette.primary.main,
                                 "&:hover": {
-                                  backgroundColor: theme.palette.error.light,
+                                  backgroundColor: theme.palette.primary.light,
                                   color: "white",
                                 },
                               }}
                             >
-                              <DeleteIcon fontSize="small" />
+                              <EditIcon fontSize="small" />
                             </IconButton>
                           </Tooltip>
+                          {hasPermission(currentUser, "asbestos.delete") && (
+                            <Tooltip title="Delete Job">
+                              <IconButton
+                                onClick={(event) => handleDeleteClick(event, job)}
+                                size="small"
+                                sx={{
+                                  color: theme.palette.error.main,
+                                  "&:hover": {
+                                    backgroundColor: theme.palette.error.light,
+                                    color: "white",
+                                  },
+                                }}
+                              >
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          )}
                         </TableCell>
                       )}
                     </TableRow>
@@ -534,7 +601,9 @@ const LeadRemoval = () => {
             justifyContent="space-between"
             alignItems="center"
           >
-            <Typography variant="h6">New Lead Removal Job</Typography>
+            <Typography variant="h6">
+              {jobToEdit ? "Edit Lead Removal Job" : "New Lead Removal Job"}
+            </Typography>
             <IconButton onClick={handleCloseModal}>
               <CloseIcon />
             </IconButton>
@@ -597,6 +666,20 @@ const LeadRemoval = () => {
               ))}
             </Select>
           </FormControl>
+          <FormControl fullWidth sx={{ mb: 2 }}>
+            <InputLabel>Jurisdiction</InputLabel>
+            <Select
+              value={selectedJurisdiction}
+              onChange={(e) => {
+                setSelectedJurisdiction(e.target.value);
+                setModalError(null);
+              }}
+              label="Jurisdiction"
+            >
+              <MenuItem value="ACT">ACT</MenuItem>
+              <MenuItem value="NSW">NSW</MenuItem>
+            </Select>
+          </FormControl>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseModal}>Cancel</Button>
@@ -612,7 +695,13 @@ const LeadRemoval = () => {
               },
             }}
           >
-            {modalLoading ? "Creating..." : "Create Job"}
+            {modalLoading
+              ? jobToEdit
+                ? "Updating..."
+                : "Creating..."
+              : jobToEdit
+                ? "Update Job"
+                : "Create Job"}
           </Button>
         </DialogActions>
       </Dialog>

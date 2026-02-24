@@ -19,6 +19,11 @@ const leadRemovalJobSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    jurisdiction: {
+      type: String,
+      enum: ["ACT", "NSW"],
+      default: "ACT",
+    },
     status: {
       type: String,
       enum: ["in_progress", "completed", "cancelled", "archived"],

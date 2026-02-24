@@ -8,6 +8,7 @@ const { PDFDocument } = require('pdf-lib');
 const auth = require('../middleware/auth');
 const AsbestosAssessment = require('../models/assessmentTemplates/asbestos/AsbestosAssessment');
 const CustomDataFieldGroup = require('../models/CustomDataFieldGroup');
+const LeadRemovalJob = require('../models/LeadRemovalJob');
 
 // Initialize DocRaptor service
 const docRaptorService = new DocRaptorService();
@@ -1457,27 +1458,28 @@ const generateSitePlanContentPage = (
 /**
  * Merge two PDFs together
  * @param {Buffer} pdf1Buffer - First PDF buffer (clearance report)
- * @param {string} pdf2Base64 - Second PDF as base64 string (air monitoring report or site plan)
+ * @param {string|Buffer} pdf2Base64OrBuffer - Second PDF as base64 string or Buffer (air monitoring report, site plan, or generated appendix cover)
  * @returns {Promise<Buffer>} - Merged PDF as buffer
  */
-const mergePDFs = async (pdf1Buffer, pdf2Base64) => {
+const mergePDFs = async (pdf1Buffer, pdf2Base64OrBuffer) => {
   try {
-    
     // Create a new PDF document
     const mergedPdf = await PDFDocument.create();
-    
+
     // Load the first PDF (clearance report or assessment report)
     const pdf1Doc = await PDFDocument.load(pdf1Buffer);
     const pdf1Pages = await mergedPdf.copyPages(pdf1Doc, pdf1Doc.getPageIndices());
     pdf1Pages.forEach((page) => mergedPdf.addPage(page));
-    
-    // Load the second PDF (air monitoring report or site plan) from base64
-    // Handle both pure base64 and data URL formats
-    let cleanBase64 = pdf2Base64;
-    if (pdf2Base64.startsWith('data:')) {
-      cleanBase64 = pdf2Base64.split(',')[1];
+
+    // Load the second PDF: accept Buffer or base64 string
+    let pdf2Buffer;
+    if (Buffer.isBuffer(pdf2Base64OrBuffer)) {
+      pdf2Buffer = pdf2Base64OrBuffer;
+    } else {
+      const str = String(pdf2Base64OrBuffer);
+      const cleanBase64 = str.startsWith('data:') ? str.split(',')[1] : str;
+      pdf2Buffer = Buffer.from(cleanBase64, 'base64');
     }
-    const pdf2Buffer = Buffer.from(cleanBase64, 'base64');
     
     // Load the second PDF with specific options to preserve layout
     const pdf2Doc = await PDFDocument.load(pdf2Buffer, {
@@ -1509,6 +1511,489 @@ const mergePDFs = async (pdf1Buffer, pdf2Base64) => {
     throw error;
   }
 };
+
+/**
+ * Generate Lead Clearance Report HTML (cover + inspection details + template sections).
+ * Uses same assets and styling as asbestos clearance; content from leadClearance report template.
+ */
+const generateLeadClearanceHTML = async (clearanceData, pdfId = 'unknown') => {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const logoPath = path.join(__dirname, '../assets/logo.png');
+  const logoBase64 = fs.existsSync(logoPath) ? fs.readFileSync(logoPath).toString('base64') : '';
+  const backgroundPath = path.join(__dirname, '../assets/clearance_front - Copy.jpg');
+  const backgroundBase64 = fs.existsSync(backgroundPath) ? fs.readFileSync(backgroundPath).toString('base64') : '';
+
+  const siteAddress = clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site';
+  const jobRef = clearanceData.projectId?.projectID || clearanceData.projectId || 'Unknown';
+  const clearanceDateStr = formatClearanceDate(clearanceData.clearanceDate);
+  const footerText = `Lead Removal Clearance Certificate: ${siteAddress}`;
+  const reportAuthoriserText = clearanceData.reportApprovedBy
+    ? clearanceData.reportApprovedBy
+    : '<span style="color: red;">Awaiting Authorisation</span>';
+  const consultant = clearanceData.consultant || 'Unknown';
+  const leadAbatementContractor = clearanceData.leadAbatementContractor || 'Unknown';
+  const inspectionTimeStr = formatInspectionTime(clearanceData.inspectionTime);
+  const inspectionDateStr = clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown';
+  const secondaryHeader = clearanceData.secondaryHeader || '';
+
+  // Resolve jurisdiction for {LEGISLATION} filtering: prefer linked lead removal job, then clearance
+  let jurisdiction = clearanceData.jurisdiction;
+  const jobId = clearanceData.leadRemovalJobId?._id || clearanceData.leadRemovalJobId;
+  if (jobId) {
+    const job = await LeadRemovalJob.findById(jobId).select('jurisdiction').lean();
+    if (job && job.jurisdiction) jurisdiction = job.jurisdiction;
+  }
+  if (!jurisdiction) jurisdiction = 'ACT';
+
+  // Fetch lead clearance template and resolve section content with placeholders.
+  // Legislation always comes from the template's related legislation (checkboxes), filtered by jurisdiction.
+  const templateContent = await getTemplateByType('leadClearance');
+  const resolvedLegislation = await resolveSelectedLegislation(templateContent?.selectedLegislation);
+  const selectedLegislation = resolvedLegislation;
+  const templateData = {
+    ...clearanceData,
+    jurisdiction,
+    LAA: consultant,
+    asbestosRemovalist: leadAbatementContractor,
+    selectedLegislation,
+    jobSpecificExclusions: clearanceData.jobSpecificExclusions || '',
+    clientName: clearanceData.projectId?.client?.name || clearanceData.clientName,
+  };
+  const sections = {
+    inspectionDetailsContent: templateContent?.standardSections?.inspectionDetailsContent ?? '',
+    clearanceCertificationContent: templateContent?.standardSections?.clearanceCertificationContent ?? '',
+    backgroundContent: templateContent?.standardSections?.backgroundContent ?? '',
+    regulatoryGuidanceContent: templateContent?.standardSections?.regulatoryGuidanceContent ?? '',
+    assessmentMethodologyContent: templateContent?.standardSections?.assessmentMethodologyContent ?? '',
+    assessmentCriteriaContent: templateContent?.standardSections?.assessmentCriteriaContent ?? '',
+    statementOfLimitationsContent: templateContent?.standardSections?.statementOfLimitationsContent ?? '',
+  };
+  const sectionHtml = {};
+  for (const [key, raw] of Object.entries(sections)) {
+    sectionHtml[key] = raw ? await replacePlaceholders(raw, templateData) : '';
+  }
+
+  const items = clearanceData.items || [];
+  const hasLevelFloor = items.some(item => item.levelFloor && String(item.levelFloor).trim() !== '');
+
+  const thLevelFloor = hasLevelFloor ? '<th style="width: 12%;">Level/Floor</th>' : '';
+  const tableHeaders = `<th>Location Description</th><th style="width: 14%;">Room/Area</th><th>Works Completed</th><th style="width: 10%;">Samples</th><th style="width: 8%;">Photo No.</th>`;
+
+  let globalPhotoCounter = 1;
+  const itemsWithPhotoNumbers = items.map((item) => {
+    const photos = (item.photographs || []).filter(p => p.includeInReport !== false);
+    const nums = photos.length ? Array.from({ length: photos.length }, () => globalPhotoCounter++) : [];
+    return { ...item, sequentialPhotoNumbers: nums };
+  });
+
+  const rows = itemsWithPhotoNumbers.map((item) => {
+    const photoText = item.sequentialPhotoNumbers.length === 0 ? '-'
+      : item.sequentialPhotoNumbers.length === 1 ? String(item.sequentialPhotoNumbers[0])
+      : `${item.sequentialPhotoNumbers[0]}-${item.sequentialPhotoNumbers[item.sequentialPhotoNumbers.length - 1]}`;
+    const samplesText = Array.isArray(item.samples) && item.samples.length > 0 ? item.samples.join(', ') : '-';
+    const levelTd = hasLevelFloor ? `<td>${escapeHtml(item.levelFloor || '')}</td>` : '';
+    return `<tr>${levelTd}<td>${escapeHtml(item.locationDescription || '')}</td><td>${escapeHtml(item.roomArea || '')}</td><td>${escapeHtml(item.worksCompleted || '')}</td><td>${escapeHtml(samplesText)}</td><td>${escapeHtml(photoText)}</td></tr>`;
+  });
+  const tableBody = rows.length > 0 ? rows.join('') : `<tr><td colspan="${hasLevelFloor ? 6 : 5}" style="text-align: center; font-style: italic;">No clearance items</td></tr>`;
+
+  const jobExclusionsHtml = (clearanceData.jobSpecificExclusions && String(clearanceData.jobSpecificExclusions).trim())
+    ? await replacePlaceholders(String(clearanceData.jobSpecificExclusions).trim(), templateData)
+    : 'None specified.';
+
+  const leadSignOffTemplate = 'Please do not hesitate to contact the undersigned should you have any queries regarding this report.<br /><br />For and on behalf of Lancaster and Dickenson Consulting.<br /><br />[SIGNATURE_IMAGE]<br /><span class="sign-off-name">[LAA_NAME]</span><br /><span class="sign-off-company">Lancaster &amp; Dickenson Consulting</span>';
+  const leadSignOffHtml = await replacePlaceholders(leadSignOffTemplate, templateData);
+
+  const appendicesForText = getLeadClearanceAppendices(clearanceData);
+  const attachmentTextLead = generateLeadAttachmentText(appendicesForText);
+
+  const baseStyles = `
+    /* DocRaptor-optimized CSS with Gothic fonts (match asbestos clearance certificates) */
+    @font-face {
+      font-family: "Gothic";
+      src: url("${frontendUrl}/fonts/static/Gothic-Regular.ttf") format("truetype");
+      font-weight: normal;
+      font-style: normal;
+    }
+    @font-face {
+      font-family: "Gothic";
+      src: url("${frontendUrl}/fonts/static/Gothic-Bold.ttf") format("truetype");
+      font-weight: bold;
+      font-style: normal;
+    }
+    @font-face {
+      font-family: "Gothic";
+      src: url("${frontendUrl}/fonts/static/Gothic-Italic.ttf") format("truetype");
+      font-weight: normal;
+      font-style: italic;
+    }
+    @font-face {
+      font-family: "Gothic";
+      src: url("${frontendUrl}/fonts/static/Gothic-BoldItalic.ttf") format("truetype");
+      font-weight: bold;
+      font-style: italic;
+    }
+    @page { size: A4; margin: 0; }
+    * { hyphens: none !important; -webkit-hyphens: none !important; -ms-hyphens: none !important; word-break: keep-all !important; overflow-wrap: normal !important; }
+    body { margin: 0; padding: 0; font-family: "Gothic", Arial, sans-serif; background: #fff; hyphens: none; -webkit-hyphens: none; -ms-hyphens: none; }
+    .page { width: 100%; min-height: 100vh; position: relative; background: #fff; margin: 0; padding: 0; page-break-after: always; }
+    .page:last-child { page-break-after: avoid; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 48px 0 48px; }
+    .logo { width: 243px; height: auto; display: block; }
+    .company-details { text-align: right; font-size: 0.75rem; color: #222; line-height: 1.5; }
+    .header-line { width: calc(100% - 96px); height: 1.5px; background: #16b12b; margin: 8px auto 0 auto; }
+    .content { padding: 10px 48px 24px 48px; }
+    .section-header { font-size: 0.9rem; font-weight: 700; text-transform: uppercase; margin: 20px 0 10px 0; color: #222; }
+    .paragraph { font-size: 0.8rem; margin-bottom: 8px; color: #222; line-height: 1.5; text-align: justify; }
+    .clearance-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; margin: 10px 0; }
+    .clearance-table th { background-color: #f5f5f5; border: 1px solid #ddd; padding: 8px; text-align: left; font-weight: 700; color: #222; }
+    .clearance-table td { border: 1px solid #ddd; padding: 8px; text-align: left; color: #222; vertical-align: top; }
+    .footer { position: absolute; left: 0; right: 0; bottom: 16px; width: calc(100% - 96px); margin: 0 auto; font-size: 0.75rem; color: #222; }
+    .footer-border-line { width: 100%; height: 1.5px; background: #16b12b; margin-bottom: 6px; }
+    .cover-page { width: 100%; min-height: 100vh; position: relative; background: #fff; overflow: hidden; }
+    .cover-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; filter: grayscale(1) contrast(1.1); z-index: 0; }
+    .cover-white-shape { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
+    .cover-content { position: absolute; left: 0; top: 0; z-index: 5; padding: 60px 40px 40px 24px; width: 50%; margin-top: 220px; box-sizing: border-box; }
+    .cover-content h1 { font-size: 1.7rem; font-weight: 700; margin: 20px 0 10px 0; letter-spacing: 0.01em; line-height: 1.2; text-transform: uppercase; color: #222; }
+    .cover-page .address { font-size: 1.65rem; margin-bottom: 32px; color: #222; line-height: 1.4; }
+    .cover-page .secondary-header { font-size: 1.2rem; margin-bottom: 24px; color: #444; }
+    .cover-page .cover-content p { font-size: 1.3rem; margin: 0 0 10px 0; color: #222; }
+    .cover-company-details { font-size: 0.75rem; color: #222; line-height: 1.5; position: absolute; bottom: 150px; left: 24px; z-index: 6; width: calc(50% - 48px); }
+    .cover-logo { position: absolute; right: 32px; bottom: 32px; width: 300px; background: rgba(255,255,255,0.95); padding: 5px; border-radius: 3px; z-index: 10; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .sign-off-block { margin-top: 24px; font-size: 0.8rem; color: #222; line-height: 1.5; }
+    .sign-off-block .sign-off-name { margin-top: 8px; }
+    .sign-off-block .sign-off-company { margin-top: 4px; font-weight: 500; }
+    .content ul, .content .paragraph ul { margin: 0 0 8px 0; padding-left: 24px; list-style-position: outside; }
+    .content ul li, .content .paragraph ul li { margin-bottom: 6px; }
+    .content ul li:last-child, .content .paragraph ul li:last-child { margin-bottom: 0; }
+  `;
+
+  const coverPage = `
+    <div class="page cover-page">
+      <img class="cover-bg" src="data:image/jpeg;base64,${backgroundBase64}" alt="" />
+      <svg class="cover-white-shape" viewBox="0 0 595 842" fill="white" xmlns="http://www.w3.org/2000/svg"><polygon points="0,-10 60,-10 298,200 298,642 60,852 0,852" /></svg>
+      <svg class="green-bracket" viewBox="0 0 595 842" fill="none" xmlns="http://www.w3.org/2000/svg" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:4;">
+        <polyline points="60,-10 298,200" stroke="#16b12b" stroke-width="6" fill="none" />
+        <polyline points="298,198 298,646" stroke="#16b12b" stroke-width="6" fill="none" />
+        <polyline points="300,642 60,852" stroke="#16b12b" stroke-width="6" fill="none" />
+      </svg>
+      <div class="cover-content">
+        <h1>LEAD REMOVAL<br />CLEARANCE<br />CERTIFICATE</h1>
+        <div class="address">${escapeHtml(siteAddress)}</div>
+        ${secondaryHeader ? `<div class="secondary-header">${escapeHtml(secondaryHeader)}</div>` : ''}
+        <p><b>Job Reference</b><br />${escapeHtml(jobRef)}</p>
+        <p><b>Clearance Date</b><br />${clearanceDateStr}</p>
+      </div>
+      <div class="cover-company-details">
+        Lancaster &amp; Dickenson Consulting Pty Ltd<br />4/6 Dacre Street, Mitchell ACT 2911<br />enquiries@landd.com.au<br />(02) 6241 2779
+      </div>
+      <img class="cover-logo" src="data:image/png;base64,${logoBase64}" alt="Logo" />
+    </div>`;
+
+  const inspectionPage = `
+    <div class="page">
+      <div class="header">
+        <img class="logo" src="data:image/png;base64,${logoBase64}" alt="Logo" />
+        <div class="company-details">Lancaster &amp; Dickenson Consulting Pty Ltd<br />4/6 Dacre Street<br />Mitchell ACT 2911<br /><span style="color:#16b12b;font-weight:500;">www.landd.com.au</span></div>
+      </div>
+      <div class="header-line"></div>
+      <div class="content">
+        <div class="section-header">INSPECTION DETAILS</div>
+        ${sectionHtml.inspectionDetailsContent ? `<div class="paragraph">${sectionHtml.inspectionDetailsContent}</div>` : ''}
+        ${attachmentTextLead ? `<p class="paragraph">${escapeHtml(attachmentTextLead)}</p>` : ''}
+        <div class="section-header">Table 1: Lead Clearance Items</div>
+        <table class="clearance-table">
+          <thead><tr>${thLevelFloor}${tableHeaders}</tr></thead>
+          <tbody>${tableBody}</tbody>
+        </table>
+        <div class="section-header">CLEARANCE CERTIFICATION</div>
+        ${sectionHtml.clearanceCertificationContent ? `<div class="paragraph">${sectionHtml.clearanceCertificationContent}</div>` : `<p class="paragraph">This lead removal clearance certificate is issued on the basis of the inspection detailed above. Report authoriser: ${reportAuthoriserText}</p>`}
+        ${jobExclusionsHtml && jobExclusionsHtml !== 'None specified.' ? `<p class="paragraph">${jobExclusionsHtml}</p>` : ''}
+        <div class="sign-off-block">${leadSignOffHtml}</div>
+      </div>
+      <div class="footer">
+        <div class="footer-border-line"></div>
+        <div class="footer-text">${escapeHtml(footerText)}</div>
+      </div>
+    </div>`;
+
+  const backgroundPage = `
+    <div class="page">
+      <div class="header">
+        <img class="logo" src="data:image/png;base64,${logoBase64}" alt="Logo" />
+        <div class="company-details">Lancaster &amp; Dickenson Consulting Pty Ltd<br />4/6 Dacre Street<br />Mitchell ACT 2911<br /><span style="color:#16b12b;font-weight:500;">www.landd.com.au</span></div>
+      </div>
+      <div class="header-line"></div>
+      <div class="content">
+        <div class="section-header">BACKGROUND</div>
+        ${sectionHtml.backgroundContent ? `<div class="paragraph">${sectionHtml.backgroundContent}</div>` : ''}
+        <div class="section-header">REGULATORY GUIDANCE, REGULATIONS AND CODES OF PRACTICE</div>
+        ${sectionHtml.regulatoryGuidanceContent ? `<div class="paragraph">${sectionHtml.regulatoryGuidanceContent}</div>` : ''}
+        <div class="section-header">ASSESSMENT METHODOLOGY</div>
+        ${sectionHtml.assessmentMethodologyContent ? `<div class="paragraph">${sectionHtml.assessmentMethodologyContent}</div>` : ''}
+        <div class="section-header">ASSESSMENT CRITERIA</div>
+        ${sectionHtml.assessmentCriteriaContent ? `<div class="paragraph">${sectionHtml.assessmentCriteriaContent}</div>` : ''}
+      </div>
+      <div class="footer">
+        <div class="footer-border-line"></div>
+        <div class="footer-text">${escapeHtml(footerText)}</div>
+      </div>
+    </div>`;
+
+  const statementOfLimitationsPage = `
+    <div class="page">
+      <div class="header">
+        <img class="logo" src="data:image/png;base64,${logoBase64}" alt="Logo" />
+        <div class="company-details">Lancaster &amp; Dickenson Consulting Pty Ltd<br />4/6 Dacre Street<br />Mitchell ACT 2911<br /><span style="color:#16b12b;font-weight:500;">www.landd.com.au</span></div>
+      </div>
+      <div class="header-line"></div>
+      <div class="content">
+        <div class="section-header">STATEMENT OF LIMITATIONS</div>
+        ${sectionHtml.statementOfLimitationsContent ? `<div class="paragraph">${sectionHtml.statementOfLimitationsContent}</div>` : ''}
+      </div>
+      <div class="footer">
+        <div class="footer-border-line"></div>
+        <div class="footer-text">${escapeHtml(footerText)}</div>
+      </div>
+    </div>`;
+
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><title>Lead Clearance Report</title><style>${baseStyles}</style></head><body>${coverPage}${inspectionPage}${backgroundPage}${statementOfLimitationsPage}</body></html>`;
+};
+
+/**
+ * Lead clearance appendix definitions in fixed order.
+ * Only appendices with present content are included; letters A, B, C... assigned in this order.
+ */
+const LEAD_CLEARANCE_APPENDIX_DEFS = [
+  { key: 'photographs', label: 'Photographs' },
+  { key: 'sitePlan', label: 'Site Plan' },
+  { key: 'preWorksSamples', label: 'Pre-works samples (soil/dust)' },
+  { key: 'validationSamples', label: 'Validation samples (soil/dust)' },
+  { key: 'airMonitoringReports', label: 'Air Monitoring Reports' },
+];
+
+/**
+ * Conditional attachment text for lead clearance (inspection details and appendix references).
+ * Uses the same appendix order as getLeadClearanceAppendices; only present appendices are mentioned.
+ */
+const generateLeadAttachmentText = (appendices) => {
+  if (!appendices || appendices.length === 0) return '';
+  const parts = appendices.map(({ letter, label }) => {
+    if (label === 'Photographs') return `Photographs of the lead removal area are presented in Appendix ${letter}.`;
+    if (label === 'Site Plan') return `A site plan is presented in Appendix ${letter}.`;
+    if (label === 'Pre-works samples (soil/dust)') return `Pre-works samples (soil/dust) are presented in Appendix ${letter}.`;
+    if (label === 'Validation samples (soil/dust)') return `Validation samples (soil/dust) are presented in Appendix ${letter}.`;
+    if (label === 'Air Monitoring Reports') return `The air monitoring report(s) for these works are presented in Appendix ${letter}.`;
+    return `${label} are presented in Appendix ${letter}.`;
+  });
+  return parts.join(' ');
+};
+
+/**
+ * Returns ordered list of appendices present for a lead clearance.
+ * Each item: { letter: 'A'|'B'|..., label: string, key: string }.
+ */
+const getLeadClearanceAppendices = (clearanceData) => {
+  const hasPhotographs = clearanceData.items && clearanceData.items.some(item =>
+    item.photographs && item.photographs.some(photo => photo.includeInReport !== false)
+  );
+  const hasSitePlan = !!(clearanceData.sitePlan && clearanceData.sitePlanFile);
+  const hasPreWorks = !!(clearanceData.sampling && Array.isArray(clearanceData.sampling.preWorksSamples) && clearanceData.sampling.preWorksSamples.length > 0);
+  const hasValidation = !!(clearanceData.sampling && Array.isArray(clearanceData.sampling.validationSamples) && clearanceData.sampling.validationSamples.length > 0);
+  const hasAirMonitoring = !!(clearanceData.leadMonitoringReports && clearanceData.leadMonitoringReports.length > 0);
+
+  const present = [hasPhotographs, hasSitePlan, hasPreWorks, hasValidation, hasAirMonitoring];
+  const letters = 'ABCDE';
+  const appendices = [];
+  LEAD_CLEARANCE_APPENDIX_DEFS.forEach((def, i) => {
+    if (present[i]) {
+      appendices.push({
+        letter: letters[appendices.length],
+        label: def.label,
+        key: def.key,
+      });
+    }
+  });
+  return appendices;
+};
+
+/**
+ * Generate HTML for lead clearance appendix cover pages (one page per appendix).
+ * Uses same fonts and styling as lead clearance report; each page shows "APPENDIX X" and the label.
+ */
+const generateLeadAppendixCoverPagesHTML = (appendices, options) => {
+  if (!appendices || appendices.length === 0) return '';
+  const { logoBase64, watermarkBase64, footerText, frontendUrl } = options;
+  const fontFaces = `
+    @font-face { font-family: "Gothic"; src: url("${frontendUrl}/fonts/static/Gothic-Regular.ttf") format("truetype"); font-weight: normal; font-style: normal; }
+    @font-face { font-family: "Gothic"; src: url("${frontendUrl}/fonts/static/Gothic-Bold.ttf") format("truetype"); font-weight: bold; font-style: normal; }
+    @font-face { font-family: "Gothic"; src: url("${frontendUrl}/fonts/static/Gothic-Italic.ttf") format("truetype"); font-weight: normal; font-style: italic; }
+    @font-face { font-family: "Gothic"; src: url("${frontendUrl}/fonts/static/Gothic-BoldItalic.ttf") format("truetype"); font-weight: bold; font-style: italic; }
+  `;
+  const pageStyles = `
+    @page { size: A4; margin: 0; }
+    * { hyphens: none !important; -webkit-hyphens: none !important; word-break: keep-all !important; overflow-wrap: normal !important; }
+    body { margin: 0; padding: 0; font-family: "Gothic", Arial, sans-serif; background: #fff; }
+    .page { width: 100%; min-height: 100vh; position: relative; background: #fff; margin: 0; padding: 0; page-break-after: always; }
+    .page:last-child { page-break-after: avoid; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 48px 0 48px; }
+    .logo { width: 243px; height: auto; display: block; }
+    .company-details { text-align: right; font-size: 0.75rem; color: #222; line-height: 1.5; }
+    .company-details .website { color: #16b12b; font-weight: 500; }
+    .green-line { width: calc(100% - 96px); height: 1.5px; background: #16b12b; margin: 8px auto 0 auto; }
+    .watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 450px; height: auto; opacity: 0.1; z-index: 1; pointer-events: none; }
+    .watermark img { width: 100%; height: auto; }
+    .content { padding: 10px 48px 24px 48px; flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; margin: 0; }
+    .centered-text { font-size: 1.8rem; text-transform: uppercase; color: #222; text-align: center; letter-spacing: 0.02em; margin-top: 400px; }
+    .appendix-title { font-weight: 700; color: #16b12b; }
+    .footer { position: absolute; left: 0; right: 0; bottom: 16px; width: calc(100% - 96px); margin: 0 auto; font-size: 0.75rem; color: #222; }
+    .footer-border-line { width: 100%; height: 1.5px; background: #16b12b; margin-bottom: 6px; }
+  `;
+  const pages = appendices.map(({ letter, label }) => `
+    <div class="page">
+      <div class="watermark">${watermarkBase64 ? `<img src="data:image/png;base64,${watermarkBase64}" alt="Watermark" />` : ''}</div>
+      <div class="header">
+        <img class="logo" src="data:image/png;base64,${logoBase64}" alt="Logo" />
+        <div class="company-details">Lancaster &amp; Dickenson Consulting Pty Ltd<br />4/6 Dacre Street<br />Mitchell ACT 2911<br /><span class="website">www.landd.com.au</span></div>
+      </div>
+      <div class="green-line"></div>
+      <div class="content">
+        <div class="centered-text">
+          <span class="appendix-title">APPENDIX ${letter}</span><br />
+          <span>${escapeHtml(label)}</span>
+        </div>
+      </div>
+      <div class="footer">
+        <div class="footer-border-line"></div>
+        <div class="footer-text">${escapeHtml(footerText)}</div>
+      </div>
+    </div>
+  `).join('');
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><title>Lead Clearance Appendices</title><style>${fontFaces}${pageStyles}</style></head><body>${pages}</body></html>`;
+};
+
+/**
+ * Ensure photo data is a valid data URL for img src.
+ */
+const toPhotoDataUrl = (data) => {
+  if (!data || typeof data !== 'string') return '';
+  const s = data.trim();
+  if (s.startsWith('data:image/')) return s;
+  if (s.startsWith('data:')) return s;
+  return 'data:image/jpeg;base64,' + s;
+};
+
+/**
+ * Generate HTML for lead clearance photographs appendix (same layout as asbestos: 2 photos per page).
+ * Uses same page structure and CSS as asbestos PhotoPage/PhotoItem.
+ */
+const generateLeadClearancePhotographsHTML = (clearanceData, options) => {
+  const { logoBase64, footerText, frontendUrl } = options;
+  const items = clearanceData.items || [];
+  const photosForReport = [];
+  items.forEach((item) => {
+    if (!item.photographs || !Array.isArray(item.photographs)) return;
+    item.photographs.forEach((photo) => {
+      if (photo.includeInReport === false) return;
+      const dataUrl = toPhotoDataUrl(photo.data);
+      if (!dataUrl) return;
+      const locationText = photo.description || `${item.roomArea || 'Unknown'} - ${item.locationDescription || 'Unknown'}`;
+      photosForReport.push({
+        dataUrl,
+        levelFloor: item.levelFloor || '',
+        roomArea: item.roomArea || 'Unknown Room/Area',
+        locationDescription: item.locationDescription || '',
+        locationText,
+      });
+    });
+  });
+
+  if (photosForReport.length === 0) {
+    const emptyPage = `
+    <div class="page">
+      <div class="header">
+        <img class="logo" src="data:image/png;base64,${logoBase64}" alt="Logo" />
+        <div class="company-details">Lancaster &amp; Dickenson Consulting Pty Ltd<br />4/6 Dacre Street<br />Mitchell ACT 2911<br /><span class="website">www.landd.com.au</span></div>
+      </div>
+      <div class="header-line"></div>
+      <div class="content"><div class="photo-container"><div class="photo"><div class="photo-placeholder">No photographs available</div></div></div></div>
+      <div class="footer"><div class="footer-border-line"></div><div class="footer-text">${escapeHtml(footerText)}</div></div>
+    </div>`;
+    return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><title>Photographs</title><style>${getLeadPhotoPageStyles(frontendUrl)}</style></head><body>${emptyPage}</body></html>`;
+  }
+
+  const fontFaces = `
+    @font-face { font-family: "Gothic"; src: url("${frontendUrl}/fonts/static/Gothic-Regular.ttf") format("truetype"); font-weight: normal; font-style: normal; }
+    @font-face { font-family: "Gothic"; src: url("${frontendUrl}/fonts/static/Gothic-Bold.ttf") format("truetype"); font-weight: bold; font-style: normal; }
+  `;
+  const pageStyles = getLeadPhotoPageStyles(frontendUrl);
+  const pages = [];
+  for (let i = 0; i < photosForReport.length; i += 2) {
+    const pagePhotos = photosForReport.slice(i, i + 2);
+    const photoItems = pagePhotos.map((photo, pageIndex) => {
+      const photoNumber = i + pageIndex + 1;
+      const levelDisplay = photo.levelFloor ? 'block' : 'none';
+      return `
+    <div class="photo-container">
+      <div class="photo">
+        <img src="${photo.dataUrl}" alt="Photograph ${photoNumber}" />
+      </div>
+      <div class="photo-details">
+        <div class="photo-number">Photograph ${photoNumber}</div>
+        <div class="photo-level-floor" style="display: ${levelDisplay}">${escapeHtml(photo.levelFloor)}</div>
+        <div class="photo-location">${escapeHtml(photo.locationText)}</div>
+      </div>
+    </div>`;
+    }).join('');
+
+    const pageHtml = `
+    <div class="page">
+      <div class="header">
+        <img class="logo" src="data:image/png;base64,${logoBase64}" alt="Logo" />
+        <div class="company-details">Lancaster &amp; Dickenson Consulting Pty Ltd<br />4/6 Dacre Street<br />Mitchell ACT 2911<br /><span class="website">www.landd.com.au</span></div>
+      </div>
+      <div class="header-line"></div>
+      <div class="content">${photoItems}</div>
+      <div class="footer">
+        <div class="footer-border-line"></div>
+        <div class="footer-content"><div class="footer-text">${escapeHtml(footerText)}</div></div>
+      </div>
+    </div>`;
+    pages.push(pageHtml);
+  }
+
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><title>Photographs</title><style>${fontFaces}${pageStyles}</style></head><body>${pages.join('')}</body></html>`;
+};
+
+function getLeadPhotoPageStyles(frontendUrl) {
+  return `
+  @page { size: A4; margin: 0; }
+  * { hyphens: none !important; -webkit-hyphens: none !important; word-break: keep-all !important; overflow-wrap: normal !important; }
+  body { margin: 0; padding: 0; font-family: "Gothic", Arial, sans-serif; background: #fff; }
+  .page { width: 100%; min-height: 100vh; position: relative; background: #fff; margin: 0; padding: 0; page-break-after: always; }
+  .page:last-child { page-break-after: avoid; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 48px 0 48px; }
+  .logo { width: 243px; height: auto; display: block; }
+  .company-details { text-align: right; font-size: 0.75rem; color: #222; line-height: 1.5; }
+  .company-details .website { color: #16b12b; font-weight: 500; }
+  .header-line { width: calc(100% - 96px); height: 1.5px; background: #16b12b; margin: 8px auto 0 auto; }
+  .content { padding: 10px 48px 24px 48px; display: flex; flex-direction: column; align-items: stretch; }
+  .photo { width: 100% !important; height: 375px !important; min-height: 375px !important; max-height: 375px !important; background: #f5f5f5; border: 2px solid #ddd; display: flex; align-items: center; justify-content: center; margin: 0 0 8px 0; padding: 0; overflow: hidden; box-sizing: border-box; flex-shrink: 0; }
+  .photo img { width: 100% !important; height: 100% !important; max-width: 100% !important; max-height: 100% !important; object-fit: contain !important; display: block !important; margin: 0; padding: 0; }
+  .photo-placeholder { color: #666; font-style: italic; }
+  .photo-container { display: flex; flex-direction: column; margin-bottom: 10px; margin-top: 10px; width: 100%; flex-shrink: 0; }
+  .photo-container:first-child { margin-top: 10px; }
+  .photo-details { font-size: 0.8rem; color: #222; line-height: 1.4; }
+  .photo-number { font-weight: 700; color: #16b12b; margin-bottom: 4px; margin-top: 4px; }
+  .photo-level-floor { font-weight: 500; margin-bottom: 2px; color: #666; }
+  .photo-location { font-weight: 600; margin-bottom: 2px; color: #222; }
+  .footer { position: absolute; left: 0; right: 0; bottom: 16px; width: calc(100% - 96px); margin: 0 auto; font-size: 0.75rem; color: #222; }
+  .footer-border-line { width: 100%; height: 1.5px; background: #16b12b; margin-bottom: 6px; }
+  .footer-content { width: 100%; display: flex; justify-content: space-between; align-items: flex-end; }
+  .footer-text { flex: 1; }
+  .content > .photo-container { width: 100%; margin-left: 0; margin-right: 0; }
+  .content > .photo-container:first-child { margin-top: 10px !important; }
+  `;
+}
 
 /**
  * Generate Asbestos Clearance Report using DocRaptor V2 templates
@@ -1649,6 +2134,113 @@ router.post('/generate-asbestos-clearance-v2', async (req, res) => {
     res.status(500).json({ 
       error: 'Failed to generate clearance V2 PDF',
       details: error.message 
+    });
+  }
+});
+
+/**
+ * Generate Lead Clearance Report using DocRaptor
+ */
+router.post('/generate-lead-clearance-v2', async (req, res) => {
+  const pdfId = `lead-clearance-v2-${Date.now()}`;
+  try {
+    const { leadClearanceData } = req.body;
+    if (!leadClearanceData) {
+      return res.status(400).json({ error: 'Lead clearance data is required' });
+    }
+    if (!leadClearanceData._id && !leadClearanceData.projectId) {
+      return res.status(400).json({ error: 'Invalid lead clearance data' });
+    }
+
+    const htmlContent = await generateLeadClearanceHTML(leadClearanceData, pdfId);
+
+    const projectId = leadClearanceData.projectId?.projectID || leadClearanceData.project?.projectID || leadClearanceData.projectId || 'Unknown';
+    const siteName = leadClearanceData.projectId?.name || leadClearanceData.project?.name || leadClearanceData.siteName || 'Unknown';
+    const clearanceDate = leadClearanceData.clearanceDate ? new Date(leadClearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown';
+    const sequenceSuffix = leadClearanceData.sequenceNumber ? ` - ${leadClearanceData.sequenceNumber}` : '';
+    const filename = `${projectId}_Lead Clearance Report - ${siteName} (${clearanceDate})${sequenceSuffix}.pdf`;
+
+    const pdfBuffer = await docRaptorService.generatePDF(htmlContent, {
+      page_size: 'A4',
+      prince_options: {
+        page_margin: '0.5in',
+        media: 'print',
+        html_mode: 'quirks',
+      },
+    });
+
+    let finalPdfBuffer = pdfBuffer;
+    const appendices = getLeadClearanceAppendices(leadClearanceData);
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const logoPath = path.join(__dirname, '../assets/logo.png');
+    const logoBase64 = fs.existsSync(logoPath) ? fs.readFileSync(logoPath).toString('base64') : '';
+    const watermarkPath = path.join(__dirname, '../assets/logo_small hi-res.png');
+    const watermarkBase64 = fs.existsSync(watermarkPath) ? fs.readFileSync(watermarkPath).toString('base64') : '';
+    const siteNameForFooter = leadClearanceData.projectId?.name || leadClearanceData.project?.name || leadClearanceData.siteName || 'Unknown';
+    const appendixFooterText = `Lead Removal Clearance Certificate: ${siteNameForFooter}`;
+
+    for (const app of appendices) {
+      const coverHtml = generateLeadAppendixCoverPagesHTML([app], {
+        logoBase64,
+        watermarkBase64,
+        footerText: appendixFooterText,
+        frontendUrl,
+      });
+      const coverPdf = await docRaptorService.generatePDF(coverHtml, {
+        page_size: 'A4',
+        prince_options: { page_margin: '0.5in', media: 'print', html_mode: 'quirks' },
+      });
+      finalPdfBuffer = await mergePDFs(finalPdfBuffer, coverPdf);
+
+      if (app.key === 'photographs') {
+        const photosHtml = generateLeadClearancePhotographsHTML(leadClearanceData, {
+          logoBase64,
+          footerText: appendixFooterText,
+          frontendUrl,
+        });
+        const photosPdf = await docRaptorService.generatePDF(photosHtml, {
+          page_size: 'A4',
+          prince_options: { page_margin: '0.5in', media: 'print', html_mode: 'quirks' },
+        });
+        finalPdfBuffer = await mergePDFs(finalPdfBuffer, photosPdf);
+      } else if (app.key === 'sitePlan' && leadClearanceData.sitePlan && leadClearanceData.sitePlanFile) {
+        const file = leadClearanceData.sitePlanFile;
+        if (!file.startsWith('/9j/') && !file.startsWith('iVBORw0KGgo') && !file.startsWith('data:image/')) {
+          try {
+            finalPdfBuffer = await mergePDFs(finalPdfBuffer, file);
+          } catch (err) {
+            console.error('Error merging lead clearance site plan PDF:', err);
+          }
+        }
+      } else if (app.key === 'preWorksSamples') {
+        // Pre-works samples content to be merged in a later change
+      } else if (app.key === 'validationSamples') {
+        // Validation samples content to be merged in a later change
+      } else if (app.key === 'airMonitoringReports' && leadClearanceData.leadMonitoringReports && leadClearanceData.leadMonitoringReports.length > 0) {
+        const leadReports = [...leadClearanceData.leadMonitoringReports].sort(
+          (a, b) => new Date(a.shiftDate || 0) - new Date(b.shiftDate || 0)
+        );
+        for (const report of leadReports) {
+          const base64 = report.reportData || report;
+          if (!base64) continue;
+          try {
+            finalPdfBuffer = await mergePDFs(finalPdfBuffer, base64);
+          } catch (err) {
+            console.error('Error merging lead monitoring PDF:', err);
+          }
+        }
+      }
+    }
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', finalPdfBuffer.length);
+    res.send(finalPdfBuffer);
+  } catch (error) {
+    console.error(`[${pdfId}] Error generating lead clearance PDF:`, error);
+    res.status(500).json({
+      error: 'Failed to generate lead clearance PDF',
+      details: error.message,
     });
   }
 });

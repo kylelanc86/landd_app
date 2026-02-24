@@ -355,12 +355,13 @@ const getTemplateByType = async (templateType) => {
         });
       } else if (templateType === "leadClearance") {
         standardSections = {
-          introductionContent: "",
-          scopeContent: "",
-          resultsContent: "",
-          signOffContent: "",
-          methodologyContent: "",
-          legislationContent: "",
+          inspectionDetailsContent: "",
+          clearanceCertificationContent: "",
+          backgroundContent: "",
+          regulatoryGuidanceContent: "",
+          assessmentMethodologyContent: "",
+          assessmentCriteriaContent: "",
+          statementOfLimitationsContent: "",
         };
         template = new ReportTemplate({
           templateType,
@@ -795,6 +796,24 @@ const replacePlaceholders = async (content, data) => {
     '[SIGNATURE_PLACEHOLDER]': userSignature ? `<img src="${userSignature}" alt="Signature" style="max-width: 150px; max-height: 75px;" />` : '[SIGNATURE_PLACEHOLDER]',
     '{AUTHOR_NAME}': data.assessorId?.firstName + ' ' + data.assessorId?.lastName || data.LAA || 'Unknown Author',
     '[AUTHOR_NAME]': data.assessorId?.firstName + ' ' + data.assessorId?.lastName || data.LAA || 'Unknown Author',
+    '{ASSESSOR_NAME}': (() => {
+      if (data.consultant) return data.consultant;
+      if (data.assessorId && typeof data.assessorId === 'object') {
+        const name = [data.assessorId.firstName, data.assessorId.lastName].filter(Boolean).join(' ').trim();
+        if (name) return name;
+      }
+      if (typeof data.assessorId === 'string') return data.assessorId;
+      return data.LAA || 'Unknown';
+    })(),
+    '[ASSESSOR_NAME]': (() => {
+      if (data.consultant) return data.consultant;
+      if (data.assessorId && typeof data.assessorId === 'object') {
+        const name = [data.assessorId.firstName, data.assessorId.lastName].filter(Boolean).join(' ').trim();
+        if (name) return name;
+      }
+      if (typeof data.assessorId === 'string') return data.assessorId;
+      return data.LAA || 'Unknown';
+    })(),
     '{JOB_REFERENCE}': data.projectId?.projectID || data.project?.projectID || 'Unknown Reference',
     '[JOB_REFERENCE]': data.projectId?.projectID || data.project?.projectID || 'Unknown Reference',
     '{VEHICLE_DESCRIPTION}': data.vehicleEquipmentDescription || 'Vehicle/Equipment',

@@ -118,6 +118,9 @@ const reportTemplateSchema = new mongoose.Schema(
       scopeContent: String,
       resultsContent: String,
       methodologyContent: String,
+      regulatoryGuidanceContent: String,
+      assessmentCriteriaContent: String,
+      statementOfLimitationsContent: String,
       
       // Version control and front cover (for clearance templates)
       frontCoverTitle: String,

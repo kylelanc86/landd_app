@@ -67,14 +67,18 @@ const leadAssessmentSections = [
   },
 ];
 
-// Template sections for Lead Clearance
+// Template sections for Lead Clearance (required sections for lead clearance report template)
 const leadClearanceSections = [
-  { key: "introductionContent", label: "Introduction" },
-  { key: "scopeContent", label: "Scope of Clearance" },
-  { key: "resultsContent", label: "Clearance Results" },
-  { key: "signOffContent", label: "Sign-off" },
-  { key: "methodologyContent", label: "Methodology" },
-  { key: "legislationContent", label: "Legislation" },
+  { key: "inspectionDetailsContent", label: "Inspection Details" },
+  { key: "clearanceCertificationContent", label: "Clearance Certification" },
+  { key: "backgroundContent", label: "Background" },
+  {
+    key: "regulatoryGuidanceContent",
+    label: "Regulatory Guidance, Regulations And Codes Of Practice",
+  },
+  { key: "assessmentMethodologyContent", label: "Assessment Methodology" },
+  { key: "assessmentCriteriaContent", label: "Assessment Criteria" },
+  { key: "statementOfLimitationsContent", label: "Statement of Limitations" },
 ];
 
 const LeadAssessmentReportTemplates = () => {
