@@ -2924,9 +2924,19 @@ const generateAssessmentHTML = async (assessmentData) => {
     const jobSpecificExclusionsRawTemplate = (assessmentData.jobSpecificExclusions || '').trim();
     const jobSpecificExclusionsHtmlTemplate = toJustifiedParagraphsHtml(jobSpecificExclusionsRawTemplate);
 
+    const asbestosSummaryBlockLegacy = identifiedAsbestosItems.length > 0
+      ? `<div class="paragraph">
+          The following is a summary of asbestos materials identified during
+          this assessment:
+        </div>
+        <div class="subsection-header-underline">Asbestos Items</div>
+        ${asbestosItemsSection}`
+      : '';
+
     const populatedDiscussionConclusions = asbestosDiscussionConclusionsTemplateWithUrl
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
       .replace(/\[ASBESTOS_COUNT_LINE\]/g, asbestosCountLineLegacy)
+      .replace(/\[ASBESTOS_SUMMARY_BLOCK\]/g, asbestosSummaryBlockLegacy)
       .replace(/\[ASBESTOS_ITEMS_SECTION\]/g, asbestosItemsSection)
       .replace(/\[DISCUSSION_CONCLUSIONS_CONTENT\]/g, discussionConclusionsHtml)
       .replace(/\[SIGN_OFF_CONTENT\]/g, discussionSignOffContent)
@@ -3794,7 +3804,7 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
           li { margin-bottom: 8px; }
 
           .sample-register-header { font-size: 0.8rem; font-weight: 700; margin: 14px 0 10px 0; }
-          .sample-block { break-inside: avoid; page-break-inside: avoid; margin-bottom: 14px; }
+          .sample-block { break-inside: avoid; page-break-inside: avoid; margin-bottom: 30px; }
 
           /* Reuse the sample table styles from Item1 (lighter weight) */
           table { width: 100%; border-collapse: collapse; }
@@ -3861,12 +3871,12 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
         ${!isResidential && remainingTableBlocks.length > 0 ? '<div class="page-break"></div><div class="section-header">Table 1: Assessment Register cont.</div>' : ''}
         ${sampleTablesHtml || (flowTableBlocks.length === 0 ? '<div class="section-body">No items</div>' : '')}
 
-        <div class="page-break"></div>
+        ${identifiedAsbestosItems.length > 0 ? '<div class="page-break"></div>' : ''}
         <div class="section-header">${escapeHtml(templateContent?.standardSections?.discussionTitle || 'DISCUSSION AND CONCLUSIONS')}</div>
         <div class="section-body">
           ${asbestosCountLineHtml}
-          <p style="margin: 0; padding-bottom: 8px;">The following is a summary of asbestos materials identified during this assessment:</p>
-          ${asbestosItemsSectionFlow}
+          ${identifiedAsbestosItems.length > 0 ? `<p style="margin: 0; padding-bottom: 8px;">The following is a summary of asbestos materials identified during this assessment:</p>
+          ${asbestosItemsSectionFlow}` : ''}
           ${discussionConclusionsHtml ? `<div class="section-body discussion-conclusions-content" style="margin-top: 12px; text-align: justify !important; width: 100%;">${discussionConclusionsHtml}</div>` : ''}
           ${inspectionExclusionsHtml ? `<div class="section-body discussion-conclusions-content" style="margin-top: 12px; text-align: justify !important; width: 100%;">${inspectionExclusionsHtml}</div>` : ''}
         </div>

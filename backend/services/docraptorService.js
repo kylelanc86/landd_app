@@ -72,7 +72,7 @@ class DocRaptorService {
 
       // Add timeout to prevent hanging
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
 
       try {
         const response = await fetch(this.apiUrl, {
@@ -101,7 +101,7 @@ class DocRaptorService {
       } catch (fetchError) {
         clearTimeout(timeoutId);
         if (fetchError.name === 'AbortError') {
-          console.error('DocRaptor API request timed out after 30 seconds');
+          console.error('DocRaptor API request timed out after 60 seconds');
           throw new Error('DocRaptor API request timed out. Please try again.');
         }
         throw fetchError;
