@@ -57,6 +57,38 @@ import { generateFibreIDReport } from "../../../utils/generateFibreIDReport";
 const CACHE_KEY = "asbestosAssessmentJobsCache";
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
+/** Trim job.originalData for cache to avoid sessionStorage quota (drops items detail, blobs, etc.) */
+const trimOriginalDataForCache = (orig) => {
+  if (!orig || typeof orig !== "object") return orig;
+  const projectId = orig.projectId;
+  return {
+    projectId: projectId
+      ? { _id: projectId._id || projectId }
+      : undefined,
+    assessmentDate: orig.assessmentDate,
+    state: orig.state,
+    secondaryHeader: orig.secondaryHeader,
+    status: orig.status,
+    LAA: orig.LAA,
+    reportApprovedBy: orig.reportApprovedBy,
+    reportAuthorisedBy: orig.reportAuthorisedBy,
+    reportIssueDate: orig.reportIssueDate,
+    noSamplesCollected: orig.noSamplesCollected,
+    samplesReceivedDate: orig.samplesReceivedDate,
+    labSamplesStatus: orig.labSamplesStatus,
+    analysisDueDate: orig.analysisDueDate,
+    items: Array.isArray(orig.items)
+      ? orig.items.map((i) => ({
+          sampleReference: i.sampleReference,
+          asbestosContent: i.asbestosContent,
+          analysisData: i.analysisData
+            ? { isAnalysed: i.analysisData.isAnalysed }
+            : undefined,
+        }))
+      : [],
+  };
+};
+
 const loadJobsCache = () => {
   if (typeof window === "undefined" || !window.sessionStorage) {
     return null;
@@ -96,10 +128,20 @@ const saveJobsCache = (jobs) => {
   }
 
   try {
-    const payload = JSON.stringify({ jobs, timestamp: Date.now() });
+    const trimmedJobs = jobs.map((j) => ({
+      ...j,
+      originalData: trimOriginalDataForCache(j.originalData || j),
+    }));
+    const payload = JSON.stringify({ jobs: trimmedJobs, timestamp: Date.now() });
     window.sessionStorage.setItem(CACHE_KEY, payload);
   } catch (error) {
-    console.warn("[Asbestos Assessment] Failed to write jobs cache", error);
+    if (error?.name === "QuotaExceededError") {
+      console.warn(
+        "[Asbestos Assessment] Cache save skipped: sessionStorage quota exceeded (payload too large)",
+      );
+    } else {
+      console.warn("[Asbestos Assessment] Failed to write jobs cache", error);
+    }
   }
 };
 
@@ -181,7 +223,7 @@ const AsbestosAssessment = () => {
   const fetchJobs = useCallback(
     async ({ force = false, silent = false } = {}) => {
       const startTime = performance.now();
-      console.log("[Asbestos Assessment] Starting fetchJobs");
+      console.log("[Asbestos Assessment] fetchJobs started", { force, silent });
 
       if (!silent) {
         setLoading(true);
@@ -190,29 +232,38 @@ const AsbestosAssessment = () => {
 
       try {
         if (!force) {
+          const cacheCheckStart = performance.now();
           const cached = loadJobsCache();
+          const cacheCheckMs = (performance.now() - cacheCheckStart).toFixed(2);
           if (cached) {
-            console.log("[Asbestos Assessment] Serving jobs from cache");
+            console.log(
+              `[Asbestos Assessment] Table load complete: ${(performance.now() - startTime).toFixed(2)}ms (source: cache, cache check: ${cacheCheckMs}ms, jobs: ${cached.jobs?.length ?? 0})`,
+            );
             setJobs(cached.jobs);
             if (!silent) {
               setLoading(false);
             }
             return;
           }
+          console.log(`[Asbestos Assessment] Cache miss (check took ${cacheCheckMs}ms)`);
         }
 
+        const apiStart = performance.now();
         const jobsResponse =
-          await asbestosAssessmentService.getAsbestosAssessments({ jobType: 'asbestos-assessment' });
+          await asbestosAssessmentService.getAsbestosAssessments({ jobType: 'asbestos-assessment', list: 1 });
+        const apiMs = (performance.now() - apiStart).toFixed(2);
         const jobs = jobsResponse.data || jobsResponse || [];
 
         if (!Array.isArray(jobs)) {
-          console.error("Jobs is not an array:", jobs);
+          console.error("[Asbestos Assessment] Jobs is not an array:", jobs);
           setJobs([]);
           return;
         }
+        console.log(
+          `[Asbestos Assessment] API response in ${apiMs}ms, jobs: ${jobs.length}`,
+        );
 
-        console.log(`[Asbestos Assessment] Found ${jobs.length} active jobs`);
-
+        const processStart = performance.now();
         const processedJobs = jobs.map((job) => {
           const projectRef = job.projectId || {};
           const projectIdentifier =
@@ -244,9 +295,17 @@ const AsbestosAssessment = () => {
           const bNum = parseInt(b.projectID?.replace(/\D/g, "") || 0);
           return bNum - aNum;
         });
+        const processMs = (performance.now() - processStart).toFixed(2);
+        console.log(
+          `[Asbestos Assessment] Process + sort in ${processMs}ms`,
+        );
 
         setJobs(sortedJobs);
         saveJobsCache(sortedJobs);
+        const totalMs = (performance.now() - startTime).toFixed(2);
+        console.log(
+          `[Asbestos Assessment] Table load complete: ${totalMs}ms (source: network, api: ${apiMs}ms, process: ${processMs}ms, jobs: ${sortedJobs.length})`,
+        );
       } catch (err) {
         const errorTime = performance.now() - startTime;
         console.error(
@@ -261,12 +320,6 @@ const AsbestosAssessment = () => {
         if (!silent) {
           setLoading(false);
         }
-        const finalTime = performance.now() - startTime;
-        console.log(
-          `[Asbestos Assessment] fetchJobs completed in ${finalTime.toFixed(
-            2,
-          )}ms`,
-        );
       }
     },
     [],
@@ -302,10 +355,15 @@ const AsbestosAssessment = () => {
   }, []);
 
   useEffect(() => {
+    const mountTime = performance.now();
+    console.log("[Asbestos Assessment] Table load started (mount)");
     const cached = loadJobsCache();
 
     if (cached) {
-      console.log("[Asbestos Assessment] Using cached jobs");
+      const fromCacheMs = (performance.now() - mountTime).toFixed(2);
+      console.log(
+        `[Asbestos Assessment] Initial render from cache in ${fromCacheMs}ms (jobs: ${cached.jobs?.length ?? 0}), background refresh triggered`,
+      );
       setJobs(cached.jobs);
       setLoading(false);
       fetchJobs({ force: true, silent: true });
@@ -354,7 +412,7 @@ const AsbestosAssessment = () => {
       "site-works-complete": "Site Works Complete",
       completed: "Completed",
       cancelled: "Cancelled",
-      complete: "Analysis Complete",
+      complete: "Complete",
       active: "Active",
       "samples-with-lab": "Samples With Lab",
       "sample-analysis-complete": "Analysis Complete",
@@ -554,7 +612,7 @@ const AsbestosAssessment = () => {
       setJobs((prev) => prev.filter((j) => j.id !== job.id));
       await fetchJobs({ force: true, silent: true });
       showSnackbar(
-        "Assessment marked as complete and removed from the table.",
+        "Job closed and removed from the table.",
         "success",
       );
     } catch (err) {
@@ -1305,7 +1363,7 @@ const AsbestosAssessment = () => {
                                 disabled={completingJobId === job.id}
                                 sx={{ textTransform: "none" }}
                               >
-                                Complete
+                                Close job
                               </Button>
                             )}
                           {(job.status === "report-ready-for-review" ||

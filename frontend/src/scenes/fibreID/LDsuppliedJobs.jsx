@@ -142,7 +142,7 @@ const LDsuppliedJobs = () => {
     try {
       setLoading(true);
       // Fetch all asbestos assessments
-      const response = await asbestosAssessmentService.getAsbestosAssessments();
+      const response = await asbestosAssessmentService.getAsbestosAssessments({ list: 1 });
 
       // Show only L&D supplied assessments where sample submission was confirmed (samplesReceivedDate set)
       const allAssessments = response.data || [];

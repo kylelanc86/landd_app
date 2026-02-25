@@ -9,10 +9,11 @@ const { getLegislationForReportTemplate } = require('../services/templateService
 
 // GET /api/assessments - list all assessment jobs (populate project and assessor); excludes archived
 // Query param jobType: 'asbestos-assessment' | 'residential-asbestos' - when set, only jobs of that type are returned
+// Query param list=1 - return minimal fields for table display (no full items, photos, blobs); faster and smaller payload
 router.get('/', async (req, res) => {
   try {
     const filter = { archived: { $ne: true } };
-    const { jobType } = req.query;
+    const { jobType, list } = req.query;
     if (jobType === 'residential-asbestos') {
       filter.jobType = 'residential-asbestos';
     } else if (jobType === 'asbestos-assessment') {
@@ -23,6 +24,92 @@ router.get('/', async (req, res) => {
         { jobType: null },
       ];
     }
+
+    if (list === '1' || list === 'true') {
+      // Minimal payload for table lists: lean aggregation with only fields needed for display and row actions
+      const pipeline = [
+        { $match: filter },
+        { $sort: { createdAt: -1 } },
+        {
+          $lookup: {
+            from: 'projects',
+            localField: 'projectId',
+            foreignField: '_id',
+            as: 'projectIdArr',
+            pipeline: [{ $project: { projectID: 1, name: 1, client: 1 } }],
+          },
+        },
+        { $unwind: { path: '$projectIdArr', preserveNullAndEmptyArrays: true } },
+        {
+          $lookup: {
+            from: 'clients',
+            localField: 'projectIdArr.client',
+            foreignField: '_id',
+            as: 'clientArr',
+            pipeline: [{ $project: { name: 1, contact1Name: 1, contact1Email: 1, address: 1 } }],
+          },
+        },
+        {
+          $addFields: {
+            projectId: {
+              $cond: {
+                if: { $eq: [{ $ifNull: ['$projectIdArr', null] }, null] },
+                then: null,
+                else: {
+                  _id: '$projectIdArr._id',
+                  projectID: '$projectIdArr.projectID',
+                  name: '$projectIdArr.name',
+                  client: { $arrayElemAt: ['$clientArr', 0] },
+                },
+              },
+            },
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+            jobType: 1,
+            projectId: 1,
+            assessmentDate: 1,
+            status: 1,
+            LAA: 1,
+            state: 1,
+            secondaryHeader: 1,
+            intrusiveness: 1,
+            reportApprovedBy: 1,
+            reportAuthorisedBy: 1,
+            reportIssueDate: 1,
+            reportViewedAt: 1,
+            authorisationRequestedBy: 1,
+            noSamplesCollected: 1,
+            samplesReceivedDate: 1,
+            labSamplesStatus: 1,
+            analysisDueDate: 1,
+            turnaroundTime: 1,
+            items: {
+              $map: {
+                input: { $ifNull: ['$items', []] },
+                as: 'item',
+                in: {
+                  sampleReference: '$$item.sampleReference',
+                  asbestosContent: '$$item.asbestosContent',
+                  analysisData: {
+                    $cond: {
+                      if: { $ne: ['$$item.analysisData', null] },
+                      then: { isAnalysed: '$$item.analysisData.isAnalysed' },
+                      else: null,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      ];
+      const jobs = await AsbestosAssessment.aggregate(pipeline);
+      return res.json(jobs);
+    }
+
     const jobs = await AsbestosAssessment.find(filter)
       .sort({ createdAt: -1 })
       .populate({
