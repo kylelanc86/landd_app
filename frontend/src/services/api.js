@@ -25,8 +25,8 @@ const api = axios.create({
     // HTTP keep-alive is handled automatically by the browser
   },
   withCredentials: true,
-  // Increase timeout for slow networks, but don't wait forever
-  timeout: 30000  // 30 seconds
+  // Increase timeout for slow networks and long-running PDF generation (e.g. DocRaptor)
+  timeout: 65000  // 65 seconds
 });
 
 // Add request interceptor
