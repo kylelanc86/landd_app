@@ -231,6 +231,7 @@ export const projectService = {
     // Add status parameter for backend filtering
     if (params.status) queryParams.append('status', params.status);
     if (params.department) queryParams.append('department', params.department);
+    if (params.userId) queryParams.append('userId', params.userId);
     if (params.projectType) queryParams.append('projectType', params.projectType);
     if (params.sortBy) queryParams.append('sortBy', params.sortBy);
     if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);

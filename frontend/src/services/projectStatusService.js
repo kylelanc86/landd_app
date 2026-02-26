@@ -239,6 +239,13 @@ const projectStatusService = {
     } catch (error) {
       console.warn('Failed to load status colors from localStorage:', error);
     }
+  },
+
+  // Replace in-memory colors from an object (e.g. from storage event in another tab). Does not write to localStorage.
+  setHardcodedColorsFromStorage(colorsObj) {
+    if (colorsObj && typeof colorsObj === 'object') {
+      hardcodedStatusColors = { ...colorsObj };
+    }
   }
 };
 

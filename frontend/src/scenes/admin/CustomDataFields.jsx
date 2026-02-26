@@ -51,7 +51,7 @@ function TabPanel({ children, value, index, ...other }) {
 const CustomDataFields = () => {
   const theme = useTheme();
   const navigate = useNavigate();
-  const { refreshStatuses, refreshStatusColorsOnly } = useProjectStatuses();
+  const { refreshStatuses } = useProjectStatuses();
   const [tabValue, setTabValue] = useState(0);
   const [itemDescriptionsTabValue, setItemDescriptionsTabValue] = useState(0); // For nested tabs within Item Descriptions
   const [asbestosRemovalists, setAsbestosRemovalists] = useState([]);
@@ -559,7 +559,7 @@ const CustomDataFields = () => {
           );
           setter(updatedData);
 
-          // For project statuses, update hardcoded colors then refresh context colors only (no refetch)
+          // For project statuses: sync to localStorage for same-user cross-tab, then refetch so this tab and all users get DB colours
           if (title === "Projects Status") {
             if (updateData.statusColor !== undefined) {
               projectStatusService.updateHardcodedColors({
@@ -567,7 +567,7 @@ const CustomDataFields = () => {
               });
             }
             await projectStatusService.syncHardcodedColorsWithDatabase();
-            refreshStatusColorsOnly();
+            refreshStatuses();
           }
 
           // Refresh the data from backend

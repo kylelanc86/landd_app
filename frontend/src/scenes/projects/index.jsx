@@ -197,6 +197,21 @@ const Projects = ({ initialFilters = {} }) => {
     return [...new Set(projects.map((p) => p.status))];
   }, [projects]);
 
+  // Count how many (currently loaded) projects each user is assigned to (for filter dropdown)
+  const userProjectCounts = useMemo(() => {
+    const counts = {};
+    if (!projects || !Array.isArray(projects)) return counts;
+    for (const project of projects) {
+      const userList = project.users;
+      if (!userList || !Array.isArray(userList)) continue;
+      for (const u of userList) {
+        const id = typeof u === "string" ? u : (u?._id?.toString?.() ?? u?._id);
+        if (id) counts[id] = (counts[id] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [projects]);
+
   // Debug logging for projects to see what status values exist
   useEffect(() => {
     if (projects && projects.length > 0) {
@@ -320,6 +335,7 @@ const Projects = ({ initialFilters = {} }) => {
       searchTerm: "",
       departmentFilter: "all",
       statusFilter: "all_active", // Default to active projects
+      userFilter: "all",
       sortModel: [{ field: "projectID", sort: "desc" }],
     };
 
@@ -332,6 +348,7 @@ const Projects = ({ initialFilters = {} }) => {
       searchTerm: initialFilters.search || "",
       departmentFilter: initialFilters.department || "all",
       statusFilter: initialFilters.status || "all",
+      userFilter: initialFilters.user || urlParams.get("user") || "all",
     };
 
     if (savedFilters) {
@@ -357,6 +374,11 @@ const Projects = ({ initialFilters = {} }) => {
             initialFilters.status ||
             parsedFilters.statusFilter ||
             "all_active",
+          userFilter:
+            urlParams.get("user") ||
+            initialFilters.user ||
+            parsedFilters.userFilter ||
+            "all",
         };
       } catch (error) {
         return {
@@ -380,6 +402,7 @@ const Projects = ({ initialFilters = {} }) => {
       filters.searchTerm,
       filters.departmentFilter,
       filters.statusFilter,
+      filters.userFilter,
       filters.sortModel,
     ]
   );
@@ -430,6 +453,11 @@ const Projects = ({ initialFilters = {} }) => {
       urlParams.set("status", newFilters.statusFilter);
     } else {
       urlParams.delete("status");
+    }
+    if (newFilters.userFilter && newFilters.userFilter !== "all") {
+      urlParams.set("user", newFilters.userFilter);
+    } else {
+      urlParams.delete("user");
     }
 
     // Update URL without reloading the page
@@ -494,6 +522,11 @@ const Projects = ({ initialFilters = {} }) => {
         // Add department filter
         if (filtersToUse.departmentFilter !== "all") {
           params.department = filtersToUse.departmentFilter;
+        }
+
+        // Add user filter (projects assigned to this user)
+        if (filtersToUse.userFilter && filtersToUse.userFilter !== "all") {
+          params.userId = filtersToUse.userFilter;
         }
 
         // Load projects based on status filter
@@ -607,6 +640,13 @@ const Projects = ({ initialFilters = {} }) => {
               break;
             case "status":
               updatedFilters.statusFilter = value;
+              // User filter only applies to Active projects; clear for this fetch when switching away
+              if (value !== "all_active") {
+                updatedFilters.userFilter = "all";
+              }
+              break;
+            case "userFilter":
+              updatedFilters.userFilter = value;
               break;
             default:
               break;
@@ -627,6 +667,11 @@ const Projects = ({ initialFilters = {} }) => {
           // Add department filter
           if (updatedFilters.departmentFilter !== "all") {
             params.department = updatedFilters.departmentFilter;
+          }
+
+          // Add user filter (projects assigned to this user)
+          if (updatedFilters.userFilter && updatedFilters.userFilter !== "all") {
+            params.userId = updatedFilters.userFilter;
           }
 
           // Load projects based on status filter
@@ -697,6 +742,13 @@ const Projects = ({ initialFilters = {} }) => {
           break;
         case "status":
           updateFilter("statusFilter", value);
+          // User filter only applies to Active projects; clear it when switching away
+          if (value !== "all_active") {
+            updateFilter("userFilter", "all");
+          }
+          break;
+        case "userFilter":
+          updateFilter("userFilter", value);
           break;
         default:
           break;
@@ -1296,6 +1348,11 @@ const Projects = ({ initialFilters = {} }) => {
         // Add department filter
         if (departmentValue !== "all") {
           params.department = departmentValue;
+        }
+
+        // Add user filter (projects assigned to this user)
+        if (tempFilters.userFilter && tempFilters.userFilter !== "all") {
+          params.userId = tempFilters.userFilter;
         }
 
         // Load projects based on status filter
@@ -2351,74 +2408,105 @@ const Projects = ({ initialFilters = {} }) => {
           </List>
         </Box>
       </Popover>
-      {/* Department Filter Buttons - hidden on mobile/narrow for cleaner layout */}
+      {/* Department Filter Buttons - hidden on mobile/narrow for cleaner layout; users filter on right (desktop only) */}
       <Box
         display={isMobileOrNarrow ? "none" : "flex"}
-        justifyContent="flex-start"
+        justifyContent="space-between"
         alignItems="center"
         gap={1}
         mb={2}
       >
-        <Button
-          variant={selectedDepartment === "All" ? "contained" : "outlined"}
-          onClick={() => handleDepartmentClick("All")}
-          sx={{
-            backgroundColor:
-              selectedDepartment === "All" ? "#1976d2" : "transparent",
-            color: selectedDepartment === "All" ? "#fff" : "#1976d2",
-            borderColor: "#1976d2",
-            "&:hover": {
-              backgroundColor: "#1976d2",
-              color: "#fff",
-            },
-          }}
-        >
-          All Departments
-        </Button>
-        {DEPARTMENTS.map((department) => (
+        <Box display="flex" alignItems="center" gap={1}>
           <Button
-            key={department}
-            variant={
-              selectedDepartment === department ? "contained" : "outlined"
-            }
-            onClick={() => handleDepartmentClick(department)}
+            variant={selectedDepartment === "All" ? "contained" : "outlined"}
+            onClick={() => handleDepartmentClick("All")}
             sx={{
               backgroundColor:
-                selectedDepartment === department
-                  ? department === "Asbestos & HAZMAT"
+                selectedDepartment === "All" ? "#1976d2" : "transparent",
+              color: selectedDepartment === "All" ? "#fff" : "#1976d2",
+              borderColor: "#1976d2",
+              "&:hover": {
+                backgroundColor: "#1976d2",
+                color: "#fff",
+              },
+            }}
+          >
+            All Departments
+          </Button>
+          {DEPARTMENTS.map((department) => (
+            <Button
+              key={department}
+              variant={
+                selectedDepartment === department ? "contained" : "outlined"
+              }
+              onClick={() => handleDepartmentClick(department)}
+              sx={{
+                backgroundColor:
+                  selectedDepartment === department
+                    ? department === "Asbestos & HAZMAT"
+                      ? "#2e7d32"
+                      : department === "Occupational Hygiene"
+                      ? "#ed6c02"
+                      : "#9c27b0"
+                    : "transparent",
+                color:
+                  selectedDepartment === department
+                    ? "#fff"
+                    : department === "Asbestos & HAZMAT"
                     ? "#2e7d32"
                     : department === "Occupational Hygiene"
                     ? "#ed6c02"
-                    : "#9c27b0"
-                  : "transparent",
-              color:
-                selectedDepartment === department
-                  ? "#fff"
-                  : department === "Asbestos & HAZMAT"
-                  ? "#2e7d32"
-                  : department === "Occupational Hygiene"
-                  ? "#ed6c02"
-                  : "#9c27b0",
-              borderColor:
-                department === "Asbestos & HAZMAT"
-                  ? "#2e7d32"
-                  : department === "Occupational Hygiene"
-                  ? "#ed6c02"
-                  : "#9c27b0",
-              "&:hover": {
-                backgroundColor:
+                    : "#9c27b0",
+                borderColor:
                   department === "Asbestos & HAZMAT"
                     ? "#2e7d32"
                     : department === "Occupational Hygiene"
                     ? "#ed6c02"
                     : "#9c27b0",
-                color: "#fff",
-              },
-            }}
-          >
-            {department}
-          </Button>
-        ))}
+                "&:hover": {
+                  backgroundColor:
+                    department === "Asbestos & HAZMAT"
+                      ? "#2e7d32"
+                      : department === "Occupational Hygiene"
+                      ? "#ed6c02"
+                      : "#9c27b0",
+                  color: "#fff",
+                },
+              }}
+            >
+              {department}
+            </Button>
+          ))}
+        </Box>
+        {/* User filter: only when status is Active projects (all_active) */}
+        {filters.statusFilter === "all_active" && (
+          <FormControl size="small" sx={{ minWidth: 180 }}>
+            <InputLabel id="projects-user-filter-label">User</InputLabel>
+            <Select
+              labelId="projects-user-filter-label"
+              id="projects-user-filter"
+              value={filters.userFilter || "all"}
+              label="User"
+              disabled={loadingUsers}
+              onChange={(e) =>
+                handleFilterChange("userFilter", e.target.value)
+              }
+            >
+              <MenuItem value="all">All users</MenuItem>
+              {users.map((u) => {
+                const uid = typeof u._id === "string" ? u._id : (u._id?.toString?.() ?? String(u._id));
+                const isSelected = filters.userFilter === uid;
+                const count = userProjectCounts[uid] ?? 0;
+                return (
+                  <MenuItem key={u._id} value={uid}>
+                    {u.firstName} {u.lastName}
+                    {isSelected ? ` (${count} project${count !== 1 ? "s" : ""})` : ""}
+                  </MenuItem>
+                );
+              })}
+            </Select>
+          </FormControl>
+        )}
       </Box>
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
