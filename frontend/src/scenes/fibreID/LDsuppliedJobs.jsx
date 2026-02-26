@@ -29,6 +29,7 @@ import {
   Mail as MailIcon,
   Add as AddIcon,
   Delete as DeleteIcon,
+  CheckCircle as CheckCircleIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import { asbestosAssessmentService, clientSuppliedJobsService, projectService } from "../../services/api";
@@ -82,6 +83,7 @@ const LDsuppliedJobs = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [jobToDelete, setJobToDelete] = useState(null);
   const [reportViewedJobIds, setReportViewedJobIds] = useState(new Set());
+  const [closingJobIds, setClosingJobIds] = useState({});
 
   useEffect(() => {
     fetchAsbestosAssessments();
@@ -738,6 +740,21 @@ const LDsuppliedJobs = () => {
     setJobToDelete(null);
   };
 
+  const handleCloseJob = async (job) => {
+    if (!job?._id) return;
+    try {
+      setClosingJobIds((prev) => ({ ...prev, [job._id]: true }));
+      await clientSuppliedJobsService.update(job._id, { status: "Completed" });
+      await fetchStandaloneLDJobs();
+      showSnackbar("Job closed successfully.", "success");
+    } catch (error) {
+      console.error("Error closing job:", error);
+      showSnackbar(error.response?.data?.message || "Failed to close job.", "error");
+    } finally {
+      setClosingJobIds((prev) => ({ ...prev, [job._id]: false }));
+    }
+  };
+
   const getAnalysisDueTime = (assessment) => {
     let dueDate;
 
@@ -1331,32 +1348,48 @@ const LDsuppliedJobs = () => {
                                   </Button>
                                 )}
                                 {visibility.showSend && (
-                                  <Button
-                                    variant="outlined"
-                                    size="small"
-                                    color={conditions.alreadySentForAuthorisation ? "inherit" : "primary"}
-                                    startIcon={<MailIcon />}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleSendForAuthorisationForJob(job);
-                                    }}
-                                    disabled={sendingAuthorisationRequests[job._id]}
-                                    sx={
-                                      conditions.alreadySentForAuthorisation
-                                        ? { color: "text.secondary", borderColor: "action.disabled" }
-                                        : undefined
-                                    }
-                                  >
-                                    {sendingAuthorisationRequests[job._id]
-                                      ? "Sending..."
-                                      : conditions.alreadySentForAuthorisation
-                                        ? "Re-send for Authorisation"
-                                        : "Send for Authorisation"}
-                                  </Button>
-                                )}
-                              </>
-                            );
-                          })()}
+                                    <Button
+                                      variant="outlined"
+                                      size="small"
+                                      color={conditions.alreadySentForAuthorisation ? "inherit" : "primary"}
+                                      startIcon={<MailIcon />}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleSendForAuthorisationForJob(job);
+                                      }}
+                                      disabled={sendingAuthorisationRequests[job._id]}
+                                      sx={
+                                        conditions.alreadySentForAuthorisation
+                                          ? { color: "text.secondary", borderColor: "action.disabled" }
+                                          : undefined
+                                      }
+                                    >
+                                      {sendingAuthorisationRequests[job._id]
+                                        ? "Sending..."
+                                        : conditions.alreadySentForAuthorisation
+                                          ? "Re-send for Authorisation"
+                                          : "Send for Authorisation"}
+                                    </Button>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          {job.reportApprovedBy && job.status !== "Completed" && (
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              color="primary"
+                              startIcon={<CheckCircleIcon />}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCloseJob(job);
+                              }}
+                              disabled={closingJobIds[job._id]}
+                              sx={{ textTransform: "none" }}
+                            >
+                              {closingJobIds[job._id] ? "Closing..." : "Close Job"}
+                            </Button>
+                          )}
                           {hasPermission(currentUser, "clientSup.delete") && (
                             <IconButton
                               onClick={(e) => {
