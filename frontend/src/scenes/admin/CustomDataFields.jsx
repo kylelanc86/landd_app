@@ -51,7 +51,7 @@ function TabPanel({ children, value, index, ...other }) {
 const CustomDataFields = () => {
   const theme = useTheme();
   const navigate = useNavigate();
-  const { refreshStatuses } = useProjectStatuses();
+  const { refreshStatuses, refreshStatusColorsOnly } = useProjectStatuses();
   const [tabValue, setTabValue] = useState(0);
   const [itemDescriptionsTabValue, setItemDescriptionsTabValue] = useState(0); // For nested tabs within Item Descriptions
   const [asbestosRemovalists, setAsbestosRemovalists] = useState([]);
@@ -336,11 +336,10 @@ const CustomDataFields = () => {
           fields: updatedFields,
         });
 
-        // For project statuses, refresh the project statuses context
+        // For project statuses, sync hardcoded colors (removes deleted status) then refresh list
         if (title === "Projects Status") {
-          refreshStatuses();
-          // Sync hardcoded colors with database after deletion
           await projectStatusService.syncHardcodedColorsWithDatabase();
+          refreshStatuses();
         }
 
         // Refresh the data from backend
@@ -560,20 +559,15 @@ const CustomDataFields = () => {
           );
           setter(updatedData);
 
-          // For project statuses, refresh the project statuses context
+          // For project statuses, update hardcoded colors then refresh context colors only (no refetch)
           if (title === "Projects Status") {
-            refreshStatuses();
-
-            // Update hardcoded colors when status color is changed
-            if (updateData.statusColor) {
-              const colorUpdate = {
+            if (updateData.statusColor !== undefined) {
+              projectStatusService.updateHardcodedColors({
                 [updatedItem.text]: updateData.statusColor,
-              };
-              projectStatusService.updateHardcodedColors(colorUpdate);
+              });
             }
-
-            // Sync hardcoded colors with database to ensure consistency
             await projectStatusService.syncHardcodedColorsWithDatabase();
+            refreshStatusColorsOnly();
           }
 
           // Refresh the data from backend
@@ -768,18 +762,15 @@ const CustomDataFields = () => {
             const updatedData = [...data, newItem];
             setter(updatedData);
 
-            // For project statuses, refresh the project statuses context
+            // For project statuses, update hardcoded colors first then refresh list (so new status appears)
             if (title === "Projects Status") {
-              refreshStatuses();
-
-              // Update hardcoded colors when new status color is added
               if (newItemData.statusColor) {
-                const colorUpdate = { [newItem.text]: newItemData.statusColor };
-                projectStatusService.updateHardcodedColors(colorUpdate);
+                projectStatusService.updateHardcodedColors({
+                  [newItem.text]: newItemData.statusColor,
+                });
               }
-
-              // Sync hardcoded colors with database to ensure consistency
               await projectStatusService.syncHardcodedColorsWithDatabase();
+              refreshStatuses();
             }
 
             // Refresh the data from backend

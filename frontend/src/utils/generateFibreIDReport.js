@@ -1,10 +1,10 @@
 import pdfMake from "pdfmake/build/pdfmake";
+import { formatDateInSydney } from '../utils/dateUtils';
 
-// Helper to format date as DD/MM/YYYY
+// Helper to format date as DD/MM/YYYY in Sydney timezone (for report issue date, sample date)
 function formatDate(dateStr) {
   if (!dateStr) return '';
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('en-GB');
+  return formatDateInSydney(dateStr);
 }
 
 // Helper to load image as base64

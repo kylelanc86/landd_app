@@ -35,6 +35,19 @@ const AssessmentItemSchema = new mongoose.Schema({
       type: String,
       required: false,
     },
+    // Arrow overlays: multiple arrows per photo (legacy single arrow migrated on first use)
+    arrow: {
+      x: { type: Number, required: false },
+      y: { type: Number, required: false },
+      rotation: { type: Number, default: 0 },
+      color: { type: String, required: false },
+    },
+    arrows: [{
+      x: { type: Number, required: true },
+      y: { type: Number, required: true },
+      rotation: { type: Number, default: -45 },
+      color: { type: String, default: '#f44336' },
+    }],
   }],
   recommendationActions: { type: String },
   readyForAnalysis: { type: Boolean, default: false },

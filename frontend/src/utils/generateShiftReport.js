@@ -1,12 +1,11 @@
 import pdfMake from "pdfmake/build/pdfmake";
 import api from '../services/api';
+import { formatDateInSydney } from '../utils/dateUtils';
 
-// Helper functions (formatDate, formatTime, getSampleNumber, loadImageAsBase64, formatReportedConcentration) remain unchanged
-// Helper to format date as DD/MM/YYYY
+// Helper to format date as DD/MM/YYYY in Sydney timezone (for report authorisation, samples received, issue dates)
 function formatDate(dateStr) {
   if (!dateStr) return '';
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('en-GB');
+  return formatDateInSydney(dateStr);
 }
 
 // Helper to format date as YYYYMMDD for filenames
@@ -486,7 +485,7 @@ pdfMake.fonts = {
                         width: '50%'
                       },
                       {
-                        text: [ { text: 'Report Issue Date: ', bold: true }, { text: formatDate(new Date()) } ], // Always use PDF generation date
+                        text: [ { text: 'Report Issue Date: ', bold: true }, { text: formatDate(new Date()) } ], // PDF generation date (Sydney)
                         style: 'tableContent',
                         margin: [0, 0, 0, 2],
                         width: '50%'

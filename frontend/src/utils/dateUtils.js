@@ -61,4 +61,19 @@ export const getTodayInSydney = () => {
   const now = new Date();
   const sydneyDate = utcToZonedTime(now, SYDNEY_TZ);
   return format(sydneyDate, 'yyyy-MM-dd');
+};
+
+const SYDNEY_TZ = 'Australia/Sydney';
+
+/**
+ * Format a date in Sydney timezone as DD/MM/YYYY (en-GB style).
+ * Use for report authorisation dates, samples received dates, and issue dates in PDFs.
+ */
+export const formatDateInSydney = (date) => {
+  if (!date) return '';
+  const parsed = typeof date === 'string' ? parseISO(date) : date;
+  const d = parsed instanceof Date ? parsed : new Date(parsed);
+  if (Number.isNaN(d.getTime())) return '';
+  const sydney = utcToZonedTime(d, SYDNEY_TZ);
+  return format(sydney, 'dd/MM/yyyy');
 }; 

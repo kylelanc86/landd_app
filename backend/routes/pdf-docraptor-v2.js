@@ -8,22 +8,13 @@ const { PDFDocument } = require('pdf-lib');
 const auth = require('../middleware/auth');
 const AsbestosAssessment = require('../models/assessmentTemplates/asbestos/AsbestosAssessment');
 const CustomDataFieldGroup = require('../models/CustomDataFieldGroup');
+const { formatDateSydney, formatClearanceDateSydney, todaySydney } = require('../utils/dateUtils');
 
 // Initialize DocRaptor service
 const docRaptorService = new DocRaptorService();
 
-// Custom date formatting function for CLEARANCE_DATE placeholder only
-const formatClearanceDate = (dateString) => {
-  if (!dateString) return 'Unknown';
-  const date = new Date(dateString);
-  const day = date.getDate();
-  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'];
-  const month = monthNames[date.getMonth()];
-  const year = date.getFullYear();
-  // Use non-breaking space between day and month to keep them on the same line
-  return `${day}\u00A0${month} ${year}`;
-};
+// Custom date formatting for CLEARANCE_DATE placeholder (Sydney timezone)
+const formatClearanceDate = (dateString) => formatClearanceDateSydney(dateString);
 
 // Format inspection time to ensure proper AM/PM display
 const formatInspectionTime = (timeString) => {
@@ -336,8 +327,8 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       .replace(/\[CLIENT_NAME\]/g, clearanceData.projectId?.client?.name || clearanceData.clientName || 'Unknown Client')
 
 
-    // Get PDF generation date (current date) - used for Issue Date in document details and Original Issue in revision history
-    const pdfGenerationDate = new Date().toLocaleDateString('en-GB');
+    // Get PDF generation date (current date in Sydney) - used for Issue Date in document details and Original Issue in revision history
+    const pdfGenerationDate = todaySydney();
     
     // Generate revision history rows
     const generateRevisionHistory = (reportAuthoriserText) => {
@@ -369,7 +360,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
         // Use actual revision reasons if available
         if (clearanceData.revisionReasons && clearanceData.revisionReasons.length > 0) {
           clearanceData.revisionReasons.forEach((revisionData) => {
-            const revisionDate = revisionData.revisedAt ? new Date(revisionData.revisedAt).toLocaleDateString('en-GB') : pdfGenerationDate;
+            const revisionDate = revisionData.revisedAt ? formatDateSydney(revisionData.revisedAt) : pdfGenerationDate;
             // Approved By should be the same as report authoriser
             const revisedByApprovedBy = approvedBy;
             
@@ -733,7 +724,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       .replace(/\[LAA_NAME\]/g, clearanceData.LAA || 'Unknown LAA')
       .replace(/\[LAA_LICENSE\]/g, 'AA00031')
       .replace(/\[INSPECTION_TIME\]/g, formatInspectionTime(clearanceData.inspectionTime))
-      .replace(/\[INSPECTION_DATE\]/g, clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown')
+      .replace(/\[INSPECTION_DATE\]/g, clearanceData.clearanceDate ? formatDateSydney(clearanceData.clearanceDate) : 'Unknown')
       .replace(/\[SIGNATURE_IMAGE\]/g, '') // Will be handled by replacePlaceholders in template content
       .replace(/\[CLEARANCE_ITEMS_HEADERS\]/g, generateClearanceItemsHeaders())
       .replace(/\[CLEARANCE_ITEMS_TABLE\]/g, generateClearanceItemsTable())
@@ -1559,7 +1550,7 @@ router.post('/generate-asbestos-clearance-v2', async (req, res) => {
       siteName = clearanceData.vehicleEquipmentDescription;
     }
     
-    const clearanceDate = clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown';
+    const clearanceDate = clearanceData.clearanceDate ? formatDateSydney(clearanceData.clearanceDate) : 'Unknown';
     
     // Use different report type name in filename based on clearance type
     let reportTypeName = 'Asbestos Clearance Report';
@@ -2478,10 +2469,11 @@ const generateAssessmentHTML = async (assessmentData) => {
     const assessmentFooterText = isResidential ? `Residential Asbestos Assessment Report: ${assessmentSiteAddress}` : `Asbestos Assessment Report: ${assessmentSiteAddress}`;
     const reportAuthorName = assessmentData.LAA || (assessmentData.assessorId?.firstName && assessmentData.assessorId?.lastName
       ? `${assessmentData.assessorId.firstName} ${assessmentData.assessorId.lastName}` : null) || 'Unknown Assessor';
-    const reportApprovedBy = assessmentData.reportApprovedBy || assessmentData.reportAuthorisedBy || 'Awaiting authorisation';
+    // Revision history: assessment report authorisation only (not Fibre ID approval)
+    const reportApprovedBy = assessmentData.reportAuthorisedBy || 'Awaiting authorisation';
     const reportIssueDate = assessmentData.reportAuthorisedAt
-      ? new Date(assessmentData.reportAuthorisedAt).toLocaleDateString('en-GB')
-      : (assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown');
+      ? formatDateSydney(assessmentData.reportAuthorisedAt)
+      : 'Awaiting authorisation';
 
     const assessmentIntrusivenessLabel = assessmentData.intrusiveness === 'intrusive' || 'non-intrusive';
     // Populate cover template with data (REPORT_TITLE, SITE_ADDRESS, SECONDARY_HEADER, CLIENT_NAME, JOB_REFERENCE, ASSESSMENT_DATE, INTRUSIVENESS, no watermark/footer)
@@ -2492,20 +2484,20 @@ const generateAssessmentHTML = async (assessmentData) => {
       .replace(/\[INTRUSIVENESS\]/g, assessmentIntrusivenessLabel)
       .replace(/\[CLIENT_NAME\]/g, assessmentClientName)
       .replace(/\[JOB_REFERENCE\]/g, assessmentData.projectId?.projectID || 'Unknown')
-      .replace(/\[ASSESSMENT_DATE\]/g, assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown')
+      .replace(/\[ASSESSMENT_DATE\]/g, assessmentData.assessmentDate ? formatDateSydney(assessmentData.assessmentDate) : 'Unknown')
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
       .replace(/\[BACKGROUND_IMAGE\]/g, `data:image/jpeg;base64,${backgroundBase64}`);
 
     // Populate version control template with data (like clearance: REPORT_TITLE, FOOTER_TEXT, document-details-table, WATERMARK_PATH)
     const versionControlReportTitle = isResidential ? 'RESIDENTIAL ASBESTOS ASSESSMENT REPORT' : 'ASBESTOS ASSESSMENT REPORT';
     const versionControlFilename = isResidential
-      ? `${assessmentData.projectId?.projectID || 'Unknown'}_Residential_Asbestos_Assessment_Report - ${assessmentData.projectId?.name || 'Unknown'} (${assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown'}).pdf`
-      : `${assessmentData.projectId?.projectID || 'Unknown'}_Asbestos_Assessment_Report - ${assessmentData.projectId?.name || 'Unknown'} (${assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown'}).pdf`;
+      ? `${assessmentData.projectId?.projectID || 'Unknown'}_Residential_Asbestos_Assessment_Report - ${assessmentData.projectId?.name || 'Unknown'} (${assessmentData.assessmentDate ? formatDateSydney(assessmentData.assessmentDate) : 'Unknown'}).pdf`
+      : `${assessmentData.projectId?.projectID || 'Unknown'}_Asbestos_Assessment_Report - ${assessmentData.projectId?.name || 'Unknown'} (${assessmentData.assessmentDate ? formatDateSydney(assessmentData.assessmentDate) : 'Unknown'}).pdf`;
     const populatedVersionControl = versionControlTemplateWithUrl
       .replace(/\[REPORT_TITLE\]/g, versionControlReportTitle)
       .replace(/\[SITE_ADDRESS\]/g, assessmentSiteAddress)
       .replace(/\[CLIENT_NAME\]/g, assessmentData.projectId?.client?.name || assessmentData.clientName || 'Unknown Client')
-      .replace(/\[ASSESSMENT_DATE\]/g, assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown')
+      .replace(/\[ASSESSMENT_DATE\]/g, assessmentData.assessmentDate ? formatDateSydney(assessmentData.assessmentDate) : 'Unknown')
       .replace(/\[ASSESSOR_NAME\]/g, reportAuthorName)
       .replace(/\[FILENAME\]/g, versionControlFilename)
       .replace(/\[REPORT_APPROVED_BY\]/g, reportApprovedBy)
@@ -2661,29 +2653,61 @@ const generateAssessmentHTML = async (assessmentData) => {
       const count = items.slice(0, idx + 1).filter((i) => !hasNoAsbestosContent(i)).length;
       return String(count);
     };
-    // Multiple images per item: include all photos marked includeInReport; fallback to legacy single photograph; one table per photo with identical item info
-    const getIncludedPhotoSources = (item) => {
-      const fromArray = (item.photographs || []).filter(p => p.includeInReport !== false).map(p => (p.data || '').trim()).filter(Boolean);
-      if (fromArray.length > 0) return fromArray;
-      const legacy = (item.photograph || '').trim();
-      if (legacy) return [legacy];
-      return [null];
+    // Arrow overlay for PDF: tip offset (viewBox 24x24, tip at 12,2, center 12,12)
+    const DEFAULT_ARROW_ROTATION_PDF = -45;
+    const getArrowTipOffsetPdf = (rotationDeg) => {
+      const r = ((rotationDeg ?? DEFAULT_ARROW_ROTATION_PDF) * Math.PI) / 180;
+      const tipX = (12 + 10 * Math.sin(r)) / 24;
+      const tipY = (12 - 10 * Math.cos(r)) / 24;
+      return { x: tipX, y: tipY };
     };
-    const getSamplePhotoCellHtmlFromSrc = (photoSrc) => {
-      let src = photoSrc || '';
+    const getPhotoArrowsForPdf = (photo) => {
+      if (!photo) return [];
+      if (photo.arrows && photo.arrows.length > 0) return photo.arrows;
+      const leg = photo.arrow;
+      if (leg && typeof leg === 'object' && (leg.x != null || leg.y != null)) return [leg];
+      return [];
+    };
+    const buildArrowOverlaysHtml = (arrows) => {
+      if (!arrows || arrows.length === 0) return '';
+      const defaultColor = '#f44336';
+      return arrows.map((arr) => {
+        const rot = arr.rotation ?? DEFAULT_ARROW_ROTATION_PDF;
+        const tipOff = getArrowTipOffsetPdf(rot);
+        const color = (arr.color || defaultColor).replace(/"/g, '&quot;');
+        const leftPct = ((arr.x ?? 0.5) * 100).toFixed(2);
+        const topPct = ((arr.y ?? 0.5) * 100).toFixed(2);
+        const tx = (-tipOff.x * 100).toFixed(2);
+        const ty = (-tipOff.y * 100).toFixed(2);
+        return `<div class="pdf-arrow-overlay" style="left:${leftPct}%;top:${topPct}%;transform:translate(${tx}%,${ty}%);"><div class="pdf-arrow-rotated" style="transform:rotate(${rot}deg);"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="22" x2="12" y2="10" stroke="rgba(0,0,0,0.5)" stroke-width="2.5" stroke-linecap="round"/><line x1="12" y1="22" x2="12" y2="10" stroke="${color}" stroke-width="2" stroke-linecap="round"/><path d="M12 2 L8 10 L16 10 Z" fill="rgba(0,0,0,0.4)" stroke="rgba(0,0,0,0.6)" stroke-width="1" stroke-linejoin="round"/><path d="M12 2 L8 10 L16 10 Z" fill="${color}" stroke="${color}" stroke-width="0.5" stroke-linejoin="round"/></svg></div></div>`;
+      }).join('');
+    };
+    // Multiple images per item: include all photos marked includeInReport with arrows; fallback to legacy single photograph
+    const getIncludedPhotos = (item) => {
+      const fromArray = (item.photographs || []).filter(p => p.includeInReport !== false && (p.data || '').trim());
+      if (fromArray.length > 0) {
+        return fromArray.map(p => ({ src: (p.data || '').trim(), arrows: getPhotoArrowsForPdf(p) }));
+      }
+      const legacy = (item.photograph || '').trim();
+      if (legacy) return [{ src: legacy, arrows: getPhotoArrowsForPdf({ arrow: item.arrow }) }];
+      return [{ src: null, arrows: [] }];
+    };
+    const getSamplePhotoCellHtml = (photoData) => {
+      let src = photoData.src || '';
       if (src && !src.startsWith('data:') && !src.startsWith('http://') && !src.startsWith('https://') && src.startsWith('/')) {
         src = frontendUrl + src;
       }
       if (src) {
         const safe = String(src).replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        return `<div class="sample-photo-cell-inner"><img class="sample-photo" src="${safe}" alt="" /></div>`;
+        const arrowsHtml = buildArrowOverlaysHtml(photoData.arrows);
+        return `<div class="sample-photo-cell-inner sample-photo-cell-inner-with-arrows"><img class="sample-photo" src="${safe}" alt="" />${arrowsHtml}</div>`;
       }
       return '<div class="sample-photo-cell-inner"><div class="sample-no-photo">No photograph available</div></div>';
     };
     const buildTableBlock = (block) => {
-      const { item, itemIndex, photoSrc } = block;
+      const { item, itemIndex, photoData } = block;
       return asbestosSampleItemTemplateWithUrl
-        .replace(/\[PHOTO_CELL\]/g, getSamplePhotoCellHtmlFromSrc(photoSrc))
+        .replace(/\[PHOTO_CELL\]/g, getSamplePhotoCellHtml(photoData))
         .replace(/\[ITEM_NUMBER\]/g, getItemNumber(assessmentItems, itemIndex))
         .replace(/\[SAMPLE_REFERENCE\]/g, getSampleRefDisplay(item, `Sample ${itemIndex + 1}`))
         .replace(/\[LOCATION_DESCRIPTION\]/g, getLocationContent(item))
@@ -2696,8 +2720,8 @@ const generateAssessmentHTML = async (assessmentData) => {
     };
     const tableBlocks = [];
     assessmentItems.forEach((item, itemIndex) => {
-      const sources = getIncludedPhotoSources(item);
-      sources.forEach(photoSrc => tableBlocks.push({ item, itemIndex, photoSrc }));
+      const photos = getIncludedPhotos(item);
+      photos.forEach(photoData => tableBlocks.push({ item, itemIndex, photoData }));
     });
     const firstSampleTable = tableBlocks.length > 0 ? buildTableBlock(tableBlocks[0]) : '';
 
@@ -3176,6 +3200,9 @@ const generateAssessmentHTML = async (assessmentData) => {
       .assessment-page .sample-table th { background: #f5f5f5; font-weight: 700; text-align: left; }
       .assessment-page .sample-photo-cell { width: 71% !important; height: 340px !important; overflow: hidden !important; box-sizing: border-box !important; text-align: center; vertical-align: middle; background: #fff; padding: 0 !important; margin: 0 !important; }
       .assessment-page .sample-photo-cell-inner { display: block; width: 100%; height: 340px; overflow: hidden; box-sizing: border-box; padding: 0; margin: 0; }
+      .assessment-page .sample-photo-cell-inner-with-arrows { position: relative; }
+      .assessment-page .pdf-arrow-overlay { position: absolute; width: 36px; height: 36px; pointer-events: none; z-index: 2; }
+      .assessment-page .pdf-arrow-rotated { width: 36px; height: 36px; }
       .assessment-page .sample-photo-cell-inner .sample-photo { display: block !important; width: 100% !important; height: 100% !important; object-fit: contain !important; object-position: center !important; padding: 0 !important; }
       .assessment-page .sample-photo { display: block; width: 100%; height: 100%; object-fit: contain; object-position: center; padding: 0; }
       .assessment-page .sample-label { font-weight: 700; width: 12.5%; background: #f5f5f5; }
@@ -3305,15 +3332,16 @@ const generateAssessmentCoverVersionHTMLV3 = async (assessmentData, isResidentia
   const assessmentFooterText = isResidential ? `Residential Asbestos Assessment Report: ${assessmentSiteAddress}` : `Asbestos Assessment Report: ${assessmentSiteAddress}`;
   const reportAuthorName = assessmentData.LAA || (assessmentData.assessorId?.firstName && assessmentData.assessorId?.lastName
     ? `${assessmentData.assessorId.firstName} ${assessmentData.assessorId.lastName}` : null) || 'Unknown Assessor';
-  const reportApprovedBy = assessmentData.reportApprovedBy || assessmentData.reportAuthorisedBy || 'Awaiting authorisation';
+  // Revision history: assessment report authorisation only (not Fibre ID approval)
+  const reportApprovedBy = assessmentData.reportAuthorisedBy || 'Awaiting authorisation';
   const reportIssueDate = assessmentData.reportAuthorisedAt
-    ? new Date(assessmentData.reportAuthorisedAt).toLocaleDateString('en-GB')
-    : (assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown');
+    ? formatDateSydney(assessmentData.reportAuthorisedAt)
+    : 'Awaiting authorisation';
 
   const versionControlReportTitle = isResidential ? 'RESIDENTIAL ASBESTOS ASSESSMENT REPORT' : (templateContent?.reportTitle || 'ASBESTOS ASSESSMENT REPORT');
   const versionControlFilename = isResidential
-    ? `${assessmentData.projectId?.projectID || 'Unknown'}_Residential_Asbestos_Assessment_Report - ${assessmentSiteAddress} (${assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown'}).pdf`
-    : `${assessmentData.projectId?.projectID || 'Unknown'}_Asbestos_Assessment_Report - ${assessmentSiteAddress} (${assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown'}).pdf`;
+    ? `${assessmentData.projectId?.projectID || 'Unknown'}_Residential_Asbestos_Assessment_Report - ${assessmentSiteAddress} (${assessmentData.assessmentDate ? formatDateSydney(assessmentData.assessmentDate) : 'Unknown'}).pdf`
+    : `${assessmentData.projectId?.projectID || 'Unknown'}_Asbestos_Assessment_Report - ${assessmentSiteAddress} (${assessmentData.assessmentDate ? formatDateSydney(assessmentData.assessmentDate) : 'Unknown'}).pdf`;
 
   const assessmentIntrusivenessLabelV3 = assessmentData.intrusiveness === 'intrusive' || 'non-intrusive';
   const populatedCover = coverTemplateWithUrl
@@ -3322,16 +3350,16 @@ const generateAssessmentCoverVersionHTMLV3 = async (assessmentData, isResidentia
     .replace(/\[SECONDARY_HEADER\]/g, assessmentData.secondaryHeader || '')
     .replace(/\[INTRUSIVENESS\]/g, assessmentIntrusivenessLabelV3)
     .replace(/\[CLIENT_NAME\]/g, assessmentClientName)
-    .replace(/\[JOB_REFERENCE\]/g, assessmentData.projectId?.projectID || 'Unknown')
-    .replace(/\[ASSESSMENT_DATE\]/g, assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown')
-    .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
+.replace(/\[JOB_REFERENCE\]/g, assessmentData.projectId?.projectID || 'Unknown')
+      .replace(/\[ASSESSMENT_DATE\]/g, assessmentData.assessmentDate ? formatDateSydney(assessmentData.assessmentDate) : 'Unknown')
+      .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
     .replace(/\[BACKGROUND_IMAGE\]/g, `data:image/jpeg;base64,${backgroundBase64}`);
 
   const populatedVersionControl = versionControlTemplateWithUrl
     .replace(/\[REPORT_TITLE\]/g, versionControlReportTitle)
     .replace(/\[SITE_ADDRESS\]/g, assessmentSiteAddress)
     .replace(/\[CLIENT_NAME\]/g, assessmentData.projectId?.client?.name || assessmentClientName)
-    .replace(/\[ASSESSMENT_DATE\]/g, assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown')
+    .replace(/\[ASSESSMENT_DATE\]/g, assessmentData.assessmentDate ? formatDateSydney(assessmentData.assessmentDate) : 'Unknown')
     .replace(/\[ASSESSOR_NAME\]/g, reportAuthorName)
     .replace(/\[FILENAME\]/g, versionControlFilename)
     .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
@@ -3500,22 +3528,54 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
     const count = items.slice(0, idx + 1).filter((i) => !hasNoAsbestosContentFlow(i)).length;
     return String(count);
   };
-  // Multiple images per item: one table per photo with identical item info
-  const getIncludedPhotoSourcesFlow = (item) => {
-    const fromArray = (item.photographs || []).filter(p => p.includeInReport !== false).map(p => (p.data || '').trim()).filter(Boolean);
-    if (fromArray.length > 0) return fromArray;
-    const legacy = (item.photograph || '').trim();
-    if (legacy) return [legacy];
-    return [null];
+  // Arrow overlay for PDF (flow): same helpers as non-flow
+  const DEFAULT_ARROW_ROTATION_PDF_FLOW = -45;
+  const getArrowTipOffsetPdfFlow = (rotationDeg) => {
+    const r = ((rotationDeg ?? DEFAULT_ARROW_ROTATION_PDF_FLOW) * Math.PI) / 180;
+    const tipX = (12 + 10 * Math.sin(r)) / 24;
+    const tipY = (12 - 10 * Math.cos(r)) / 24;
+    return { x: tipX, y: tipY };
   };
-  const getSamplePhotoCellHtmlFromSrcFlow = (photoSrc) => {
-    let src = photoSrc || '';
+  const getPhotoArrowsForPdfFlow = (photo) => {
+    if (!photo) return [];
+    if (photo.arrows && photo.arrows.length > 0) return photo.arrows;
+    const leg = photo.arrow;
+    if (leg && typeof leg === 'object' && (leg.x != null || leg.y != null)) return [leg];
+    return [];
+  };
+  const buildArrowOverlaysHtmlFlow = (arrows) => {
+    if (!arrows || arrows.length === 0) return '';
+    const defaultColor = '#f44336';
+    return arrows.map((arr) => {
+      const rot = arr.rotation ?? DEFAULT_ARROW_ROTATION_PDF_FLOW;
+      const tipOff = getArrowTipOffsetPdfFlow(rot);
+      const color = (arr.color || defaultColor).replace(/"/g, '&quot;');
+      const leftPct = ((arr.x ?? 0.5) * 100).toFixed(2);
+      const topPct = ((arr.y ?? 0.5) * 100).toFixed(2);
+      const tx = (-tipOff.x * 100).toFixed(2);
+      const ty = (-tipOff.y * 100).toFixed(2);
+      return `<div class="pdf-arrow-overlay" style="left:${leftPct}%;top:${topPct}%;transform:translate(${tx}%,${ty}%);"><div class="pdf-arrow-rotated" style="transform:rotate(${rot}deg);"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="22" x2="12" y2="10" stroke="rgba(0,0,0,0.5)" stroke-width="2.5" stroke-linecap="round"/><line x1="12" y1="22" x2="12" y2="10" stroke="${color}" stroke-width="2" stroke-linecap="round"/><path d="M12 2 L8 10 L16 10 Z" fill="rgba(0,0,0,0.4)" stroke="rgba(0,0,0,0.6)" stroke-width="1" stroke-linejoin="round"/><path d="M12 2 L8 10 L16 10 Z" fill="${color}" stroke="${color}" stroke-width="0.5" stroke-linejoin="round"/></svg></div></div>`;
+    }).join('');
+  };
+  // Multiple images per item: one table per photo with identical item info and arrows
+  const getIncludedPhotosFlow = (item) => {
+    const fromArray = (item.photographs || []).filter(p => p.includeInReport !== false && (p.data || '').trim());
+    if (fromArray.length > 0) {
+      return fromArray.map(p => ({ src: (p.data || '').trim(), arrows: getPhotoArrowsForPdfFlow(p) }));
+    }
+    const legacy = (item.photograph || '').trim();
+    if (legacy) return [{ src: legacy, arrows: getPhotoArrowsForPdfFlow({ arrow: item.arrow }) }];
+    return [{ src: null, arrows: [] }];
+  };
+  const getSamplePhotoCellHtmlFlow = (photoData) => {
+    let src = photoData.src || '';
     if (src && !src.startsWith('data:') && !src.startsWith('http://') && !src.startsWith('https://') && src.startsWith('/')) {
       src = frontendUrl + src;
     }
     if (src) {
       const safe = String(src).replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      return `<div class="sample-photo-cell-inner"><img class="sample-photo" src="${safe}" alt="" /></div>`;
+      const arrowsHtml = buildArrowOverlaysHtmlFlow(photoData.arrows);
+      return `<div class="sample-photo-cell-inner sample-photo-cell-inner-with-arrows"><img class="sample-photo" src="${safe}" alt="" />${arrowsHtml}</div>`;
     }
     return '<div class="sample-photo-cell-inner"><div class="sample-no-photo">No photograph available</div></div>';
   };
@@ -3527,13 +3587,13 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
 
   const flowTableBlocks = [];
   assessmentItems.forEach((item, idx) => {
-    getIncludedPhotoSourcesFlow(item).forEach(photoSrc => flowTableBlocks.push({ item, idx, photoSrc }));
+    getIncludedPhotosFlow(item).forEach(photoData => flowTableBlocks.push({ item, idx, photoData }));
   });
   const buildBlockHtml = (block, blockIndex, addContinuationHeader) => {
-    const { item, idx, photoSrc } = block;
+    const { item, idx, photoData } = block;
     const n = idx + 1;
     const sampleTable = asbestosSampleItemTemplateWithUrl
-      .replace(/\[PHOTO_CELL\]/g, getSamplePhotoCellHtmlFromSrcFlow(photoSrc))
+      .replace(/\[PHOTO_CELL\]/g, getSamplePhotoCellHtmlFlow(photoData))
       .replace(/\[ITEM_NUMBER\]/g, getItemNumberFlow(assessmentItems, idx))
       .replace(/\[SAMPLE_REFERENCE\]/g, getSampleRefDisplay(item, `Sample ${n}`))
       .replace(/\[LOCATION_DESCRIPTION\]/g, getLocationContent(item))
@@ -3819,6 +3879,9 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
           .sample-location-content { height: 60px; vertical-align: top; padding: 8px; background: #fafafa; border: 1.5px solid #888; font-size: 0.64rem; line-height: 1.4; }
           .sample-photo-cell { width: 71% !important; height: 340px !important; overflow: hidden !important; box-sizing: border-box !important; text-align: center; vertical-align: middle; background: #fff; padding: 0 !important; margin: 0 !important; }
           .sample-photo-cell-inner { display: block; width: 100%; height: 340px; overflow: hidden; box-sizing: border-box; padding: 0; margin: 0; }
+          .sample-photo-cell-inner-with-arrows { position: relative; }
+          .pdf-arrow-overlay { position: absolute; width: 36px; height: 36px; pointer-events: none; z-index: 2; }
+          .pdf-arrow-rotated { width: 36px; height: 36px; }
           .sample-photo { display: block !important; width: 100% !important; height: 100% !important; object-fit: contain !important; object-position: center !important; padding: 0 !important; }
           .sample-no-photo { display: flex; align-items: center; justify-content: center; min-height: 340px; height: 100%; color: #666; font-style: italic; font-size: 0.64rem; }
           .asbestos-content-asbestos { color: #c62828; font-weight: 700; }

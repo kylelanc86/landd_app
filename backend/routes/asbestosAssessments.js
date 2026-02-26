@@ -1019,6 +1019,155 @@ router.patch('/:id/items/:itemId/photos/:photoId/description', async (req, res) 
   }
 });
 
+// Ensure photo has arrows array (migrate legacy single arrow only if it has a real position)
+function ensureArrowsArray(photo) {
+  if (!photo.arrows) {
+    photo.arrows = [];
+  }
+  const leg = photo.arrow;
+  if (leg != null && typeof leg === 'object') {
+    const hasPosition = leg.x != null || leg.y != null;
+    if (hasPosition) {
+      photo.arrows.push({
+        x: leg.x ?? 0.5,
+        y: leg.y ?? 0.5,
+        rotation: leg.rotation ?? 0,
+        color: leg.color,
+      });
+    }
+    delete photo.arrow;
+  }
+}
+
+// POST /api/assessments/:id/items/:itemId/photos/:photoId/arrows - add arrow
+router.post('/:id/items/:itemId/photos/:photoId/arrows', async (req, res) => {
+  try {
+    const { x, y, rotation, color } = req.body;
+
+    const job = await AsbestosAssessment.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+
+    const item = job.items.id(req.params.itemId);
+    if (!item) return res.status(404).json({ message: 'Assessment item not found' });
+
+    const photo = item.photographs.id(req.params.photoId);
+    if (!photo) return res.status(404).json({ message: 'Photo not found' });
+
+    ensureArrowsArray(photo);
+    photo.arrows.push({
+      x: typeof x === 'number' ? x : 0.5,
+      y: typeof y === 'number' ? y : 0.5,
+      rotation: typeof rotation === 'number' ? rotation : -45,
+      color: color || '#f44336',
+    });
+    item.updatedAt = new Date();
+    await job.save();
+
+    res.status(201).json({ message: 'Arrow added', item });
+  } catch (err) {
+    console.error('Error adding arrow:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// PATCH /api/assessments/:id/items/:itemId/photos/:photoId/arrows/:arrowId - update one arrow
+router.patch('/:id/items/:itemId/photos/:photoId/arrows/:arrowId', async (req, res) => {
+  try {
+    const { x, y, rotation, color } = req.body;
+    const { arrowId } = req.params;
+
+    const job = await AsbestosAssessment.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+
+    const item = job.items.id(req.params.itemId);
+    if (!item) return res.status(404).json({ message: 'Assessment item not found' });
+
+    const photo = item.photographs.id(req.params.photoId);
+    if (!photo) return res.status(404).json({ message: 'Photo not found' });
+
+    ensureArrowsArray(photo);
+    const arrow = photo.arrows.id(arrowId);
+    if (!arrow) return res.status(404).json({ message: 'Arrow not found' });
+
+    if (typeof x === 'number') arrow.x = x;
+    if (typeof y === 'number') arrow.y = y;
+    if (typeof rotation === 'number') arrow.rotation = rotation;
+    if (color !== undefined) arrow.color = color;
+
+    item.updatedAt = new Date();
+    await job.save();
+
+    res.json({ message: 'Arrow updated', item });
+  } catch (err) {
+    console.error('Error updating arrow:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// DELETE /api/assessments/:id/items/:itemId/photos/:photoId/arrows/:arrowId - delete one arrow
+router.delete('/:id/items/:itemId/photos/:photoId/arrows/:arrowId', async (req, res) => {
+  try {
+    const job = await AsbestosAssessment.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+
+    const item = job.items.id(req.params.itemId);
+    if (!item) return res.status(404).json({ message: 'Assessment item not found' });
+
+    const photo = item.photographs.id(req.params.photoId);
+    if (!photo) return res.status(404).json({ message: 'Photo not found' });
+
+    ensureArrowsArray(photo);
+    const arrow = photo.arrows.id(req.params.arrowId);
+    if (!arrow) return res.status(404).json({ message: 'Arrow not found' });
+
+    photo.arrows.pull(req.params.arrowId);
+    item.updatedAt = new Date();
+    await job.save();
+
+    res.json({ message: 'Arrow deleted', item });
+  } catch (err) {
+    console.error('Error deleting arrow:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// PATCH /api/assessments/:id/items/:itemId/photos/:photoId/arrow - legacy: set/remove single arrow (now maps to arrows array)
+router.patch('/:id/items/:itemId/photos/:photoId/arrow', async (req, res) => {
+  try {
+    const { x, y, rotation, color, arrow } = req.body;
+
+    const job = await AsbestosAssessment.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+
+    const item = job.items.id(req.params.itemId);
+    if (!item) return res.status(404).json({ message: 'Assessment item not found' });
+
+    const photo = item.photographs.id(req.params.photoId);
+    if (!photo) return res.status(404).json({ message: 'Photo not found' });
+
+    ensureArrowsArray(photo);
+    if (arrow === null) {
+      photo.arrows = [];
+      delete photo.arrow;
+    } else if (x !== undefined || y !== undefined || rotation !== undefined || color !== undefined) {
+      const existing = photo.arrows[0] || {};
+      photo.arrows = [{
+        x: typeof x === 'number' ? x : (existing.x ?? 0.5),
+        y: typeof y === 'number' ? y : (existing.y ?? 0.5),
+        rotation: typeof rotation === 'number' ? rotation : (existing.rotation ?? -45),
+        color: color !== undefined ? color : (existing.color || '#f44336'),
+      }];
+    }
+    item.updatedAt = new Date();
+    await job.save();
+
+    res.json({ message: 'Photo arrow updated successfully', item });
+  } catch (err) {
+    console.error('Error updating photo arrow:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
 // DELETE /api/assessments/:id - delete assessment job
 router.delete('/:id', async (req, res) => {
   try {

@@ -7,6 +7,7 @@ const {
   syncClearanceForProject,
 } = require("../services/asbestosRemovalJobSyncService");
 const { getLegislationForReportTemplate } = require("../services/templateService");
+const { formatDateSydney } = require("../utils/dateUtils");
 
 // Get all asbestos clearances with filtering and pagination
 router.get("/", auth, checkPermission("asbestos.view"), async (req, res) => {
@@ -919,6 +920,125 @@ router.patch("/:id/items/:itemId/photos/:photoId/description", auth, checkPermis
   }
 });
 
+function ensureArrowsArray(photo) {
+  if (!photo.arrows) photo.arrows = [];
+  const leg = photo.arrow;
+  if (leg != null && typeof leg === "object") {
+    const hasPosition = leg.x != null || leg.y != null;
+    if (hasPosition) {
+      photo.arrows.push({
+        x: leg.x ?? 0.5,
+        y: leg.y ?? 0.5,
+        rotation: leg.rotation ?? 0,
+        color: leg.color,
+      });
+    }
+    delete photo.arrow;
+  }
+}
+
+router.post("/:id/items/:itemId/photos/:photoId/arrows", auth, checkPermission("asbestos.edit"), async (req, res) => {
+  try {
+    const { x, y, rotation, color } = req.body;
+    const clearance = await AsbestosClearance.findById(req.params.id);
+    if (!clearance) return res.status(404).json({ message: "Asbestos clearance not found" });
+    const item = clearance.items.id(req.params.itemId);
+    if (!item) return res.status(404).json({ message: "Clearance item not found" });
+    const photo = item.photographs.id(req.params.photoId);
+    if (!photo) return res.status(404).json({ message: "Photo not found" });
+    ensureArrowsArray(photo);
+    photo.arrows.push({
+      x: typeof x === "number" ? x : 0.5,
+      y: typeof y === "number" ? y : 0.5,
+      rotation: typeof rotation === "number" ? rotation : -45,
+      color: color || "#f44336",
+    });
+    clearance.updatedBy = req.user.id;
+    await clearance.save();
+    res.status(201).json({ message: "Arrow added", item });
+  } catch (err) {
+    console.error("Error adding arrow:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+router.patch("/:id/items/:itemId/photos/:photoId/arrows/:arrowId", auth, checkPermission("asbestos.edit"), async (req, res) => {
+  try {
+    const { x, y, rotation, color } = req.body;
+    const clearance = await AsbestosClearance.findById(req.params.id);
+    if (!clearance) return res.status(404).json({ message: "Asbestos clearance not found" });
+    const item = clearance.items.id(req.params.itemId);
+    if (!item) return res.status(404).json({ message: "Clearance item not found" });
+    const photo = item.photographs.id(req.params.photoId);
+    if (!photo) return res.status(404).json({ message: "Photo not found" });
+    ensureArrowsArray(photo);
+    const arrow = photo.arrows.id(req.params.arrowId);
+    if (!arrow) return res.status(404).json({ message: "Arrow not found" });
+    if (typeof x === "number") arrow.x = x;
+    if (typeof y === "number") arrow.y = y;
+    if (typeof rotation === "number") arrow.rotation = rotation;
+    if (color !== undefined) arrow.color = color;
+    clearance.updatedBy = req.user.id;
+    await clearance.save();
+    res.json({ message: "Arrow updated", item });
+  } catch (err) {
+    console.error("Error updating arrow:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+router.delete("/:id/items/:itemId/photos/:photoId/arrows/:arrowId", auth, checkPermission("asbestos.edit"), async (req, res) => {
+  try {
+    const clearance = await AsbestosClearance.findById(req.params.id);
+    if (!clearance) return res.status(404).json({ message: "Asbestos clearance not found" });
+    const item = clearance.items.id(req.params.itemId);
+    if (!item) return res.status(404).json({ message: "Clearance item not found" });
+    const photo = item.photographs.id(req.params.photoId);
+    if (!photo) return res.status(404).json({ message: "Photo not found" });
+    ensureArrowsArray(photo);
+    const arrow = photo.arrows.id(req.params.arrowId);
+    if (!arrow) return res.status(404).json({ message: "Arrow not found" });
+    photo.arrows.pull(req.params.arrowId);
+    clearance.updatedBy = req.user.id;
+    await clearance.save();
+    res.json({ message: "Arrow deleted", item });
+  } catch (err) {
+    console.error("Error deleting arrow:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+router.patch("/:id/items/:itemId/photos/:photoId/arrow", auth, checkPermission("asbestos.edit"), async (req, res) => {
+  try {
+    const { x, y, rotation, color, arrow } = req.body;
+    const clearance = await AsbestosClearance.findById(req.params.id);
+    if (!clearance) return res.status(404).json({ message: "Asbestos clearance not found" });
+    const item = clearance.items.id(req.params.itemId);
+    if (!item) return res.status(404).json({ message: "Clearance item not found" });
+    const photo = item.photographs.id(req.params.photoId);
+    if (!photo) return res.status(404).json({ message: "Photo not found" });
+    ensureArrowsArray(photo);
+    if (arrow === null) {
+      photo.arrows = [];
+      delete photo.arrow;
+    } else if (x !== undefined || y !== undefined || rotation !== undefined || color !== undefined) {
+      const existing = photo.arrows[0] || {};
+      photo.arrows = [{
+        x: typeof x === "number" ? x : (existing.x ?? 0.5),
+        y: typeof y === "number" ? y : (existing.y ?? 0.5),
+        rotation: typeof rotation === "number" ? rotation : (existing.rotation ?? -45),
+        color: color !== undefined ? color : (existing.color || "#f44336"),
+      }];
+    }
+    clearance.updatedBy = req.user.id;
+    await clearance.save();
+    res.json({ message: "Photo arrow updated successfully", item });
+  } catch (err) {
+    console.error("Error updating photo arrow:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
 // Authorise clearance report
 router.post("/:id/authorise", auth, checkPermission("asbestos.edit"), async (req, res) => {
   try {
@@ -974,7 +1094,7 @@ router.post("/:id/authorise", auth, checkPermission("asbestos.edit"), async (req
           const projectID = clearance.projectId?.projectID || "N/A";
           const clientName = clearance.projectId?.client?.name || "the client";
           const clearanceDate = clearance.clearanceDate
-            ? new Date(clearance.clearanceDate).toLocaleDateString("en-GB")
+            ? formatDateSydney(clearance.clearanceDate)
             : "N/A";
           const clearanceType = clearance.clearanceType || "Asbestos Clearance";
           const approverName = approver;
@@ -1152,7 +1272,7 @@ router.post("/:id/send-for-authorisation", auth, checkPermission("asbestos.edit"
     await clearance.save();
 
     const clearanceDate = clearance.clearanceDate
-      ? new Date(clearance.clearanceDate).toLocaleDateString("en-GB")
+      ? formatDateSydney(clearance.clearanceDate)
       : "N/A";
     const clearanceType = clearance.clearanceType || "Asbestos Clearance";
 

@@ -4,6 +4,7 @@ const IAQRecord = require('../models/IAQRecord');
 const IAQSample = require('../models/IAQSample');
 const User = require('../models/User');
 const { sendMail } = require('../services/mailer');
+const { formatDateSydney, todaySydney } = require('../utils/dateUtils');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 
@@ -139,7 +140,7 @@ Your IAQ report has been authorised.
 
 IAQ Reference: ${generateIAQReference(record)}
 Authorised by: ${approver}
-Authorisation Date: ${new Date().toLocaleDateString()}
+Authorisation Date: ${todaySydney()}
 
 You can view the authorised report at: ${recordUrl}
             `,
@@ -156,7 +157,7 @@ You can view the authorised report at: ${recordUrl}
                   <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
                     <p style="margin: 5px 0;"><strong>IAQ Reference:</strong> ${generateIAQReference(record)}</p>
                     <p style="margin: 5px 0;"><strong>Authorised by:</strong> ${approver}</p>
-                    <p style="margin: 5px 0;"><strong>Authorisation Date:</strong> ${new Date().toLocaleDateString()}</p>
+                    <p style="margin: 5px 0;"><strong>Authorisation Date:</strong> ${todaySydney()}</p>
                   </div>
                   <div style="text-align: center; margin: 30px 0;">
                     <a href="${recordUrl}" style="background-color: rgb(25, 138, 44); color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">View Report</a>

@@ -32,7 +32,7 @@ import {
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import { asbestosAssessmentService, clientSuppliedJobsService, projectService } from "../../services/api";
-import { getTodayInSydney } from "../../utils/dateUtils";
+import { getTodayInSydney, formatDateInSydney } from "../../utils/dateUtils";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
@@ -996,13 +996,9 @@ const LDsuppliedJobs = () => {
                         <TableCell>
                           <Typography variant="body2" sx={{ fontWeight: "bold" }}>
                             {assessment.samplesReceivedDate
-                              ? new Date(
+                              ? formatDateInSydney(
                                   assessment.samplesReceivedDate,
-                                ).toLocaleDateString("en-GB", {
-                                  day: "2-digit",
-                                  month: "2-digit",
-                                  year: "numeric",
-                                })
+                                )
                               : "—"}
                           </Typography>
                         </TableCell>

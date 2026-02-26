@@ -13,6 +13,7 @@ const {
   syncAirMonitoringForJob,
 } = require("../services/asbestosRemovalJobSyncService");
 const { sendMail } = require("../services/mailer");
+const { formatDateSydney } = require("../utils/dateUtils");
 
 // Debug middleware removed
 router.use((req, res, next) => {
@@ -401,7 +402,7 @@ router.put('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports']
 
             const shiftName = populatedShift.name || 'Air Monitoring Shift';
             const shiftDate = populatedShift.date
-              ? new Date(populatedShift.date).toLocaleDateString('en-GB')
+              ? formatDateSydney(populatedShift.date)
               : 'N/A';
             const approverName = updatedShift.reportApprovedBy;
             const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -677,7 +678,7 @@ router.get('/:id/chain-of-custody', auth, checkPermission(['jobs.view']), async 
     const clientName = client?.name || 'Unknown Client';
 
     // Format shift date
-    const shiftDate = shift.date ? new Date(shift.date).toLocaleDateString('en-GB') : 'N/A';
+    const shiftDate = shift.date ? formatDateSydney(shift.date) : 'N/A';
     
     // Get submission info
     let submittedBy = shift.submittedBy;
@@ -690,7 +691,7 @@ router.get('/:id/chain-of-custody', auth, checkPermission(['jobs.view']), async 
     }
     
     const submissionDate = shift.samplesReceivedDate 
-      ? new Date(shift.samplesReceivedDate).toLocaleDateString('en-GB') 
+      ? formatDateSydney(shift.samplesReceivedDate) 
       : shiftDate;
     
     // Create simple HTML document
@@ -960,7 +961,7 @@ router.post(
 
       const shiftName = shift.name || 'Air Monitoring Shift';
       const shiftDate = shift.date
-        ? new Date(shift.date).toLocaleDateString('en-GB')
+        ? formatDateSydney(shift.date)
         : 'N/A';
 
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';

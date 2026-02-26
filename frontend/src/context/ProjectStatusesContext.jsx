@@ -170,6 +170,11 @@ export const ProjectStatusesProvider = ({ children }) => {
     fetchStatuses();
   }, [fetchStatuses]);
 
+  /** Update only status colors from the in-memory hardcoded map (no API call). Use after admin changes status colours. */
+  const refreshStatusColorsOnly = useCallback(() => {
+    setStatusColors(projectStatusService.getAllHardcodedColors());
+  }, []);
+
   useEffect(() => {
     console.log("ProjectStatusesProvider mounted, fetching statuses...");
     mountedRef.current = true;
@@ -196,6 +201,7 @@ export const ProjectStatusesProvider = ({ children }) => {
     loading,
     error,
     refreshStatuses,
+    refreshStatusColorsOnly,
   };
 
   return (

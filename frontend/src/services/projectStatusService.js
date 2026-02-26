@@ -201,14 +201,14 @@ const projectStatusService = {
         ];
         
         const databaseColors = allStatusObjects.reduce((acc, status) => {
-          if (status.text && status.statusColor) {
-            acc[status.text] = status.statusColor;
+          if (status.text) {
+            acc[status.text] = status.statusColor || '#1976d2';
           }
           return acc;
         }, {});
         
-        // Update hardcoded colors to match database
-        hardcodedStatusColors = { ...hardcodedStatusColors, ...databaseColors };
+        // Replace hardcoded colors with DB so deleted statuses are removed
+        hardcodedStatusColors = { ...databaseColors };
         
         // Store in localStorage
         try {

@@ -97,6 +97,46 @@ const asbestosAssessmentService = {
     return response.data;
   },
 
+  // Add arrow to photo. Defaults: red, -45deg.
+  addPhotoArrow: async (assessmentId, itemId, photoId, arrow) => {
+    const response = await api.post(
+      `/assessments/${assessmentId}/items/${itemId}/photos/${photoId}/arrows`,
+      {
+        x: arrow.x ?? 0.5,
+        y: arrow.y ?? 0.5,
+        rotation: arrow.rotation ?? -45,
+        color: arrow.color ?? '#f44336',
+      }
+    );
+    return response.data;
+  },
+
+  // Update one arrow (position/rotation/color).
+  updatePhotoArrow: async (assessmentId, itemId, photoId, arrowId, updates) => {
+    const response = await api.patch(
+      `/assessments/${assessmentId}/items/${itemId}/photos/${photoId}/arrows/${arrowId}`,
+      updates
+    );
+    return response.data;
+  },
+
+  // Delete one arrow.
+  deletePhotoArrow: async (assessmentId, itemId, photoId, arrowId) => {
+    const response = await api.delete(
+      `/assessments/${assessmentId}/items/${itemId}/photos/${photoId}/arrows/${arrowId}`
+    );
+    return response.data;
+  },
+
+  // Legacy: set/clear single arrow (clears all arrows and sets one, or clears all).
+  updatePhotoArrowLegacy: async (assessmentId, itemId, photoId, arrow) => {
+    const response = await api.patch(
+      `/assessments/${assessmentId}/items/${itemId}/photos/${photoId}/arrow`,
+      arrow === null ? { arrow: null } : arrow
+    );
+    return response.data;
+  },
+
   // Generate asbestos assessment PDF using DocRaptor templates (pdf-docraptor-v2)
   // options.isResidential: when true, cover/version control and footer use "Residential Asbestos Assessment Report" and filename includes "Residential"
   generateAsbestosAssessmentPdf: async (assessmentData, options = {}) => {

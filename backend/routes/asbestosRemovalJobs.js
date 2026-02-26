@@ -9,6 +9,7 @@ const Sample = require("../models/Sample");
 const AsbestosClearance = require("../models/clearanceTemplates/asbestos/AsbestosClearance");
 const auth = require("../middleware/auth");
 const checkPermission = require("../middleware/checkPermission");
+const { formatDateSydney } = require("../utils/dateUtils");
 
 const escapeCsvCell = (value) => {
   if (value === null || value === undefined) return "";
@@ -17,8 +18,7 @@ const escapeCsvCell = (value) => {
 
 const formatDate = (dateStr) => {
   if (!dateStr) return "";
-  const d = new Date(dateStr);
-  return d.toLocaleDateString("en-AU");
+  return formatDateSydney(dateStr);
 };
 
 const formatPersonName = (value) => {
