@@ -26,7 +26,7 @@ const api = axios.create({
   },
   withCredentials: true,
   // Increase timeout for slow networks and long-running PDF generation (e.g. DocRaptor)
-  timeout: 65000  // 65 seconds
+  timeout: 130000  // 130 seconds
 });
 
 // Add request interceptor

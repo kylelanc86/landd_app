@@ -22,8 +22,9 @@ export const generateAssessmentPDF = async (assessmentData) => {
     console.log('Calling backend URL:', requestUrl);
 
     // Create an AbortController for timeout handling
+    const PDF_REQUEST_TIMEOUT_MS = 130000; // 130s for upload + DocRaptor + download
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 65000); // 65 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), PDF_REQUEST_TIMEOUT_MS);
 
     try {
       // Call the server-side PDF generation endpoint with cache busting and timeout
@@ -82,7 +83,7 @@ export const generateAssessmentPDF = async (assessmentData) => {
     } catch (fetchError) {
       clearTimeout(timeoutId);
       if (fetchError.name === 'AbortError') {
-        throw new Error('Assessment PDF generation timed out after 65 seconds');
+        throw new Error(`Assessment PDF generation timed out after ${PDF_REQUEST_TIMEOUT_MS / 1000} seconds`);
       }
       throw fetchError;
     }
