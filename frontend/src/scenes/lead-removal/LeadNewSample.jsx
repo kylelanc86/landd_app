@@ -645,11 +645,11 @@ const LeadNewSample = () => {
     fetchCriticalData();
   }, [shiftId, location.state]);
 
-  // Lead monitoring: sampler dropdown includes all users
+  // Lead monitoring: sampler dropdown includes active users only
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const res = await userService.getAll(true);
+        const res = await userService.getAll(false);
         const users = (res.data || []).slice();
         users.sort((a, b) => {
           const nameA =
@@ -1401,64 +1401,62 @@ const LeadNewSample = () => {
               flexWrap: "wrap",
             }}
           >
-            {!isSimplifiedSample && (
-              <Box
-                sx={{
-                  display: "flex",
-                  gap: 1.5,
-                  flex: { xs: "none", sm: "1 1 0" },
+            <Box
+              sx={{
+                display: "flex",
+                gap: 1.5,
+                flex: { xs: "none", sm: "1 1 0" },
+                minWidth: 0,
+                flexWrap: { xs: "nowrap", sm: "wrap" },
+                "& > *": {
+                  flex: { xs: "1 1 0", sm: "1 1 140px" },
                   minWidth: 0,
-                  flexWrap: { xs: "nowrap", sm: "wrap" },
-                  "& > *": {
-                    flex: { xs: "1 1 0", sm: "1 1 140px" },
-                    minWidth: 0,
-                  },
-                }}
+                },
+              }}
+            >
+              <FormControl
+                fullWidth
+                size="small"
+                required
+                error={!!fieldErrors.sampler}
+                sx={{ minWidth: 0 }}
               >
-                <FormControl
-                  fullWidth
-                  size="small"
-                  required
-                  error={!!fieldErrors.sampler}
-                  sx={{ minWidth: 0 }}
-                >
-                  <InputLabel>Sampler</InputLabel>
-                  <Select
-                    name="sampler"
-                    value={form.sampler}
-                    onChange={handleChange}
-                    label="Sampler"
-                    required
-                  >
-                    {allUsers.map((user) => (
-                      <MenuItem key={user._id} value={user._id}>
-                        {user.firstName} {user.lastName}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                  {fieldErrors.sampler && (
-                    <Typography
-                      variant="caption"
-                      color="error"
-                      sx={{ mt: 0.5 }}
-                    >
-                      {fieldErrors.sampler}
-                    </Typography>
-                  )}
-                </FormControl>
-                <TextField
-                  size="small"
-                  name="sampleNumber"
-                  label="Sample Number"
-                  value={form.sampleNumber}
+                <InputLabel>Sampler</InputLabel>
+                <Select
+                  name="sampler"
+                  value={form.sampler}
                   onChange={handleChange}
+                  label="Sampler"
                   required
-                  fullWidth
-                  disabled
-                  error={!!fieldErrors.sampleNumber}
-                />
-              </Box>
-            )}
+                >
+                  {allUsers.map((user) => (
+                    <MenuItem key={user._id} value={user._id}>
+                      {user.firstName} {user.lastName}
+                    </MenuItem>
+                  ))}
+                </Select>
+                {fieldErrors.sampler && (
+                  <Typography
+                    variant="caption"
+                    color="error"
+                    sx={{ mt: 0.5 }}
+                  >
+                    {fieldErrors.sampler}
+                  </Typography>
+                )}
+              </FormControl>
+              <TextField
+                size="small"
+                name="sampleNumber"
+                label="Sample Number"
+                value={form.sampleNumber}
+                onChange={handleChange}
+                required
+                fullWidth
+                disabled
+                error={!!fieldErrors.sampleNumber}
+              />
+            </Box>
             <Box
               sx={{
                 display: "flex",

@@ -497,7 +497,8 @@ export const asbestosAssessmentService = {
       assessmentData: { ...assessmentData, _id: id, id },
       ...(options.isResidential === true && { isResidential: true }),
     };
-    return api.post('/pdf-docraptor-v2/generate-asbestos-assessment-v3', payload, { responseType: 'blob' });
+    // DocRaptor sync limit 60s; 120s allows upload + generation + download on slow connections
+    return api.post('/pdf-docraptor-v2/generate-asbestos-assessment-v3', payload, { responseType: 'blob', timeout: 120000 });
   },
 };
 

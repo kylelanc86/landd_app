@@ -24,7 +24,7 @@ import {
 } from "@mui/icons-material";
 import { tokens } from "../theme/tokens";
 import loadGoogleMapsApi from "../utils/loadGoogleMapsApi";
-import { sampleService } from "../services/api";
+import { sampleService, leadAirSampleService } from "../services/api";
 
 const SitePlanMap = ({
   open,
@@ -33,6 +33,7 @@ const SitePlanMap = ({
   initialData,
   onSave,
   projectId,
+  useLeadSamples = false,
 }) => {
   const colors = tokens;
   const mapRef = useRef(null);
@@ -174,7 +175,9 @@ const SitePlanMap = ({
 
   const loadSamples = async () => {
     try {
-      const response = await sampleService.getByShift(shiftId);
+      const response = useLeadSamples
+        ? await leadAirSampleService.getByShift(shiftId)
+        : await sampleService.getByShift(shiftId);
       const samplesData = response.data;
 
       // Filter out field blanks - they aren't site samples

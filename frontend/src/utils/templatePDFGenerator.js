@@ -22,8 +22,10 @@ export const generateAssessmentPDF = async (assessmentData) => {
     console.log('Calling backend URL:', requestUrl);
 
     // Create an AbortController for timeout handling
+    // DocRaptor sync limit is 60s; allow 120s for upload + generation + download on slow connections
+    const PDF_REQUEST_TIMEOUT_MS = 120000;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), PDF_REQUEST_TIMEOUT_MS);
 
     try {
       // Call the server-side PDF generation endpoint with cache busting and timeout
@@ -82,7 +84,7 @@ export const generateAssessmentPDF = async (assessmentData) => {
     } catch (fetchError) {
       clearTimeout(timeoutId);
       if (fetchError.name === 'AbortError') {
-        throw new Error('Assessment PDF generation timed out after 30 seconds');
+        throw new Error(`Assessment PDF generation timed out after ${PDF_REQUEST_TIMEOUT_MS / 1000} seconds. Try again or use a faster connection.`);
       }
       throw fetchError;
     }
@@ -99,6 +101,9 @@ export const generateAssessmentPDF = async (assessmentData) => {
  * @param {Object} options - Options including openInNewTab (default: false)
  * @returns {Promise<string>} - Generated PDF filename
  */
+// DocRaptor sync limit is 60s; allow 120s for upload + generation + download on slow connections
+const PDF_REQUEST_TIMEOUT_MS = 120000;
+
 export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
   const { openInNewTab = false } = options;
   try {
@@ -133,7 +138,9 @@ export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
     }
     
     const url = `${process.env.REACT_APP_API_URL}${endpoint}?t=${Date.now()}`;
-    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), PDF_REQUEST_TIMEOUT_MS);
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -146,7 +153,8 @@ export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
         assessmentData: type === 'asbestos-assessment' ? data : undefined,
         jobData: type === 'client-supplied-fibre-id' ? data : undefined,
       }),
-    });
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId));
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -219,6 +227,9 @@ export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
 
   } catch (error) {
     console.error(`Error generating ${type} PDF:`, error);
+    if (error.name === 'AbortError') {
+      throw new Error(`PDF generation timed out after ${PDF_REQUEST_TIMEOUT_MS / 1000} seconds. Try again or use a faster connection.`);
+    }
     throw error;
   }
 };

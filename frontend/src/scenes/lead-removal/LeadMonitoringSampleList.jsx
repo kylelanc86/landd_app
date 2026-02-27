@@ -642,50 +642,7 @@ const LeadMonitoringSampleList = () => {
       // Close dialog
       setShowSamplingCompleteDialog(false);
 
-      // Generate and download Chain of Custody PDF (fetch full user for signature image)
-      const confirmedAt = new Date();
-      try {
-        let confirmedBy = null;
-        if (currentUser?._id) {
-          try {
-            const userRes = await userService.getById(currentUser._id);
-            const fullUser = userRes?.data;
-            confirmedBy = fullUser
-              ? {
-                  firstName: fullUser.firstName,
-                  lastName: fullUser.lastName,
-                  email: fullUser.email,
-                  signature: fullUser.signature || undefined,
-                }
-              : {
-                  firstName: currentUser.firstName,
-                  lastName: currentUser.lastName,
-                  email: currentUser.email,
-                };
-          } catch (_) {
-            confirmedBy = {
-              firstName: currentUser.firstName,
-              lastName: currentUser.lastName,
-              email: currentUser.email,
-            };
-          }
-        }
-        await generateLeadChainOfCustodyPDF({
-          shift: shiftResponse.data,
-          samples,
-          confirmedBy,
-          analysisTurnaroundDate: computedTurnaroundDate,
-          analysisTurnaroundLabel: TURNAROUND_LABELS[analysisTurnaroundType],
-          confirmedAt,
-          projectID: shiftResponse.data?.job?.projectId?.projectID ?? job?.projectId?.projectID,
-        });
-      } catch (pdfError) {
-        console.error("Error generating Chain of Custody PDF:", pdfError);
-        showSnackbar(
-          "Sampling completed but PDF download failed. You can try again from the shift.",
-          "warning"
-        );
-      }
+      showSnackbar("Sampling marked complete. You can download the Chain of Custody from the shift when needed.", "success");
     } catch (error) {
       console.error("Error updating shift status:", error);
       setError("Failed to update shift status. Please try again.");
@@ -1766,7 +1723,7 @@ const LeadMonitoringSampleList = () => {
                   },
                 }}
               >
-                Review Chain of Custody
+                Chain of Custody
               </Button>
             )}
             {shift?.status === "sampling_complete" && (
@@ -2328,6 +2285,7 @@ const LeadMonitoringSampleList = () => {
         initialData={sitePlanData}
         onSave={handleSaveSitePlan}
         projectId={job?.projectId?.projectID}
+        useLeadSamples={true}
       />
     </Box>
   );

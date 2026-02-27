@@ -208,80 +208,11 @@ export async function generateLeadMonitoringShiftReport({
         ]
       : { text: "[No lead concentration data available for conclusions.]", alignment: "justify" };
 
-  const docDefinition = {
-    pageSize: "A4",
-    pageMargins: [40, 105, 40, 58],
-    defaultStyle: { font: "Gothic", fontSize: 10, alignment: "justify" },
-    images: {
-      ...(companyLogo ? { companyLogo } : {}),
-      ...(samplerSignature ? { samplerSignature } : {}),
-      ...(watermarkLogo ? { watermarkLogo } : {}),
-    },
-    header: companyLogo
-      ? function (currentPage, pageCount) {
-          return {
-            stack: [
-              {
-                columns: [
-                  { image: "companyLogo", width: 165 },
-                  {
-                    stack: [
-                      {
-                        text: "Lancaster & Dickenson Consulting Pty Ltd",
-                        fontSize: 9,
-                        margin: [0, 1, 0, 1],
-                        color: "black",
-                        lineHeight: 1.5,
-                      },
-                      {
-                        text: "4/6 Dacre Street, Mitchell ACT 2911",
-                        fontSize: 9,
-                        margin: [0, 1, 0, 1],
-                        color: "black",
-                        lineHeight: 1.5,
-                      },
-                      {
-                        text: "W: www.landd.com.au",
-                        fontSize: 9,
-                        margin: [0, 1, 0, 1],
-                        color: "black",
-                        lineHeight: 1.5,
-                      },
-                    ],
-                    alignment: "right",
-                  },
-                ],
-                margin: [0, 0, 0, 4],
-              },
-              {
-                canvas: [
-                  {
-                    type: "line",
-                    x1: 0,
-                    y1: 0,
-                    x2: 520,
-                    y2: 0,
-                    lineWidth: 1.5,
-                    lineColor: "#16b12b",
-                  },
-                ],
-                margin: [0, 0, 0, 4],
-              },
-            ],
-            margin: [40, 30, 40, 0],
-          };
-        }
-      : undefined,
-    styles: {
-      header: { fontSize: 11, bold: true, margin: [0, 0, 0, 4], alignment: "justify" },
-      body: { fontSize: 10, margin: [0, 0, 0, 6], lineHeight: 1.4, alignment: "justify" },
-      tableHeader: { fontSize: 9, bold: true, fillColor: "#f0f0f0" },
-      tableContent: { fontSize: 9 },
-    },
-    content: [
-      // Client details
-      {
-        table: {
+  // Build content array so we can split main report vs appendix and compute main page count
+  const content = [
+    // Client details
+    {
+      table: {
           widths: ["100%"],
           body: [
             [
@@ -289,22 +220,27 @@ export async function generateLeadMonitoringShiftReport({
                 stack: [
                   {
                     text: [
-                      { text: "Client Name: ", bold: true },
                       { text: clientName },
                     ],
                     margin: [0, 0, 0, 2],
                   },
                   {
                     text: [
-                      { text: "Client Contact: ", bold: true },
                       {
                         text:
                           project?.projectContact?.name ||
-                          project?.client?.contact1Name ||
-                          "N/A",
+                          project?.client?.contact1Name
+            
                       },
                     ],
                     margin: [0, 0, 0, 2],
+                  },
+
+                  {
+                    text:project?.projectContact?.email ||
+                    project?.client?.contact1Email ||
+                    project?.client?.contact2Email,
+                    margin: [0, 14, 0, 0],
                   },
                   {
                     text: pdfGenerationDate,
@@ -326,7 +262,7 @@ export async function generateLeadMonitoringShiftReport({
           { text: `${siteName} - ${shiftDate}`, bold: false },
         ],
         margin: [0, 0, 0, 16],
-        fontSize: 11,
+        fontSize: 10,
       },
       // Introduction
       {
@@ -500,9 +436,111 @@ export async function generateLeadMonitoringShiftReport({
         alignment: "center",
         margin: [0, 0, 0, 24],
       },
-    ],
+  ];
+
+  const appendixStartIndex = content.findIndex((item) => item.pageBreak === "before");
+  const mainContent = appendixStartIndex >= 0 ? content.slice(0, appendixStartIndex) : content;
+  const appendixContent = appendixStartIndex >= 0 ? content.slice(appendixStartIndex) : [];
+
+  // Generate a main-only PDF to get the number of pages before the first appendix cover
+  const mainOnlyDocDef = {
+    pageSize: "A4",
+    pageMargins: [40, 105, 40, 58],
+    defaultStyle: { font: "Gothic", fontSize: 10, alignment: "justify" },
+    images: {
+      ...(companyLogo ? { companyLogo } : {}),
+      ...(samplerSignature ? { samplerSignature } : {}),
+      ...(watermarkLogo ? { watermarkLogo } : {}),
+    },
+    header: undefined,
+    styles: {
+      header: { fontSize: 11, bold: true, margin: [0, 0, 0, 4], alignment: "justify" },
+      body: { fontSize: 10, margin: [0, 0, 0, 6], lineHeight: 1.4, alignment: "justify" },
+      tableHeader: { fontSize: 9, bold: true, fillColor: "#f0f0f0" },
+      tableContent: { fontSize: 9 },
+    },
+    content: mainContent,
+  };
+  const mainOnlyBlob = await new Promise((resolve, reject) => {
+    pdfMake.createPdf(mainOnlyDocDef).getBlob((blob) => (blob ? resolve(blob) : reject(new Error("Failed to get main-only PDF blob"))));
+  });
+  const { PDFDocument } = await import("pdf-lib");
+  const mainOnlyPdf = await PDFDocument.load(await mainOnlyBlob.arrayBuffer());
+  const mainPageCount = mainOnlyPdf.getPageCount();
+
+  const docDefinition = {
+    pageSize: "A4",
+    pageMargins: [40, 105, 40, 58],
+    defaultStyle: { font: "Gothic", fontSize: 10, alignment: "justify" },
+    images: {
+      ...(companyLogo ? { companyLogo } : {}),
+      ...(samplerSignature ? { samplerSignature } : {}),
+      ...(watermarkLogo ? { watermarkLogo } : {}),
+    },
+    header: companyLogo
+      ? function (currentPage, pageCount) {
+          return {
+            stack: [
+              {
+                columns: [
+                  { image: "companyLogo", width: 165 },
+                  {
+                    stack: [
+                      {
+                        text: "Lancaster & Dickenson Consulting Pty Ltd",
+                        fontSize: 9,
+                        margin: [0, 1, 0, 1],
+                        color: "black",
+                        lineHeight: 1.5,
+                      },
+                      {
+                        text: "4/6 Dacre Street, Mitchell ACT 2911",
+                        fontSize: 9,
+                        margin: [0, 1, 0, 1],
+                        color: "black",
+                        lineHeight: 1.5,
+                      },
+                      {
+                        text: "W: www.landd.com.au",
+                        fontSize: 9,
+                        margin: [0, 1, 0, 1],
+                        color: "black",
+                        lineHeight: 1.5,
+                      },
+                    ],
+                    alignment: "right",
+                  },
+                ],
+                margin: [0, 0, 0, 4],
+              },
+              {
+                canvas: [
+                  {
+                    type: "line",
+                    x1: 0,
+                    y1: 0,
+                    x2: 520,
+                    y2: 0,
+                    lineWidth: 1.5,
+                    lineColor: "#16b12b",
+                  },
+                ],
+                margin: [0, 0, 0, 4],
+              },
+            ],
+            margin: [40, 30, 40, 0],
+          };
+        }
+      : undefined,
+    styles: {
+      header: { fontSize: 11, bold: true, margin: [0, 0, 0, 4], alignment: "justify" },
+      body: { fontSize: 10, margin: [0, 0, 0, 6], lineHeight: 1.4, alignment: "justify" },
+      tableHeader: { fontSize: 9, bold: true, fillColor: "#f0f0f0" },
+      tableContent: { fontSize: 9 },
+    },
+    content: [...mainContent, ...appendixContent],
     footer: (currentPage, pageCount) => {
-      const isAppendixCover = currentPage === pageCount;
+      const isMainReportPage = currentPage <= mainPageCount;
       const footerBlocks = [
         {
           canvas: [
@@ -536,15 +574,15 @@ export async function generateLeadMonitoringShiftReport({
             },
             { text: "", width: "40%" },
             {
-              stack: isAppendixCover
-                ? []
-                : [
+              stack: isMainReportPage
+                ? [
                     {
-                      text: `Page ${currentPage} of ${pageCount}`,
+                      text: `Page ${currentPage} of ${mainPageCount}`,
                       alignment: "right",
                       fontSize: 8,
                     },
-                  ],
+                  ]
+                : [],
               alignment: "right",
               width: "30%",
             },

@@ -63,6 +63,7 @@ const assessmentService = {
     console.log("assessmentService.generatePDF called with:", assessmentData);
     return axios.post('/api/pdf-docraptor-v2/generate-asbestos-assessment-v3', { assessmentData }, { 
       responseType: 'blob',
+      timeout: 120000, // DocRaptor can take 60s; 120s for slow upload/download
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`,
         'Cache-Control': 'no-cache, no-store, must-revalidate',
