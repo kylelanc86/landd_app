@@ -848,6 +848,7 @@ const replacePlaceholders = async (content, data) => {
     })(),
     '{AIR_MONITORING_REFERENCE}': data.airMonitoring ? 'and air monitoring' : '',
     '{AIR_MONITORING_RESULTS}': data.airMonitoring ? `Air monitoring was conducted and results were below the clearance indicator of 0.01 fibres per mL.` : '',
+    '{LEAD_SAMPLING?}': data.leadSampling ? ' and sampling to assess for elevated lead dust' : '',
     '{JOB_SPECIFIC_EXCLUSIONS}': data.jobSpecificExclusions ? data.jobSpecificExclusions : '',
     '{LEGISLATION}': (() => {
       if (data.selectedLegislation && Array.isArray(data.selectedLegislation) && data.selectedLegislation.length > 0) {

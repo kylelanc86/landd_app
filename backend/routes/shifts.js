@@ -526,26 +526,16 @@ router.patch('/:id/reopen', auth, checkPermission(['admin.update']), async (req,
 
     // Check if shift is in a state that can be reopened
     if (!['analysis_complete', 'shift_complete', 'samples_submitted_to_lab'].includes(shift.status)) {
-      return res.status(400).json({ 
-        message: `Cannot reopen shift with status: ${shift.status}` 
+      return res.status(400).json({
+        message: `Cannot reopen shift with status: ${shift.status}`
       });
     }
 
-    // Reopen by setting status back to a state that allows editing
-    // For shifts that are completed at analysis level, go back to sampling_complete
-    // For shifts that are fully complete, go back to analysis_complete
-    let newStatus = 'sampling_complete';
-    if (shift.status === 'shift_complete') {
-      newStatus = 'analysis_complete';
-    }
-
-    shift.status = newStatus;
-    
-    // Clear report approval fields to indicate the shift needs re-approval
-    if (shift.status === 'analysis_complete') {
-      shift.reportApprovedBy = '';
-      shift.reportIssueDate = null;
-    }
+    // Reopen by resetting status to "in progress" (ongoing) so the shift can be edited again
+    shift.status = 'ongoing';
+    shift.reportApprovedBy = '';
+    shift.reportIssueDate = null;
+    shift.reportViewedAt = null;
 
     const updatedShift = await shift.save();
     if (shift.job && (shift.jobModel === 'AsbestosRemovalJob' || !shift.jobModel)) {
@@ -670,7 +660,8 @@ router.post('/:id/upload-analysis-report', auth, checkPermission(['jobs.edit']),
     if (!file.mimetype || !file.mimetype.toLowerCase().includes('pdf')) {
       return res.status(400).json({ error: 'File must be a PDF' });
     }
-    const uploadDir = path.join(__dirname, '../uploads/lead-analysis-reports');
+    const uploadsRoot = process.env.UPLOADS_DIR || path.join(__dirname, '..', 'uploads');
+    const uploadDir = path.join(uploadsRoot, 'lead-analysis-reports');
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
@@ -692,15 +683,32 @@ router.post('/:id/upload-analysis-report', auth, checkPermission(['jobs.edit']),
 });
 
 // Download lead analysis report PDF for a shift
+// Uses process.env.UPLOADS_DIR if set (e.g. /data/uploads on DigitalOcean for a persistent volume)
 router.get('/:id/analysis-report', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
     const shift = await Shift.findById(req.params.id).select('analysisReportPath analysisReportOriginalName');
-    if (!shift || !shift.analysisReportPath) {
+    if (!shift) {
+      console.warn('[analysis-report] Shift not found:', req.params.id);
       return res.status(404).json({ message: 'Analysis report not found' });
     }
-    const fullPath = path.join(__dirname, '../uploads', shift.analysisReportPath);
+    if (!shift.analysisReportPath) {
+      console.warn('[analysis-report] No analysisReportPath for shift:', req.params.id);
+      return res.status(404).json({ message: 'Analysis report not found' });
+    }
+    const uploadsRoot = process.env.UPLOADS_DIR || path.join(__dirname, '..', 'uploads');
+    const fullPath = path.join(uploadsRoot, shift.analysisReportPath);
     if (!fs.existsSync(fullPath)) {
-      return res.status(404).json({ message: 'Analysis report file not found' });
+      console.error(
+        '[analysis-report] File missing on disk. shiftId=%s, analysisReportPath=%s, resolvedPath=%s',
+        req.params.id,
+        shift.analysisReportPath,
+        fullPath
+      );
+      return res.status(404).json({
+        message:
+          'Analysis report file not found on the server. If the app was recently redeployed, the file may have been lost (uploads are not persisted by default). Please re-upload the PDF in the Attach Analysis Report modal.',
+        code: 'ANALYSIS_REPORT_FILE_MISSING',
+      });
     }
     const name = shift.analysisReportOriginalName || 'analysis-report.pdf';
     res.setHeader('Content-Type', 'application/pdf');

@@ -635,7 +635,10 @@ export async function generateLeadMonitoringShiftReport({
   } catch (err) {
     const msg =
       err.response?.status === 404
-        ? "No analysis report has been attached for this shift. Please attach the PDF in the Attach Analysis Report modal before viewing."
+        ? (typeof err.response?.data === "string"
+            ? err.response.data
+            : err.response?.data?.message) ||
+          "No analysis report has been attached for this shift. Please attach the PDF in the Attach Analysis Report modal before viewing."
         : (typeof err.response?.data === "string"
             ? err.response.data
             : err.response?.data?.message) ||

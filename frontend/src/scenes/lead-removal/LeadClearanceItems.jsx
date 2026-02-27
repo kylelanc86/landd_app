@@ -54,7 +54,7 @@ import leadRemovalJobService from "../../services/leadRemovalJobService";
 import PermissionGate from "../../components/PermissionGate";
 import SitePlanDrawing from "../../components/SitePlanDrawing";
 
-const WORKS_COMPLETED_OPTIONS = ["All surfaces HEPA vacuumed and wet-wiped"];
+const WORKS_COMPLETED_OPTIONS = ["All surfaces HEPA vacuumed and wet-wiped", "Flaking lead paint removed, and surfaces overpainted"];
 const LEAD_VALIDATION_TYPES = [
   "Visual inspection",
   "Visual inspection and validation sampling",

@@ -65,6 +65,14 @@ This document verifies that everything needed for development and production dep
 
 **Note:** If email variables are not set, password reset functionality will fail. The app will still run but users cannot reset passwords.
 
+### Backend Service (Optional - Persistent uploads, e.g. DigitalOcean)
+
+| Variable | Type | Description | Required For |
+|----------|------|-------------|--------------|
+| `UPLOADS_DIR` | String | Absolute path to directory for file uploads (lead analysis reports, etc.) | Persisting uploads across redeploys |
+
+**Note:** By default, uploads are stored under the app's `uploads/` directory. On platforms like DigitalOcean App Platform, the container filesystem is ephemeral, so uploaded files (e.g. lead analysis report PDFs) are lost on redeploy. To persist them, mount a volume and set `UPLOADS_DIR` to that path (e.g. `/data/uploads`). If not set, "View Report" may show "Analysis report file not found on the server" after a redeploy until the user re-uploads the PDF.
+
 ### Backend Service (Optional - Xero Integration)
 
 | Variable | Type | Description | Required For |

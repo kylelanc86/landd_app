@@ -155,6 +155,27 @@ Check that:
 - [ ] Can access `/test` endpoint (frontend test)
 - [ ] Backend health check works: `/api/health`
 
+### 11. Lead monitoring: "Analysis report file not found" when viewing report
+
+**Symptom:** View Report works locally but in DigitalOcean you get: "Analysis report file not found on the server..." or "No analysis report has been attached...".
+
+**Cause:** On App Platform the container filesystem is ephemeral. Uploaded lead analysis PDFs are stored under `uploads/lead-analysis-reports/`. After a redeploy or restart, that directory is empty even though the database still has `analysisReportPath` set.
+
+**What to do:**
+
+1. **Confirm in backend logs**  
+   In DigitalOcean → Backend Service → Runtime Logs, trigger View Report and look for:
+   - `[analysis-report] File missing on disk. shiftId=..., resolvedPath=...`  
+   That means the DB has the path but the file is not on disk.
+
+2. **Short-term:** Ask the user to re-upload the PDF in the Attach Analysis Report modal for that shift. The app will work until the next redeploy.
+
+3. **Long-term – persist uploads:**  
+   - Add a **Volume** to the Backend Service in DigitalOcean and mount it (e.g. `/data`).  
+   - Set backend env: `UPLOADS_DIR=/data/uploads`.  
+   - Restart/redeploy. New uploads will be stored on the volume and survive redeploys.  
+   See **DEPLOYMENT_CHECKLIST.md** → "Backend Service (Optional - Persistent uploads)".
+
 ## Still Not Working?
 
 If none of these help, check:

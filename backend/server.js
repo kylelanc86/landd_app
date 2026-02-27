@@ -381,13 +381,16 @@ connectDB()
     
     const server = http.createServer(app);
     
-    // Configure keep-alive timeouts for better connection reuse
-    server.keepAliveTimeout = 65000; // 65 seconds (longer than most load balancers)
-    server.headersTimeout = 66000;   // Must be greater than keepAliveTimeout
-    
+    // Configure timeouts so long-running PDF generation (DocRaptor ~60s) does not get cut off.
+    // 65s was too short and caused report generation to time out.
+    const longRequestMs = 130000; // 130s — allow upload + DocRaptor + download
+    server.timeout = longRequestMs;           // Socket timeout for in-flight requests (no data sent while waiting on DocRaptor)
+    server.keepAliveTimeout = longRequestMs; // Keep connection alive long enough for one long request
+    server.headersTimeout = longRequestMs + 1000; // Must be greater than keepAliveTimeout
+
     server.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
-      console.log(`Keep-alive timeout: ${server.keepAliveTimeout}ms`);
+      console.log(`Request/keep-alive timeout: ${server.timeout}ms`);
     });
   })
   .catch(err => {

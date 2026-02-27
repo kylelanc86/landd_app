@@ -157,6 +157,7 @@ const LeadRemovalJobDetails = () => {
 
   // PDF generation state
   const [generatingPDF, setGeneratingPDF] = useState(false);
+  const [generatingShiftReport, setGeneratingShiftReport] = useState(false);
   const { showSnackbar } = useSnackbar();
   const [reportViewedShiftIds, setReportViewedShiftIds] = useState(new Set());
   const [reportViewedClearanceIds, setReportViewedClearanceIds] = useState(
@@ -198,7 +199,6 @@ const LeadRemovalJobDetails = () => {
     inspectionTime: "09:00 AM",
     asbestosRemovalist: "",
     consultant: "",
-    jurisdiction: "ACT",
     secondaryHeader: "",
     descriptionOfWorks: "",
     vehicleEquipmentDescription: "",
@@ -730,7 +730,6 @@ const LeadRemovalJobDetails = () => {
           clearance.asbestosRemovalist ||
           "",
         consultant: consultantValue,
-        jurisdiction: clearance.jurisdiction || job?.jurisdiction || "ACT",
         secondaryHeader: clearance.secondaryHeader || "",
         descriptionOfWorks: clearance.descriptionOfWorks || "",
         vehicleEquipmentDescription:
@@ -864,6 +863,11 @@ const LeadRemovalJobDetails = () => {
     (clearances.length === 0 || allClearancesCompleteAndAuthorised);
 
   const handleViewReport = async (shift) => {
+    // Show overlay immediately on this page (lead job) so user sees feedback before any network calls
+    if (jobId) {
+      setGeneratingShiftReport(true);
+      await new Promise((r) => setTimeout(r, 0));
+    }
     try {
       // Fetch the latest shift data
       const shiftResponse = await shiftService.getById(shift._id);
@@ -873,41 +877,47 @@ const LeadRemovalJobDetails = () => {
       const isLeadShift = latestShift.jobModel === "LeadRemovalJob" || !!jobId; // jobId from params = we're on a lead removal job
 
       if (isLeadShift) {
-        const jobResponse = await leadRemovalJobService.getById(
-          latestShift.job?._id || latestShift.job || jobId,
-        );
-        const samplesResponse = await leadAirSampleService.getByShift(
-          latestShift._id,
-        );
-        const samplesWithAnalysis = samplesResponse.data || [];
-
-        let project = jobResponse.data.projectId;
-        if (project && typeof project === "string") {
-          const projectResponse = await projectService.getById(project);
-          project = projectResponse.data;
-        }
-        if (project && project.client && typeof project.client === "string") {
-          const clientResponse = await clientService.getById(project.client);
-          project.client = clientResponse.data;
-        }
-
-        await generateLeadMonitoringShiftReport({
-          shift: latestShift,
-          job: jobResponse.data,
-          samples: samplesWithAnalysis,
-          project: project || {},
-          openInNewTab: !shift.reportApprovedBy,
-        });
-        setReportViewedShiftIds((prev) => new Set(prev).add(shift._id));
         try {
-          await shiftService.update(shift._id, {
-            reportViewedAt: new Date().toISOString(),
+          const jobResponse = await leadRemovalJobService.getById(
+            latestShift.job?._id || latestShift.job || jobId,
+          );
+          const samplesResponse = await leadAirSampleService.getByShift(
+            latestShift._id,
+          );
+          const samplesWithAnalysis = samplesResponse.data || [];
+
+          let project = jobResponse.data.projectId;
+          if (project && typeof project === "string") {
+            const projectResponse = await projectService.getById(project);
+            project = projectResponse.data;
+          }
+          if (project && project.client && typeof project.client === "string") {
+            const clientResponse = await clientService.getById(project.client);
+            project.client = clientResponse.data;
+          }
+
+          await generateLeadMonitoringShiftReport({
+            shift: latestShift,
+            job: jobResponse.data,
+            samples: samplesWithAnalysis,
+            project: project || {},
+            openInNewTab: !shift.reportApprovedBy,
           });
-        } catch (e) {
-          console.warn("Failed to persist report viewed:", e);
+          setReportViewedShiftIds((prev) => new Set(prev).add(shift._id));
+          try {
+            await shiftService.update(shift._id, {
+              reportViewedAt: new Date().toISOString(),
+            });
+          } catch (e) {
+            console.warn("Failed to persist report viewed:", e);
+          }
+        } finally {
+          setGeneratingShiftReport(false);
         }
         return;
       }
+
+      setGeneratingShiftReport(false);
 
       // Non-lead shifts: for attached analysis report PDF, open that; otherwise generate asbestos report
       if (latestShift.analysisReportPath) {
@@ -995,6 +1005,7 @@ const LeadRemovalJobDetails = () => {
       }
     } catch (err) {
       console.error("Error generating report:", err);
+      setGeneratingShiftReport(false);
       const msg =
         err?.message ||
         err?.response?.data?.message ||
@@ -1785,7 +1796,6 @@ const LeadRemovalJobDetails = () => {
       asbestosRemovalist:
         job?.leadAbatementContractor || job?.asbestosRemovalist || "",
       consultant: "",
-      jurisdiction: job?.jurisdiction || "ACT",
       secondaryHeader: "",
       descriptionOfWorks: "",
       vehicleEquipmentDescription: "",
@@ -1898,6 +1908,11 @@ const LeadRemovalJobDetails = () => {
       return;
     }
 
+    if (!clearanceForm.descriptionOfWorks?.trim()) {
+      setError("Description of works is required");
+      return;
+    }
+
     setCreating(true);
     setError(null);
 
@@ -1909,7 +1924,7 @@ const LeadRemovalJobDetails = () => {
         inspectionTime: clearanceForm.inspectionTime,
         leadAbatementContractor: clearanceForm.asbestosRemovalist,
         consultant: clearanceForm.consultant,
-        jurisdiction: clearanceForm.jurisdiction || job?.jurisdiction || "ACT",
+        jurisdiction: job?.jurisdiction || "ACT",
         secondaryHeader: clearanceForm.secondaryHeader,
         descriptionOfWorks: clearanceForm.descriptionOfWorks,
         vehicleEquipmentDescription: clearanceForm.vehicleEquipmentDescription,
@@ -2007,8 +2022,12 @@ const LeadRemovalJobDetails = () => {
     >
       {/* PDF Loading Overlay */}
       <PDFLoadingOverlay
-        open={generatingPDF}
-        message="Generating Lead Clearance PDF..."
+        open={generatingPDF || generatingShiftReport}
+        message={
+          generatingShiftReport
+            ? "Generating Lead Monitoring Shift Report..."
+            : "Generating Lead Clearance PDF..."
+        }
       />
 
       {/* Breadcrumbs */}
@@ -2423,6 +2442,7 @@ const LeadRemovalJobDetails = () => {
                                   variant="outlined"
                                   size="small"
                                   startIcon={<PictureAsPdfIcon />}
+                                  disabled={generatingShiftReport}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleViewReport(shift);
@@ -3060,24 +3080,6 @@ const LeadRemovalJobDetails = () => {
                   </Select>
                 </FormControl>
               </Grid>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Jurisdiction</InputLabel>
-                  <Select
-                    value={clearanceForm.jurisdiction || "ACT"}
-                    onChange={(e) =>
-                      setClearanceForm({
-                        ...clearanceForm,
-                        jurisdiction: e.target.value,
-                      })
-                    }
-                    label="Jurisdiction"
-                  >
-                    <MenuItem value="ACT">ACT</MenuItem>
-                    <MenuItem value="NSW">NSW</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
               <Grid item xs={12}>
                 <TextField
                   fullWidth
@@ -3096,6 +3098,7 @@ const LeadRemovalJobDetails = () => {
               <Grid item xs={12}>
                 <TextField
                   fullWidth
+                  required
                   label="Description of works"
                   multiline
                   rows={3}

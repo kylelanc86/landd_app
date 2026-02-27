@@ -1550,6 +1550,9 @@ const generateLeadClearanceHTML = async (clearanceData, pdfId = 'unknown') => {
   const templateContent = await getTemplateByType('leadClearance');
   const resolvedLegislation = await resolveSelectedLegislation(templateContent?.selectedLegislation);
   const selectedLegislation = resolvedLegislation;
+  const hasDustOrSoilSamples =
+    (Array.isArray(clearanceData.sampling?.preWorksSamples) && clearanceData.sampling.preWorksSamples.length > 0) ||
+    (Array.isArray(clearanceData.sampling?.validationSamples) && clearanceData.sampling.validationSamples.length > 0);
   const templateData = {
     ...clearanceData,
     jurisdiction,
@@ -1558,6 +1561,7 @@ const generateLeadClearanceHTML = async (clearanceData, pdfId = 'unknown') => {
     selectedLegislation,
     jobSpecificExclusions: clearanceData.jobSpecificExclusions || '',
     clientName: clearanceData.projectId?.client?.name || clearanceData.clientName,
+    leadSampling: hasDustOrSoilSamples, // {LEAD_SAMPLING?} → " and sampling to assess for elevated lead dust" only when clearance has dust/soil samples
   };
   const sections = {
     inspectionDetailsContent: templateContent?.standardSections?.inspectionDetailsContent ?? '',
@@ -1577,7 +1581,10 @@ const generateLeadClearanceHTML = async (clearanceData, pdfId = 'unknown') => {
   const hasLevelFloor = items.some(item => item.levelFloor && String(item.levelFloor).trim() !== '');
 
   const thLevelFloor = hasLevelFloor ? '<th style="width: 12%;">Level/Floor</th>' : '';
-  const tableHeaders = `<th>Location Description</th><th style="width: 14%;">Room/Area</th><th>Works Completed</th><th style="width: 10%;">Samples</th><th style="width: 8%;">Photo No.</th>`;
+  // Works Completed 30% narrower; freed width split equally between Room/Area and Location Description. Order: Room/Area, Location Description, Works Completed, Photo No.
+  const tableHeaders = hasLevelFloor
+    ? `<th style="width: 17%;">Room/Area</th><th style="width: 32%;">Location Description</th><th style="width: 32%;">Works Completed</th><th style="width: 7%;">Photo No.</th>`
+    : `<th style="width: 19%;">Room/Area</th><th style="width: 38%;">Location Description</th><th style="width: 35%;">Works Completed</th><th style="width: 8%;">Photo No.</th>`;
 
   let globalPhotoCounter = 1;
   const itemsWithPhotoNumbers = items.map((item) => {
@@ -1590,11 +1597,10 @@ const generateLeadClearanceHTML = async (clearanceData, pdfId = 'unknown') => {
     const photoText = item.sequentialPhotoNumbers.length === 0 ? '-'
       : item.sequentialPhotoNumbers.length === 1 ? String(item.sequentialPhotoNumbers[0])
       : `${item.sequentialPhotoNumbers[0]}-${item.sequentialPhotoNumbers[item.sequentialPhotoNumbers.length - 1]}`;
-    const samplesText = Array.isArray(item.samples) && item.samples.length > 0 ? item.samples.join(', ') : '-';
     const levelTd = hasLevelFloor ? `<td>${escapeHtml(item.levelFloor || '')}</td>` : '';
-    return `<tr>${levelTd}<td>${escapeHtml(item.locationDescription || '')}</td><td>${escapeHtml(item.roomArea || '')}</td><td>${escapeHtml(item.worksCompleted || '')}</td><td>${escapeHtml(samplesText)}</td><td>${escapeHtml(photoText)}</td></tr>`;
+    return `<tr>${levelTd}<td>${escapeHtml(item.roomArea || '')}</td><td>${escapeHtml(item.locationDescription || '')}</td><td>${escapeHtml(item.worksCompleted || '')}</td><td>${escapeHtml(photoText)}</td></tr>`;
   });
-  const tableBody = rows.length > 0 ? rows.join('') : `<tr><td colspan="${hasLevelFloor ? 6 : 5}" style="text-align: center; font-style: italic;">No clearance items</td></tr>`;
+  const tableBody = rows.length > 0 ? rows.join('') : `<tr><td colspan="${hasLevelFloor ? 5 : 4}" style="text-align: center; font-style: italic;">No clearance items</td></tr>`;
 
   const jobExclusionsHtml = (clearanceData.jobSpecificExclusions && String(clearanceData.jobSpecificExclusions).trim())
     ? await replacePlaceholders(String(clearanceData.jobSpecificExclusions).trim(), templateData)
@@ -1728,10 +1734,12 @@ const generateLeadClearanceHTML = async (clearanceData, pdfId = 'unknown') => {
         ${sectionHtml.backgroundContent ? `<div class="paragraph">${sectionHtml.backgroundContent}</div>` : ''}
         <div class="section-header">REGULATORY GUIDANCE, REGULATIONS AND CODES OF PRACTICE</div>
         ${sectionHtml.regulatoryGuidanceContent ? `<div class="paragraph">${sectionHtml.regulatoryGuidanceContent}</div>` : ''}
+        ${hasDustOrSoilSamples ? `
         <div class="section-header">ASSESSMENT METHODOLOGY</div>
         ${sectionHtml.assessmentMethodologyContent ? `<div class="paragraph">${sectionHtml.assessmentMethodologyContent}</div>` : ''}
         <div class="section-header">ASSESSMENT CRITERIA</div>
         ${sectionHtml.assessmentCriteriaContent ? `<div class="paragraph">${sectionHtml.assessmentCriteriaContent}</div>` : ''}
+        ` : ''}
       </div>
       <div class="footer">
         <div class="footer-border-line"></div>
@@ -1756,7 +1764,33 @@ const generateLeadClearanceHTML = async (clearanceData, pdfId = 'unknown') => {
       </div>
     </div>`;
 
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><title>Lead Clearance Report</title><style>${baseStyles}</style></head><body>${coverPage}${inspectionPage}${backgroundPage}${statementOfLimitationsPage}</body></html>`;
+  // When no dust/soil sampling: drop the separate background page and put Statement of Limitations beneath Regulatory Guidance on one page
+  const regulatoryAndLimitationsPage = `
+    <div class="page">
+      <div class="header">
+        <img class="logo" src="data:image/png;base64,${logoBase64}" alt="Logo" />
+        <div class="company-details">Lancaster &amp; Dickenson Consulting Pty Ltd<br />4/6 Dacre Street<br />Mitchell ACT 2911<br /><span style="color:#16b12b;font-weight:500;">www.landd.com.au</span></div>
+      </div>
+      <div class="header-line"></div>
+      <div class="content">
+        <div class="section-header">BACKGROUND</div>
+        ${sectionHtml.backgroundContent ? `<div class="paragraph">${sectionHtml.backgroundContent}</div>` : ''}
+        <div class="section-header">REGULATORY GUIDANCE, REGULATIONS AND CODES OF PRACTICE</div>
+        ${sectionHtml.regulatoryGuidanceContent ? `<div class="paragraph">${sectionHtml.regulatoryGuidanceContent}</div>` : ''}
+        <div class="section-header">STATEMENT OF LIMITATIONS</div>
+        ${sectionHtml.statementOfLimitationsContent ? `<div class="paragraph">${sectionHtml.statementOfLimitationsContent}</div>` : ''}
+      </div>
+      <div class="footer">
+        <div class="footer-border-line"></div>
+        <div class="footer-text">${escapeHtml(footerText)}</div>
+      </div>
+    </div>`;
+
+  const pagesAfterInspection = hasDustOrSoilSamples
+    ? `${backgroundPage}${statementOfLimitationsPage}`
+    : regulatoryAndLimitationsPage;
+
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><title>Lead Clearance Report</title><style>${baseStyles}</style></head><body>${coverPage}${inspectionPage}${pagesAfterInspection}</body></html>`;
 };
 
 /**

@@ -268,6 +268,11 @@ const LeadAssessmentReportTemplates = () => {
       name: "LEGISLATION",
       description: "Selected legislation items (formatted as bullet points)",
     },
+    {
+      name: "LEAD_SAMPLING?",
+      description:
+        "Optional (lead clearances only): ' and sampling to assess for elevated lead dust' when the clearance has dust or soil samples; otherwise nothing",
+    },
   ];
 
   const formattingOptions = [
