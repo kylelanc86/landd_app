@@ -18,6 +18,7 @@ class DocRaptorService {
         throw new Error('DOCRAPTOR_API_KEY environment variable is not set');
       }
 
+      // DocRaptor sync generation limit is 60s; allow 90s+ for upload/download on slow connections
       const { timeoutMs: optionsTimeout, ...docraptorOptions } = options;
       const envTimeout = parseInt(process.env.DOCRAPTOR_TIMEOUT_MS, 10);
       const timeoutMs = optionsTimeout != null ? optionsTimeout : (isNaN(envTimeout) ? 90000 : envTimeout);
