@@ -214,6 +214,10 @@ const AsbestosAssessmentSchema = new mongoose.Schema({
   reportViewedAt: { type: Date }, // When Fibre ID report was viewed (L&D Supplied Jobs – used to show Authorise / Send for Authorisation)
   archived: { type: Boolean, default: false }, // When true, job is removed from the assessment table (completed)
   revision: { type: Number, default: 0 }, // Report revision number
+  // Persisted assessment report PDF (async generation)
+  pdfBuffer: { type: Buffer, required: false },
+  pdfReadyAt: { type: Date, required: false },
+  pdfFilename: { type: String, required: false },
   // Legislation snapshot at job creation (state-specific, from report template); used for {LEGISLATION} in PDFs
   legislation: [{
     _id: String,
@@ -223,6 +227,30 @@ const AsbestosAssessmentSchema = new mongoose.Schema({
   }],
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
+});
+
+// Ensure updatedAt is set on every save (covers all doc.save() paths)
+AsbestosAssessmentSchema.pre('save', function (next) {
+  this.updatedAt = new Date();
+  next();
+});
+
+// Ensure updatedAt is set on every findByIdAndUpdate/findOneAndUpdate (covers all query-based updates)
+AsbestosAssessmentSchema.pre('findOneAndUpdate', function (next) {
+  const update = this.getUpdate();
+  if (update && typeof update === 'object') {
+    const now = new Date();
+    if (update.$set && typeof update.$set === 'object') {
+      update.$set.updatedAt = now;
+    } else if (Object.keys(update).some((k) => k.startsWith('$'))) {
+      // Update uses operators ($push, $pull, etc.); add $set.updatedAt
+      update.$set = update.$set || {};
+      update.$set.updatedAt = now;
+    } else {
+      update.updatedAt = now;
+    }
+  }
+  next();
 });
 
 module.exports = mongoose.model('AsbestosAssessment', AsbestosAssessmentSchema); 

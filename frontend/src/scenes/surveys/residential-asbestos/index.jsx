@@ -39,9 +39,9 @@ import CloseIcon from "@mui/icons-material/Close";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
-import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import MailIcon from "@mui/icons-material/Mail";
+import DownloadingIcon from "@mui/icons-material/Downloading";
 import { tokens } from "../../../theme/tokens";
 import { useTheme } from "@mui/material/styles";
 import {
@@ -54,6 +54,12 @@ import { hasPermission } from "../../../config/permissions";
 import { getTodaySydney } from "../../../utils/dateUtils";
 import { useSnackbar } from "../../../context/SnackbarContext";
 import PDFLoadingOverlay from "../../../components/PDFLoadingOverlay";
+import {
+  startAssessmentPDFJob,
+  getAssessmentPDFStatus,
+  downloadAssessmentPDFByAssessmentId,
+} from "../../../utils/templatePDFGenerator";
+import { formatAuthoriserDisplayName } from "../../../utils/formatters";
 
 const CACHE_KEY = "residentialAsbestosJobsCache";
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -63,9 +69,7 @@ const trimOriginalDataForCache = (orig) => {
   if (!orig || typeof orig !== "object") return orig;
   const projectId = orig.projectId;
   return {
-    projectId: projectId
-      ? { _id: projectId._id || projectId }
-      : undefined,
+    projectId: projectId ? { _id: projectId._id || projectId } : undefined,
     assessmentDate: orig.assessmentDate,
     state: orig.state,
     secondaryHeader: orig.secondaryHeader,
@@ -75,6 +79,9 @@ const trimOriginalDataForCache = (orig) => {
     reportApprovedBy: orig.reportApprovedBy,
     reportAuthorisedBy: orig.reportAuthorisedBy,
     reportIssueDate: orig.reportIssueDate,
+    pdfReadyAt: orig.pdfReadyAt,
+    pdfFilename: orig.pdfFilename,
+    updatedAt: orig.updatedAt,
     noSamplesCollected: orig.noSamplesCollected,
     samplesReceivedDate: orig.samplesReceivedDate,
     labSamplesStatus: orig.labSamplesStatus,
@@ -134,7 +141,10 @@ const saveJobsCache = (jobs) => {
       ...j,
       originalData: trimOriginalDataForCache(j.originalData || j),
     }));
-    const payload = JSON.stringify({ jobs: trimmedJobs, timestamp: Date.now() });
+    const payload = JSON.stringify({
+      jobs: trimmedJobs,
+      timestamp: Date.now(),
+    });
     window.sessionStorage.setItem(CACHE_KEY, payload);
   } catch (error) {
     if (error?.name === "QuotaExceededError") {
@@ -195,8 +205,13 @@ const ResidentialAsbestosAssessment = () => {
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState(null);
 
-  // View Report state
-  const [generatingReportId, setGeneratingReportId] = useState(null);
+  // View Report state (async PDF: start only in handler; polling in useEffect)
+  const [assessmentPdfJobId, setAssessmentPdfJobId] = useState(null);
+  const [assessmentPdfStatus, setAssessmentPdfStatus] = useState("idle"); // 'idle' | 'generating'
+  const [assessmentPdfStartingId, setAssessmentPdfStartingId] = useState(null); // job id while start request in flight
+  const [assessmentPdfGeneratingForJobId, setAssessmentPdfGeneratingForJobId] = useState(null); // job id whose PDF is generating (until poll completes)
+  const [assessmentDownloadDialogOpen, setAssessmentDownloadDialogOpen] = useState(false);
+  const [generatingReportId, setGeneratingReportId] = useState(null); // legacy / other flows
 
   // Delete confirmation state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -217,7 +232,10 @@ const ResidentialAsbestosAssessment = () => {
   const fetchJobs = useCallback(
     async ({ force = false, silent = false } = {}) => {
       const startTime = performance.now();
-      console.log("[Residential Asbestos] fetchJobs started", { force, silent });
+      console.log("[Residential Asbestos] fetchJobs started", {
+        force,
+        silent,
+      });
 
       if (!silent) {
         setLoading(true);
@@ -239,12 +257,17 @@ const ResidentialAsbestosAssessment = () => {
             }
             return;
           }
-          console.log(`[Residential Asbestos] Cache miss (check took ${cacheCheckMs}ms)`);
+          console.log(
+            `[Residential Asbestos] Cache miss (check took ${cacheCheckMs}ms)`,
+          );
         }
 
         const apiStart = performance.now();
         const jobsResponse =
-          await asbestosAssessmentService.getAsbestosAssessments({ jobType: 'residential-asbestos', list: 1 });
+          await asbestosAssessmentService.getAsbestosAssessments({
+            jobType: "residential-asbestos",
+            list: 1,
+          });
         const apiMs = (performance.now() - apiStart).toFixed(2);
         const jobs = jobsResponse.data || jobsResponse || [];
 
@@ -290,9 +313,7 @@ const ResidentialAsbestosAssessment = () => {
           return bNum - aNum;
         });
         const processMs = (performance.now() - processStart).toFixed(2);
-        console.log(
-          `[Residential Asbestos] Process + sort in ${processMs}ms`,
-        );
+        console.log(`[Residential Asbestos] Process + sort in ${processMs}ms`);
 
         setJobs(sortedJobs);
         saveJobsCache(sortedJobs);
@@ -480,7 +501,7 @@ const ResidentialAsbestosAssessment = () => {
         LAA: selectedLAA || null,
         secondaryHeader: secondaryHeader?.trim() || null,
         intrusiveness: intrusiveness,
-        jobType: 'residential-asbestos',
+        jobType: "residential-asbestos",
       };
 
       const response =
@@ -546,6 +567,14 @@ const ResidentialAsbestosAssessment = () => {
     job.noSamplesCollected === true ||
     job.originalData?.noSamplesCollected === true;
 
+  /** True when report is authorised (reportAuthorisedBy set) – report is read-only. Uses authorisation (final sign-off), not "ready for review" (reportApprovedBy). Closed jobs are removed from the list. */
+  const isJobReportLocked = (job) => {
+    const data = job?.originalData || job;
+    const v = data?.reportAuthorisedBy;
+    if (v == null) return false;
+    return typeof v === "string" ? v.trim() !== "" : !!v;
+  };
+
   const canCompleteAssessment =
     currentUser?.role === "admin" ||
     currentUser?.role === "super_admin" ||
@@ -608,10 +637,7 @@ const ResidentialAsbestosAssessment = () => {
       clearJobsCache();
       setJobs((prev) => prev.filter((j) => j.id !== job.id));
       await fetchJobs({ force: true, silent: true });
-      showSnackbar(
-        "Job closed and removed from the table.",
-        "success",
-      );
+      showSnackbar("Job closed and removed from the table.", "success");
     } catch (err) {
       console.error("Error completing assessment:", err);
       showSnackbar(
@@ -627,6 +653,7 @@ const ResidentialAsbestosAssessment = () => {
 
   const handleEditClick = (event, job) => {
     event.stopPropagation();
+    if (isJobReportLocked(job)) return;
     setJobToEdit(job);
     setEditDate(
       job.surveyDate
@@ -696,55 +723,132 @@ const ResidentialAsbestosAssessment = () => {
     }
   };
 
-  const handleViewReport = async (event, job) => {
+  // Poll assessment PDF job; on complete show snackbar and refresh table (same pattern as clearance)
+  useEffect(() => {
+    if (!assessmentPdfJobId || assessmentPdfStatus !== "generating") {
+      return;
+    }
+    const POLL_MS = 2500;
+    const poll = async () => {
+      try {
+        const data = await getAssessmentPDFStatus(assessmentPdfJobId);
+        if (data.status === "completed" || data.ready) {
+          const assessmentId = assessmentPdfGeneratingForJobId;
+          setAssessmentPdfStatus("idle");
+          setAssessmentPdfJobId(null);
+          setAssessmentPdfGeneratingForJobId(null);
+          // Optimistic update: mark this job as having a valid PDF so the icon turns green immediately
+          const now = new Date();
+          setJobs((prev) =>
+            prev.map((j) =>
+              String(j.id) === String(assessmentId)
+                ? {
+                    ...j,
+                    originalData: {
+                      ...(j.originalData || {}),
+                      pdfReadyAt: now,
+                      updatedAt: now,
+                    },
+                  }
+                : j
+            )
+          );
+          try {
+            const { filename } = await downloadAssessmentPDFByAssessmentId(assessmentId);
+            showSnackbar(`Downloaded: ${filename}`, "success");
+            setReportViewedAssessmentIds((prev) => new Set(prev).add(assessmentId));
+          } catch (e) {
+            showSnackbar(e.message || "Download failed", "error");
+          }
+          // Delay refresh so backend has persisted the PDF; otherwise list can overwrite optimistic update with stale data
+          setTimeout(() => fetchJobs({ force: true, silent: true }), 800);
+          return;
+        }
+        if (data.status === "failed") {
+          const errMsg = data.error || data.message || "PDF generation failed";
+          setAssessmentPdfStatus("idle");
+          setAssessmentPdfJobId(null);
+          setAssessmentPdfGeneratingForJobId(null);
+          showSnackbar(errMsg, "error");
+          return;
+        }
+      } catch (err) {
+        setAssessmentPdfStatus("idle");
+        setAssessmentPdfJobId(null);
+        setAssessmentPdfGeneratingForJobId(null);
+        showSnackbar(err.message || "Status check failed", "error");
+        return;
+      }
+      timerRef.current = setTimeout(poll, POLL_MS);
+    };
+    const timerRef = { current: null };
+    poll();
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [
+    assessmentPdfJobId,
+    assessmentPdfStatus,
+    assessmentPdfGeneratingForJobId,
+    fetchJobs,
+    showSnackbar,
+  ]);
+
+  const handleStartAssessmentPdf = async (event, job) => {
     event.stopPropagation();
-    if (generatingReportId) return;
+    if (assessmentPdfStartingId) return;
 
-    setGeneratingReportId(job.id);
+    setAssessmentPdfStartingId(job.id);
+    setAssessmentPdfGeneratingForJobId(job.id);
+    showSnackbar("PDF generation has started. You will be notified when it is ready.", "info");
+    setAssessmentPdfStatus("generating");
+    setAssessmentPdfJobId(null);
     try {
-      const response =
-        await asbestosAssessmentService.getAsbestosAssessmentById(job.id);
-      const fullAssessment = response.data;
-
-      const { data: pdfBlob } =
-        await asbestosAssessmentService.generateAsbestosAssessmentPdf(
-          fullAssessment,
-          { isResidential: true },
-        );
-
-      const url = window.URL.createObjectURL(pdfBlob);
-      const link = document.createElement("a");
-      link.href = url;
-      const projectId =
-        fullAssessment.projectId?.projectID || job.projectID || "Unknown";
-      const siteName =
-        fullAssessment.projectId?.name || job.projectName || "Unknown";
-      const assessmentDate = fullAssessment.assessmentDate
-        ? new Date(fullAssessment.assessmentDate)
-            .toLocaleDateString("en-GB")
-            .replace(/\//g, "-")
-        : "Unknown";
-      link.download = `${projectId}: Residential Asbestos Assessment Report - ${siteName} (${assessmentDate}).pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-
-      setReportViewedAssessmentIds((prev) => new Set(prev).add(job.id));
-      showSnackbar(
-        "Residential asbestos assessment report generated successfully.",
-        "success",
-      );
+      const { jobId } = await startAssessmentPDFJob(job.id, { isResidential: true });
+      setAssessmentPdfJobId(jobId);
     } catch (err) {
-      console.error("Error generating asbestos assessment report:", err);
-      showSnackbar(
-        err.response?.data?.message ||
-          err.message ||
-          "Failed to generate report",
-        "error",
-      );
+      console.error("Error starting assessment PDF:", err);
+      setAssessmentPdfStatus("idle");
+      setAssessmentPdfGeneratingForJobId(null);
+      showSnackbar(err.message || "Failed to start PDF generation", "error");
     } finally {
-      setGeneratingReportId(null);
+      setAssessmentPdfStartingId(null);
+    }
+  };
+
+  // True when a PDF exists and assessment was not updated after it was generated (safe to just download).
+  const hasRetainedValidPdf = (job) => {
+    const pdfReadyAt = job.pdfReadyAt || job.originalData?.pdfReadyAt;
+    if (!pdfReadyAt) return false;
+    const updatedAt = job.updatedAt ?? job.originalData?.updatedAt;
+    if (!updatedAt) return true; // no updatedAt → assume PDF still valid, try download
+    return new Date(updatedAt) <= new Date(pdfReadyAt);
+  };
+
+  const handleDownloadOrGenerateAssessmentReport = async (event, job) => {
+    event.stopPropagation();
+    if (hasRetainedValidPdf(job)) {
+      setAssessmentDownloadDialogOpen(true);
+      try {
+        const { filename } = await downloadAssessmentPDFByAssessmentId(job.id);
+        showSnackbar(`Downloaded: ${filename}`, "success");
+        setReportViewedAssessmentIds((prev) => new Set(prev).add(job.id));
+      } catch (err) {
+        console.error("Error downloading assessment report:", err);
+        const msg = err.message || "";
+        const isNoPdf = /no pdf|not available|retention|generate the pdf first/i.test(msg);
+        if (isNoPdf) {
+          showSnackbar("No PDF available. Starting generation…", "info");
+          handleStartAssessmentPdf(event, job);
+        } else {
+          showSnackbar(msg || "Failed to download PDF", "error");
+        }
+      } finally {
+        setAssessmentDownloadDialogOpen(false);
+      }
+    } else {
+      // No retained PDF or assessment changed since last PDF → generate
+      handleStartAssessmentPdf(event, job);
     }
   };
 
@@ -856,6 +960,22 @@ const ResidentialAsbestosAssessment = () => {
         message="Generating Residential Asbestos Assessment PDF..."
       />
       <Box sx={{ mt: 4, mb: 4 }}>
+        <Dialog
+          open={assessmentDownloadDialogOpen}
+          onClose={() => setAssessmentDownloadDialogOpen(false)}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{ sx: { borderRadius: 2 } }}
+        >
+          <DialogTitle>Downloading report</DialogTitle>
+          <DialogContent>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2, py: 2 }}>
+              <CircularProgress size={24} />
+              <Typography>The report is downloading. Please wait.</Typography>
+            </Box>
+          </DialogContent>
+        </Dialog>
+
         <Breadcrumbs sx={{ mb: 3 }}>
           <Link
             component="button"
@@ -902,11 +1022,30 @@ const ResidentialAsbestosAssessment = () => {
           <TableContainer>
             <Table stickyHeader>
               <TableHead>
-                <TableRow sx={{ background: "linear-gradient(to right, #045E1F, #96CC78) !important", color: "white", "&:hover": { backgroundColor: "transparent" } }}>
-                  <TableCell sx={{ fontWeight: "bold", maxWidth: "90px", color: "inherit" }}>
+                <TableRow
+                  sx={{
+                    background:
+                      "linear-gradient(to right, #045E1F, #96CC78) !important",
+                    color: "white",
+                    "&:hover": { backgroundColor: "transparent" },
+                  }}
+                >
+                  <TableCell
+                    sx={{
+                      fontWeight: "bold",
+                      maxWidth: "90px",
+                      color: "inherit",
+                    }}
+                  >
                     Project ID
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", maxWidth: "195px", color: "inherit" }}>
+                  <TableCell
+                    sx={{
+                      fontWeight: "bold",
+                      maxWidth: "195px",
+                      color: "inherit",
+                    }}
+                  >
                     Project Name
                   </TableCell>
                   <TableCell
@@ -925,7 +1064,7 @@ const ResidentialAsbestosAssessment = () => {
                   <TableCell
                     sx={{
                       fontWeight: "bold",
-                      maxWidth: "140px",
+                      width: "200px",
                       color: "inherit",
                       display: { xs: "none", sm: "table-cell" },
                     }}
@@ -937,7 +1076,7 @@ const ResidentialAsbestosAssessment = () => {
                       fontWeight: "bold",
                       minWidth: "180px",
                       color: "inherit",
-                      display: { xs: "none", sm: "table-cell" },
+                      display: "none", // Sample Analysis column hidden for now
                     }}
                   >
                     Sample Analysis
@@ -1018,7 +1157,8 @@ const ResidentialAsbestosAssessment = () => {
                               },
                             }}
                           >
-                            Survey Date: {job.surveyDate
+                            Survey Date:{" "}
+                            {job.surveyDate
                               ? new Date(job.surveyDate).toLocaleDateString(
                                   "en-GB",
                                 )
@@ -1057,12 +1197,46 @@ const ResidentialAsbestosAssessment = () => {
                             color: "white",
                           }}
                         />
+                        {(job.status === "report-ready-for-review" ||
+                          job.status === "complete") &&
+                          (job.originalData?.reportAuthorisedBy ||
+                            job.reportAuthorisedBy ? (
+                            <Typography
+                              variant="caption"
+                              display="block"
+                              sx={{
+                                mt: 0.5,
+                                fontWeight: "medium",
+                                color: "#2e7d32",
+                                fontStyle: "italic",
+                              }}
+                            >
+                              ✓ Authorised:{" "}
+                              {formatAuthoriserDisplayName(
+                                job.originalData?.reportAuthorisedBy ||
+                                  job.reportAuthorisedBy
+                              )}
+                            </Typography>
+                          ) : (
+                            <Typography
+                              variant="caption"
+                              display="block"
+                              sx={{
+                                mt: 0.5,
+                                fontWeight: "medium",
+                                color: theme.palette.warning.main,
+                                fontStyle: "italic",
+                              }}
+                            >
+                              Report not authorised
+                            </Typography>
+                          ))}
                       </TableCell>
                       <TableCell
                         onClick={(e) => e.stopPropagation()}
                         sx={{
                           maxWidth: "140px",
-                          display: { xs: "none", sm: "table-cell" },
+                          display: "none", // Sample Analysis column hidden for now
                         }}
                       >
                         <Box
@@ -1089,6 +1263,7 @@ const ResidentialAsbestosAssessment = () => {
                               {hasNoSamplesCollected(job) ? (
                                 <Typography
                                   variant="body2"
+                                  fontSize="0.8rem"
                                   color="text.secondary"
                                   fontStyle="italic"
                                 >
@@ -1097,6 +1272,7 @@ const ResidentialAsbestosAssessment = () => {
                               ) : (
                                 <Typography
                                   variant="body2"
+                                  fontSize="0.8rem"
                                   fontStyle="italic"
                                   color="text.secondary"
                                 >
@@ -1166,7 +1342,8 @@ const ResidentialAsbestosAssessment = () => {
                                       : "Analyse"}
                                 </Button>
                                 {hasSamplesSubmitted(job) &&
-                                  job.originalData?.labSamplesStatus !== "analysis-complete" &&
+                                  job.originalData?.labSamplesStatus !==
+                                    "analysis-complete" &&
                                   job.originalData?.analysisDueDate && (
                                     <Typography
                                       variant="caption"
@@ -1193,8 +1370,10 @@ const ResidentialAsbestosAssessment = () => {
                                 sx={{
                                   color: "white",
                                   backgroundColor:
-                                    getLabStatusLabel(job) === "Analysis complete"
-                                      ? theme.palette.success?.main ?? "#2e7d32"
+                                    getLabStatusLabel(job) ===
+                                    "Analysis complete"
+                                      ? (theme.palette.success?.main ??
+                                        "#2e7d32")
                                       : theme.palette.primary.main,
                                 }}
                               />
@@ -1225,38 +1404,66 @@ const ResidentialAsbestosAssessment = () => {
                               <Button
                                 variant="outlined"
                                 size="small"
-                                color="success"
                                 onClick={(event) =>
                                   handleCompleteClick(event, job)
                                 }
                                 disabled={completingJobId === job.id}
-                                sx={{ textTransform: "none" }}
+                                sx={{
+                                  textTransform: "none",
+                                  color: "#1565c0",
+                                  borderColor: "rgb(34, 12, 158)",
+                                  "&:hover": {
+                                    borderColor: "rgba(25, 118, 210, 0.08)",
+                                    backgroundColor: "rgba(25, 118, 210, 0.08)",
+                                  },
+                                }}
                               >
-                                Close job
+                                Close Job
                               </Button>
                             )}
                           {(job.status === "report-ready-for-review" ||
                             job.status === "complete") && (
-                            <Tooltip title="View Asbestos Assessment Report">
-                              <IconButton
-                                onClick={(event) =>
-                                  handleViewReport(event, job)
+                              <Tooltip
+                                title={
+                                  assessmentPdfStartingId === job.id || assessmentPdfGeneratingForJobId === job.id
+                                    ? "PDF is generating..."
+                                    : hasRetainedValidPdf(job)
+                                      ? "Download report"
+                                      : "Generate and download report"
                                 }
-                                color="primary"
-                                size="small"
-                                disabled={generatingReportId === job.id}
                               >
-                                <PictureAsPdfIcon />
-                              </IconButton>
-                            </Tooltip>
-                          )}
+                                <span>
+                                  <IconButton
+                                    size="small"
+                                    color={hasRetainedValidPdf(job) ? "success" : "warning"}
+                                    onClick={(event) =>
+                                      handleDownloadOrGenerateAssessmentReport(event, job)
+                                    }
+                                    disabled={
+                                      assessmentPdfStartingId === job.id ||
+                                      assessmentPdfGeneratingForJobId === job.id
+                                    }
+                                    sx={{
+                                      mr: 1,
+                                      ...((assessmentPdfStartingId === job.id || assessmentPdfGeneratingForJobId === job.id) && {
+                                        "@keyframes pdfSyncSpin": {
+                                          "0%": { transform: "rotate(0deg)" },
+                                          "100%": { transform: "rotate(360deg)" },
+                                        },
+                                        animation: "pdfSyncSpin 1s linear infinite",
+                                      }),
+                                    }}
+                                  >
+                                    <DownloadingIcon />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                            )}
                           {(() => {
                             const reportAuthorised =
                               job.originalData?.reportAuthorisedBy ||
                               job.reportAuthorisedBy;
-                            const reportViewed = reportViewedAssessmentIds.has(
-                              job.id,
-                            );
+                            const hasRetainedPdf = hasRetainedValidPdf(job);
                             const canAuthorise = currentUser?.reportProofer;
                             const canSendForApproval =
                               hasPermission(currentUser, "asbestos.edit") &&
@@ -1264,13 +1471,13 @@ const ResidentialAsbestosAssessment = () => {
 
                             const showAuthorise =
                               !reportAuthorised &&
-                              reportViewed &&
+                              hasRetainedPdf &&
                               canAuthorise &&
                               (job.status === "report-ready-for-review" ||
                                 job.status === "complete");
                             const showSend =
                               !reportAuthorised &&
-                              reportViewed &&
+                              hasRetainedPdf &&
                               canSendForApproval &&
                               (job.status === "report-ready-for-review" ||
                                 job.status === "complete");
@@ -1287,7 +1494,8 @@ const ResidentialAsbestosAssessment = () => {
                                     }
                                     disabled={
                                       authorisingReports[job.id] ||
-                                      generatingReportId === job.id
+                                      generatingReportId === job.id ||
+                                      assessmentPdfStartingId === job.id
                                     }
                                     sx={{
                                       textTransform: "none",
@@ -1318,21 +1526,25 @@ const ResidentialAsbestosAssessment = () => {
                                   >
                                     {sendingAuthorisationRequests[job.id]
                                       ? "Sending..."
-                                      : "Send for Approval"}
+                                      : "Send for Authorisation"}
                                   </Button>
                                 )}
                               </>
                             );
                           })()}
-                          <Tooltip title="Edit Assessment">
-                            <IconButton
-                              onClick={(event) => handleEditClick(event, job)}
-                              color="primary"
-                              size="small"
-                            >
-                              <EditIcon />
-                            </IconButton>
-                          </Tooltip>
+                          {!isJobReportLocked(job) && (
+                            <Tooltip title="Edit Assessment">
+                              <IconButton
+                                onClick={(event) =>
+                                  handleEditClick(event, job)
+                                }
+                                color="primary"
+                                size="small"
+                              >
+                                <EditIcon />
+                              </IconButton>
+                            </Tooltip>
+                          )}
                           {hasPermission(currentUser, "asbestos.delete") && (
                             <Tooltip title="Delete Assessment">
                               <IconButton

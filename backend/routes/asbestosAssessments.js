@@ -7,6 +7,15 @@ const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const { getLegislationForReportTemplate } = require('../services/templateService');
 
+/** Assessment report PDF retention (days) – matches DocRaptor; after this, report is no longer offered for download. */
+const ASSESSMENT_PDF_RETENTION_DAYS = 7;
+const ASSESSMENT_PDF_RETENTION_MS = ASSESSMENT_PDF_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+function isAssessmentPdfExpired(pdfReadyAt) {
+  if (!pdfReadyAt) return true;
+  return Date.now() - new Date(pdfReadyAt).getTime() > ASSESSMENT_PDF_RETENTION_MS;
+}
+
 // GET /api/assessments - list all assessment jobs (populate project and assessor); excludes archived
 // Query param jobType: 'asbestos-assessment' | 'residential-asbestos' - when set, only jobs of that type are returned
 // Query param list=1 - return minimal fields for table display (no full items, photos, blobs); faster and smaller payload
@@ -86,6 +95,9 @@ router.get('/', async (req, res) => {
             labSamplesStatus: 1,
             analysisDueDate: 1,
             turnaroundTime: 1,
+            pdfReadyAt: 1,
+            pdfFilename: 1,
+            updatedAt: 1,
             items: {
               $map: {
                 input: { $ifNull: ['$items', []] },
@@ -107,10 +119,18 @@ router.get('/', async (req, res) => {
         },
       ];
       const jobs = await AsbestosAssessment.aggregate(pipeline);
+      // Hide PDF availability when past retention (download icon disappears)
+      jobs.forEach((job) => {
+        if (isAssessmentPdfExpired(job.pdfReadyAt)) {
+          job.pdfReadyAt = null;
+          job.pdfFilename = null;
+        }
+      });
       return res.json(jobs);
     }
 
     const jobs = await AsbestosAssessment.find(filter)
+      .select('-pdfBuffer')
       .sort({ createdAt: -1 })
       .populate({
         path: "projectId",
@@ -121,6 +141,13 @@ router.get('/', async (req, res) => {
         }
       })
       .populate('assessorId');
+    // Hide PDF availability when past retention (download icon disappears)
+    jobs.forEach((job) => {
+      if (isAssessmentPdfExpired(job.pdfReadyAt)) {
+        job.pdfReadyAt = null;
+        job.pdfFilename = null;
+      }
+    });
     res.json(jobs);
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch jobs', error: err.message });
@@ -453,7 +480,7 @@ router.put('/:id', async (req, res) => {
       updateData.intrusiveness = intrusiveness;
     }
 
-    // Fetch existing doc to detect newly set authorisation (for requester notification email) and Fibre ID approval (for sample submitter email)
+    // Fetch existing doc to detect newly set assessment report authorisation (requester email) and Fibre ID approval (sample submitter email)
     const existing = await AsbestosAssessment.findById(req.params.id)
       .select('reportAuthorisedBy reportApprovedBy authorisationRequestedBy')
       .lean();
@@ -473,24 +500,26 @@ router.put('/:id', async (req, res) => {
     
     if (!job) return res.status(404).json({ message: 'Assessment job not found' });
 
-    // Send notification email to the user who requested authorisation when report is newly authorised
-    const wasAlreadyAuthorised = !!(existing && (existing.reportAuthorisedBy || existing.reportApprovedBy));
-    const nowAuthorised = !!(job.reportAuthorisedBy || job.reportApprovedBy);
-    if (existing && !wasAlreadyAuthorised && nowAuthorised && job.authorisationRequestedBy) {
+    // Assessment report authorisation: notify the user who requested authorisation (separate from Fibre ID approval)
+    const assessmentReportWasAuthorised = !!(existing && existing.reportAuthorisedBy);
+    const assessmentReportNowAuthorised = !!job.reportAuthorisedBy;
+    if (existing && !assessmentReportWasAuthorised && assessmentReportNowAuthorised && job.authorisationRequestedBy) {
       try {
         const requester = await User.findById(job.authorisationRequestedBy)
           .select('firstName lastName email');
         if (requester && requester.email) {
           const projectName = job.projectId?.name || 'Unknown Project';
           const projectID = job.projectId?.projectID || 'N/A';
-          const approverName = job.reportAuthorisedBy || job.reportApprovedBy || 'Unknown';
+          const approverName = job.reportAuthorisedBy || 'Unknown';
           const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-          const jobUrl = `${frontendUrl}/surveys/asbestos-assessment`;
+          const surveyPath = job.jobType === 'residential-asbestos' ? 'residential-asbestos' : 'asbestos-assessment';
+          const reportLabel = job.jobType === 'residential-asbestos' ? 'Residential Asbestos Assessment' : 'Asbestos Assessment';
+          const jobUrl = `${frontendUrl}/surveys/${surveyPath}`;
           await sendMail({
             to: requester.email,
-            subject: `Report Authorised - ${projectID}: Asbestos Assessment / Fibre ID Report`,
+            subject: `Report Authorised - ${projectID}: ${reportLabel} Report`,
             text: `
-The Asbestos Assessment / Fibre ID report you requested for authorisation has been authorised.
+The ${reportLabel} report you requested for authorisation has been authorised.
 
 Project: ${projectName} (${projectID})
 Authorised by: ${approverName}
@@ -501,12 +530,11 @@ View the report at: ${jobUrl}
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
                 <div style="margin-bottom: 30px;">
                   <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
-                  <p style="color: #666; font-size: 16px; margin: 10px 0 0 0;">Environmental Services</p>
                 </div>
                 <div style="color: #333; line-height: 1.6;">
                   <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Report Authorised</h2>
                   <p>Hello ${requester.firstName},</p>
-                  <p>The Asbestos Assessment / Fibre ID report you requested for authorisation has been authorised:</p>
+                  <p>The ${reportLabel} report you requested for authorisation has been authorised:</p>
                   <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
                     <p style="margin: 5px 0;"><strong>Project:</strong> ${projectName}</p>
                     <p style="margin: 5px 0;"><strong>Project ID:</strong> ${projectID}</p>
@@ -554,7 +582,6 @@ You can view the assessment and Fibre ID report at: ${jobUrl}
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
                 <div style="margin-bottom: 30px;">
                   <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
-                  <p style="color: #666; font-size: 16px; margin: 10px 0 0 0;">Environmental Services</p>
                 </div>
                 <div style="color: #333; line-height: 1.6;">
                   <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Samples Analysed</h2>
@@ -680,15 +707,17 @@ router.post('/:id/send-for-authorisation', auth, checkPermission('asbestos.edit'
     const projectName = assessment.projectId?.name || 'Unknown Project';
     const projectID = assessment.projectId?.projectID || 'N/A';
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const jobUrl = `${frontendUrl}/surveys/asbestos-assessment`;
+    const surveyPath = assessment.jobType === 'residential-asbestos' ? 'residential-asbestos' : 'asbestos-assessment';
+    const reportLabel = assessment.jobType === 'residential-asbestos' ? 'Residential Asbestos Assessment' : 'Asbestos Assessment';
+    const jobUrl = `${frontendUrl}/surveys/${surveyPath}`;
 
     const emailPromises = reportProoferUsers.map(async (user) => {
       try {
         await sendMail({
           to: user.email,
-          subject: `Report Authorisation Required - ${projectID}: Asbestos Assessment Report`,
+          subject: `Report Authorisation Required - ${projectID}: ${reportLabel} Report`,
           text: `
-An Asbestos Assessment report is ready for authorisation.
+A ${reportLabel} report is ready for authorisation.
 
 Project: ${projectName} (${projectID})
 Requested by: ${requesterName}
@@ -699,12 +728,11 @@ Please review and authorise the report at: ${jobUrl}
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
               <div style="margin-bottom: 30px;">
                 <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
-                <p style="color: #666; font-size: 16px; margin: 10px 0 0 0;">Environmental Services</p>
               </div>
               <div style="color: #333; line-height: 1.6;">
                 <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Report Authorisation Required</h2>
                 <p>Hello ${user.firstName},</p>
-                <p>An Asbestos Assessment report is ready for your authorisation:</p>
+                <p>A ${reportLabel} report is ready for your authorisation:</p>
                 <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
                   <p style="margin: 5px 0;"><strong>Project:</strong> ${projectName}</p>
                   <p style="margin: 5px 0;"><strong>Project ID:</strong> ${projectID}</p>

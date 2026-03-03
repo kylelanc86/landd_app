@@ -79,21 +79,9 @@ const clientSuppliedJobSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  // Legacy: single object { fileName, fileType, uploadedAt, data }. New: array of { fileName, fileType, uploadedAt, data, fileSizeBytes }
   chainOfCustody: {
-    fileName: {
-      type: String,
-      trim: true
-    },
-    fileType: {
-      type: String,
-      trim: true
-    },
-    uploadedAt: {
-      type: Date
-    },
-    data: {
-      type: String
-    }
+    type: mongoose.Schema.Types.Mixed
   },
   samples: [{
     labReference: {

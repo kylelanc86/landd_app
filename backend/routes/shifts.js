@@ -430,7 +430,6 @@ View the report at: ${jobUrl}
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
                   <div style="margin-bottom: 30px;">
                     <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
-                    <p style="color: #666; font-size: 16px; margin: 10px 0 0 0;">Environmental Services</p>
                   </div>
                   <div style="color: #333; line-height: 1.6;">
                     <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Report Authorised</h2>
@@ -991,7 +990,6 @@ Review the report at: ${jobUrl}
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
                 <div style="margin-bottom: 30px;">
                   <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
-                  <p style="color: #666; font-size: 16px; margin: 10px 0 0 0;">Environmental Services</p>
                 </div>
                 <div style="color: #333; line-height: 1.6;">
                   <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Report Authorisation Required</h2>

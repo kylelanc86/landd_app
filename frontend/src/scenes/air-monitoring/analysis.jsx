@@ -2428,15 +2428,15 @@ const Analysis = () => {
                     onChange={handleAnalysisDetailsChange}
                   >
                     <FormControlLabel
-                      value="Partial 5"
+                      value="5"
                       control={<Radio />}
-                      label="Partial 5"
+                      label="5"
                       disabled={shiftStatus === "analysis_complete"}
                     />
                     <FormControlLabel
-                      value="6"
+                      value="Partial6"
                       control={<Radio />}
-                      label="6"
+                      label="Partial 6"
                       disabled={shiftStatus === "analysis_complete"}
                     />
 

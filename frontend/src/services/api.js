@@ -479,6 +479,23 @@ export const asbestosAssessmentService = {
     };
     return api.post('/pdf-docraptor-v2/generate-asbestos-assessment-v3', payload, { responseType: 'blob' });
   },
+
+  // Start async assessment PDF generation (returns jobId for polling status)
+  startAsbestosAssessmentPdf: (assessmentData, options = {}) => {
+    const id = assessmentData?._id || assessmentData?.id;
+    const payload = {
+      assessmentData: { ...assessmentData, _id: id, id },
+      ...(options.isResidential === true && { isResidential: true }),
+    };
+    return api.post('/pdf-docraptor-v2/start-asbestos-assessment-pdf', payload);
+  },
+
+  // Get async PDF job status (shared with clearance; use for assessment jobId from startAsbestosAssessmentPdf)
+  getAsyncPdfStatus: (jobId) => api.get(`/pdf-docraptor-v2/status/${jobId}`),
+
+  // Download persisted assessment PDF by assessment ID (no regeneration)
+  downloadAssessmentPDFByAssessmentId: (assessmentId) =>
+    api.get(`/pdf-docraptor-v2/download-by-assessment/${assessmentId}`, { responseType: 'blob' }),
 };
 
 // Client Supplied Jobs service

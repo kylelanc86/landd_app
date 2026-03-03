@@ -92,4 +92,16 @@ export const isValidEmailOrDash = (email) => {
   return emailRegex.test(email);
 };
 
- 
+/**
+ * Formats an authoriser/approver full name for display: first name as initial only, e.g. "John Smith" -> "J. Smith"
+ * @param {string} fullName - Full name (e.g. "First Last")
+ * @returns {string} - Display form (e.g. "F. Last") or original if no space
+ */
+export const formatAuthoriserDisplayName = (fullName) => {
+  if (!fullName || typeof fullName !== "string") return fullName || "";
+  const trimmed = fullName.trim();
+  if (!trimmed) return "";
+  const spaceIndex = trimmed.indexOf(" ");
+  if (spaceIndex <= 0) return trimmed.length > 0 ? `${trimmed[0]}.` : "";
+  return `${trimmed[0]}. ${trimmed.slice(spaceIndex + 1)}`;
+};

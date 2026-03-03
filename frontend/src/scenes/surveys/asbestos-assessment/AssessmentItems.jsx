@@ -425,6 +425,13 @@ const AssessmentItems = () => {
   const [dictationErrorDiscussion, setDictationErrorDiscussion] = useState("");
   const recognitionRefDiscussion = useRef(null);
 
+  // Authorised: report is read-only (view only, no edits). Uses reportAuthorisedBy (final sign-off), not "ready for review" (reportApprovedBy). Closed jobs are removed from the list.
+  const isReportLocked = (() => {
+    const v = assessment?.reportAuthorisedBy;
+    if (v == null) return false;
+    return typeof v === "string" ? v.trim() !== "" : !!v;
+  })();
+
   // Assessment Complete state
   const [assessmentCompleted, setAssessmentCompleted] = useState(false);
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
@@ -652,6 +659,7 @@ const AssessmentItems = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isReportLocked) return;
 
     // Validate required fields
     if (
@@ -920,12 +928,13 @@ const AssessmentItems = () => {
   };
 
   const handleDelete = (item) => {
+    if (isReportLocked) return;
     setItemToDelete(item);
     setDeleteConfirmDialogOpen(true);
   };
 
   const confirmDelete = async () => {
-    if (!itemToDelete) return;
+    if (!itemToDelete || isReportLocked) return;
 
     try {
       await asbestosAssessmentService.deleteItem(id, itemToDelete._id);
@@ -1253,6 +1262,7 @@ const AssessmentItems = () => {
 
   // Complete assessment handler
   const handleCompleteAssessment = () => {
+    if (isReportLocked) return;
     const noItems = !items || items.length === 0;
     if (noItems && !hasValidScope) {
       setNoItemsAndScopeDialogOpen(true);
@@ -1270,6 +1280,7 @@ const AssessmentItems = () => {
   };
 
   const confirmCompleteAssessment = async () => {
+    if (isReportLocked) return;
     if (!hasValidScope) {
       showSnackbar(
         "At least one Scope of Assessment item is required before marking site works complete.",
@@ -1296,6 +1307,7 @@ const AssessmentItems = () => {
 
   // Handle Samples Submitted to Lab
   const handleSamplesSubmittedToLab = () => {
+    if (isReportLocked) return;
     // Automatically set the current user's name
     const userName = currentUser
       ? `${currentUser.firstName} ${currentUser.lastName}`
@@ -1310,6 +1322,7 @@ const AssessmentItems = () => {
 
   // Handle the actual submission after dialog confirmation
   const handleConfirmSamplesSubmitted = async () => {
+    if (isReportLocked) return;
     // Validate turnaround time is selected
     if (!turnaroundTime && !showCustomTurnaround) {
       showSnackbar("Please select a turnaround time", "error");
@@ -1358,10 +1371,12 @@ const AssessmentItems = () => {
 
   // Finalise Assessment (no samples) - goes straight to report-ready-for-review
   const handleFinaliseAssessment = () => {
+    if (isReportLocked) return;
     setShowFinaliseAssessmentDialog(true);
   };
 
   const handleConfirmFinaliseAssessment = async () => {
+    if (isReportLocked) return;
     try {
       setFinalisingAssessment(true);
       await asbestosAssessmentService.update(id, {
@@ -1389,6 +1404,7 @@ const AssessmentItems = () => {
 
   // Site Plan handlers
   const performSitePlanSave = async (sitePlanData) => {
+    if (isReportLocked) return;
     const imageData =
       typeof sitePlanData === "string"
         ? sitePlanData
@@ -1528,6 +1544,7 @@ const AssessmentItems = () => {
   };
 
   const handleRemoveSitePlan = async () => {
+    if (isReportLocked) return;
     if (window.confirm("Are you sure you want to remove the site plan?")) {
       try {
         // Update the assessment to remove the site plan file (preserve status; clear approval if changed)
@@ -1944,7 +1961,7 @@ const AssessmentItems = () => {
   };
 
   const handleAddPhotoToItem = async (photoData) => {
-    if (!selectedItemForPhotos) return;
+    if (isReportLocked || !selectedItemForPhotos) return;
     try {
       const response = await asbestosAssessmentService.addPhotoToItem(
         id,
@@ -1975,10 +1992,12 @@ const AssessmentItems = () => {
   };
 
   const handleDeletePhotoFromItem = (itemId, photoId) => {
+    if (isReportLocked) return;
     setPhotosToDelete((prev) => new Set([...prev, photoId]));
   };
 
   const handleTogglePhotoInReport = (itemId, photoId) => {
+    if (isReportLocked) return;
     setLocalPhotoChanges((prev) => ({
       ...prev,
       [photoId]: !getCurrentPhotoState(photoId),
@@ -2083,7 +2102,7 @@ const AssessmentItems = () => {
   };
 
   const handleAddPhotoArrow = async (photoId, arrow) => {
-    if (!selectedItemForPhotos || !id) return;
+    if (isReportLocked || !selectedItemForPhotos || !id) return;
     try {
       const response = await asbestosAssessmentService.addPhotoArrow(
         id,
@@ -2107,7 +2126,7 @@ const AssessmentItems = () => {
   };
 
   const handleUpdatePhotoArrow = async (photoId, arrowId, updates) => {
-    if (!selectedItemForPhotos || !id) return;
+    if (isReportLocked || !selectedItemForPhotos || !id) return;
     try {
       const response = await asbestosAssessmentService.updatePhotoArrow(
         id,
@@ -2127,7 +2146,7 @@ const AssessmentItems = () => {
   };
 
   const handleDeletePhotoArrow = async (photoId, arrowId) => {
-    if (!selectedItemForPhotos || !id) return;
+    if (isReportLocked || !selectedItemForPhotos || !id) return;
     try {
       const response = await asbestosAssessmentService.deletePhotoArrow(
         id,
@@ -2191,6 +2210,7 @@ const AssessmentItems = () => {
   };
 
   const savePhotoChanges = async () => {
+    if (isReportLocked) return;
     try {
       const togglePromises = [];
       const descriptionPromises = [];
@@ -2565,6 +2585,7 @@ const AssessmentItems = () => {
               color="secondary"
               onClick={() => setSitePlanDrawingDialogOpen(true)}
               startIcon={<MapIcon />}
+              disabled={isReportLocked}
             >
               {assessment?.sitePlanFile ? "Edit Site Plan" : "Site Plan"}
             </Button>
@@ -2573,6 +2594,7 @@ const AssessmentItems = () => {
                 variant="outlined"
                 color="error"
                 onClick={handleRemoveSitePlan}
+                disabled={isReportLocked}
                 startIcon={<DeleteIcon />}
                 sx={{
                   borderColor: "#d32f2f",
@@ -2629,6 +2651,7 @@ const AssessmentItems = () => {
               setItemTypeSelectionModalOpen(true);
             }}
             startIcon={<AddIcon />}
+            disabled={isReportLocked}
           >
             <Box
               component="span"
@@ -3034,7 +3057,8 @@ const AssessmentItems = () => {
                                 onClick={() => handleEdit(item)}
                                 color="primary"
                                 size="small"
-                                title="Edit"
+                                title={isReportLocked ? "View only (report approved)" : "Edit"}
+                                disabled={isReportLocked}
                                 sx={{
                                   display: "inline-flex",
                                   "@media (max-width: 600px)": {
@@ -3049,6 +3073,7 @@ const AssessmentItems = () => {
                                 color="error"
                                 size="small"
                                 title="Delete"
+                                disabled={isReportLocked}
                                 sx={{
                                   display: "inline-flex",
                                   "@media (orientation: portrait) and (max-width: 600px)":
@@ -3085,6 +3110,7 @@ const AssessmentItems = () => {
               variant="contained"
               color="primary"
               onClick={handleCompleteAssessment}
+              disabled={isReportLocked}
               sx={{
                 backgroundColor: "#1976d2",
                 "&:hover": {
@@ -3105,7 +3131,7 @@ const AssessmentItems = () => {
                   <Button
                     variant="contained"
                     onClick={handleFinaliseAssessment}
-                    disabled={finalisingAssessment}
+                    disabled={finalisingAssessment || isReportLocked}
                     sx={{
                       backgroundColor: "#ff9800",
                       color: "white",
@@ -3122,6 +3148,7 @@ const AssessmentItems = () => {
                 <Button
                   variant="contained"
                   onClick={handleSamplesSubmittedToLab}
+                  disabled={isReportLocked}
                   sx={{
                     backgroundColor: "#ff9800",
                     color: "white",
@@ -3301,8 +3328,14 @@ const AssessmentItems = () => {
               {editingItem ? "Edit Item" : "Add New Item"}
             </Typography>
           </DialogTitle>
+          {isReportLocked && (
+            <Alert severity="info" sx={{ mx: 3, mt: 1 }}>
+              Report approved – view only. No changes can be saved.
+            </Alert>
+          )}
           <form onSubmit={handleSubmit}>
             <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+              <Box component="fieldset" disabled={isReportLocked} sx={{ border: "none", m: 0, p: 0, minWidth: 0 }}>
               <Grid container spacing={2}>
                 <Grid item xs={12}>
                   <Divider sx={{ my: -3 }}>
@@ -3915,6 +3948,7 @@ const AssessmentItems = () => {
                   />
                 </Grid>
               </Grid>
+              </Box>
             </DialogContent>
             <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
               <Button
@@ -3934,6 +3968,7 @@ const AssessmentItems = () => {
                 variant="contained"
                 startIcon={editingItem ? <EditIcon /> : <AddIcon />}
                 disabled={
+                  isReportLocked ||
                   !form.roomArea.trim() ||
                   !form.locationDescription.trim() ||
                   !form.materialType.trim()
@@ -4033,6 +4068,7 @@ const AssessmentItems = () => {
               variant="contained"
               color="error"
               startIcon={<DeleteIcon />}
+              disabled={isReportLocked}
               sx={{
                 minWidth: 120,
                 borderRadius: 2,
@@ -4095,6 +4131,7 @@ const AssessmentItems = () => {
                   startIcon={<PhotoCameraIcon />}
                   onClick={handleTakePhoto}
                   size="small"
+                  disabled={isReportLocked}
                 >
                   Take Photo
                 </Button>
@@ -4103,6 +4140,7 @@ const AssessmentItems = () => {
                   startIcon={<UploadIcon />}
                   component="label"
                   size="small"
+                  disabled={isReportLocked}
                 >
                   Upload Photo
                   <input
@@ -4110,6 +4148,7 @@ const AssessmentItems = () => {
                     hidden
                     accept="image/*"
                     onChange={handlePhotoUploadForGallery}
+                    disabled={isReportLocked}
                   />
                 </Button>
               </Box>
@@ -4214,6 +4253,7 @@ const AssessmentItems = () => {
                             startIcon={<PhotoCameraIcon />}
                             onClick={handleTakePhoto}
                             size="small"
+                            disabled={isReportLocked}
                           >
                             Take Photo
                           </Button>
@@ -4222,6 +4262,7 @@ const AssessmentItems = () => {
                             startIcon={<UploadIcon />}
                             component="label"
                             size="small"
+                            disabled={isReportLocked}
                           >
                             Upload Photo
                             <input
@@ -4229,6 +4270,7 @@ const AssessmentItems = () => {
                               hidden
                               accept="image/*"
                               onChange={handlePhotoUploadForGallery}
+                              disabled={isReportLocked}
                             />
                           </Button>
                         </Box>
@@ -4927,6 +4969,7 @@ const AssessmentItems = () => {
                         required={index === 0}
                         variant="outlined"
                         size="small"
+                        disabled={isReportLocked}
                       />
                       {scopeItems.length > 1 && (
                         <IconButton
@@ -4939,6 +4982,7 @@ const AssessmentItems = () => {
                           color="error"
                           sx={{ mt: 1 }}
                           title="Remove this item"
+                          disabled={isReportLocked}
                         >
                           <DeleteIcon />
                         </IconButton>
@@ -4951,6 +4995,7 @@ const AssessmentItems = () => {
                   startIcon={<AddIcon />}
                   onClick={() => setScopeItems([...scopeItems, ""])}
                   sx={{ mt: 2 }}
+                  disabled={isReportLocked}
                 >
                   Add Scope Item
                 </Button>
@@ -4972,6 +5017,7 @@ const AssessmentItems = () => {
                 </Button>
                 <Button
                   onClick={async () => {
+                    if (isReportLocked) return;
                     // Validate that assessment exists
                     if (!assessment) {
                       showSnackbar(
@@ -5032,6 +5078,7 @@ const AssessmentItems = () => {
                     textTransform: "none",
                     fontWeight: 500,
                   }}
+                  disabled={isReportLocked}
                 >
                   Save Scope
                 </Button>
@@ -5426,6 +5473,7 @@ const AssessmentItems = () => {
                 multiline
                 rows={6}
                 placeholder="Enter job-specific exclusions/caveats that should be included in the assessment report"
+                disabled={isReportLocked}
                 InputProps={{
                   endAdornment: (
                     <InputAdornment position="end">
@@ -5557,7 +5605,7 @@ const AssessmentItems = () => {
               }}
               variant="contained"
               color="primary"
-              disabled={savingExclusions}
+              disabled={savingExclusions || isReportLocked}
               sx={{
                 minWidth: 100,
                 borderRadius: 2,
@@ -5674,6 +5722,7 @@ const AssessmentItems = () => {
                 }}
                 multiline
                 placeholder="Enter discussion and conclusions for the assessment report"
+                disabled={isReportLocked}
                 sx={{
                   flex: 1,
                   display: "flex",
@@ -5828,7 +5877,7 @@ const AssessmentItems = () => {
                 }
               }}
               variant="contained"
-              disabled={savingDiscussion}
+              disabled={savingDiscussion || isReportLocked}
               sx={{
                 minWidth: 100,
                 borderRadius: 2,

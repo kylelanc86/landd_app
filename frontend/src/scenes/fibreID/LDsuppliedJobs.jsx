@@ -744,9 +744,9 @@ const LDsuppliedJobs = () => {
     if (!job?._id) return;
     try {
       setClosingJobIds((prev) => ({ ...prev, [job._id]: true }));
-      await clientSuppliedJobsService.update(job._id, { status: "Completed" });
+      await clientSuppliedJobsService.archive(job._id);
       await fetchStandaloneLDJobs();
-      showSnackbar("Job closed successfully.", "success");
+      showSnackbar("Job closed and removed from list.", "success");
     } catch (error) {
       console.error("Error closing job:", error);
       showSnackbar(error.response?.data?.message || "Failed to close job.", "error");
@@ -941,7 +941,7 @@ const LDsuppliedJobs = () => {
                   <TableCell sx={{ fontWeight: "bold", maxWidth: "80px", color: "inherit" }}>
                     Project ID
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", minWidth: "240px", color: "inherit" }}>
+                  <TableCell sx={{ fontWeight: "bold", minWidth: "160px", color: "inherit" }}>
                     Project Name
                   </TableCell>
                   <TableCell sx={{ fontWeight: "bold", maxWidth: "105px", color: "inherit" }}>
@@ -950,7 +950,7 @@ const LDsuppliedJobs = () => {
                   <TableCell sx={{ fontWeight: "bold", maxWidth: "70px", color: "inherit" }}>
                     No. of Samples
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", maxWidth: "80px", color: "inherit" }}>
+                  <TableCell sx={{ fontWeight: "bold", maxWidth: "70px", color: "inherit" }}>
                     Status
                   </TableCell>
                   <TableCell sx={{ fontWeight: "bold", Width: "110px", color: "inherit" }}>
@@ -960,6 +960,7 @@ const LDsuppliedJobs = () => {
                     sx={{
                       fontWeight: "bold",
                       width: "1%",
+                      minWidth: "300px",
                       whiteSpace: "nowrap",
                       color: "inherit",
                     }}
@@ -1022,13 +1023,14 @@ const LDsuppliedJobs = () => {
                         <TableCell>
                           <Typography
                             variant="body2"
+                            maxWidth="70px"
                             sx={{ fontWeight: "bold" }}
                           >
                             {sampleCount}
                           </Typography>
                         </TableCell>
-                        <TableCell sx={{ maxWidth: "160px" }}>
-                          <Chip
+<TableCell maxWidth="120px">
+                        <Chip
                             label={getLabStatusLabel(labStatus)}
                             color={getLabStatusColor(labStatus)}
                             size="small"
@@ -1037,9 +1039,8 @@ const LDsuppliedJobs = () => {
                         </TableCell>
                         <TableCell sx={{ maxWidth: "100px" }}>
                           <Typography
-                            variant="body2"
+                            fontSize="0.8rem"                            
                             sx={{
-                              fontWeight: "bold",
                               color: getAnalysisDueColor(assessment),
                             }}
                           >
@@ -1048,7 +1049,7 @@ const LDsuppliedJobs = () => {
                         </TableCell>
                         <TableCell
                           onClick={(e) => e.stopPropagation()}
-                          sx={{ width: "1%", minWidth: "200px" }}
+                          sx={{ width: "1%", minWidth: "300px" }}
                         >
                           <Box
                             sx={{
@@ -1111,9 +1112,11 @@ const LDsuppliedJobs = () => {
                                 <Typography
                                   variant="caption"
                                   sx={{
-                                    color: "text.secondary",
+                                    color: "success.main",
                                     fontStyle: "italic",
-                                    maxWidth: "280px",
+                                    fontSize: "0.7rem",
+                                    mt: 0.5,
+                                    ml: 0.5,
                                   }}
                                 >
                                   Approved
@@ -1253,7 +1256,7 @@ const LDsuppliedJobs = () => {
                           {job.samples?.length || 0}
                         </Typography>
                       </TableCell>
-                      <TableCell sx={{ maxWidth: "160px" }}>
+                      <TableCell sx={{ maxWidth: "120px" }}>
                         <Chip
                           label={job.status || "In Progress"}
                           color={
@@ -1283,7 +1286,7 @@ const LDsuppliedJobs = () => {
                       </TableCell>
                       <TableCell
                         onClick={(e) => e.stopPropagation()}
-                        sx={{ width: "1%", minWidth: "200px" }}
+                        sx={{ width: "1%", minWidth: "300px" }}
                       >
                         <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "flex-start" }}>
                           <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
@@ -1309,6 +1312,14 @@ const LDsuppliedJobs = () => {
                                 sx={{ color: "error.main", fontSize: "0.7rem", mt: 0.5, ml: 0.5 }}
                               >
                                 Not approved
+                              </Typography>
+                            )}
+                            {job.reportApprovedBy && (
+                              <Typography
+                                variant="caption"
+                                sx={{ color: "success.main", fontStyle: "italic", fontSize: "0.7rem", mt: 0.5, ml: 0.5 }}
+                              >
+                                Approved
                               </Typography>
                             )}
                           </Box>
@@ -1374,7 +1385,7 @@ const LDsuppliedJobs = () => {
                                 </>
                               );
                             })()}
-                          {job.reportApprovedBy && job.status !== "Completed" && (
+                          {job.reportApprovedBy && hasPermission(currentUser, "clientSup.edit") && (
                             <Button
                               variant="outlined"
                               size="small"
@@ -1386,6 +1397,7 @@ const LDsuppliedJobs = () => {
                               }}
                               disabled={closingJobIds[job._id]}
                               sx={{ textTransform: "none" }}
+                              title="Remove job from this list (archive)"
                             >
                               {closingJobIds[job._id] ? "Closing..." : "Close Job"}
                             </Button>

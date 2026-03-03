@@ -871,14 +871,14 @@ const BlankAnalysis = () => {
               disabled={isReadOnly}
             >
               <FormControlLabel
-                value="Partial 5"
+                value="5"
                 control={<Radio size="small" />}
-                label="Partial 5"
+                label="5"
               />
               <FormControlLabel
-                value="6"
+                value="Partial 6"
                 control={<Radio size="small" />}
-                label="6"
+                label="Partial 6"
               />
             </RadioGroup>
           </FormControl>

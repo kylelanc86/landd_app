@@ -220,8 +220,8 @@ const MobileDrawer = ({ open, onClose }) => {
 
             <PermissionGate requiredPermissions={["timesheets.view"]}>
               <MenuItem
-                title="Daily Timesheet"
-                to="/timesheets"
+                title="Timesheets"
+                to="/timesheets/monthly"
                 icon={<AccessTimeIcon />}
               />
 
@@ -264,15 +264,19 @@ const MobileDrawer = ({ open, onClose }) => {
 
             <Divider sx={{ my: 1 }} />
 
-            {isFeatureEnabled("ADVANCED.SURVEYS") && (
-              <MenuItem title="Surveys" to="/surveys" icon={<SearchIcon />} />
-            )}
-
             {isFeatureEnabled("ADVANCED.ASBESTOS_REMOVAL") && (
               <MenuItem
-                title="Air Mon & Clearances"
+                title="Asbestos Removal"
                 to="/asbestos-removal"
                 icon={<ConstructionIcon />}
+              />
+            )}
+
+            {isFeatureEnabled("ADVANCED.SURVEYS") && (
+              <MenuItem
+                title="Asbestos Assessment"
+                to="/surveys"
+                icon={<SearchIcon />}
               />
             )}
 

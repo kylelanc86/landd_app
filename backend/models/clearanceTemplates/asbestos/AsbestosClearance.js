@@ -224,6 +224,11 @@ const asbestosClearanceSchema = new mongoose.Schema(
       legislationTitle: String,
       jurisdiction: String,
     }],
+    // Persisted clearance report PDF (one generation shared by all users; avoids repeat DocRaptor usage)
+    pdfDownloadUrl: { type: String, required: false },
+    pdfJobId: { type: String, required: false },
+    pdfReadyAt: { type: Date, required: false },
+    pdfFilename: { type: String, required: false },
   },
   {
     timestamps: true,
