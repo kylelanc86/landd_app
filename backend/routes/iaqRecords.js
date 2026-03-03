@@ -4,6 +4,7 @@ const IAQRecord = require('../models/IAQRecord');
 const IAQSample = require('../models/IAQSample');
 const User = require('../models/User');
 const { sendMail } = require('../services/mailer');
+const { formatDateSydney, todaySydney } = require('../utils/dateUtils');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 
@@ -139,7 +140,7 @@ Your IAQ report has been authorised.
 
 IAQ Reference: ${generateIAQReference(record)}
 Authorised by: ${approver}
-Authorisation Date: ${new Date().toLocaleDateString()}
+Authorisation Date: ${todaySydney()}
 
 You can view the authorised report at: ${recordUrl}
             `,
@@ -147,7 +148,6 @@ You can view the authorised report at: ${recordUrl}
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
                 <div style="margin-bottom: 30px;">
                   <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
-                  <p style="color: #666; font-size: 16px; margin: 10px 0 0 0;">Environmental Services</p>
                 </div>
                 <div style="color: #333; line-height: 1.6;">
                   <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Report Authorised</h2>
@@ -156,7 +156,7 @@ You can view the authorised report at: ${recordUrl}
                   <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
                     <p style="margin: 5px 0;"><strong>IAQ Reference:</strong> ${generateIAQReference(record)}</p>
                     <p style="margin: 5px 0;"><strong>Authorised by:</strong> ${approver}</p>
-                    <p style="margin: 5px 0;"><strong>Authorisation Date:</strong> ${new Date().toLocaleDateString()}</p>
+                    <p style="margin: 5px 0;"><strong>Authorisation Date:</strong> ${todaySydney()}</p>
                   </div>
                   <div style="text-align: center; margin: 30px 0;">
                     <a href="${recordUrl}" style="background-color: rgb(25, 138, 44); color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">View Report</a>
@@ -258,7 +258,6 @@ Please review and authorise the report at: ${recordUrl}
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
               <div style="margin-bottom: 30px;">
                 <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
-                <p style="color: #666; font-size: 16px; margin: 10px 0 0 0;">Environmental Services</p>
               </div>
               <div style="color: #333; line-height: 1.6;">
                 <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Report Authorisation Required</h2>

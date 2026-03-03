@@ -51,6 +51,8 @@ const SitePlanMap = ({
   const availableSampleNumbersRef = useRef([]);
   const [usedSampleNumbers, setUsedSampleNumbers] = useState(new Set());
   const usedSampleNumbersRef = useRef(new Set());
+  const [legacySamplingPointCount, setLegacySamplingPointCount] = useState(0);
+  const legacySamplingPointCountRef = useRef(0);
 
   // Load samples for the shift
   useEffect(() => {
@@ -81,6 +83,8 @@ const SitePlanMap = ({
       mapInstanceRef.current = null;
       usedSampleNumbersRef.current = new Set();
       setUsedSampleNumbers(new Set());
+      legacySamplingPointCountRef.current = 0;
+      setLegacySamplingPointCount(0);
     }
   }, [open]);
 
@@ -205,22 +209,31 @@ const SitePlanMap = ({
         siteSamples.map((s) => ({ id: s._id, sampleNumber: s.sampleNumber }))
       );
 
-      // Initialize used sample numbers from existing markers
+      // Initialize used sample numbers and legacy count from existing markers
       const existingUsed = new Set();
+      let legacyCount = 0;
       if (initialData?.sitePlanData?.markers) {
         initialData.sitePlanData.markers.forEach((marker) => {
-          if (marker.type === "sampling_point" && marker.sampleNumber) {
-            existingUsed.add(marker.sampleNumber);
+          if (marker.type === "sampling_point") {
+            if (marker.sampleNumber) {
+              existingUsed.add(marker.sampleNumber);
+            } else {
+              legacyCount += 1;
+            }
           }
         });
       }
       usedSampleNumbersRef.current = existingUsed;
       setUsedSampleNumbers(existingUsed);
+      legacySamplingPointCountRef.current = legacyCount;
+      setLegacySamplingPointCount(legacyCount);
     } catch (error) {
       console.error("Error loading samples:", error);
       setSamples([]);
       setAvailableSampleNumbers([]);
       setUsedSampleNumbers(new Set());
+      legacySamplingPointCountRef.current = 0;
+      setLegacySamplingPointCount(0);
     }
   };
 
@@ -269,10 +282,31 @@ const SitePlanMap = ({
       }
 
       if (initialMarkers) {
-        setMarkers(initialMarkers);
-        initialMarkers.forEach((markerData) => {
+        // Loaded markers from API have no id (stripped on save); assign one so delete/chip key work
+        const markersWithIds = initialMarkers.map((m, i) => ({
+          ...m,
+          id: m.id || `loaded-${i}-${m.position?.lat ?? 0}-${m.position?.lng ?? 0}`,
+        }));
+        setMarkers(markersWithIds);
+        markersWithIds.forEach((markerData) => {
           createMarkerOnMap(markerData);
         });
+        // Sync used sample numbers from loaded markers so we don't allow duplicate sampling points on re-open
+        const existingUsed = new Set();
+        let legacyCount = 0;
+        initialMarkers.forEach((marker) => {
+          if (marker.type === "sampling_point") {
+            if (marker.sampleNumber) {
+              existingUsed.add(marker.sampleNumber);
+            } else {
+              legacyCount += 1;
+            }
+          }
+        });
+        usedSampleNumbersRef.current = existingUsed;
+        setUsedSampleNumbers(existingUsed);
+        legacySamplingPointCountRef.current = legacyCount;
+        setLegacySamplingPointCount(legacyCount);
       }
     }
   };
@@ -339,11 +373,11 @@ const SitePlanMap = ({
         return; // Don't add the marker if no samples are available
       }
 
-      // Check if we've already used all available samples
-      if (
-        usedSampleNumbersRef.current.size >=
-        availableSampleNumbersRef.current.length
-      ) {
+      // Check if we've already used all available samples (include legacy markers that have no sampleNumber)
+      const effectiveUsed =
+        usedSampleNumbersRef.current.size +
+        legacySamplingPointCountRef.current;
+      if (effectiveUsed >= availableSampleNumbersRef.current.length) {
         console.log(
           "All samples have been used. Cannot add more sampling points."
         );
@@ -427,19 +461,23 @@ const SitePlanMap = ({
   const deleteMarker = (markerId) => {
     // Find the marker being deleted to free up its sample number
     const markerToDelete = markers.find((marker) => marker.id === markerId);
-    if (
-      markerToDelete &&
-      markerToDelete.type === "sampling_point" &&
-      markerToDelete.sampleNumber
-    ) {
-      usedSampleNumbersRef.current.delete(markerToDelete.sampleNumber);
-      setUsedSampleNumbers(new Set(usedSampleNumbersRef.current));
-      console.log(
-        "Freed up sample number:",
-        markerToDelete.sampleNumber,
-        "Remaining:",
-        usedSampleNumbersRef.current
-      );
+    if (markerToDelete && markerToDelete.type === "sampling_point") {
+      if (markerToDelete.sampleNumber) {
+        usedSampleNumbersRef.current.delete(markerToDelete.sampleNumber);
+        setUsedSampleNumbers(new Set(usedSampleNumbersRef.current));
+        console.log(
+          "Freed up sample number:",
+          markerToDelete.sampleNumber,
+          "Remaining:",
+          usedSampleNumbersRef.current
+        );
+      } else {
+        legacySamplingPointCountRef.current = Math.max(
+          0,
+          legacySamplingPointCountRef.current - 1
+        );
+        setLegacySamplingPointCount(legacySamplingPointCountRef.current);
+      }
     }
 
     setMarkers((prev) => prev.filter((marker) => marker.id !== markerId));
@@ -605,10 +643,12 @@ const SitePlanMap = ({
         >
           <Typography variant="body2" sx={{ mr: 2 }}>
             Click on the map to add markers. Sampling points automatically get
-            sample numbers in order ({usedSampleNumbers.size}/
+            sample numbers in order (
+            {usedSampleNumbers.size + legacySamplingPointCount}/
             {availableSampleNumbers.length} used). Drag markers to move them.
             Click existing markers to edit them.
-            {usedSampleNumbers.size >= availableSampleNumbers.length &&
+            {usedSampleNumbers.size + legacySamplingPointCount >=
+              availableSampleNumbers.length &&
               availableSampleNumbers.length > 0 && (
                 <Typography variant="body2" color="warning.main" sx={{ mt: 1 }}>
                   All sampling points have been placed. Delete existing sampling
@@ -625,17 +665,20 @@ const SitePlanMap = ({
               label="Marker Type"
               disabled={
                 newMarkerType === "sampling_point" &&
-                usedSampleNumbers.size >= availableSampleNumbers.length
+                usedSampleNumbers.size + legacySamplingPointCount >=
+                  availableSampleNumbers.length
               }
             >
               <MenuItem
                 value="sampling_point"
                 disabled={
-                  usedSampleNumbers.size >= availableSampleNumbers.length
+                  usedSampleNumbers.size + legacySamplingPointCount >=
+                  availableSampleNumbers.length
                 }
               >
                 Sampling Point{" "}
-                {usedSampleNumbers.size >= availableSampleNumbers.length
+                {usedSampleNumbers.size + legacySamplingPointCount >=
+                availableSampleNumbers.length
                   ? "(All used)"
                   : ""}
               </MenuItem>

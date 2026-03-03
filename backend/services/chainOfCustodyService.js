@@ -1,6 +1,7 @@
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
+const { formatDateSydney, nowSydneyDateTime } = require('../utils/dateUtils');
 
 // Load the logo base64 data
 const logoPath = path.join(__dirname, '../assets/logo_base64_optimized.txt');
@@ -52,12 +53,12 @@ async function generateChainOfCustodyPDF(assessment) {
       CLIENT_EMAIL: assessment.projectId?.client?.email || 'N/A',
       SITE_NAME: assessment.projectId?.name || 'Unknown Site',
       LD_REFERENCE: assessment.projectId?.projectID || 'LDJOxxxx',
-      SAMPLE_DATE: assessment.assessmentDate ? new Date(assessment.assessmentDate).toLocaleDateString('en-GB') : 'N/A',
+      SAMPLE_DATE: assessment.assessmentDate ? formatDateSydney(assessment.assessmentDate) : 'N/A',
       SAMPLER: assessment.assessorId ? `${assessment.assessorId.firstName} ${assessment.assessorId.lastName}` : 'Unknown',
       NUMBER_OF_SAMPLES: assessment.items?.length || 0,
       RECEIVED_BY: 'L&D Laboratory',
       SIGNATURE: '',
-      PRINT_DATE: new Date().toLocaleDateString('en-GB') + ' ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+      PRINT_DATE: nowSydneyDateTime(),
       SAMPLE_ROWS: generateSampleRows(assessment.items || []),
       LOGO_BASE64: logoBase64
     };

@@ -16,6 +16,7 @@ const {
   syncAirMonitoringForJob,
 } = require("../services/asbestosRemovalJobSyncService");
 const { sendMail } = require("../services/mailer");
+const { formatDateSydney } = require("../utils/dateUtils");
 
 // Debug middleware removed
 router.use((req, res, next) => {
@@ -426,7 +427,7 @@ router.put('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports']
 
             const shiftName = populatedShift.name || 'Air Monitoring Shift';
             const shiftDate = populatedShift.date
-              ? new Date(populatedShift.date).toLocaleDateString('en-GB')
+              ? formatDateSydney(populatedShift.date)
               : 'N/A';
             const approverName = updatedShift.reportApprovedBy;
             const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -454,7 +455,6 @@ View the report at: ${jobUrl}
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
                   <div style="margin-bottom: 30px;">
                     <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
-                    <p style="color: #666; font-size: 16px; margin: 10px 0 0 0;">Environmental Services</p>
                   </div>
                   <div style="color: #333; line-height: 1.6;">
                     <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Report Authorised</h2>
@@ -767,7 +767,7 @@ router.get('/:id/chain-of-custody', auth, checkPermission(['jobs.view']), async 
     const clientName = client?.name || 'Unknown Client';
 
     // Format shift date
-    const shiftDate = shift.date ? new Date(shift.date).toLocaleDateString('en-GB') : 'N/A';
+    const shiftDate = shift.date ? formatDateSydney(shift.date) : 'N/A';
     
     // Get submission info
     let submittedBy = shift.submittedBy;
@@ -780,7 +780,7 @@ router.get('/:id/chain-of-custody', auth, checkPermission(['jobs.view']), async 
     }
     
     const submissionDate = shift.samplesReceivedDate 
-      ? new Date(shift.samplesReceivedDate).toLocaleDateString('en-GB') 
+      ? formatDateSydney(shift.samplesReceivedDate) 
       : shiftDate;
     
     // Create simple HTML document
@@ -1050,7 +1050,7 @@ router.post(
 
       const shiftName = shift.name || 'Air Monitoring Shift';
       const shiftDate = shift.date
-        ? new Date(shift.date).toLocaleDateString('en-GB')
+        ? formatDateSydney(shift.date)
         : 'N/A';
 
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -1080,7 +1080,6 @@ Review the report at: ${jobUrl}
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
                 <div style="margin-bottom: 30px;">
                   <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
-                  <p style="color: #666; font-size: 16px; margin: 10px 0 0 0;">Environmental Services</p>
                 </div>
                 <div style="color: #333; line-height: 1.6;">
                   <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Report Authorisation Required</h2>

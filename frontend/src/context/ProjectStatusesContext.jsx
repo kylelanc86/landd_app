@@ -10,6 +10,22 @@ import projectStatusService from "../services/projectStatusService";
 
 const ProjectStatusesContext = createContext();
 
+const DEFAULT_STATUS_COLOR = "#1976d2";
+
+/** Build statusColors map from API response (single source of truth: database). */
+function buildStatusColorsFromApiData(data) {
+  if (!data) return {};
+  const items = [];
+  if (data.activeStatuses?.length) items.push(...data.activeStatuses);
+  if (data.inactiveStatuses?.length) items.push(...data.inactiveStatuses);
+  if (Array.isArray(data)) items.push(...data);
+  return items.reduce((acc, s) => {
+    const text = s?.text;
+    if (text) acc[text] = s.statusColor || DEFAULT_STATUS_COLOR;
+    return acc;
+  }, {});
+}
+
 export const useProjectStatuses = () => {
   const context = useContext(ProjectStatusesContext);
   if (!context) {
@@ -70,14 +86,14 @@ export const ProjectStatusesProvider = ({ children }) => {
               inactive = data.filter(s => s.isActiveStatus === false).map(s => s.text).sort();
               all = data.sort((a, b) => a.text.localeCompare(b.text));
             }
-            
-            const colors = projectStatusService.getAllHardcodedColors();
+            const colors = buildStatusColorsFromApiData(data);
+            const colorsToUse = Object.keys(colors).length > 0 ? colors : projectStatusService.getAllHardcodedColors();
             
             if (mountedRef.current) {
               setActiveStatuses(active);
               setInactiveStatuses(inactive);
               setAllStatuses(all);
-              setStatusColors(colors);
+              setStatusColors(colorsToUse);
               setLoading(false);
             }
             
@@ -135,15 +151,14 @@ export const ProjectStatusesProvider = ({ children }) => {
       console.log("Raw status data from backend:", { active, inactive, all });
       console.log(`⚡ Status fetch optimized: 1 API call in ${fetchTime.toFixed(2)}ms (was 3 calls)`);
 
-      // Use hardcoded colors for fast loading (these are synced with database)
-      // This prevents the need to fetch colors from database every time
-      let colors = projectStatusService.getAllHardcodedColors();
-      console.log("Using hardcoded status colors for fast loading:", colors);
+      // Single source of truth: use status colours from API (database) so all users see the same colours
+      const colors = buildStatusColorsFromApiData(allStatusesData);
+      const colorsToUse = Object.keys(colors).length > 0 ? colors : projectStatusService.getAllHardcodedColors();
 
       setActiveStatuses(active);
       setInactiveStatuses(inactive);
       setAllStatuses(all);
-      setStatusColors(colors);
+      setStatusColors(colorsToUse);
     } catch (err) {
       console.error("Error fetching project statuses:", err);
       if (mountedRef.current) {
@@ -170,6 +185,11 @@ export const ProjectStatusesProvider = ({ children }) => {
     fetchStatuses();
   }, [fetchStatuses]);
 
+  /** Update only status colors from the in-memory hardcoded map (no API call). Use after admin changes status colours. */
+  const refreshStatusColorsOnly = useCallback(() => {
+    setStatusColors(projectStatusService.getAllHardcodedColors());
+  }, []);
+
   useEffect(() => {
     console.log("ProjectStatusesProvider mounted, fetching statuses...");
     mountedRef.current = true;
@@ -188,6 +208,21 @@ export const ProjectStatusesProvider = ({ children }) => {
     }
   }, [statusColors]);
 
+  // Cross-tab sync (same user): when status colors are updated in another tab, this tab picks up from localStorage
+  useEffect(() => {
+    const handleStorage = (e) => {
+      if (e.key === 'statusColors' && e.newValue && mountedRef.current) {
+        try {
+          setStatusColors(JSON.parse(e.newValue));
+        } catch (err) {
+          console.warn('Failed to apply status colors from storage event:', err);
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
   const value = {
     activeStatuses,
     inactiveStatuses,
@@ -196,6 +231,7 @@ export const ProjectStatusesProvider = ({ children }) => {
     loading,
     error,
     refreshStatuses,
+    refreshStatusColorsOnly,
   };
 
   return (

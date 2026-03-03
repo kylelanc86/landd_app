@@ -7,24 +7,40 @@ const { getTemplateByType, replacePlaceholders } = require('../services/template
 const { PDFDocument } = require('pdf-lib');
 const auth = require('../middleware/auth');
 const AsbestosAssessment = require('../models/assessmentTemplates/asbestos/AsbestosAssessment');
+const AsbestosClearance = require('../models/clearanceTemplates/asbestos/AsbestosClearance');
 const CustomDataFieldGroup = require('../models/CustomDataFieldGroup');
 const LeadRemovalJob = require('../models/LeadRemovalJob');
+const { formatDateSydney, formatClearanceDateSydney, todaySydney } = require('../utils/dateUtils');
 
 // Initialize DocRaptor service
 const docRaptorService = new DocRaptorService();
 
-// Custom date formatting function for CLEARANCE_DATE placeholder only
-const formatClearanceDate = (dateString) => {
-  if (!dateString) return 'Unknown';
-  const date = new Date(dateString);
-  const day = date.getDate();
-  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'];
-  const month = monthNames[date.getMonth()];
-  const year = date.getFullYear();
-  // Use non-breaking space between day and month to keep them on the same line
-  return `${day}\u00A0${month} ${year}`;
-};
+// In-memory job store for async PDF generation (jobId -> job record)
+// Job record: { statusId, status, downloadUrl?, error?, message?, createdAt, reportType, filename, mergePayload? }
+const asyncPdfJobs = new Map();
+
+// Remove completed/failed jobs older than 1 hour to prevent unbounded growth
+const JOB_RETENTION_MS = 60 * 60 * 1000;
+
+/** Assessment report PDF retention (days) – matches DocRaptor; after this, report is no longer available. */
+const ASSESSMENT_PDF_RETENTION_DAYS = 7;
+const ASSESSMENT_PDF_RETENTION_MS = ASSESSMENT_PDF_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+function isAssessmentPdfExpired(pdfReadyAt) {
+  if (!pdfReadyAt) return true;
+  return Date.now() - new Date(pdfReadyAt).getTime() > ASSESSMENT_PDF_RETENTION_MS;
+}
+function pruneOldJobs() {
+  const now = Date.now();
+  for (const [jobId, job] of asyncPdfJobs.entries()) {
+    if ((job.status === 'completed' || job.status === 'failed') && (now - job.createdAt > JOB_RETENTION_MS)) {
+      asyncPdfJobs.delete(jobId);
+    }
+  }
+}
+
+// Custom date formatting for CLEARANCE_DATE placeholder (Sydney timezone)
+const formatClearanceDate = (dateString) => formatClearanceDateSydney(dateString);
 
 // Format inspection time to ensure proper AM/PM display
 const formatInspectionTime = (timeString) => {
@@ -337,8 +353,8 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       .replace(/\[CLIENT_NAME\]/g, clearanceData.projectId?.client?.name || clearanceData.clientName || 'Unknown Client')
 
 
-    // Get PDF generation date (current date) - used for Issue Date in document details and Original Issue in revision history
-    const pdfGenerationDate = new Date().toLocaleDateString('en-GB');
+    // Get PDF generation date (current date in Sydney) - used for Issue Date in document details and Original Issue in revision history
+    const pdfGenerationDate = todaySydney();
     
     // Generate revision history rows
     const generateRevisionHistory = (reportAuthoriserText) => {
@@ -370,7 +386,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
         // Use actual revision reasons if available
         if (clearanceData.revisionReasons && clearanceData.revisionReasons.length > 0) {
           clearanceData.revisionReasons.forEach((revisionData) => {
-            const revisionDate = revisionData.revisedAt ? new Date(revisionData.revisedAt).toLocaleDateString('en-GB') : pdfGenerationDate;
+            const revisionDate = revisionData.revisedAt ? formatDateSydney(revisionData.revisedAt) : pdfGenerationDate;
             // Approved By should be the same as report authoriser
             const revisedByApprovedBy = approvedBy;
             
@@ -734,7 +750,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       .replace(/\[LAA_NAME\]/g, clearanceData.LAA || 'Unknown LAA')
       .replace(/\[LAA_LICENSE\]/g, 'AA00031')
       .replace(/\[INSPECTION_TIME\]/g, formatInspectionTime(clearanceData.inspectionTime))
-      .replace(/\[INSPECTION_DATE\]/g, clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown')
+      .replace(/\[INSPECTION_DATE\]/g, clearanceData.clearanceDate ? formatDateSydney(clearanceData.clearanceDate) : 'Unknown')
       .replace(/\[SIGNATURE_IMAGE\]/g, '') // Will be handled by replacePlaceholders in template content
       .replace(/\[CLEARANCE_ITEMS_HEADERS\]/g, generateClearanceItemsHeaders())
       .replace(/\[CLEARANCE_ITEMS_TABLE\]/g, generateClearanceItemsTable())
@@ -2030,145 +2046,223 @@ function getLeadPhotoPageStyles(frontendUrl) {
 }
 
 /**
- * Generate Asbestos Clearance Report using DocRaptor V2 templates
+ * Generate Asbestos Clearance Report using DocRaptor V2 templates (async: starts job, returns jobId for polling)
  */
 router.post('/generate-asbestos-clearance-v2', async (req, res) => {
   const pdfId = `clearance-v2-${Date.now()}`;
-  
+
   try {
-    console.log("=== PDF GENERATION ENDPOINT CALLED ===");
-    console.log("Request body:", req.body);
-    
     const { clearanceData } = req.body;
-    
-    console.log("ClearanceData extracted:", clearanceData);
-    console.log("ClearanceData items:", clearanceData?.items);
-    
     if (!clearanceData) {
       return res.status(400).json({ error: 'Clearance data is required' });
     }
-
-
-    // Validate clearance data
     if (!clearanceData._id && !clearanceData.projectId) {
       return res.status(400).json({ error: 'Invalid clearance data' });
     }
 
-    // Generate HTML content using new templates
     const htmlContent = await generateClearanceHTMLV2(clearanceData, pdfId);
+    console.log(`[${pdfId}] HTML length: ${htmlContent.length} chars`);
 
-    // DIAGNOSTIC: Log HTML content length and structure
-    console.log(`[${pdfId}] HTML Content Length: ${htmlContent.length} characters`);
-    console.log(`[${pdfId}] HTML contains site-plan-page: ${htmlContent.includes('site-plan-page')}`);
-    console.log(`[${pdfId}] HTML contains site-plan-landscape: ${htmlContent.includes('site-plan-landscape')}`);
-    console.log(`[${pdfId}] HTML contains page-break-after: ${htmlContent.includes('page-break-after')}`);
-    
-    // DIAGNOSTIC: Count page elements
-    const pageCount = (htmlContent.match(/<div class="page/g) || []).length;
-    const sitePlanPageCount = (htmlContent.match(/site-plan-page/g) || []).length;
-    console.log(`[${pdfId}] Total pages in HTML: ${pageCount}`);
-    console.log(`[${pdfId}] Site plan pages: ${sitePlanPageCount}`);
-
-    // Generate filename
     const projectId = clearanceData.projectId?.projectID || clearanceData.project?.projectID || clearanceData.projectId || 'Unknown';
     let siteName = clearanceData.projectId?.name || clearanceData.project?.name || clearanceData.siteName || 'Unknown';
-    
-    // If Vehicle/Equipment clearance, use vehicle equipment description for filename
     if (clearanceData.clearanceType === 'Vehicle/Equipment' && clearanceData.vehicleEquipmentDescription) {
       siteName = clearanceData.vehicleEquipmentDescription;
     }
-    
-    const clearanceDate = clearanceData.clearanceDate ? new Date(clearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown';
-    
-    // Use different report type name in filename based on clearance type
-    let reportTypeName = 'Asbestos Clearance Report';
-    if (clearanceData.clearanceType === 'Vehicle/Equipment') {
-      reportTypeName = 'Inspection Certificate';
-    }
-    
-    // Determine clearance type prefix for filename (NF for Non-friable, F for Friable types)
+    const clearanceDate = clearanceData.clearanceDate ? formatDateSydney(clearanceData.clearanceDate) : 'Unknown';
+    let reportTypeName = clearanceData.clearanceType === 'Vehicle/Equipment' ? 'Inspection Certificate' : 'Asbestos Clearance Report';
     let clearanceTypePrefix = '';
-    if (clearanceData.clearanceType === 'Non-friable') {
-      clearanceTypePrefix = 'NF ';
-    } else if (clearanceData.clearanceType === 'Friable' || clearanceData.clearanceType === 'Friable (Non-Friable Conditions)') {
-      clearanceTypePrefix = 'F ';
-    }
-    // Vehicle/Equipment clearances don't get a prefix
-    
-    // Add sequence number suffix if it exists (for multiple clearances of same type/project/date)
+    if (clearanceData.clearanceType === 'Non-friable') clearanceTypePrefix = 'NF ';
+    else if (clearanceData.clearanceType === 'Friable' || clearanceData.clearanceType === 'Friable (Non-Friable Conditions)') clearanceTypePrefix = 'F ';
     const sequenceSuffix = clearanceData.sequenceNumber ? ` - ${clearanceData.sequenceNumber}` : '';
     const filename = `${projectId}_${clearanceTypePrefix}${reportTypeName} - ${siteName} (${clearanceDate})${sequenceSuffix}.pdf`;
 
-    // Generate PDF using DocRaptor with optimized settings
-    const pdfBuffer = await docRaptorService.generatePDF(htmlContent, {
-      // DocRaptor-specific options for better page handling
+    const airReports = (clearanceData.airMonitoringReports && clearanceData.airMonitoringReports.length > 0)
+      ? [...clearanceData.airMonitoringReports].sort((a, b) => new Date(a.shiftDate || 0) - new Date(b.shiftDate || 0))
+      : (clearanceData.airMonitoringReport ? [{ reportData: clearanceData.airMonitoringReport }] : []);
+    const mergePayload = {
+      airReports,
+      sitePlan: clearanceData.sitePlan,
+      sitePlanFile: clearanceData.sitePlanFile
+    };
+
+    const { status_id } = await docRaptorService.createAsyncDocument(htmlContent, {
       page_size: 'A4',
-      prince_options: {
-        page_margin: '0.5in',
-        media: 'print',
-        html_mode: 'quirks'  // Force consistent rendering
-      }
+      prince_options: { page_margin: '0.5in', media: 'print', html_mode: 'quirks' }
     });
 
-    // DIAGNOSTIC: Log PDF generation results
-    console.log(`[${pdfId}] DocRaptor PDF generated successfully, size: ${pdfBuffer.length} bytes`);
+    const jobId = status_id;
+    const clearanceId = clearanceData._id || null;
+    asyncPdfJobs.set(jobId, {
+      statusId: jobId,
+      status: 'queued',
+      downloadUrl: null,
+      error: null,
+      message: null,
+      createdAt: Date.now(),
+      reportType: 'asbestos-clearance',
+      filename,
+      mergePayload,
+      clearanceId
+    });
+    pruneOldJobs();
 
-    // DIAGNOSTIC: Save HTML to file for inspection (temporary debugging)
     if (process.env.NODE_ENV === 'development') {
-      const fs = require('fs');
-      const path = require('path');
       const htmlFilePath = path.join(__dirname, '..', 'debug', `clearance-${pdfId}.html`);
       fs.mkdirSync(path.dirname(htmlFilePath), { recursive: true });
       fs.writeFileSync(htmlFilePath, htmlContent);
-      console.log(`[${pdfId}] HTML content saved to: ${htmlFilePath}`);
     }
 
+    return res.status(201).json({ jobId });
+  } catch (error) {
+    console.error(`[${pdfId}] Error starting clearance V2 PDF:`, error);
+    return res.status(500).json({
+      error: 'Failed to start clearance V2 PDF',
+      details: error.message
+    });
+  }
+});
 
-    // Handle PDF merging for site plan and air monitoring reports
-    let finalPdfBuffer = pdfBuffer;
+/**
+ * Get status of an async PDF job (poll this from the frontend)
+ */
+router.get('/status/:jobId', async (req, res) => {
+  const { jobId } = req.params;
+  const job = asyncPdfJobs.get(jobId);
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found', status: null });
+  }
 
-    // Air monitoring: support multiple reports in chronological order (earliest first)
-    const airReports = (clearanceData.airMonitoringReports && clearanceData.airMonitoringReports.length > 0)
-      ? [...clearanceData.airMonitoringReports].sort(
-          (a, b) => new Date(a.shiftDate || 0) - new Date(b.shiftDate || 0)
-        )
-      : (clearanceData.airMonitoringReport
-          ? [{ reportData: clearanceData.airMonitoringReport }]
-          : []);
+  // Assessment PDF jobs are updated by the backend task; no DocRaptor polling
+  if (job.reportType === 'asbestos-assessment') {
+    const payload = { status: job.status };
+    if (job.message) payload.message = job.message;
+    if (job.error) payload.error = job.error;
+    if (job.status === 'completed') payload.ready = true;
+    return res.json(payload);
+  }
+
+  if (job.status !== 'completed' && job.status !== 'failed') {
+    try {
+      const statusResponse = await docRaptorService.getStatus(job.statusId);
+      job.status = statusResponse.status;
+      job.message = statusResponse.message || null;
+      job.downloadUrl = statusResponse.download_url || null;
+      if (statusResponse.validation_errors) job.error = statusResponse.validation_errors;
+      // Persist to clearance so any user can download without regenerating
+      if (job.status === 'completed' && job.downloadUrl && job.clearanceId) {
+        try {
+          await AsbestosClearance.findByIdAndUpdate(job.clearanceId, {
+            pdfDownloadUrl: job.downloadUrl,
+            pdfJobId: jobId,
+            pdfReadyAt: new Date(),
+            pdfFilename: job.filename || null
+          });
+        } catch (updateErr) {
+          console.error('Failed to persist clearance PDF URL:', updateErr);
+        }
+      }
+    } catch (err) {
+      console.error('DocRaptor status check failed:', err);
+      return res.status(502).json({ error: 'Status check failed', details: err.message, status: job.status });
+    }
+  }
+
+  const payload = { status: job.status };
+  if (job.message) payload.message = job.message;
+  if (job.error) payload.error = job.error;
+  if (job.status === 'completed') payload.ready = true;
+  return res.json(payload);
+});
+
+/**
+ * Download completed PDF (proxy + optional merge). Call only when status is 'completed'.
+ */
+router.get('/download/:jobId', async (req, res) => {
+  const { jobId } = req.params;
+  const job = asyncPdfJobs.get(jobId);
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+  if (job.status !== 'completed' || !job.downloadUrl) {
+    return res.status(400).json({ error: 'PDF not ready for download', status: job.status });
+  }
+
+  try {
+    let pdfBuffer = await docRaptorService.fetchDocument(job.downloadUrl);
+    if (job.reportType === 'asbestos-clearance' && job.mergePayload) {
+      const { airReports, sitePlanFile } = job.mergePayload;
+      for (const report of airReports || []) {
+        const base64 = report.reportData || report;
+        if (!base64) continue;
+        try {
+          pdfBuffer = await mergePDFs(pdfBuffer, base64);
+        } catch (err) {
+          console.error('Error merging air monitoring PDF:', err);
+        }
+      }
+      if (sitePlanFile && !sitePlanFile.startsWith('/9j/') && !sitePlanFile.startsWith('iVBORw0KGgo') && !sitePlanFile.startsWith('data:image/')) {
+        try {
+          pdfBuffer = await mergePDFs(pdfBuffer, sitePlanFile);
+        } catch (err) {
+          console.error('Error merging site plan PDF:', err);
+        }
+      }
+    }
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${job.filename}"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('Download failed for job', jobId, error);
+    return res.status(502).json({ error: 'Download failed', details: error.message });
+  }
+});
+
+/**
+ * Download clearance PDF by clearance ID (uses persisted pdfDownloadUrl; no regeneration).
+ * Available to any user once a PDF has been generated for this clearance.
+ */
+router.get('/download-by-clearance/:clearanceId', async (req, res) => {
+  const { clearanceId } = req.params;
+  try {
+    const clearance = await AsbestosClearance.findById(clearanceId).lean();
+    if (!clearance) {
+      return res.status(404).json({ error: 'Clearance not found' });
+    }
+    if (!clearance.pdfDownloadUrl) {
+      return res.status(404).json({
+        error: 'No PDF available for this clearance',
+        hint: 'Generate the PDF first using Generate PDF'
+      });
+    }
+    let pdfBuffer = await docRaptorService.fetchDocument(clearance.pdfDownloadUrl);
+    const airReports = (clearance.airMonitoringReports && clearance.airMonitoringReports.length > 0)
+      ? [...clearance.airMonitoringReports].sort((a, b) => new Date(a.shiftDate || 0) - new Date(b.shiftDate || 0))
+      : (clearance.airMonitoringReport ? [{ reportData: clearance.airMonitoringReport }] : []);
     for (const report of airReports) {
       const base64 = report.reportData || report;
       if (!base64) continue;
       try {
-        finalPdfBuffer = await mergePDFs(finalPdfBuffer, base64);
-      } catch (error) {
-        console.error(`Error merging air monitoring PDF:`, error);
+        pdfBuffer = await mergePDFs(pdfBuffer, base64);
+      } catch (err) {
+        console.error('Error merging air monitoring PDF:', err);
       }
     }
-
-    // If there's a site plan PDF (not an image), merge it with the generated PDF
-    if (clearanceData.sitePlan && clearanceData.sitePlanFile && !clearanceData.sitePlanFile.startsWith('/9j/') && !clearanceData.sitePlanFile.startsWith('iVBORw0KGgo') && !clearanceData.sitePlanFile.startsWith('data:image/')) {
+    if (clearance.sitePlan && clearance.sitePlanFile && !clearance.sitePlanFile.startsWith('/9j/') && !clearance.sitePlanFile.startsWith('iVBORw0KGgo') && !clearance.sitePlanFile.startsWith('data:image/')) {
       try {
-        const mergedPdf = await mergePDFs(finalPdfBuffer, clearanceData.sitePlanFile);
-        finalPdfBuffer = mergedPdf; // Update the final buffer
-      } catch (error) {
-        console.error(`Error merging site plan PDFs:`, error);
+        pdfBuffer = await mergePDFs(pdfBuffer, clearance.sitePlanFile);
+      } catch (err) {
+        console.error('Error merging site plan PDF:', err);
       }
     }
-
-    // Set response headers
+    const filename = clearance.pdfFilename || `clearance_${clearanceId}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Content-Length', finalPdfBuffer.length);
-
-    // Send final PDF buffer
-    res.send(finalPdfBuffer);
-
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
   } catch (error) {
-    console.error(`[${pdfId}] Error generating clearance V2 PDF:`, error);
-    res.status(500).json({ 
-      error: 'Failed to generate clearance V2 PDF',
-      details: error.message 
-    });
+    console.error('Download by clearance failed', clearanceId, error);
+    return res.status(502).json({ error: 'Download failed', details: error.message });
   }
 });
 
@@ -2890,158 +2984,238 @@ router.post('/generate-asbestos-assessment', auth, async (req, res) => {
   }
 });
 
-// Experimental v3 asbestos assessment generator:
-// - Generates cover + version control using existing templates (stable layout)
-// - Generates the remainder of the report using a flow-based template with running header/footer
-//   so DocRaptor can paginate automatically for large documents.
-router.post('/generate-asbestos-assessment-v3', auth, async (req, res) => {
+/**
+ * Run assessment PDF v3 generation: one DocRaptor call (single HTML for cover, version, flow, appendices, site plan),
+ * then merge pre-existing fibre analysis and site plan PDFs. Returns buffer and filename for sync or async use.
+ */
+async function runAssessmentPdfV3(assessmentData, isResidential) {
   const pdfId = `assessment-v3-${Date.now()}`;
 
+  const assessmentId = assessmentData._id || assessmentData.id;
+  const idStr = assessmentId ? String(assessmentId) : null;
+  if (idStr) {
+    try {
+      const doc = await AsbestosAssessment.findById(idStr)
+        .select('state fibreAnalysisReport sitePlan sitePlanFile sitePlanLegend sitePlanLegendTitle sitePlanFigureTitle')
+        .lean();
+      if (doc) {
+        if (doc.state != null) assessmentData.state = doc.state;
+        if (doc.fibreAnalysisReport) {
+          assessmentData.fibreAnalysisReport = doc.fibreAnalysisReport;
+          console.log(`[${pdfId}] Loaded fibre analysis report from DB (length: ${doc.fibreAnalysisReport.length})`);
+        } else {
+          console.log(`[${pdfId}] No fibre analysis report in DB for assessment ${idStr}`);
+        }
+        if (doc.sitePlan != null) assessmentData.sitePlan = doc.sitePlan;
+        if (doc.sitePlanFile != null) assessmentData.sitePlanFile = doc.sitePlanFile;
+        if (doc.sitePlanLegend != null) assessmentData.sitePlanLegend = doc.sitePlanLegend;
+        if (doc.sitePlanLegendTitle != null) assessmentData.sitePlanLegendTitle = doc.sitePlanLegendTitle;
+        if (doc.sitePlanFigureTitle != null) assessmentData.sitePlanFigureTitle = doc.sitePlanFigureTitle;
+      } else {
+        console.warn(`[${pdfId}] Assessment not found in DB: ${idStr}`);
+      }
+    } catch (err) {
+      console.warn(`[${pdfId}] Could not load fibre analysis report or site plan from DB:`, err.message);
+    }
+  } else {
+    console.warn(`[${pdfId}] No assessment ID in request body - cannot load fibre analysis report from DB`);
+  }
+
+  // Single HTML document (cover, version, flow, appendix covers, site plan image) → one DocRaptor call
+  const fullHtml = await generateAssessmentSingleHTMLV3(assessmentData, isResidential === true);
+  let merged = await docRaptorService.generatePDF(fullHtml);
+
+  const hasFibreIdReport = !!assessmentData.fibreAnalysisReport;
+  const hasSitePlan = !!(assessmentData.sitePlan && assessmentData.sitePlanFile);
+
+  // Merge pre-existing PDFs: fibre analysis report, then site plan (when uploaded as PDF)
+  if (assessmentData.fibreAnalysisReport) {
+    try {
+      merged = await mergePDFs(merged, assessmentData.fibreAnalysisReport);
+    } catch (error) {
+      console.error(`[${pdfId}] Error merging fibre analysis PDFs:`, error);
+    }
+  }
+  if (hasSitePlan && assessmentData.sitePlanFile) {
+    const isSitePlanImage = assessmentData.sitePlanFile.startsWith('/9j/') ||
+      assessmentData.sitePlanFile.startsWith('iVBORw0KGgo') ||
+      assessmentData.sitePlanFile.startsWith('data:image/');
+    if (!isSitePlanImage) {
+      try {
+        merged = await mergePDFs(merged, assessmentData.sitePlanFile);
+      } catch (error) {
+        console.error(`[${pdfId}] Error merging site plan PDF:`, error);
+      }
+    }
+  }
+
+  const projectId = assessmentData.projectId?.projectID || 'Unknown';
+  const siteName = assessmentData.projectId?.name || assessmentData.siteName || 'Unknown';
+  const dateStr = assessmentData.assessmentDate ? formatDateSydney(assessmentData.assessmentDate) : 'Unknown';
+  const filename = isResidential
+    ? `${projectId}: Residential Asbestos Assessment Report - ${siteName} (${dateStr}).pdf`
+    : `${projectId}: Asbestos Assessment Report - ${siteName} (${dateStr}).pdf`;
+
+  return { buffer: merged, filename };
+}
+
+// Experimental v3 asbestos assessment generator (sync): uses runAssessmentPdfV3 and streams result.
+router.post('/generate-asbestos-assessment-v3', auth, async (req, res) => {
   try {
     const { assessmentData, isResidential } = req.body;
     if (!assessmentData) {
       throw new Error('Assessment data is required');
     }
-
-    // Load fibre analysis report and site plan from DB by assessment id (same idea as clearance: large blobs live on the document; we fetch here so they attach without frontend sending huge base64)
-    const assessmentId = assessmentData._id || assessmentData.id;
-    const idStr = assessmentId ? String(assessmentId) : null;
-    if (idStr) {
-      try {
-        const doc = await AsbestosAssessment.findById(idStr)
-          .select('state fibreAnalysisReport sitePlan sitePlanFile sitePlanLegend sitePlanLegendTitle sitePlanFigureTitle')
-          .lean();
-        if (doc) {
-          // Ensure state is set from DB for placeholder replacement (e.g. {10m2_RULE}, {STATE_SPECIFIC_REMOVAL_RECS})
-          if (doc.state != null) assessmentData.state = doc.state;
-          if (doc.fibreAnalysisReport) {
-            assessmentData.fibreAnalysisReport = doc.fibreAnalysisReport;
-            console.log(`[${pdfId}] Loaded fibre analysis report from DB (length: ${doc.fibreAnalysisReport.length})`);
-          } else {
-            console.log(`[${pdfId}] No fibre analysis report in DB for assessment ${idStr}`);
-          }
-          if (doc.sitePlan != null) assessmentData.sitePlan = doc.sitePlan;
-          if (doc.sitePlanFile != null) assessmentData.sitePlanFile = doc.sitePlanFile;
-          if (doc.sitePlanLegend != null) assessmentData.sitePlanLegend = doc.sitePlanLegend;
-          if (doc.sitePlanLegendTitle != null) assessmentData.sitePlanLegendTitle = doc.sitePlanLegendTitle;
-          if (doc.sitePlanFigureTitle != null) assessmentData.sitePlanFigureTitle = doc.sitePlanFigureTitle;
-        } else {
-          console.warn(`[${pdfId}] Assessment not found in DB: ${idStr}`);
-        }
-      } catch (err) {
-        console.warn(`[${pdfId}] Could not load fibre analysis report or site plan from DB:`, err.message);
-      }
-    } else {
-      console.warn(`[${pdfId}] No assessment ID in request body - cannot load fibre analysis report from DB`);
-    }
-
-    const logoPath = path.join(__dirname, '../assets/logo.png');
-    const logoBase64 = fs.existsSync(logoPath) ? fs.readFileSync(logoPath).toString('base64') : '';
-
-    // Generate cover + version control PDF (existing templates)
-    const coverVersionHtml = await generateAssessmentCoverVersionHTMLV3(assessmentData, isResidential === true);
-    const coverVersionPdf = await docRaptorService.generatePDF(coverVersionHtml);
-
-    // Generate flow-based body PDF (automatic pagination; page numbers only on these pages)
-    const flowHtml = await generateAssessmentFlowHTMLV3(assessmentData, isResidential === true);
-    const flowPdf = await docRaptorService.generatePDF(flowHtml);
-
-    const hasFibreIdReport = !!assessmentData.fibreAnalysisReport;
-    const hasSitePlan = !!(assessmentData.sitePlan && assessmentData.sitePlanFile);
-
-    // Appendix A cover (no page number in footer); only when there are samples (fibre ID report attachment)
-    let appendixACoverPdf = null;
-    if (hasFibreIdReport) {
-      const appendixAHtml = generateAppendixCoverHTMLV3('A', assessmentData);
-      appendixACoverPdf = await docRaptorService.generatePDF(appendixAHtml);
-    }
-
-    // Site plan appendix cover: Appendix A when no fibre ID report, Appendix B when fibre ID report exists
-    let sitePlanAppendixCoverPdf = null;
-    if (hasSitePlan) {
-      const sitePlanAppendixLetter = hasFibreIdReport ? 'B' : 'A';
-      const sitePlanCoverHtml = generateAppendixCoverHTMLV3('B', assessmentData, sitePlanAppendixLetter);
-      sitePlanAppendixCoverPdf = await docRaptorService.generatePDF(sitePlanCoverHtml);
-    }
-
-    // Merge: cover+version, flow, Appendix A cover, fibre analysis (Certificate of Analysis), Appendix B cover, then site plan content
-    let merged = await mergePdfBuffers([coverVersionPdf, flowPdf]);
-    if (appendixACoverPdf) {
-      merged = await mergePdfBuffers([merged, appendixACoverPdf]);
-    }
-    if (assessmentData.fibreAnalysisReport) {
-      try {
-        merged = await mergePDFs(merged, assessmentData.fibreAnalysisReport);
-      } catch (error) {
-        console.error(`[${pdfId}] Error merging fibre analysis PDFs:`, error);
-      }
-    }
-    if (sitePlanAppendixCoverPdf) {
-      merged = await mergePdfBuffers([merged, sitePlanAppendixCoverPdf]);
-    }
-    if (hasSitePlan && assessmentData.sitePlanFile) {
-      const isSitePlanImage = assessmentData.sitePlanFile.startsWith('/9j/') ||
-        assessmentData.sitePlanFile.startsWith('iVBORw0KGgo') ||
-        assessmentData.sitePlanFile.startsWith('data:image/');
-      if (isSitePlanImage) {
-        try {
-          const trimmedSitePlan = await trimSitePlanImage(assessmentData.sitePlanFile);
-          const assessmentDataTrimmed = { ...assessmentData, sitePlanFile: trimmedSitePlan };
-          const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-          const assessmentFooterText = isResidential
-            ? `Residential Asbestos Assessment Report: ${assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site'}`
-            : `Asbestos Assessment Report: ${assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site'}`;
-          const sitePlanFigureTitle = assessmentData.sitePlanFigureTitle || 'Asbestos Survey Site Plan';
-          const sitePlanLetter = hasFibreIdReport ? 'B' : 'A';
-          const sitePlanFragment = generateSitePlanContentPage(assessmentDataTrimmed, sitePlanLetter, logoBase64, assessmentFooterText, 'sitePlanFile', 'SITE PLAN', sitePlanFigureTitle, 'sitePlanLegend', 'sitePlanLegendTitle');
-          const sitePlanCss = `
-          @font-face { font-family: "Gothic"; src: url("${frontendUrl}/fonts/static/Gothic-Regular.ttf") format("truetype"); font-weight: normal; font-style: normal; }
-          @font-face { font-family: "Gothic"; src: url("${frontendUrl}/fonts/static/Gothic-Bold.ttf") format("truetype"); font-weight: bold; font-style: normal; }
-          @font-face { font-family: "Gothic"; src: url("${frontendUrl}/fonts/static/Gothic-Italic.ttf") format("truetype"); font-weight: normal; font-style: italic; }
-          @font-face { font-family: "Gothic"; src: url("${frontendUrl}/fonts/static/Gothic-BoldItalic.ttf") format("truetype"); font-weight: bold; font-style: italic; }
-          @page { size: A4 landscape; margin: 0; }
-          * { box-sizing: border-box; }
-          html, body { margin: 0; padding: 0; height: 100%; font-family: "Gothic", Arial, sans-serif; color: #222; background: #fff; }
-          .page { width: 100%; height: 100%; position: relative; background: #fff; margin: 0; padding: 0; }
-          .site-plan-page { height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden; page-break-after: avoid; page-break-inside: avoid; }
-          .site-plan-page .header { flex-shrink: 0; display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 48px 0 48px; margin: 0; font-family: "Gothic", Arial, sans-serif; }
-          .site-plan-page .green-line { flex-shrink: 0; width: calc(100% - 96px); height: 1.5px; background: #16b12b; margin: 8px auto 0 auto; border-radius: 0; }
-          .site-plan-page .content { flex: 1; min-height: 0; overflow: hidden; padding: 5px 48px 10px 48px; display: flex; flex-direction: column; }
-          .site-plan-page .footer { flex-shrink: 0; position: relative; left: 0; right: 0; bottom: 0; width: 100%; padding: 0 48px 16px 48px; text-align: justify; font-size: 0.75rem; color: #222; font-family: "Gothic", Arial, sans-serif; }
-          .logo { width: 243px; height: auto; display: block; background: #fff; margin: 0; }
-          .company-details { text-align: right; font-size: 0.75rem; color: #222; line-height: 1.5; margin-top: 8px; margin: 0; }
-          .company-details .website { color: #16b12b; font-weight: 500; }
-          .footer-border-line { width: 100%; height: 1.5px; background: #16b12b; margin-bottom: 6px; border-radius: 0; }
-          .footer-content { width: 100%; display: flex; justify-content: space-between; align-items: flex-end; }
-          .footer-text { flex: 1; }
-          .site-plan-layout { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: row; justify-content: center; gap: 8px; align-items: flex-start; margin: 0; width: 100%; padding: 0; }
-          .site-plan-container { flex: 0 0 auto; width: fit-content; max-width: 85%; min-width: 0; overflow: hidden; display: flex; flex-direction: column; padding: 0; margin: 12px 0 0 0; border: none; background: transparent; border-radius: 0; box-shadow: none; }
-          .site-plan-container .site-plan-image-wrapper { flex: 0 0 auto; width: fit-content; overflow: hidden; display: flex; align-items: center; justify-content: center; }
-          .site-plan-container .site-plan-image { display: block; width: auto; height: auto; max-width: 100%; max-height: 70vh; object-fit: contain; border: 1px solid #999; box-sizing: border-box; margin: 0; padding: 0; background: transparent; }
-          .site-plan-container .site-plan-figure-caption { flex-shrink: 0; font-size: 14px; font-weight: 600; color: #222; text-align: center; margin-top: 8px; font-family: "Gothic", Arial, sans-serif; }
-          .site-plan-legend-container { flex-shrink: 0; font-family: "Gothic", Arial, sans-serif; }
-          `;
-          const sitePlanHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Site Plan</title><style>${sitePlanCss}</style></head><body>${sitePlanFragment}</body></html>`;
-          const sitePlanPdf = await docRaptorService.generatePDF(sitePlanHtml);
-          merged = await mergePdfBuffers([merged, sitePlanPdf]);
-        } catch (error) {
-          console.error(`[${pdfId}] Error generating site plan content PDF:`, error);
-        }
-      } else {
-        try {
-          merged = await mergePDFs(merged, assessmentData.sitePlanFile);
-        } catch (error) {
-          console.error(`[${pdfId}] Error merging site plan PDF:`, error);
-        }
-      }
-    }
-
+    const result = await runAssessmentPdfV3(assessmentData, isResidential === true);
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Length', merged.length);
-    res.send(merged);
+    res.setHeader('Content-Length', result.buffer.length);
+    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+    res.send(result.buffer);
   } catch (error) {
     console.error('Error generating assessment PDF (v3):', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Load full assessment by ID for PDF generation (same shape as GET /assessments/:id).
+ */
+async function loadAssessmentForPdf(assessmentId) {
+  const doc = await AsbestosAssessment.findById(assessmentId)
+    .populate({
+      path: 'projectId',
+      select: 'projectID name client',
+      populate: { path: 'client', select: 'name contact1Name contact1Email address' }
+    })
+    .populate('assessorId')
+    .populate('analyst', 'firstName lastName email')
+    .lean();
+  if (!doc) {
+    throw new Error(`Assessment not found: ${assessmentId}`);
+  }
+  return doc;
+}
+
+/**
+ * Start async assessment PDF generation. Returns jobId for polling GET /status/:jobId.
+ * Accepts assessmentId + isResidential; loads full assessment from DB to avoid large request body.
+ * On completion the PDF is persisted on the assessment; use GET /download-by-assessment/:assessmentId to download.
+ */
+router.post('/start-asbestos-assessment-pdf', auth, async (req, res) => {
+  let assessmentId;
+  let jobId;
+  try {
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const idParam = body.assessmentId ?? body.assessmentData?._id ?? body.assessmentData?.id;
+    if (!idParam) {
+      return res.status(400).json({ error: 'Assessment ID is required (assessmentId or assessmentData._id)' });
+    }
+    assessmentId = String(idParam);
+    const isResidential = body.isResidential === true;
+
+    jobId = `assessment-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+    const job = {
+      statusId: jobId,
+      status: 'processing',
+      assessmentId,
+      isResidential,
+      reportType: 'asbestos-assessment',
+      createdAt: Date.now(),
+      filename: null,
+      error: null,
+      message: null
+    };
+    asyncPdfJobs.set(jobId, job);
+    pruneOldJobs();
+
+    // Defer: load assessment from DB then run PDF generation (avoids large request body and sync throws)
+    setImmediate(() => {
+      loadAssessmentForPdf(assessmentId)
+        .then((assessmentData) => runAssessmentPdfV3(assessmentData, isResidential))
+        .then(async (result) => {
+          try {
+            await AsbestosAssessment.findByIdAndUpdate(assessmentId, {
+              pdfBuffer: result.buffer,
+              pdfReadyAt: new Date(),
+              pdfFilename: result.filename
+            });
+            const j = asyncPdfJobs.get(jobId);
+            if (j) {
+              j.status = 'completed';
+              j.filename = result.filename;
+            }
+          } catch (updateErr) {
+            console.error('Failed to persist assessment PDF:', updateErr);
+            const j = asyncPdfJobs.get(jobId);
+            if (j) {
+              j.status = 'failed';
+              j.error = updateErr.message;
+            }
+          }
+        })
+        .catch((err) => {
+          console.error('Assessment PDF generation failed:', err);
+          const j = asyncPdfJobs.get(jobId);
+          if (j) {
+            j.status = 'failed';
+            j.error = err.message;
+          }
+        });
+    });
+
+    return res.status(201).json({ jobId });
+  } catch (error) {
+    console.error('Error starting assessment PDF:', error);
+    return res.status(500).json({
+      error: 'Failed to start assessment PDF',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * Download assessment PDF by assessment ID (uses persisted pdfBuffer; no regeneration).
+ * After ASSESSMENT_PDF_RETENTION_DAYS (7), the report is no longer served and stored PDF is cleared.
+ */
+router.get('/download-by-assessment/:assessmentId', auth, async (req, res) => {
+  const { assessmentId } = req.params;
+  try {
+    // Query without .lean() so Mongoose properly hydrates Buffer; then get plain buffer for response
+    const assessment = await AsbestosAssessment.findById(assessmentId).select('pdfBuffer pdfReadyAt pdfFilename');
+    if (!assessment) {
+      return res.status(404).json({ error: 'Assessment not found' });
+    }
+    // Retention: if PDF is past 7 days, clear it and return 410 Gone
+    if (assessment.pdfReadyAt && isAssessmentPdfExpired(assessment.pdfReadyAt)) {
+      await AsbestosAssessment.findByIdAndUpdate(assessmentId, {
+        $unset: { pdfBuffer: 1, pdfReadyAt: 1, pdfFilename: 1 },
+      });
+      return res.status(410).json({
+        error: 'Report no longer available',
+        hint: 'Retention period (7 days) has ended. Generate the PDF again if needed.',
+      });
+    }
+    let buffer = assessment.pdfBuffer;
+    if (!buffer) {
+      if (assessment.pdfReadyAt) {
+        console.warn(`[download-by-assessment] Assessment ${assessmentId} has pdfReadyAt but no pdfBuffer - persist may have failed (e.g. document size limit)`);
+      }
+      return res.status(404).json({
+        error: 'No PDF available for this assessment',
+        hint: 'Generate the PDF first using Generate PDF'
+      });
+    }
+    if (!Buffer.isBuffer(buffer)) {
+      buffer = Buffer.from(buffer);
+    }
+    const filename = assessment.pdfFilename || `assessment-${assessmentId}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.send(buffer);
+  } catch (err) {
+    console.error('Download by assessment failed:', err);
+    return res.status(500).json({ error: 'Download failed', details: err.message });
   }
 });
 
@@ -3104,10 +3278,11 @@ const generateAssessmentHTML = async (assessmentData) => {
     const assessmentFooterText = isResidential ? `Residential Asbestos Assessment Report: ${assessmentSiteAddress}` : `Asbestos Assessment Report: ${assessmentSiteAddress}`;
     const reportAuthorName = assessmentData.LAA || (assessmentData.assessorId?.firstName && assessmentData.assessorId?.lastName
       ? `${assessmentData.assessorId.firstName} ${assessmentData.assessorId.lastName}` : null) || 'Unknown Assessor';
-    const reportApprovedBy = assessmentData.reportApprovedBy || assessmentData.reportAuthorisedBy || 'Awaiting authorisation';
+    // Revision history: assessment report authorisation only (not Fibre ID approval)
+    const reportApprovedBy = assessmentData.reportAuthorisedBy || 'Awaiting authorisation';
     const reportIssueDate = assessmentData.reportAuthorisedAt
-      ? new Date(assessmentData.reportAuthorisedAt).toLocaleDateString('en-GB')
-      : (assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown');
+      ? formatDateSydney(assessmentData.reportAuthorisedAt)
+      : 'Awaiting authorisation';
 
     const assessmentIntrusivenessLabel = assessmentData.intrusiveness === 'intrusive' || 'non-intrusive';
     // Populate cover template with data (REPORT_TITLE, SITE_ADDRESS, SECONDARY_HEADER, CLIENT_NAME, JOB_REFERENCE, ASSESSMENT_DATE, INTRUSIVENESS, no watermark/footer)
@@ -3118,20 +3293,20 @@ const generateAssessmentHTML = async (assessmentData) => {
       .replace(/\[INTRUSIVENESS\]/g, assessmentIntrusivenessLabel)
       .replace(/\[CLIENT_NAME\]/g, assessmentClientName)
       .replace(/\[JOB_REFERENCE\]/g, assessmentData.projectId?.projectID || 'Unknown')
-      .replace(/\[ASSESSMENT_DATE\]/g, assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown')
+      .replace(/\[ASSESSMENT_DATE\]/g, assessmentData.assessmentDate ? formatDateSydney(assessmentData.assessmentDate) : 'Unknown')
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
       .replace(/\[BACKGROUND_IMAGE\]/g, `data:image/jpeg;base64,${backgroundBase64}`);
 
     // Populate version control template with data (like clearance: REPORT_TITLE, FOOTER_TEXT, document-details-table, WATERMARK_PATH)
     const versionControlReportTitle = isResidential ? 'RESIDENTIAL ASBESTOS ASSESSMENT REPORT' : 'ASBESTOS ASSESSMENT REPORT';
     const versionControlFilename = isResidential
-      ? `${assessmentData.projectId?.projectID || 'Unknown'}_Residential_Asbestos_Assessment_Report - ${assessmentData.projectId?.name || 'Unknown'} (${assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown'}).pdf`
-      : `${assessmentData.projectId?.projectID || 'Unknown'}_Asbestos_Assessment_Report - ${assessmentData.projectId?.name || 'Unknown'} (${assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown'}).pdf`;
+      ? `${assessmentData.projectId?.projectID || 'Unknown'}_Residential_Asbestos_Assessment_Report - ${assessmentData.projectId?.name || 'Unknown'} (${assessmentData.assessmentDate ? formatDateSydney(assessmentData.assessmentDate) : 'Unknown'}).pdf`
+      : `${assessmentData.projectId?.projectID || 'Unknown'}_Asbestos_Assessment_Report - ${assessmentData.projectId?.name || 'Unknown'} (${assessmentData.assessmentDate ? formatDateSydney(assessmentData.assessmentDate) : 'Unknown'}).pdf`;
     const populatedVersionControl = versionControlTemplateWithUrl
       .replace(/\[REPORT_TITLE\]/g, versionControlReportTitle)
       .replace(/\[SITE_ADDRESS\]/g, assessmentSiteAddress)
       .replace(/\[CLIENT_NAME\]/g, assessmentData.projectId?.client?.name || assessmentData.clientName || 'Unknown Client')
-      .replace(/\[ASSESSMENT_DATE\]/g, assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown')
+      .replace(/\[ASSESSMENT_DATE\]/g, assessmentData.assessmentDate ? formatDateSydney(assessmentData.assessmentDate) : 'Unknown')
       .replace(/\[ASSESSOR_NAME\]/g, reportAuthorName)
       .replace(/\[FILENAME\]/g, versionControlFilename)
       .replace(/\[REPORT_APPROVED_BY\]/g, reportApprovedBy)
@@ -3287,29 +3462,61 @@ const generateAssessmentHTML = async (assessmentData) => {
       const count = items.slice(0, idx + 1).filter((i) => !hasNoAsbestosContent(i)).length;
       return String(count);
     };
-    // Multiple images per item: include all photos marked includeInReport; fallback to legacy single photograph; one table per photo with identical item info
-    const getIncludedPhotoSources = (item) => {
-      const fromArray = (item.photographs || []).filter(p => p.includeInReport !== false).map(p => (p.data || '').trim()).filter(Boolean);
-      if (fromArray.length > 0) return fromArray;
-      const legacy = (item.photograph || '').trim();
-      if (legacy) return [legacy];
-      return [null];
+    // Arrow overlay for PDF: tip offset (viewBox 24x24, tip at 12,2, center 12,12)
+    const DEFAULT_ARROW_ROTATION_PDF = -45;
+    const getArrowTipOffsetPdf = (rotationDeg) => {
+      const r = ((rotationDeg ?? DEFAULT_ARROW_ROTATION_PDF) * Math.PI) / 180;
+      const tipX = (12 + 10 * Math.sin(r)) / 24;
+      const tipY = (12 - 10 * Math.cos(r)) / 24;
+      return { x: tipX, y: tipY };
     };
-    const getSamplePhotoCellHtmlFromSrc = (photoSrc) => {
-      let src = photoSrc || '';
+    const getPhotoArrowsForPdf = (photo) => {
+      if (!photo) return [];
+      if (photo.arrows && photo.arrows.length > 0) return photo.arrows;
+      const leg = photo.arrow;
+      if (leg && typeof leg === 'object' && (leg.x != null || leg.y != null)) return [leg];
+      return [];
+    };
+    const buildArrowOverlaysHtml = (arrows) => {
+      if (!arrows || arrows.length === 0) return '';
+      const defaultColor = '#f44336';
+      return arrows.map((arr) => {
+        const rot = arr.rotation ?? DEFAULT_ARROW_ROTATION_PDF;
+        const tipOff = getArrowTipOffsetPdf(rot);
+        const color = (arr.color || defaultColor).replace(/"/g, '&quot;');
+        const leftPct = ((arr.x ?? 0.5) * 100).toFixed(2);
+        const topPct = ((arr.y ?? 0.5) * 100).toFixed(2);
+        const tx = (-tipOff.x * 100).toFixed(2);
+        const ty = (-tipOff.y * 100).toFixed(2);
+        return `<div class="pdf-arrow-overlay" style="left:${leftPct}%;top:${topPct}%;transform:translate(${tx}%,${ty}%);"><div class="pdf-arrow-rotated" style="transform:rotate(${rot}deg);"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="22" x2="12" y2="10" stroke="rgba(0,0,0,0.5)" stroke-width="2.5" stroke-linecap="round"/><line x1="12" y1="22" x2="12" y2="10" stroke="${color}" stroke-width="2" stroke-linecap="round"/><path d="M12 2 L8 10 L16 10 Z" fill="rgba(0,0,0,0.4)" stroke="rgba(0,0,0,0.6)" stroke-width="1" stroke-linejoin="round"/><path d="M12 2 L8 10 L16 10 Z" fill="${color}" stroke="${color}" stroke-width="0.5" stroke-linejoin="round"/></svg></div></div>`;
+      }).join('');
+    };
+    // Multiple images per item: include all photos marked includeInReport with arrows; fallback to legacy single photograph
+    const getIncludedPhotos = (item) => {
+      const fromArray = (item.photographs || []).filter(p => p.includeInReport !== false && (p.data || '').trim());
+      if (fromArray.length > 0) {
+        return fromArray.map(p => ({ src: (p.data || '').trim(), arrows: getPhotoArrowsForPdf(p) }));
+      }
+      const legacy = (item.photograph || '').trim();
+      if (legacy) return [{ src: legacy, arrows: getPhotoArrowsForPdf({ arrow: item.arrow }) }];
+      return [{ src: null, arrows: [] }];
+    };
+    const getSamplePhotoCellHtml = (photoData) => {
+      let src = photoData.src || '';
       if (src && !src.startsWith('data:') && !src.startsWith('http://') && !src.startsWith('https://') && src.startsWith('/')) {
         src = frontendUrl + src;
       }
       if (src) {
         const safe = String(src).replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        return `<div class="sample-photo-cell-inner"><img class="sample-photo" src="${safe}" alt="" /></div>`;
+        const arrowsHtml = buildArrowOverlaysHtml(photoData.arrows);
+        return `<div class="sample-photo-cell-inner sample-photo-cell-inner-with-arrows"><img class="sample-photo" src="${safe}" alt="" />${arrowsHtml}</div>`;
       }
       return '<div class="sample-photo-cell-inner"><div class="sample-no-photo">No photograph available</div></div>';
     };
     const buildTableBlock = (block) => {
-      const { item, itemIndex, photoSrc } = block;
+      const { item, itemIndex, photoData } = block;
       return asbestosSampleItemTemplateWithUrl
-        .replace(/\[PHOTO_CELL\]/g, getSamplePhotoCellHtmlFromSrc(photoSrc))
+        .replace(/\[PHOTO_CELL\]/g, getSamplePhotoCellHtml(photoData))
         .replace(/\[ITEM_NUMBER\]/g, getItemNumber(assessmentItems, itemIndex))
         .replace(/\[SAMPLE_REFERENCE\]/g, getSampleRefDisplay(item, `Sample ${itemIndex + 1}`))
         .replace(/\[LOCATION_DESCRIPTION\]/g, getLocationContent(item))
@@ -3322,8 +3529,8 @@ const generateAssessmentHTML = async (assessmentData) => {
     };
     const tableBlocks = [];
     assessmentItems.forEach((item, itemIndex) => {
-      const sources = getIncludedPhotoSources(item);
-      sources.forEach(photoSrc => tableBlocks.push({ item, itemIndex, photoSrc }));
+      const photos = getIncludedPhotos(item);
+      photos.forEach(photoData => tableBlocks.push({ item, itemIndex, photoData }));
     });
     const firstSampleTable = tableBlocks.length > 0 ? buildTableBlock(tableBlocks[0]) : '';
 
@@ -3550,9 +3757,19 @@ const generateAssessmentHTML = async (assessmentData) => {
     const jobSpecificExclusionsRawTemplate = (assessmentData.jobSpecificExclusions || '').trim();
     const jobSpecificExclusionsHtmlTemplate = toJustifiedParagraphsHtml(jobSpecificExclusionsRawTemplate);
 
+    const asbestosSummaryBlockLegacy = identifiedAsbestosItems.length > 0
+      ? `<div class="paragraph">
+          The following is a summary of asbestos materials identified during
+          this assessment:
+        </div>
+        <div class="subsection-header-underline">Asbestos Items</div>
+        ${asbestosItemsSection}`
+      : '';
+
     const populatedDiscussionConclusions = asbestosDiscussionConclusionsTemplateWithUrl
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
       .replace(/\[ASBESTOS_COUNT_LINE\]/g, asbestosCountLineLegacy)
+      .replace(/\[ASBESTOS_SUMMARY_BLOCK\]/g, asbestosSummaryBlockLegacy)
       .replace(/\[ASBESTOS_ITEMS_SECTION\]/g, asbestosItemsSection)
       .replace(/\[DISCUSSION_CONCLUSIONS_CONTENT\]/g, discussionConclusionsHtml)
       .replace(/\[SIGN_OFF_CONTENT\]/g, discussionSignOffContent)
@@ -3653,9 +3870,9 @@ const generateAssessmentHTML = async (assessmentData) => {
       remediationContentPage2 = remediationSection.content.substring(splitIndex);
     }
 
-    // First additional page: Assessment Methodology, Risk Assessment, first part of Remediation
+    // First additional page: Assessment Methodology (residential only), Risk Assessment, first part of Remediation
     const firstPageContent = [
-      `<div class="section-header">${sections[0].title}</div>${convertContentToHtml(sections[0].content)}`,
+      ...(isResidential ? [`<div class="section-header">${sections[0].title}</div>${convertContentToHtml(sections[0].content)}`] : []),
       `<div class="section-header">${sections[2].title}</div>${convertContentToHtml(sections[2].content)}`,
       `<div class="section-header">${remediationSection.title}</div>${convertContentToHtml(remediationContentPage1)}`
     ].join('');
@@ -3792,6 +4009,9 @@ const generateAssessmentHTML = async (assessmentData) => {
       .assessment-page .sample-table th { background: #f5f5f5; font-weight: 700; text-align: left; }
       .assessment-page .sample-photo-cell { width: 71% !important; height: 340px !important; overflow: hidden !important; box-sizing: border-box !important; text-align: center; vertical-align: middle; background: #fff; padding: 0 !important; margin: 0 !important; }
       .assessment-page .sample-photo-cell-inner { display: block; width: 100%; height: 340px; overflow: hidden; box-sizing: border-box; padding: 0; margin: 0; }
+      .assessment-page .sample-photo-cell-inner-with-arrows { position: relative; }
+      .assessment-page .pdf-arrow-overlay { position: absolute; width: 36px; height: 36px; pointer-events: none; z-index: 2; }
+      .assessment-page .pdf-arrow-rotated { width: 36px; height: 36px; }
       .assessment-page .sample-photo-cell-inner .sample-photo { display: block !important; width: 100% !important; height: 100% !important; object-fit: contain !important; object-position: center !important; padding: 0 !important; }
       .assessment-page .sample-photo { display: block; width: 100%; height: 100%; object-fit: contain; object-position: center; padding: 0; }
       .assessment-page .sample-label { font-weight: 700; width: 12.5%; background: #f5f5f5; }
@@ -3921,15 +4141,16 @@ const generateAssessmentCoverVersionHTMLV3 = async (assessmentData, isResidentia
   const assessmentFooterText = isResidential ? `Residential Asbestos Assessment Report: ${assessmentSiteAddress}` : `Asbestos Assessment Report: ${assessmentSiteAddress}`;
   const reportAuthorName = assessmentData.LAA || (assessmentData.assessorId?.firstName && assessmentData.assessorId?.lastName
     ? `${assessmentData.assessorId.firstName} ${assessmentData.assessorId.lastName}` : null) || 'Unknown Assessor';
-  const reportApprovedBy = assessmentData.reportApprovedBy || assessmentData.reportAuthorisedBy || 'Awaiting authorisation';
+  // Revision history: assessment report authorisation only (not Fibre ID approval)
+  const reportApprovedBy = assessmentData.reportAuthorisedBy || 'Awaiting authorisation';
   const reportIssueDate = assessmentData.reportAuthorisedAt
-    ? new Date(assessmentData.reportAuthorisedAt).toLocaleDateString('en-GB')
-    : (assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown');
+    ? formatDateSydney(assessmentData.reportAuthorisedAt)
+    : 'Awaiting authorisation';
 
   const versionControlReportTitle = isResidential ? 'RESIDENTIAL ASBESTOS ASSESSMENT REPORT' : (templateContent?.reportTitle || 'ASBESTOS ASSESSMENT REPORT');
   const versionControlFilename = isResidential
-    ? `${assessmentData.projectId?.projectID || 'Unknown'}_Residential_Asbestos_Assessment_Report - ${assessmentSiteAddress} (${assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown'}).pdf`
-    : `${assessmentData.projectId?.projectID || 'Unknown'}_Asbestos_Assessment_Report - ${assessmentSiteAddress} (${assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown'}).pdf`;
+    ? `${assessmentData.projectId?.projectID || 'Unknown'}_Residential_Asbestos_Assessment_Report - ${assessmentSiteAddress} (${assessmentData.assessmentDate ? formatDateSydney(assessmentData.assessmentDate) : 'Unknown'}).pdf`
+    : `${assessmentData.projectId?.projectID || 'Unknown'}_Asbestos_Assessment_Report - ${assessmentSiteAddress} (${assessmentData.assessmentDate ? formatDateSydney(assessmentData.assessmentDate) : 'Unknown'}).pdf`;
 
   const assessmentIntrusivenessLabelV3 = assessmentData.intrusiveness === 'intrusive' || 'non-intrusive';
   const populatedCover = coverTemplateWithUrl
@@ -3938,16 +4159,16 @@ const generateAssessmentCoverVersionHTMLV3 = async (assessmentData, isResidentia
     .replace(/\[SECONDARY_HEADER\]/g, assessmentData.secondaryHeader || '')
     .replace(/\[INTRUSIVENESS\]/g, assessmentIntrusivenessLabelV3)
     .replace(/\[CLIENT_NAME\]/g, assessmentClientName)
-    .replace(/\[JOB_REFERENCE\]/g, assessmentData.projectId?.projectID || 'Unknown')
-    .replace(/\[ASSESSMENT_DATE\]/g, assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown')
-    .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
+.replace(/\[JOB_REFERENCE\]/g, assessmentData.projectId?.projectID || 'Unknown')
+      .replace(/\[ASSESSMENT_DATE\]/g, assessmentData.assessmentDate ? formatDateSydney(assessmentData.assessmentDate) : 'Unknown')
+      .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
     .replace(/\[BACKGROUND_IMAGE\]/g, `data:image/jpeg;base64,${backgroundBase64}`);
 
   const populatedVersionControl = versionControlTemplateWithUrl
     .replace(/\[REPORT_TITLE\]/g, versionControlReportTitle)
     .replace(/\[SITE_ADDRESS\]/g, assessmentSiteAddress)
     .replace(/\[CLIENT_NAME\]/g, assessmentData.projectId?.client?.name || assessmentClientName)
-    .replace(/\[ASSESSMENT_DATE\]/g, assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB') : 'Unknown')
+    .replace(/\[ASSESSMENT_DATE\]/g, assessmentData.assessmentDate ? formatDateSydney(assessmentData.assessmentDate) : 'Unknown')
     .replace(/\[ASSESSOR_NAME\]/g, reportAuthorName)
     .replace(/\[FILENAME\]/g, versionControlFilename)
     .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
@@ -4116,22 +4337,54 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
     const count = items.slice(0, idx + 1).filter((i) => !hasNoAsbestosContentFlow(i)).length;
     return String(count);
   };
-  // Multiple images per item: one table per photo with identical item info
-  const getIncludedPhotoSourcesFlow = (item) => {
-    const fromArray = (item.photographs || []).filter(p => p.includeInReport !== false).map(p => (p.data || '').trim()).filter(Boolean);
-    if (fromArray.length > 0) return fromArray;
-    const legacy = (item.photograph || '').trim();
-    if (legacy) return [legacy];
-    return [null];
+  // Arrow overlay for PDF (flow): same helpers as non-flow
+  const DEFAULT_ARROW_ROTATION_PDF_FLOW = -45;
+  const getArrowTipOffsetPdfFlow = (rotationDeg) => {
+    const r = ((rotationDeg ?? DEFAULT_ARROW_ROTATION_PDF_FLOW) * Math.PI) / 180;
+    const tipX = (12 + 10 * Math.sin(r)) / 24;
+    const tipY = (12 - 10 * Math.cos(r)) / 24;
+    return { x: tipX, y: tipY };
   };
-  const getSamplePhotoCellHtmlFromSrcFlow = (photoSrc) => {
-    let src = photoSrc || '';
+  const getPhotoArrowsForPdfFlow = (photo) => {
+    if (!photo) return [];
+    if (photo.arrows && photo.arrows.length > 0) return photo.arrows;
+    const leg = photo.arrow;
+    if (leg && typeof leg === 'object' && (leg.x != null || leg.y != null)) return [leg];
+    return [];
+  };
+  const buildArrowOverlaysHtmlFlow = (arrows) => {
+    if (!arrows || arrows.length === 0) return '';
+    const defaultColor = '#f44336';
+    return arrows.map((arr) => {
+      const rot = arr.rotation ?? DEFAULT_ARROW_ROTATION_PDF_FLOW;
+      const tipOff = getArrowTipOffsetPdfFlow(rot);
+      const color = (arr.color || defaultColor).replace(/"/g, '&quot;');
+      const leftPct = ((arr.x ?? 0.5) * 100).toFixed(2);
+      const topPct = ((arr.y ?? 0.5) * 100).toFixed(2);
+      const tx = (-tipOff.x * 100).toFixed(2);
+      const ty = (-tipOff.y * 100).toFixed(2);
+      return `<div class="pdf-arrow-overlay" style="left:${leftPct}%;top:${topPct}%;transform:translate(${tx}%,${ty}%);"><div class="pdf-arrow-rotated" style="transform:rotate(${rot}deg);"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="22" x2="12" y2="10" stroke="rgba(0,0,0,0.5)" stroke-width="2.5" stroke-linecap="round"/><line x1="12" y1="22" x2="12" y2="10" stroke="${color}" stroke-width="2" stroke-linecap="round"/><path d="M12 2 L8 10 L16 10 Z" fill="rgba(0,0,0,0.4)" stroke="rgba(0,0,0,0.6)" stroke-width="1" stroke-linejoin="round"/><path d="M12 2 L8 10 L16 10 Z" fill="${color}" stroke="${color}" stroke-width="0.5" stroke-linejoin="round"/></svg></div></div>`;
+    }).join('');
+  };
+  // Multiple images per item: one table per photo with identical item info and arrows
+  const getIncludedPhotosFlow = (item) => {
+    const fromArray = (item.photographs || []).filter(p => p.includeInReport !== false && (p.data || '').trim());
+    if (fromArray.length > 0) {
+      return fromArray.map(p => ({ src: (p.data || '').trim(), arrows: getPhotoArrowsForPdfFlow(p) }));
+    }
+    const legacy = (item.photograph || '').trim();
+    if (legacy) return [{ src: legacy, arrows: getPhotoArrowsForPdfFlow({ arrow: item.arrow }) }];
+    return [{ src: null, arrows: [] }];
+  };
+  const getSamplePhotoCellHtmlFlow = (photoData) => {
+    let src = photoData.src || '';
     if (src && !src.startsWith('data:') && !src.startsWith('http://') && !src.startsWith('https://') && src.startsWith('/')) {
       src = frontendUrl + src;
     }
     if (src) {
       const safe = String(src).replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      return `<div class="sample-photo-cell-inner"><img class="sample-photo" src="${safe}" alt="" /></div>`;
+      const arrowsHtml = buildArrowOverlaysHtmlFlow(photoData.arrows);
+      return `<div class="sample-photo-cell-inner sample-photo-cell-inner-with-arrows"><img class="sample-photo" src="${safe}" alt="" />${arrowsHtml}</div>`;
     }
     return '<div class="sample-photo-cell-inner"><div class="sample-no-photo">No photograph available</div></div>';
   };
@@ -4143,13 +4396,13 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
 
   const flowTableBlocks = [];
   assessmentItems.forEach((item, idx) => {
-    getIncludedPhotoSourcesFlow(item).forEach(photoSrc => flowTableBlocks.push({ item, idx, photoSrc }));
+    getIncludedPhotosFlow(item).forEach(photoData => flowTableBlocks.push({ item, idx, photoData }));
   });
   const buildBlockHtml = (block, blockIndex, addContinuationHeader) => {
-    const { item, idx, photoSrc } = block;
+    const { item, idx, photoData } = block;
     const n = idx + 1;
     const sampleTable = asbestosSampleItemTemplateWithUrl
-      .replace(/\[PHOTO_CELL\]/g, getSamplePhotoCellHtmlFromSrcFlow(photoSrc))
+      .replace(/\[PHOTO_CELL\]/g, getSamplePhotoCellHtmlFlow(photoData))
       .replace(/\[ITEM_NUMBER\]/g, getItemNumberFlow(assessmentItems, idx))
       .replace(/\[SAMPLE_REFERENCE\]/g, getSampleRefDisplay(item, `Sample ${n}`))
       .replace(/\[LOCATION_DESCRIPTION\]/g, getLocationContent(item))
@@ -4302,7 +4555,9 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
     : '';
 
   const additionalSections = [
-    { title: templateContent?.standardSections?.assessmentMethodologyTitle || 'ASSESSMENT METHODOLOGY', content: templateContent?.standardSections?.assessmentMethodologyContent ? await replacePlaceholders(templateContent.standardSections.assessmentMethodologyContent, flowTemplateData) : '' },
+    ...(isResidential && templateContent?.standardSections?.assessmentMethodologyContent
+      ? [{ title: templateContent?.standardSections?.assessmentMethodologyTitle || 'ASSESSMENT METHODOLOGY', content: await replacePlaceholders(templateContent.standardSections.assessmentMethodologyContent, flowTemplateData) }]
+      : []),
     { title: templateContent?.standardSections?.riskAssessmentTitle || 'RISK ASSESSMENT', content: templateContent?.standardSections?.riskAssessmentContent ? await replacePlaceholders(templateContent.standardSections.riskAssessmentContent, flowTemplateData) : '' },
     { title: templateContent?.standardSections?.controlMeasuresTitle || 'DETERMINING SUITABLE CONTROL MEASURES', content: templateContent?.standardSections?.controlMeasuresContent ? await replacePlaceholders(templateContent.standardSections.controlMeasuresContent, flowTemplateData) : '' },
     { title: templateContent?.standardSections?.remediationRequirementsTitle || 'REQUIREMENTS FOR REMEDIATION/REMOVAL WORKS INVOLVING ACM', content: templateContent?.standardSections?.remediationRequirementsContent ? await replacePlaceholders(templateContent.standardSections.remediationRequirementsContent, flowTemplateData) : '' },
@@ -4310,10 +4565,11 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
     { title: templateContent?.standardSections?.assessmentLimitationsTitle || 'ASSESSMENT LIMITATIONS/CAVEATS', content: templateContent?.standardSections?.assessmentLimitationsContent ? await replacePlaceholders(templateContent.standardSections.assessmentLimitationsContent, flowTemplateData) : '' }
   ];
 
-  const bodySectionsHtml = additionalSections.map((s, i) => {
+  const bodySectionsHtml = additionalSections.map((s) => {
     const sectionHtml = `<div class="section-header">${escapeHtml(s.title)}</div><div class="section-body">${s.content || ''}</div>`;
-    // Page break after DETERMINING SUITABLE CONTROL MEASURES (3rd section, index 2)
-    return i === 2 ? `${sectionHtml}<div class="page-break"></div>` : sectionHtml;
+    // Page break after DETERMINING SUITABLE CONTROL MEASURES (index varies: 2 for residential, 1 for non-residential)
+    const isControlMeasuresSection = (s.title || '').toUpperCase().includes('DETERMINING SUITABLE') && (s.title || '').toUpperCase().includes('CONTROL MEASURES');
+    return isControlMeasuresSection ? `${sectionHtml}<div class="page-break"></div>` : sectionHtml;
   }).join('');
 
   const discussionSignOffContent = templateContent?.standardSections?.signOffContent
@@ -4417,7 +4673,7 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
           li { margin-bottom: 8px; }
 
           .sample-register-header { font-size: 0.8rem; font-weight: 700; margin: 14px 0 10px 0; }
-          .sample-block { break-inside: avoid; page-break-inside: avoid; margin-bottom: 14px; }
+          .sample-block { break-inside: avoid; page-break-inside: avoid; margin-bottom: 30px; }
 
           /* Reuse the sample table styles from Item1 (lighter weight) */
           table { width: 100%; border-collapse: collapse; }
@@ -4432,6 +4688,9 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
           .sample-location-content { height: 60px; vertical-align: top; padding: 8px; background: #fafafa; border: 1.5px solid #888; font-size: 0.64rem; line-height: 1.4; }
           .sample-photo-cell { width: 71% !important; height: 340px !important; overflow: hidden !important; box-sizing: border-box !important; text-align: center; vertical-align: middle; background: #fff; padding: 0 !important; margin: 0 !important; }
           .sample-photo-cell-inner { display: block; width: 100%; height: 340px; overflow: hidden; box-sizing: border-box; padding: 0; margin: 0; }
+          .sample-photo-cell-inner-with-arrows { position: relative; }
+          .pdf-arrow-overlay { position: absolute; width: 36px; height: 36px; pointer-events: none; z-index: 2; }
+          .pdf-arrow-rotated { width: 36px; height: 36px; }
           .sample-photo { display: block !important; width: 100% !important; height: 100% !important; object-fit: contain !important; object-position: center !important; padding: 0 !important; }
           .sample-no-photo { display: flex; align-items: center; justify-content: center; min-height: 340px; height: 100%; color: #666; font-style: italic; font-size: 0.64rem; }
           .asbestos-content-asbestos { color: #c62828; font-weight: 700; }
@@ -4484,12 +4743,12 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
         ${!isResidential && remainingTableBlocks.length > 0 ? '<div class="page-break"></div><div class="section-header">Table 1: Assessment Register cont.</div>' : ''}
         ${sampleTablesHtml || (flowTableBlocks.length === 0 ? '<div class="section-body">No items</div>' : '')}
 
-        <div class="page-break"></div>
+        ${identifiedAsbestosItems.length > 0 ? '<div class="page-break"></div>' : ''}
         <div class="section-header">${escapeHtml(templateContent?.standardSections?.discussionTitle || 'DISCUSSION AND CONCLUSIONS')}</div>
         <div class="section-body">
           ${asbestosCountLineHtml}
-          <p style="margin: 0; padding-bottom: 8px;">The following is a summary of asbestos materials identified during this assessment:</p>
-          ${asbestosItemsSectionFlow}
+          ${identifiedAsbestosItems.length > 0 ? `<p style="margin: 0; padding-bottom: 8px;">The following is a summary of asbestos materials identified during this assessment:</p>
+          ${asbestosItemsSectionFlow}` : ''}
           ${discussionConclusionsHtml ? `<div class="section-body discussion-conclusions-content" style="margin-top: 12px; text-align: justify !important; width: 100%;">${discussionConclusionsHtml}</div>` : ''}
           ${inspectionExclusionsHtml ? `<div class="section-body discussion-conclusions-content" style="margin-top: 12px; text-align: justify !important; width: 100%;">${inspectionExclusionsHtml}</div>` : ''}
         </div>
@@ -4525,6 +4784,24 @@ const mergePdfBuffers = async (buffers) => {
 };
 
 /**
+ * Extract inner HTML of the first <body>...</body> from a full HTML document.
+ */
+function extractBodyContent(html) {
+  if (!html || typeof html !== 'string') return '';
+  const match = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  return match ? match[1].trim() : html;
+}
+
+/**
+ * Extract inner HTML of the first <style>...</style> from a full HTML document.
+ */
+function extractStyleContent(html) {
+  if (!html || typeof html !== 'string') return '';
+  const match = html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+  return match ? match[1].trim() : '';
+}
+
+/**
  * V3: Generate single-page Appendix A or B cover HTML (footer with no page number).
  * Uses existing DocRaptor templates so Appendix A and all pages after have no page number.
  * For site plan (type 'B'), appendixLetterOverride can be 'A' or 'B': use 'A' when there is no
@@ -4551,6 +4828,169 @@ const generateAppendixCoverHTMLV3 = (type, assessmentData, appendixLetterOverrid
   }
   return html;
 };
+
+/**
+ * V3: Build a single HTML document for the full assessment report (cover, version, flow, appendices, site plan).
+ * Uses named @page (cover, version, main, appendix, appendix-landscape) so one DocRaptor call produces one PDF.
+ * Preserves flow-based pagination and running header/footer in the main section; appendix pages have no page number.
+ */
+async function generateAssessmentSingleHTMLV3(assessmentData, isResidential) {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const logoPath = path.join(__dirname, '../assets/logo.png');
+  const logoBase64 = fs.existsSync(logoPath) ? fs.readFileSync(logoPath).toString('base64') : '';
+  const hasFibreIdReport = !!assessmentData.fibreAnalysisReport;
+  const hasSitePlan = !!(assessmentData.sitePlan && assessmentData.sitePlanFile);
+  const isSitePlanImage = hasSitePlan && (
+    assessmentData.sitePlanFile.startsWith('/9j/') ||
+    assessmentData.sitePlanFile.startsWith('iVBORw0KGgo') ||
+    assessmentData.sitePlanFile.startsWith('data:image/')
+  );
+
+  // 1. Cover + version (one string: cover full HTML + page-break + version full HTML)
+  const coverVersionHtml = await generateAssessmentCoverVersionHTMLV3(assessmentData, isResidential);
+  const coverVersionParts = coverVersionHtml.split(/<div class="page-break"><\/div>/);
+  const coverFull = coverVersionParts[0] || '';
+  const versionFull = coverVersionParts[1] || '';
+  const coverBody = extractBodyContent(coverFull);
+  const versionBody = extractBodyContent(versionFull);
+  let coverCss = extractStyleContent(coverFull).replace(/@page\s*\{/g, '@page cover {');
+  let versionCss = extractStyleContent(versionFull).replace(/@page\s*\{/g, '@page version {');
+
+  // 2. Flow (full document) – use @page main, reset page counter so first body page is 1, match footer to version/appendix
+  const flowHtml = await generateAssessmentFlowHTMLV3(assessmentData, isResidential);
+  const flowBody = extractBodyContent(flowHtml);
+  let flowCss = extractStyleContent(flowHtml).replace(/@page\s*\{/g, '@page main {');
+  flowCss = flowCss.replace('35mm 15mm 18mm 15mm', '35mm 15mm 4.2mm 15mm');
+  flowCss += '\n.main-section-start { counter-reset: page 1; }\n';
+
+  // 3. Appendix A cover (if fibre ID report)
+  let appendixACss = '';
+  let appendixABody = '';
+  if (hasFibreIdReport) {
+    const appendixAHtml = generateAppendixCoverHTMLV3('A', assessmentData);
+    appendixABody = extractBodyContent(appendixAHtml);
+    appendixACss = extractStyleContent(appendixAHtml).replace(/@page\s*\{/g, '@page appendix {');
+  }
+
+  // 4. Appendix B cover (if site plan) and optional site plan content page
+  let appendixBCss = '';
+  let appendixBBody = '';
+  let sitePlanFragment = '';
+  let sitePlanCss = '';
+  if (hasSitePlan) {
+    const sitePlanAppendixLetter = hasFibreIdReport ? 'B' : 'A';
+    const appendixBHtml = generateAppendixCoverHTMLV3('B', assessmentData, sitePlanAppendixLetter);
+    appendixBBody = extractBodyContent(appendixBHtml);
+    appendixBCss = extractStyleContent(appendixBHtml).replace(/@page\s*\{/g, '@page appendix {');
+    if (isSitePlanImage) {
+      const trimmedSitePlan = await trimSitePlanImage(assessmentData.sitePlanFile);
+      const assessmentDataTrimmed = { ...assessmentData, sitePlanFile: trimmedSitePlan };
+      const assessmentFooterText = isResidential
+        ? `Residential Asbestos Assessment Report: ${assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site'}`
+        : `Asbestos Assessment Report: ${assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site'}`;
+      const sitePlanFigureTitle = assessmentData.sitePlanFigureTitle || 'Asbestos Survey Site Plan';
+      sitePlanFragment = generateSitePlanContentPage(
+        assessmentDataTrimmed,
+        sitePlanAppendixLetter,
+        logoBase64,
+        assessmentFooterText,
+        'sitePlanFile',
+        'SITE PLAN',
+        sitePlanFigureTitle,
+        'sitePlanLegend',
+        'sitePlanLegendTitle'
+      );
+      sitePlanCss = `
+        @page appendix-landscape { size: A4 landscape; margin: 0; }
+        .site-plan-page { page: appendix-landscape; height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden; page-break-after: avoid; page-break-inside: avoid; }
+        .site-plan-page .header { flex-shrink: 0; display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 48px 0 48px; margin: 0; font-family: "Gothic", Arial, sans-serif; }
+        .site-plan-page .green-line { flex-shrink: 0; width: calc(100% - 96px); height: 1.5px; background: #16b12b; margin: 8px auto 0 auto; border-radius: 0; }
+        .site-plan-page .content { flex: 1; min-height: 0; overflow: hidden; padding: 5px 48px 10px 48px; display: flex; flex-direction: column; }
+        .site-plan-page .footer { flex-shrink: 0; position: relative; left: 0; right: 0; bottom: 0; width: 100%; padding: 0 48px 16px 48px; text-align: justify; font-size: 0.75rem; color: #222; font-family: "Gothic", Arial, sans-serif; }
+        .logo { width: 243px; height: auto; display: block; background: #fff; margin: 0; }
+        .company-details { text-align: right; font-size: 0.75rem; color: #222; line-height: 1.5; margin-top: 8px; margin: 0; }
+        .company-details .website { color: #16b12b; font-weight: 500; }
+        .footer-border-line { width: 100%; height: 1.5px; background: #16b12b; margin-bottom: 6px; border-radius: 0; }
+        .footer-content { width: 100%; display: flex; justify-content: space-between; align-items: flex-end; }
+        .footer-text { flex: 1; }
+        .site-plan-layout { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: row; justify-content: center; gap: 8px; align-items: flex-start; margin: 0; width: 100%; padding: 0; }
+        .site-plan-container { flex: 0 0 auto; width: fit-content; max-width: 85%; min-width: 0; overflow: hidden; display: flex; flex-direction: column; padding: 0; margin: 12px 0 0 0; border: none; background: transparent; border-radius: 0; box-shadow: none; }
+        .site-plan-container .site-plan-image-wrapper { flex: 0 0 auto; width: fit-content; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+        .site-plan-container .site-plan-image { display: block; width: auto; height: auto; max-width: 100%; max-height: 70vh; object-fit: contain; border: 1px solid #999; box-sizing: border-box; margin: 0; padding: 0; background: transparent; }
+        .site-plan-container .site-plan-figure-caption { flex-shrink: 0; font-size: 14px; font-weight: 600; color: #222; text-align: center; margin-top: 8px; font-family: "Gothic", Arial, sans-serif; }
+        .site-plan-legend-container { flex-shrink: 0; font-family: "Gothic", Arial, sans-serif; }
+      `;
+    }
+  }
+
+  /* A4 portrait: 210mm x 297mm - use fixed size so percentage heights resolve (body has no height in single doc) */
+  const A4_HEIGHT = '297mm';
+  const A4_WIDTH = '210mm';
+
+  // Single-doc layout: avoid blank pages, full-page sections use fixed A4 height so cover/content render
+  const singleDocLayoutCss = `
+    @page { size: A4; margin: 0; }
+    body { font-family: "Gothic", Arial, sans-serif; color: #222; margin: 0; padding: 0; }
+    .single-doc-cover, .single-doc-version, .single-doc-appendix { width: ${A4_WIDTH}; min-width: ${A4_WIDTH}; height: ${A4_HEIGHT}; min-height: ${A4_HEIGHT}; box-sizing: border-box; }
+    .single-doc-cover .cover-page, .single-doc-cover .page, .single-doc-version .page, .single-doc-appendix .page, .single-doc-appendix .appendix-a-page, .single-doc-appendix .appendix-b-page { width: 100% !important; height: 100% !important; min-height: 100% !important; box-sizing: border-box; }
+    .single-doc-section { page-break-before: always; break-before: page; }
+    .single-doc-cover { page-break-before: avoid; }
+  `;
+
+  /* Version and appendix: same footer formatting as main (green line, layout, at bottom of page) */
+  const versionAppendixOverridesCss = `
+    .single-doc-version .header, .single-doc-appendix .header { display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 48px 0 48px; margin: 0; }
+    .single-doc-version .green-line, .single-doc-appendix .green-line { width: calc(100% - 96px); height: 1.5px; background: #16b12b; margin: 8px auto 0 auto; border-radius: 0; }
+    .single-doc-version .footer, .single-doc-appendix .footer { position: absolute; left: 48px; right: 48px; bottom: 0; width: calc(100% - 96px); margin: 0; padding-bottom: 16px; text-align: justify; font-size: 0.75rem; color: #222; box-sizing: border-box; }
+    .single-doc-version .footer .footer-border-line, .single-doc-appendix .footer .footer-border-line { width: 100%; height: 1.5px; background: #16b12b; margin-bottom: 6px; border-radius: 0; }
+    .single-doc-version .footer .footer-content, .single-doc-appendix .footer .footer-content { width: 100%; display: flex; justify-content: space-between; align-items: flex-end; }
+    .single-doc-version .footer .footer-text, .single-doc-appendix .footer .footer-text { flex: 1; }
+  `;
+
+  const combinedCss = [
+    `@font-face { font-family: "Gothic"; src: url("${frontendUrl}/fonts/static/Gothic-Regular.ttf") format("truetype"); font-weight: normal; font-style: normal; }`,
+    `@font-face { font-family: "Gothic"; src: url("${frontendUrl}/fonts/static/Gothic-Bold.ttf") format("truetype"); font-weight: bold; font-style: normal; }`,
+    `@font-face { font-family: "Gothic"; src: url("${frontendUrl}/fonts/static/Gothic-Italic.ttf") format("truetype"); font-weight: normal; font-style: italic; }`,
+    `@font-face { font-family: "Gothic"; src: url("${frontendUrl}/fonts/static/Gothic-BoldItalic.ttf") format("truetype"); font-weight: bold; font-style: italic; }`,
+    '* { hyphens: none !important; -webkit-hyphens: none !important; -ms-hyphens: none !important; word-break: keep-all !important; overflow-wrap: normal !important; }',
+    singleDocLayoutCss,
+    '.page-break { page-break-before: always; break-before: page; height: 0; margin: 0; padding: 0; }',
+    coverCss,
+    versionCss,
+    flowCss,
+    appendixACss,
+    appendixBCss,
+    sitePlanCss,
+    versionAppendixOverridesCss
+  ].filter(Boolean).join('\n');
+
+  const bodyParts = [
+    `<div class="single-doc-cover" style="page: cover">${coverBody}</div>`,
+    `<div class="single-doc-version single-doc-section" style="page: version">${versionBody}</div>`,
+    `<div class="single-doc-main single-doc-section" style="page: main"><div class="main-section-start">${flowBody}</div></div>`
+  ];
+  if (hasFibreIdReport) {
+    bodyParts.push(`<div class="single-doc-appendix single-doc-section" style="page: appendix">${appendixABody}</div>`);
+  }
+  if (hasSitePlan) {
+    bodyParts.push(`<div class="single-doc-appendix single-doc-section" style="page: appendix">${appendixBBody}</div>`);
+    if (isSitePlanImage && sitePlanFragment) {
+      bodyParts.push(`<div class="single-doc-section" style="page: appendix-landscape">${sitePlanFragment}</div>`);
+    }
+  }
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Asbestos Assessment Report</title>
+  <style>${combinedCss}</style>
+</head>
+<body>
+${bodyParts.join('\n')}
+</body>
+</html>`;
+}
 
 const generateAssessmentPhotographsContent = (items) => {
   if (!items || items.length === 0) {

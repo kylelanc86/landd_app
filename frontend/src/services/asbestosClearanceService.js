@@ -155,6 +155,42 @@ const asbestosClearanceService = {
     return response.data;
   },
 
+  addPhotoArrow: async (clearanceId, itemId, photoId, arrow) => {
+    const response = await axios.post(
+      `${API_BASE_URL}/${clearanceId}/items/${itemId}/photos/${photoId}/arrows`,
+      {
+        x: arrow.x ?? 0.5,
+        y: arrow.y ?? 0.5,
+        rotation: arrow.rotation ?? -45,
+        color: arrow.color ?? '#f44336',
+      }
+    );
+    return response.data;
+  },
+
+  updatePhotoArrow: async (clearanceId, itemId, photoId, arrowId, updates) => {
+    const response = await axios.patch(
+      `${API_BASE_URL}/${clearanceId}/items/${itemId}/photos/${photoId}/arrows/${arrowId}`,
+      updates
+    );
+    return response.data;
+  },
+
+  deletePhotoArrow: async (clearanceId, itemId, photoId, arrowId) => {
+    const response = await axios.delete(
+      `${API_BASE_URL}/${clearanceId}/items/${itemId}/photos/${photoId}/arrows/${arrowId}`
+    );
+    return response.data;
+  },
+
+  updatePhotoArrowLegacy: async (clearanceId, itemId, photoId, arrow) => {
+    const response = await axios.patch(
+      `${API_BASE_URL}/${clearanceId}/items/${itemId}/photos/${photoId}/arrow`,
+      arrow === null ? { arrow: null } : arrow
+    );
+    return response.data;
+  },
+
   // Authorise clearance report
   authorise: async (id) => {
     const response = await axios.post(`${API_BASE_URL}/${id}/authorise`);

@@ -37,12 +37,13 @@ import {
   FormLabel,
   Autocomplete,
   IconButton,
+  Tooltip,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import MonitorIcon from "@mui/icons-material/Monitor";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import AddIcon from "@mui/icons-material/Add";
-import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
+import DownloadingIcon from "@mui/icons-material/Downloading";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import CloseIcon from "@mui/icons-material/Close";
@@ -60,12 +61,18 @@ import {
 import asbestosClearanceService from "../../services/asbestosClearanceService";
 import asbestosRemovalJobService from "../../services/asbestosRemovalJobService";
 import customDataFieldGroupService from "../../services/customDataFieldGroupService";
-import { generateHTMLTemplatePDF } from "../../utils/templatePDFGenerator";
+import {
+  generateHTMLTemplatePDF,
+  startClearancePDFJob,
+  getClearancePDFStatus,
+  downloadClearancePDFByClearanceId,
+} from "../../utils/templatePDFGenerator";
 import { generateShiftReport } from "../../utils/generateShiftReport";
 import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
 import { useAuth } from "../../context/AuthContext";
 import { useUserLists } from "../../context/UserListsContext";
 import { formatDate } from "../../utils/dateFormat";
+import { formatAuthoriserDisplayName } from "../../utils/formatters";
 import { getTodayInSydney } from "../../utils/dateUtils";
 import { hasPermission } from "../../config/permissions";
 import PermissionGate from "../../components/PermissionGate";
@@ -114,12 +121,18 @@ const AsbestosRemovalJobDetails = () => {
   const [loadingReports, setLoadingReports] = useState(false);
 
   // PDF generation state
-  const [generatingPDF, setGeneratingPDF] = useState(false);
   const { showSnackbar } = useSnackbar();
   const [reportViewedShiftIds, setReportViewedShiftIds] = useState(new Set());
   const [reportViewedClearanceIds, setReportViewedClearanceIds] = useState(
     new Set(),
   );
+  // Clearance PDF: background job for snackbar + auto table refresh
+  const [clearancePdfJobId, setClearancePdfJobId] = useState(null);
+  const [clearancePdfStatus, setClearancePdfStatus] = useState("idle"); // 'idle' | 'generating' | 'completed' | 'error'
+  const [clearancePdfStartingId, setClearancePdfStartingId] = useState(null); // clearance _id while start request is in flight (prevents duplicate clicks)
+  const [clearancePdfGeneratingForClearanceId, setClearancePdfGeneratingForClearanceId] = useState(null); // clearance _id whose PDF is generating (until poll completes)
+  const [clearanceDownloadDialogOpen, setClearanceDownloadDialogOpen] = useState(false);
+  const [shiftReportDownloadingShiftId, setShiftReportDownloadingShiftId] = useState(null);
   const [sendingAuthorisationRequests, setSendingAuthorisationRequests] =
     useState({});
   const [
@@ -650,7 +663,77 @@ const AsbestosRemovalJobDetails = () => {
     });
   }, [job, logDebug]);
 
-  // Open clearance edit dialog once assessors are loaded
+  // Poll clearance PDF job; on complete show snackbar and refresh table
+  useEffect(() => {
+    if (!clearancePdfJobId || clearancePdfStatus !== "generating") {
+      return;
+    }
+    const POLL_MS = 2500;
+    const poll = async () => {
+      try {
+        const data = await getClearancePDFStatus(clearancePdfJobId);
+        if (data.status === "completed" || data.ready) {
+          const clearanceId = clearancePdfGeneratingForClearanceId;
+          setClearancePdfStatus("idle");
+          setClearancePdfJobId(null);
+          setClearancePdfGeneratingForClearanceId(null);
+          // Optimistic update: mark this clearance as having a valid PDF so the icon turns green immediately
+          const now = new Date();
+          setClearances((prev) =>
+            prev.map((c) =>
+              String(c._id) === String(clearanceId)
+                ? { ...c, pdfReadyAt: now, updatedAt: now }
+                : c
+            )
+          );
+          try {
+            const { filename } = await downloadClearancePDFByClearanceId(clearanceId);
+            showSnackbar(`Downloaded: ${filename}`, "success");
+            setReportViewedClearanceIds((prev) =>
+              new Set(prev).add(clearanceId),
+            );
+            try {
+              await asbestosClearanceService.markReportViewed(clearanceId);
+            } catch (e) {
+              console.warn("Failed to persist report viewed:", e);
+            }
+          } catch (e) {
+            showSnackbar(e.message || "Download failed", "error");
+          }
+          // Delay refresh so backend has persisted the PDF; otherwise list can overwrite optimistic update with stale data
+          setTimeout(() => fetchJobDetails({ silent: true }), 800);
+          return;
+        }
+        if (data.status === "failed") {
+          const errMsg = data.error || data.message || "PDF generation failed";
+          setClearancePdfStatus("idle");
+          setClearancePdfJobId(null);
+          setClearancePdfGeneratingForClearanceId(null);
+          showSnackbar(errMsg, "error");
+          return;
+        }
+      } catch (err) {
+        setClearancePdfStatus("idle");
+        setClearancePdfJobId(null);
+        setClearancePdfGeneratingForClearanceId(null);
+        showSnackbar(err.message || "Status check failed", "error");
+        return;
+      }
+      timerRef.current = setTimeout(poll, POLL_MS);
+    };
+    const timerRef = { current: null };
+    poll();
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [
+    clearancePdfJobId,
+    clearancePdfStatus,
+    clearancePdfGeneratingForClearanceId,
+    fetchJobDetails,
+    showSnackbar,
+  ]);
+
   useEffect(() => {
     if (pendingClearanceEdit && activeLAAs.length > 0) {
       const clearance = pendingClearanceEdit;
@@ -813,6 +896,7 @@ const AsbestosRemovalJobDetails = () => {
     (clearances.length === 0 || allClearancesCompleteAndAuthorised);
 
   const handleViewReport = async (shift) => {
+    setShiftReportDownloadingShiftId(shift._id);
     try {
       // Fetch the latest shift data
       const shiftResponse = await shiftService.getById(shift._id);
@@ -854,7 +938,7 @@ const AsbestosRemovalJobDetails = () => {
         project.client = clientResponse.data;
       }
 
-      generateShiftReport({
+      await generateShiftReport({
         shift: latestShift,
         job: jobResponse.data,
         samples: samplesWithAnalysis,
@@ -878,6 +962,8 @@ const AsbestosRemovalJobDetails = () => {
     } catch (err) {
       console.error("Error generating report:", err);
       showSnackbar("Failed to generate report.", "error");
+    } finally {
+      setShiftReportDownloadingShiftId(null);
     }
   };
 
@@ -906,16 +992,21 @@ const AsbestosRemovalJobDetails = () => {
       // Update shift with report approval
       const response = await shiftService.update(shift._id, updatedShiftData);
 
+      // Re-fetch shift so we have populated supervisor/defaultSampler for the PDF (same as manual view path)
+      const shiftResponse = await shiftService.getById(shift._id);
+      const latestShift = shiftResponse.data;
+
       // Generate and download the report
+      setShiftReportDownloadingShiftId(shift._id);
       try {
         // Fetch job and samples for this shift - use correct service based on jobModel
         let jobResponse;
-        if (currentShift.data.jobModel === "AsbestosRemovalJob") {
+        if (latestShift.jobModel === "AsbestosRemovalJob") {
           jobResponse = await asbestosRemovalJobService.getById(
-            shift.job?._id || shift.job,
+            latestShift.job?._id || latestShift.job,
           );
         } else {
-          jobResponse = await clientSuppliedJobsService.getById(shift.job?._id || shift.job);
+          jobResponse = await clientSuppliedJobsService.getById(latestShift.job?._id || latestShift.job);
         }
         const samplesResponse = await sampleService.getByShift(shift._id);
 
@@ -942,16 +1033,16 @@ const AsbestosRemovalJobDetails = () => {
           project.client = clientResponse.data;
         }
 
-        generateShiftReport({
-          shift: updatedShiftData,
+        await generateShiftReport({
+          shift: latestShift,
           job: jobResponse.data,
           samples: samplesWithAnalysis,
           project,
           openInNewTab: false, // Always download when authorised
-          sitePlanData: updatedShiftData.sitePlan
+          sitePlanData: latestShift.sitePlan
             ? {
-                sitePlan: updatedShiftData.sitePlan,
-                sitePlanData: updatedShiftData.sitePlanData,
+                sitePlan: latestShift.sitePlan,
+                sitePlanData: latestShift.sitePlanData,
               }
             : null,
         });
@@ -969,6 +1060,8 @@ const AsbestosRemovalJobDetails = () => {
           "Report authorised but failed to generate download.",
           "warning",
         );
+      } finally {
+        setShiftReportDownloadingShiftId(null);
       }
     } catch (error) {
       console.error("Error authorising report:", error);
@@ -1231,68 +1324,70 @@ const AsbestosRemovalJobDetails = () => {
     }
   };
 
-  const handleViewClearanceReport = async (clearance, event) => {
-    event.stopPropagation();
+  const handleOpenClearancePdfDialog = async (clearance, event) => {
+    event?.stopPropagation();
+    setClearancePdfStartingId(clearance._id);
+    setClearancePdfGeneratingForClearanceId(clearance._id);
+    showSnackbar("PDF generation has started. You will be notified when it is ready.", "info");
+    setClearancePdfStatus("generating");
+    setClearancePdfJobId(null);
     try {
-      setGeneratingPDF(true);
-
-      // Get the full clearance data with populated project
       const fullClearance = await asbestosClearanceService.getById(
         clearance._id,
       );
-
-      // Use the new HTML template-based PDF generation
-      const fileName = await generateHTMLTemplatePDF(
-        "asbestos-clearance", // template type
-        fullClearance, // clearance data
-        { openInNewTab: true }, // open in new tab instead of downloading
-      );
-
-      showSnackbar("PDF opened in new tab", "success");
-
-      setReportViewedClearanceIds((prev) => new Set(prev).add(clearance._id));
-      try {
-        await asbestosClearanceService.markReportViewed(clearance._id);
-      } catch (e) {
-        console.warn("Failed to persist report viewed:", e);
-      }
+      const { jobId } = await startClearancePDFJob(fullClearance);
+      setClearancePdfJobId(jobId);
     } catch (err) {
-      console.error("Error generating PDF:", err);
-      showSnackbar("Failed to generate PDF", "error");
+      console.error("Error starting clearance PDF:", err);
+      setClearancePdfStatus("idle");
+      setClearancePdfGeneratingForClearanceId(null);
+      showSnackbar(err.message || "Failed to start PDF generation", "error");
     } finally {
-      setGeneratingPDF(false);
+      setClearancePdfStartingId(null);
     }
   };
 
-  const handleGeneratePDF = async (clearance, event) => {
-    // Prevent row click when clicking PDF icon
-    event.stopPropagation();
+  // True when a PDF exists and clearance was not updated after it was generated (safe to just download).
+  const hasRetainedValidPdf = (clearance) => {
+    const pdfReadyAt = clearance.pdfReadyAt;
+    const hasPdf = pdfReadyAt || clearance.pdfDownloadUrl;
+    if (!hasPdf) return false;
+    const updatedAt = clearance.updatedAt;
+    if (!updatedAt) return true;
+    if (!pdfReadyAt) return true; // pdfDownloadUrl only, can't compare
+    return new Date(updatedAt) <= new Date(pdfReadyAt);
+  };
 
-    try {
-      setGeneratingPDF(true);
-
-      // Get the full clearance data with populated project
-      const fullClearance = await asbestosClearanceService.getById(
-        clearance._id,
-      );
-
-      // Use the new HTML template-based PDF generation
-      const fileName = await generateHTMLTemplatePDF(
-        "asbestos-clearance", // template type
-        fullClearance, // clearance data
-      );
-
-      showSnackbar(
-        `PDF generated successfully! Check your downloads folder for: ${
-          fileName.filename || fileName
-        }`,
-        "success",
-      );
-    } catch (err) {
-      console.error("Error generating PDF:", err);
-      showSnackbar("Failed to generate PDF", "error");
-    } finally {
-      setGeneratingPDF(false);
+  const handleDownloadOrGenerateClearanceReport = async (clearance, event) => {
+    event?.stopPropagation();
+    if (hasRetainedValidPdf(clearance)) {
+      setClearanceDownloadDialogOpen(true);
+      try {
+        const { filename } = await downloadClearancePDFByClearanceId(clearance._id);
+        showSnackbar(`Downloaded: ${filename}`, "success");
+        setReportViewedClearanceIds((prev) =>
+          new Set(prev).add(clearance._id),
+        );
+        try {
+          await asbestosClearanceService.markReportViewed(clearance._id);
+        } catch (e) {
+          console.warn("Failed to persist report viewed:", e);
+        }
+      } catch (err) {
+        console.error("Error downloading clearance PDF:", err);
+        const msg = err.message || "";
+        const isNoPdf = /no pdf|not available|retention|generate the pdf first/i.test(msg);
+        if (isNoPdf) {
+          showSnackbar("No PDF available. Starting generation…", "info");
+          handleOpenClearancePdfDialog(clearance, event);
+        } else {
+          showSnackbar(msg || "Failed to download PDF", "error");
+        }
+      } finally {
+        setClearanceDownloadDialogOpen(false);
+      }
+    } else {
+      handleOpenClearancePdfDialog(clearance, event);
     }
   };
 
@@ -1652,9 +1747,66 @@ const AsbestosRemovalJobDetails = () => {
     >
       {/* PDF Loading Overlay */}
       <PDFLoadingOverlay
-        open={generatingPDF}
+        open={clearancePdfStatus === "generating"}
         message="Generating Asbestos Clearance PDF..."
       />
+
+      {/* Clearance report download dialog */}
+      <Dialog
+        open={clearanceDownloadDialogOpen}
+        onClose={() => setClearanceDownloadDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 2 } }}
+      >
+        <DialogTitle>Downloading report</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2, py: 2 }}>
+            <CircularProgress size={24} />
+            <Typography>
+              The report is downloading. Please wait.
+            </Typography>
+          </Box>
+        </DialogContent>
+      </Dialog>
+
+      {/* Air monitoring shift report download dialog */}
+      <Dialog
+        open={Boolean(shiftReportDownloadingShiftId)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            overflow: "visible",
+          },
+        }}
+        disableEscapeKeyDown
+      >
+        <DialogTitle sx={{ fontWeight: 600, pb: 0 }}>
+          Generating shift report
+        </DialogTitle>
+        <DialogContent>
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 2,
+              py: 3,
+              px: 1,
+            }}
+          >
+            <CircularProgress size={48} thickness={4} color="success" />
+            <Typography variant="body1" color="text.secondary" textAlign="center">
+              The air monitoring shift report is being generated.
+            </Typography>
+            <Typography variant="body2" color="text.secondary" textAlign="center">
+              Please wait — this may take a moment.
+            </Typography>
+          </Box>
+        </DialogContent>
+      </Dialog>
 
       {/* Breadcrumbs */}
       <Breadcrumbs sx={{ marginBottom: { xs: 2, md: 3 } }}>
@@ -1683,6 +1835,7 @@ const AsbestosRemovalJobDetails = () => {
               gutterBottom
               sx={{
                 display: { xs: "none", md: "block" },
+                fontSize: { xs: "0.9rem", md: "1.5rem" },
                 fontWeight: 600,
               }}
             >
@@ -1966,7 +2119,10 @@ const AsbestosRemovalJobDetails = () => {
                                 fontStyle: "italic",
                               }}
                             >
-                              ✓ Authorised by {shift.reportApprovedBy}
+                              ✓ Authorised by{" "}
+                              {formatAuthoriserDisplayName(
+                                shift.reportApprovedBy
+                              )}
                             </Typography>
                           )}
                         </TableCell>
@@ -2076,6 +2232,7 @@ const AsbestosRemovalJobDetails = () => {
                                 <Button
                                   variant="outlined"
                                   size="small"
+                                  disabled={shiftReportDownloadingShiftId === shift._id}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleViewReport(shift);
@@ -2089,8 +2246,15 @@ const AsbestosRemovalJobDetails = () => {
                                         theme.palette.success.light,
                                     },
                                   }}
+                                  startIcon={
+                                    shiftReportDownloadingShiftId === shift._id ? (
+                                      <CircularProgress size={16} color="success" />
+                                    ) : null
+                                  }
                                 >
-                                  {shift.reportApprovedBy
+                                  {shiftReportDownloadingShiftId === shift._id
+                                    ? "Generating…"
+                                    : shift.reportApprovedBy
                                     ? "Download Report"
                                     : "View Report"}
                                 </Button>
@@ -2285,7 +2449,7 @@ const AsbestosRemovalJobDetails = () => {
                               color: "white",
                             }}
                           />
-                          {clearance.reportApprovedBy && (
+                          {clearance.reportApprovedBy ? (
                             <Typography
                               variant="caption"
                               display="block"
@@ -2296,9 +2460,25 @@ const AsbestosRemovalJobDetails = () => {
                                 fontStyle: "italic",
                               }}
                             >
-                              ✓ Authorised by {clearance.reportApprovedBy}
+                              ✓ Authorised by{" "}
+                              {formatAuthoriserDisplayName(
+                                clearance.reportApprovedBy
+                              )}
                             </Typography>
-                          )}
+                          ) : clearance.status === "complete" ? (
+                            <Typography
+                              variant="caption"
+                              display="block"
+                              sx={{
+                                mt: 0.5,
+                                fontWeight: "medium",
+                                color: theme.palette.warning.main,
+                                fontStyle: "italic",
+                              }}
+                            >
+                              Report not authorised
+                            </Typography>
+                          ) : null}
                         </TableCell>
                         <TableCell
                           sx={{ display: { xs: "none", md: "table-cell" } }}
@@ -2328,66 +2508,47 @@ const AsbestosRemovalJobDetails = () => {
                           </PermissionGate>
                           {clearance.status === "complete" && (
                             <>
-                              {clearance.reportApprovedBy ||
-                              authorisingClearanceReports[clearance._id] ? (
-                                <Button
-                                  variant="outlined"
-                                  size="small"
-                                  onClick={(e) =>
-                                    handleGeneratePDF(clearance, e)
-                                  }
-                                  disabled={
-                                    generatingPDF ||
-                                    authorisingClearanceReports[clearance._id]
-                                  }
-                                  startIcon={
-                                    authorisingClearanceReports[
-                                      clearance._id
-                                    ] ? (
-                                      <CircularProgress size={16} />
-                                    ) : null
-                                  }
-                                  sx={{
-                                    borderColor: theme.palette.success.main,
-                                    color: theme.palette.success.main,
-                                    "&:hover": {
-                                      borderColor: theme.palette.success.dark,
-                                      backgroundColor:
-                                        theme.palette.success.light,
-                                    },
-                                    mr: 1,
-                                  }}
-                                >
-                                  {authorisingClearanceReports[clearance._id]
-                                    ? "Authorising..."
-                                    : "Download Report"}
-                                </Button>
-                              ) : (
-                                <>
-                                  <Button
-                                    variant="outlined"
+                              <Tooltip
+                                title={
+                                  clearancePdfStartingId === clearance._id ||
+                                  clearancePdfGeneratingForClearanceId === clearance._id
+                                    ? "PDF is generating..."
+                                    : hasRetainedValidPdf(clearance)
+                                      ? "Download report"
+                                      : "Generate and download report"
+                                }
+                              >
+                                <span>
+                                  <IconButton
                                     size="small"
+                                    color={hasRetainedValidPdf(clearance) ? "success" : "warning"}
                                     onClick={(e) =>
-                                      handleViewClearanceReport(clearance, e)
+                                      handleDownloadOrGenerateClearanceReport(clearance, e)
                                     }
-                                    disabled={generatingPDF}
+                                    disabled={
+                                      clearancePdfStartingId === clearance._id ||
+                                      clearancePdfGeneratingForClearanceId === clearance._id
+                                    }
                                     sx={{
-                                      borderColor: theme.palette.success.main,
-                                      color: theme.palette.success.main,
-                                      "&:hover": {
-                                        borderColor: theme.palette.success.dark,
-                                        backgroundColor:
-                                          theme.palette.success.light,
-                                      },
                                       mr: 1,
+                                      ...((clearancePdfStartingId === clearance._id ||
+                                        clearancePdfGeneratingForClearanceId === clearance._id) && {
+                                        "@keyframes pdfSyncSpin": {
+                                          "0%": { transform: "rotate(0deg)" },
+                                          "100%": { transform: "rotate(360deg)" },
+                                        },
+                                        animation: "pdfSyncSpin 1s linear infinite",
+                                      }),
                                     }}
                                   >
-                                    View Report
-                                  </Button>
-                                  {(reportViewedClearanceIds.has(
-                                    clearance._id,
-                                  ) ||
-                                    !!clearance.reportViewedAt) && (
+                                    <DownloadingIcon />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                              {(reportViewedClearanceIds.has(
+                                clearance._id,
+                              ) ||
+                                !!clearance.reportViewedAt) && (
                                     <>
                                       {currentUser?.reportProofer &&
                                         !clearance.reportApprovedBy && (
@@ -2404,7 +2565,9 @@ const AsbestosRemovalJobDetails = () => {
                                             disabled={
                                               authorisingClearanceReports[
                                                 clearance._id
-                                              ] || generatingPDF
+                                              ] ||
+                                              clearancePdfStartingId === clearance._id ||
+                                              clearancePdfGeneratingForClearanceId === clearance._id
                                             }
                                             startIcon={
                                               authorisingClearanceReports[
@@ -2443,7 +2606,8 @@ const AsbestosRemovalJobDetails = () => {
                                         hasPermission(
                                           currentUser,
                                           "asbestos.edit",
-                                        ) && (
+                                        ) &&
+                                        !clearance.reportApprovedBy && (
                                           <Button
                                             variant="outlined"
                                             size="small"
@@ -2479,8 +2643,6 @@ const AsbestosRemovalJobDetails = () => {
                                   )}
                                 </>
                               )}
-                            </>
-                          )}
                         </TableCell>
                       </TableRow>
                     ))}

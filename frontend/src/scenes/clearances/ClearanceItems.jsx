@@ -47,6 +47,7 @@ import {
   Close as CloseIcon,
   Map as MapIcon,
   ArrowBack as ArrowBackIcon,
+  ArrowUpward as ArrowUpwardIcon,
 } from "@mui/icons-material";
 import MicIcon from "@mui/icons-material/Mic";
 import { Checkbox, FormControlLabel } from "@mui/material";
@@ -63,6 +64,23 @@ import {
 } from "../../utils/imageCompression";
 import { formatDate } from "../../utils/dateUtils";
 import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
+
+const DEFAULT_ARROW_COLOR = "#f44336";
+const DEFAULT_ARROW_ROTATION = -45;
+function getArrowTipOffset(rotationDeg) {
+  const r = ((rotationDeg ?? 0) * Math.PI) / 180;
+  const tipX = (12 + 10 * Math.sin(r)) / 24;
+  const tipY = (12 - 10 * Math.cos(r)) / 24;
+  return { x: tipX, y: tipY };
+}
+const ARROW_COLORS = [
+  { name: "Yellow", hex: "#ffeb3b" },
+  { name: "Red", hex: "#f44336" },
+  { name: "White", hex: "#ffffff" },
+  { name: "Black", hex: "#212121" },
+  { name: "Orange", hex: "#ff9800" },
+  { name: "Green", hex: "#4caf50" },
+];
 
 const ClearanceItems = () => {
   const theme = useTheme();
@@ -100,6 +118,11 @@ const ClearanceItems = () => {
     useState(null); // Track which photo description is being edited
   const [fullSizePhotoDialogOpen, setFullSizePhotoDialogOpen] = useState(false);
   const [fullSizePhotoUrl, setFullSizePhotoUrl] = useState(null);
+  const [fullSizePhotoId, setFullSizePhotoId] = useState(null);
+  const [fullSizeArrowMode, setFullSizeArrowMode] = useState(false);
+  const [selectedArrowId, setSelectedArrowId] = useState(null);
+  const [movingArrowId, setMovingArrowId] = useState(null);
+  const [selectedArrowColor, setSelectedArrowColor] = useState(DEFAULT_ARROW_COLOR);
   const [compressionStatus, setCompressionStatus] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
   const [photoFile, setPhotoFile] = useState(null);
@@ -1279,12 +1302,15 @@ const ClearanceItems = () => {
     setPhotoPreview(null);
     setPhotoFile(null);
     setCompressionStatus(null);
-    setLocalPhotoChanges({}); // Clear any unsaved changes
-    setPhotosToDelete(new Set()); // Clear any photos marked for deletion
-    setLocalPhotoDescriptions({}); // Clear any unsaved description changes
-    setEditingDescriptionPhotoId(null); // Clear editing state
+    setLocalPhotoChanges({});
+    setPhotosToDelete(new Set());
+    setLocalPhotoDescriptions({});
+    setEditingDescriptionPhotoId(null);
+    setFullSizePhotoId(null);
+    setFullSizeArrowMode(false);
+    setSelectedArrowId(null);
+    setMovingArrowId(null);
 
-    // Refresh the main table data to update photo counts
     await fetchData();
   };
 
@@ -1420,10 +1446,47 @@ const ClearanceItems = () => {
     }));
   };
 
-  // View full-size photo
-  const handleViewFullSizePhoto = (photoUrl) => {
-    setFullSizePhotoUrl(photoUrl);
+  // View full-size photo (accept photo object for arrow support)
+  const handleViewFullSizePhoto = (photo) => {
+    const url = typeof photo === "string" ? photo : photo?.data;
+    setFullSizePhotoUrl(url);
+    setFullSizePhotoId(typeof photo === "object" && photo?._id ? photo._id : null);
+    setFullSizeArrowMode(false);
+    setSelectedArrowId(null);
+    setMovingArrowId(null);
+    const firstArrow = typeof photo === "object" && getPhotoArrows(photo)[0];
+    setSelectedArrowColor(firstArrow?.color || DEFAULT_ARROW_COLOR);
     setFullSizePhotoDialogOpen(true);
+  };
+
+  const fullSizePhoto =
+    fullSizePhotoId && selectedItemForPhotos?.photographs
+      ? selectedItemForPhotos.photographs.find((p) => p._id === fullSizePhotoId)
+      : null;
+
+  const handleFullSizePhotoClickForArrow = (e) => {
+    if (!fullSizePhotoId || !fullSizePhoto) return;
+    const img = e.currentTarget;
+    const rect = img.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    const clampedX = Math.max(0, Math.min(1, x));
+    const clampedY = Math.max(0, Math.min(1, y));
+    if (movingArrowId) {
+      handleUpdatePhotoArrow(fullSizePhotoId, movingArrowId, {
+        x: clampedX,
+        y: clampedY,
+      });
+      return;
+    }
+    if (fullSizeArrowMode) {
+      handleAddPhotoArrow(fullSizePhotoId, {
+        x: clampedX,
+        y: clampedY,
+        rotation: DEFAULT_ARROW_ROTATION,
+        color: selectedArrowColor,
+      });
+    }
   };
 
   // Helper function to get current photo state (including local changes)
@@ -1479,6 +1542,94 @@ const ClearanceItems = () => {
       ...prev,
       [photoId]: newDescription,
     }));
+  };
+
+  const getPhotoArrows = (photo) => {
+    if (!photo) return [];
+    if (photo.arrows && photo.arrows.length > 0) return photo.arrows;
+    const leg = photo.arrow;
+    if (leg && typeof leg === "object" && (leg.x != null || leg.y != null))
+      return [leg];
+    return [];
+  };
+
+  const handleAddPhotoArrow = async (photoId, arrow) => {
+    if (!selectedItemForPhotos || !clearanceId) return;
+    try {
+      const response = await asbestosClearanceService.addPhotoArrow(
+        clearanceId,
+        selectedItemForPhotos._id,
+        photoId,
+        {
+          x: arrow.x ?? 0.5,
+          y: arrow.y ?? 0.5,
+          rotation: arrow.rotation ?? DEFAULT_ARROW_ROTATION,
+          color: arrow.color ?? DEFAULT_ARROW_COLOR,
+        },
+      );
+      if (response?.item) setSelectedItemForPhotos(response.item);
+      setFullSizeArrowMode(false);
+      showSnackbar("Arrow added", "success");
+    } catch (err) {
+      console.error("Error adding arrow:", err);
+      showSnackbar("Failed to add arrow", "error");
+    }
+  };
+
+  const handleUpdatePhotoArrow = async (photoId, arrowId, updates) => {
+    if (!selectedItemForPhotos || !clearanceId) return;
+    try {
+      const response = await asbestosClearanceService.updatePhotoArrow(
+        clearanceId,
+        selectedItemForPhotos._id,
+        photoId,
+        arrowId,
+        updates,
+      );
+      if (response?.item) setSelectedItemForPhotos(response.item);
+      setMovingArrowId(null);
+      setFullSizeArrowMode(false);
+      showSnackbar("Arrow updated", "success");
+    } catch (err) {
+      console.error("Error updating arrow:", err);
+      showSnackbar("Failed to update arrow", "error");
+    }
+  };
+
+  const handleDeletePhotoArrow = async (photoId, arrowId) => {
+    if (!selectedItemForPhotos || !clearanceId) return;
+    try {
+      const response = await asbestosClearanceService.deletePhotoArrow(
+        clearanceId,
+        selectedItemForPhotos._id,
+        photoId,
+        arrowId,
+      );
+      if (response?.item) setSelectedItemForPhotos(response.item);
+      if (selectedArrowId === arrowId) setSelectedArrowId(null);
+      setFullSizeArrowMode(false);
+      showSnackbar("Arrow removed", "success");
+    } catch (err) {
+      console.error("Error deleting arrow:", err);
+      showSnackbar("Failed to remove arrow", "error");
+    }
+  };
+
+  const handleClearAllArrows = async (photoId) => {
+    if (!selectedItemForPhotos || !clearanceId) return;
+    try {
+      const response = await asbestosClearanceService.updatePhotoArrowLegacy(
+        clearanceId,
+        selectedItemForPhotos._id,
+        photoId,
+        null,
+      );
+      if (response?.item) setSelectedItemForPhotos(response.item);
+      showSnackbar("Arrows cleared", "success");
+    } catch (err) {
+      console.error("Error clearing arrows:", err);
+      showSnackbar("Failed to clear arrows", "error");
+    }
   };
 
   // Helper function to check if there are unsaved changes
@@ -4434,7 +4585,7 @@ const ClearanceItems = () => {
                                 opacity: 0.9,
                               },
                             }}
-                            onClick={() => handleViewFullSizePhoto(photo.data)}
+                            onClick={() => handleViewFullSizePhoto(photo)}
                           >
                             <img
                               src={photo.data}
@@ -4448,6 +4599,111 @@ const ClearanceItems = () => {
                                 objectFit: "cover",
                               }}
                             />
+
+                            {/* Arrow overlays (multiple, with delete per arrow) */}
+                            {getPhotoArrows(photo).map((arr, arrIdx) => {
+                              const arrowColor =
+                                arr.color || DEFAULT_ARROW_COLOR;
+                              const arrowId = arr._id;
+                              const rot =
+                                arr.rotation ?? DEFAULT_ARROW_ROTATION;
+                              const tipOff = getArrowTipOffset(rot);
+                              return (
+                                <Box
+                                  key={arrowId || `arrow-${arrIdx}`}
+                                  sx={{
+                                    position: "absolute",
+                                    left: `${(arr.x ?? 0.5) * 100}%`,
+                                    top: `${(arr.y ?? 0.5) * 100}%`,
+                                    transform: `translate(${-tipOff.x * 100}%, ${-tipOff.y * 100}%)`,
+                                    zIndex: 2,
+                                    pointerEvents: "auto",
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    alignItems: "center",
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Box
+                                    sx={{
+                                      transform: `rotate(${rot}deg)`,
+                                    }}
+                                  >
+                                    <svg
+                                      width="40"
+                                      height="40"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      style={{ pointerEvents: "none" }}
+                                    >
+                                      <line
+                                        x1="12"
+                                        y1="22"
+                                        x2="12"
+                                        y2="10"
+                                        stroke="rgba(0,0,0,0.5)"
+                                        strokeWidth="2.5"
+                                        strokeLinecap="round"
+                                      />
+                                      <line
+                                        x1="12"
+                                        y1="22"
+                                        x2="12"
+                                        y2="10"
+                                        stroke={arrowColor}
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                      />
+                                      <path
+                                        d="M12 2 L8 10 L16 10 Z"
+                                        fill="rgba(0,0,0,0.4)"
+                                        stroke="rgba(0,0,0,0.6)"
+                                        strokeWidth="1"
+                                        strokeLinejoin="round"
+                                      />
+                                      <path
+                                        d="M12 2 L8 10 L16 10 Z"
+                                        fill={arrowColor}
+                                        stroke={arrowColor}
+                                        strokeWidth="0.5"
+                                        strokeLinejoin="round"
+                                      />
+                                    </svg>
+                                  </Box>
+                                  <IconButton
+                                    size="small"
+                                    sx={{
+                                      minWidth: 0,
+                                      width: 20,
+                                      height: 20,
+                                      color: "white",
+                                      bgcolor: "rgba(0,0,0,0.7)",
+                                      "&:hover": {
+                                        bgcolor: "rgba(244,67,54,0.9)",
+                                      },
+                                      mt: -0.5,
+                                    }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (arrowId) {
+                                        handleDeletePhotoArrow(
+                                          photo._id,
+                                          arrowId,
+                                        );
+                                      } else {
+                                        handleClearAllArrows(photo._id);
+                                      }
+                                    }}
+                                    title="Remove this arrow"
+                                  >
+                                    <CloseIcon
+                                      sx={{ fontSize: "0.9rem" }}
+                                    />
+                                  </IconButton>
+                                </Box>
+                              );
+                            })}
 
                             {/* Marked for deletion overlay */}
                             {isPhotoMarkedForDeletion(photo._id) && (
@@ -4713,7 +4969,13 @@ const ClearanceItems = () => {
         {/* Full Size Photo Dialog */}
         <Dialog
           open={fullSizePhotoDialogOpen}
-          onClose={() => setFullSizePhotoDialogOpen(false)}
+          onClose={() => {
+            setFullSizePhotoDialogOpen(false);
+            setFullSizePhotoId(null);
+            setFullSizeArrowMode(false);
+            setSelectedArrowId(null);
+            setMovingArrowId(null);
+          }}
           maxWidth="lg"
           fullWidth
           PaperProps={{
@@ -4724,13 +4986,20 @@ const ClearanceItems = () => {
         >
           <DialogContent sx={{ p: 0, position: "relative" }}>
             <IconButton
-              onClick={() => setFullSizePhotoDialogOpen(false)}
+              onClick={() => {
+                setFullSizePhotoDialogOpen(false);
+                setFullSizePhotoId(null);
+                setFullSizeArrowMode(false);
+                setSelectedArrowId(null);
+                setMovingArrowId(null);
+              }}
               sx={{
                 position: "absolute",
                 top: 10,
                 right: 10,
                 color: "white",
                 bgcolor: "rgba(0, 0, 0, 0.5)",
+                zIndex: 10,
                 "&:hover": {
                   bgcolor: "rgba(0, 0, 0, 0.7)",
                 },
@@ -4738,7 +5007,264 @@ const ClearanceItems = () => {
             >
               <CloseIcon />
             </IconButton>
-            {fullSizePhotoUrl && (
+            {fullSizePhoto && (
+              <Box
+                sx={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  minHeight: "80vh",
+                  p: 2,
+                  pt: 6,
+                }}
+              >
+                <Box
+                  sx={{
+                    display: "flex",
+                    gap: 1,
+                    mb: 2,
+                    flexWrap: "wrap",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Button
+                    variant="contained"
+                    size="small"
+                    startIcon={<ArrowUpwardIcon />}
+                    onClick={() => {
+                      setFullSizeArrowMode((prev) => !prev);
+                      setMovingArrowId(null);
+                    }}
+                    sx={{
+                      bgcolor: fullSizeArrowMode
+                        ? "primary.main"
+                        : "rgba(0, 0, 0, 0.65)",
+                      color: "white",
+                      border: "1px solid rgba(255,255,255,0.4)",
+                      "&:hover": {
+                        bgcolor: fullSizeArrowMode
+                          ? "primary.dark"
+                          : "rgba(0, 0, 0, 0.85)",
+                        borderColor: "rgba(255,255,255,0.6)",
+                      },
+                    }}
+                  >
+                    Add arrow
+                  </Button>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    disabled={
+                      !selectedArrowId || selectedArrowId === "legacy"
+                    }
+                    startIcon={<ArrowUpwardIcon />}
+                    onClick={() => {
+                      setMovingArrowId(selectedArrowId);
+                      setFullSizeArrowMode(false);
+                    }}
+                    sx={{
+                      bgcolor: movingArrowId
+                        ? "primary.main"
+                        : "rgba(0, 0, 0, 0.5)",
+                      color: "white",
+                      "&:hover":
+                        selectedArrowId && selectedArrowId !== "legacy"
+                          ? { bgcolor: "primary.dark" }
+                          : {},
+                    }}
+                  >
+                    Move selected
+                  </Button>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    disabled={!selectedArrowId}
+                    startIcon={<CloseIcon />}
+                    onClick={() => {
+                      if (selectedArrowId) {
+                        if (selectedArrowId === "legacy") {
+                          handleClearAllArrows(fullSizePhotoId);
+                        } else {
+                          handleDeletePhotoArrow(
+                            fullSizePhotoId,
+                            selectedArrowId,
+                          );
+                        }
+                        setSelectedArrowId(null);
+                      }
+                    }}
+                    sx={{
+                      bgcolor: "rgba(244, 67, 54, 0.9)",
+                      color: "white",
+                      "&:hover": { bgcolor: "rgba(244, 67, 54, 1)" },
+                    }}
+                  >
+                    Delete selected
+                  </Button>
+                  <Typography
+                    component="span"
+                    sx={{
+                      color: "rgba(255,255,255,0.9)",
+                      fontSize: "0.85rem",
+                      alignSelf: "center",
+                      ml: 1,
+                    }}
+                  >
+                    Arrow color:
+                  </Typography>
+                  {ARROW_COLORS.map(({ name, hex }) => (
+                    <Box
+                      key={hex}
+                      onClick={() => {
+                        setSelectedArrowColor(hex);
+                        if (
+                          selectedArrowId &&
+                          selectedArrowId !== "legacy"
+                        ) {
+                          handleUpdatePhotoArrow(
+                            fullSizePhotoId,
+                            selectedArrowId,
+                            { color: hex },
+                          );
+                        }
+                      }}
+                      sx={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: "50%",
+                        bgcolor: hex,
+                        border:
+                          selectedArrowColor === hex
+                            ? "3px solid #2196f3"
+                            : "2px solid black",
+                        cursor: "pointer",
+                        flexShrink: 0,
+                        "&:hover": {
+                          borderColor:
+                            selectedArrowColor === hex
+                              ? "#2196f3"
+                              : "rgba(255,255,255,0.8)",
+                          transform: "scale(1.1)",
+                        },
+                        transition: "border-color 0.15s, transform 0.15s",
+                      }}
+                      title={name}
+                    />
+                  ))}
+                </Box>
+                {(fullSizeArrowMode || movingArrowId) && (
+                  <Typography
+                    variant="body2"
+                    sx={{ color: "rgba(0, 0, 0, 0.9)", mb: 1 }}
+                  >
+                    {movingArrowId
+                      ? "Click on the photo to move the selected arrow"
+                      : "Click on the photo to place a new arrow"}
+                  </Typography>
+                )}
+                <Box
+                  sx={{
+                    position: "relative",
+                    display: "inline-flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                  }}
+                >
+                  <img
+                    src={fullSizePhoto.data}
+                    alt="Full size"
+                    style={{
+                      maxWidth: "100%",
+                      maxHeight: "75vh",
+                      objectFit: "contain",
+                      cursor:
+                        fullSizeArrowMode || movingArrowId
+                          ? "crosshair"
+                          : "default",
+                    }}
+                    onClick={handleFullSizePhotoClickForArrow}
+                  />
+                  {getPhotoArrows(fullSizePhoto).map((arr, arrIdx) => {
+                    const arrowColor =
+                      arr.color || DEFAULT_ARROW_COLOR;
+                    const isSelected = selectedArrowId === arr._id;
+                    const rot =
+                      arr.rotation ?? DEFAULT_ARROW_ROTATION;
+                    const tipOff = getArrowTipOffset(rot);
+                    return (
+                      <Box
+                        key={arr._id || `fs-arrow-${arrIdx}`}
+                        sx={{
+                          position: "absolute",
+                          left: `${(arr.x ?? 0.5) * 100}%`,
+                          top: `${(arr.y ?? 0.5) * 100}%`,
+                          transform: `translate(${-tipOff.x * 100}%, ${-tipOff.y * 100}%)`,
+                          pointerEvents: "auto",
+                          cursor: "pointer",
+                          outline: isSelected
+                            ? "3px solid white"
+                            : "none",
+                          outlineOffset: 2,
+                          borderRadius: 1,
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedArrowId(arr._id || "legacy");
+                          setSelectedArrowColor(
+                            arr.color || DEFAULT_ARROW_COLOR,
+                          );
+                        }}
+                      >
+                        <Box sx={{ transform: `rotate(${rot}deg)` }}>
+                          <svg
+                            width="56"
+                            height="56"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                            style={{ pointerEvents: "none" }}
+                          >
+                            <line
+                              x1="12"
+                              y1="22"
+                              x2="12"
+                              y2="10"
+                              stroke="rgba(0,0,0,0.5)"
+                              strokeWidth="2.5"
+                              strokeLinecap="round"
+                            />
+                            <line
+                              x1="12"
+                              y1="22"
+                              x2="12"
+                              y2="10"
+                              stroke={arrowColor}
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                            />
+                            <path
+                              d="M12 2 L8 10 L16 10 Z"
+                              fill="rgba(0,0,0,0.4)"
+                              stroke="rgba(0,0,0,0.6)"
+                              strokeWidth="1"
+                              strokeLinejoin="round"
+                            />
+                            <path
+                              d="M12 2 L8 10 L16 10 Z"
+                              fill={arrowColor}
+                              stroke={arrowColor}
+                              strokeWidth="0.5"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </Box>
+                      </Box>
+                    );
+                  })}
+                </Box>
+              </Box>
+            )}
+            {fullSizePhotoUrl && !fullSizePhoto && (
               <Box
                 sx={{
                   display: "flex",

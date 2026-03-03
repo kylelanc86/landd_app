@@ -76,8 +76,8 @@ riLiquidCalibrationSchema.pre('save', async function(next) {
 
   // Calculate next calibration date - default to 6 months for RI Liquids
   // Only calculate if nextCalibration is not already set
-  // Use dateOpened instead of date for next calibration calculation
-  const dateForCalculation = this.dateOpened || this.date;
+  // Use calibration date (this.date) for next calibration calculation
+  const dateForCalculation = this.date;
   if (dateForCalculation && !this.nextCalibration) {
     try {
       const CalibrationFrequency = mongoose.model('CalibrationFrequency');

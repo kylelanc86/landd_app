@@ -51,6 +51,7 @@ import {
   Check as CheckIcon,
   Description as DescriptionIcon,
   Map as MapIcon,
+  ArrowUpward as ArrowUpwardIcon,
 } from "@mui/icons-material";
 import MicIcon from "@mui/icons-material/Mic";
 import WarningIcon from "@mui/icons-material/Warning";
@@ -70,6 +71,28 @@ import {
   needsCompression,
   saveFileToDevice, // eslint-disable-line no-unused-vars -- used when save-to-device is re-enabled
 } from "../../../utils/imageCompression";
+
+/** Default arrow overlay color (hex) and rotation (degrees, anticlockwise). */
+const DEFAULT_ARROW_COLOR = "#f44336";
+const DEFAULT_ARROW_ROTATION = -45;
+
+/** Arrow SVG viewBox is 24x24; tip at (12,2), center (12,12). Returns tip position as 0–1 of box for given rotation (degrees). */
+function getArrowTipOffset(rotationDeg) {
+  const r = ((rotationDeg ?? 0) * Math.PI) / 180;
+  const tipX = (12 + 10 * Math.sin(r)) / 24;
+  const tipY = (12 - 10 * Math.cos(r)) / 24;
+  return { x: tipX, y: tipY };
+}
+
+/** Preset arrow colors for the color picker. */
+const ARROW_COLORS = [
+  { name: "Yellow", hex: "#ffeb3b" },
+  { name: "Red", hex: "#f44336" },
+  { name: "White", hex: "#ffffff" },
+  { name: "Black", hex: "#212121" },
+  { name: "Orange", hex: "#ff9800" },
+  { name: "Green", hex: "#4caf50" },
+];
 
 /**
  * Add business days to a date, skipping weekends (Saturday and Sunday).
@@ -402,6 +425,13 @@ const AssessmentItems = () => {
   const [dictationErrorDiscussion, setDictationErrorDiscussion] = useState("");
   const recognitionRefDiscussion = useRef(null);
 
+  // Authorised: report is read-only (view only, no edits). Uses reportAuthorisedBy (final sign-off), not "ready for review" (reportApprovedBy). Closed jobs are removed from the list.
+  const isReportLocked = (() => {
+    const v = assessment?.reportAuthorisedBy;
+    if (v == null) return false;
+    return typeof v === "string" ? v.trim() !== "" : !!v;
+  })();
+
   // Assessment Complete state
   const [assessmentCompleted, setAssessmentCompleted] = useState(false);
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
@@ -446,8 +476,15 @@ const AssessmentItems = () => {
   const [localPhotoDescriptions, setLocalPhotoDescriptions] = useState({});
   const [editingDescriptionPhotoId, setEditingDescriptionPhotoId] =
     useState(null);
+  const [editingArrowPhotoId, setEditingArrowPhotoId] = useState(null);
   const [fullSizePhotoDialogOpen, setFullSizePhotoDialogOpen] = useState(false);
   const [fullSizePhotoUrl, setFullSizePhotoUrl] = useState(null);
+  const [fullSizePhotoId, setFullSizePhotoId] = useState(null);
+  const [fullSizeArrowMode, setFullSizeArrowMode] = useState(false);
+  const [selectedArrowId, setSelectedArrowId] = useState(null);
+  const [movingArrowId, setMovingArrowId] = useState(null);
+  const [selectedArrowColor, setSelectedArrowColor] =
+    useState(DEFAULT_ARROW_COLOR);
   const [compressionStatus, setCompressionStatus] = useState(null);
   // eslint-disable-next-line no-unused-vars
   const [photoPreview, setPhotoPreview] = useState(null);
@@ -622,6 +659,7 @@ const AssessmentItems = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isReportLocked) return;
 
     // Validate required fields
     if (
@@ -890,12 +928,13 @@ const AssessmentItems = () => {
   };
 
   const handleDelete = (item) => {
+    if (isReportLocked) return;
     setItemToDelete(item);
     setDeleteConfirmDialogOpen(true);
   };
 
   const confirmDelete = async () => {
-    if (!itemToDelete) return;
+    if (!itemToDelete || isReportLocked) return;
 
     try {
       await asbestosAssessmentService.deleteItem(id, itemToDelete._id);
@@ -1223,6 +1262,7 @@ const AssessmentItems = () => {
 
   // Complete assessment handler
   const handleCompleteAssessment = () => {
+    if (isReportLocked) return;
     const noItems = !items || items.length === 0;
     if (noItems && !hasValidScope) {
       setNoItemsAndScopeDialogOpen(true);
@@ -1240,6 +1280,7 @@ const AssessmentItems = () => {
   };
 
   const confirmCompleteAssessment = async () => {
+    if (isReportLocked) return;
     if (!hasValidScope) {
       showSnackbar(
         "At least one Scope of Assessment item is required before marking site works complete.",
@@ -1266,6 +1307,7 @@ const AssessmentItems = () => {
 
   // Handle Samples Submitted to Lab
   const handleSamplesSubmittedToLab = () => {
+    if (isReportLocked) return;
     // Automatically set the current user's name
     const userName = currentUser
       ? `${currentUser.firstName} ${currentUser.lastName}`
@@ -1280,6 +1322,7 @@ const AssessmentItems = () => {
 
   // Handle the actual submission after dialog confirmation
   const handleConfirmSamplesSubmitted = async () => {
+    if (isReportLocked) return;
     // Validate turnaround time is selected
     if (!turnaroundTime && !showCustomTurnaround) {
       showSnackbar("Please select a turnaround time", "error");
@@ -1328,10 +1371,12 @@ const AssessmentItems = () => {
 
   // Finalise Assessment (no samples) - goes straight to report-ready-for-review
   const handleFinaliseAssessment = () => {
+    if (isReportLocked) return;
     setShowFinaliseAssessmentDialog(true);
   };
 
   const handleConfirmFinaliseAssessment = async () => {
+    if (isReportLocked) return;
     try {
       setFinalisingAssessment(true);
       await asbestosAssessmentService.update(id, {
@@ -1359,6 +1404,7 @@ const AssessmentItems = () => {
 
   // Site Plan handlers
   const performSitePlanSave = async (sitePlanData) => {
+    if (isReportLocked) return;
     const imageData =
       typeof sitePlanData === "string"
         ? sitePlanData
@@ -1498,6 +1544,7 @@ const AssessmentItems = () => {
   };
 
   const handleRemoveSitePlan = async () => {
+    if (isReportLocked) return;
     if (window.confirm("Are you sure you want to remove the site plan?")) {
       try {
         // Update the assessment to remove the site plan file (preserve status; clear approval if changed)
@@ -1594,6 +1641,7 @@ const AssessmentItems = () => {
     setPhotosToDelete(new Set());
     setLocalPhotoDescriptions({});
     setEditingDescriptionPhotoId(null);
+    setEditingArrowPhotoId(null);
     await fetchData();
   };
 
@@ -1913,7 +1961,7 @@ const AssessmentItems = () => {
   };
 
   const handleAddPhotoToItem = async (photoData) => {
-    if (!selectedItemForPhotos) return;
+    if (isReportLocked || !selectedItemForPhotos) return;
     try {
       const response = await asbestosAssessmentService.addPhotoToItem(
         id,
@@ -1944,19 +1992,62 @@ const AssessmentItems = () => {
   };
 
   const handleDeletePhotoFromItem = (itemId, photoId) => {
+    if (isReportLocked) return;
     setPhotosToDelete((prev) => new Set([...prev, photoId]));
   };
 
   const handleTogglePhotoInReport = (itemId, photoId) => {
+    if (isReportLocked) return;
     setLocalPhotoChanges((prev) => ({
       ...prev,
       [photoId]: !getCurrentPhotoState(photoId),
     }));
   };
 
-  const handleViewFullSizePhoto = (photoUrl) => {
-    setFullSizePhotoUrl(photoUrl);
+  const handleViewFullSizePhoto = (photo) => {
+    const url = typeof photo === "string" ? photo : photo?.data;
+    setFullSizePhotoUrl(url);
+    setFullSizePhotoId(typeof photo === "object" && photo?._id ? photo._id : null);
+    setFullSizeArrowMode(false);
+    setSelectedArrowId(null);
+    setMovingArrowId(null);
+    const firstArrow = typeof photo === "object" && getPhotoArrows(photo)[0];
+    setSelectedArrowColor(
+      firstArrow?.color || DEFAULT_ARROW_COLOR,
+    );
     setFullSizePhotoDialogOpen(true);
+  };
+
+  const fullSizePhoto =
+    fullSizePhotoId && selectedItemForPhotos?.photographs
+      ? selectedItemForPhotos.photographs.find(
+          (p) => p._id === fullSizePhotoId,
+        )
+      : null;
+
+  const handleFullSizePhotoClickForArrow = (e) => {
+    if (!fullSizePhotoId || !fullSizePhoto) return;
+    const img = e.currentTarget;
+    const rect = img.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    const clampedX = Math.max(0, Math.min(1, x));
+    const clampedY = Math.max(0, Math.min(1, y));
+    if (movingArrowId) {
+      handleUpdatePhotoArrow(fullSizePhotoId, movingArrowId, {
+        x: clampedX,
+        y: clampedY,
+      });
+      return;
+    }
+    if (fullSizeArrowMode) {
+      handleAddPhotoArrow(fullSizePhotoId, {
+        x: clampedX,
+        y: clampedY,
+        rotation: DEFAULT_ARROW_ROTATION,
+        color: selectedArrowColor,
+      });
+    }
   };
 
   const getCurrentPhotoState = (photoId) => {
@@ -2000,6 +2091,112 @@ const AssessmentItems = () => {
     }));
   };
 
+  /** Returns arrows array for a photo (supports legacy single arrow). Ignores empty legacy arrow. */
+  const getPhotoArrows = (photo) => {
+    if (!photo) return [];
+    if (photo.arrows && photo.arrows.length > 0) return photo.arrows;
+    const leg = photo.arrow;
+    if (leg && typeof leg === "object" && (leg.x != null || leg.y != null))
+      return [leg];
+    return [];
+  };
+
+  const handleAddPhotoArrow = async (photoId, arrow) => {
+    if (isReportLocked || !selectedItemForPhotos || !id) return;
+    try {
+      const response = await asbestosAssessmentService.addPhotoArrow(
+        id,
+        selectedItemForPhotos._id,
+        photoId,
+        {
+          x: arrow.x ?? 0.5,
+          y: arrow.y ?? 0.5,
+          rotation: arrow.rotation ?? DEFAULT_ARROW_ROTATION,
+          color: arrow.color ?? DEFAULT_ARROW_COLOR,
+        },
+      );
+      if (response?.item) setSelectedItemForPhotos(response.item);
+      setEditingArrowPhotoId(null);
+      setFullSizeArrowMode(false);
+      showSnackbar("Arrow added", "success");
+    } catch (err) {
+      console.error("Error adding arrow:", err);
+      showSnackbar("Failed to add arrow", "error");
+    }
+  };
+
+  const handleUpdatePhotoArrow = async (photoId, arrowId, updates) => {
+    if (isReportLocked || !selectedItemForPhotos || !id) return;
+    try {
+      const response = await asbestosAssessmentService.updatePhotoArrow(
+        id,
+        selectedItemForPhotos._id,
+        photoId,
+        arrowId,
+        updates,
+      );
+      if (response?.item) setSelectedItemForPhotos(response.item);
+      setMovingArrowId(null);
+      setFullSizeArrowMode(false);
+      showSnackbar("Arrow updated", "success");
+    } catch (err) {
+      console.error("Error updating arrow:", err);
+      showSnackbar("Failed to update arrow", "error");
+    }
+  };
+
+  const handleDeletePhotoArrow = async (photoId, arrowId) => {
+    if (isReportLocked || !selectedItemForPhotos || !id) return;
+    try {
+      const response = await asbestosAssessmentService.deletePhotoArrow(
+        id,
+        selectedItemForPhotos._id,
+        photoId,
+        arrowId,
+      );
+      if (response?.item) setSelectedItemForPhotos(response.item);
+      if (selectedArrowId === arrowId) setSelectedArrowId(null);
+      setFullSizeArrowMode(false);
+      showSnackbar("Arrow removed", "success");
+    } catch (err) {
+      console.error("Error deleting arrow:", err);
+      showSnackbar("Failed to remove arrow", "error");
+    }
+  };
+
+  const handleClearAllArrows = async (photoId) => {
+    if (!selectedItemForPhotos || !id) return;
+    try {
+      const response = await asbestosAssessmentService.updatePhotoArrowLegacy(
+        id,
+        selectedItemForPhotos._id,
+        photoId,
+        null,
+      );
+      if (response?.item) setSelectedItemForPhotos(response.item);
+      showSnackbar("Arrows cleared", "success");
+    } catch (err) {
+      console.error("Error clearing arrows:", err);
+      showSnackbar("Failed to clear arrows", "error");
+    }
+  };
+
+  const handlePhotoImageClickForArrow = (photoId, e) => {
+    e.stopPropagation();
+    if (editingArrowPhotoId !== photoId) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    const clampedX = Math.max(0, Math.min(1, x));
+    const clampedY = Math.max(0, Math.min(1, y));
+    handleAddPhotoArrow(photoId, {
+      x: clampedX,
+      y: clampedY,
+      rotation: DEFAULT_ARROW_ROTATION,
+      color: DEFAULT_ARROW_COLOR,
+    });
+  };
+
   const hasUnsavedChanges = () => {
     return (
       Object.keys(localPhotoChanges).length > 0 ||
@@ -2013,6 +2210,7 @@ const AssessmentItems = () => {
   };
 
   const savePhotoChanges = async () => {
+    if (isReportLocked) return;
     try {
       const togglePromises = [];
       const descriptionPromises = [];
@@ -2387,6 +2585,7 @@ const AssessmentItems = () => {
               color="secondary"
               onClick={() => setSitePlanDrawingDialogOpen(true)}
               startIcon={<MapIcon />}
+              disabled={isReportLocked}
             >
               {assessment?.sitePlanFile ? "Edit Site Plan" : "Site Plan"}
             </Button>
@@ -2395,6 +2594,7 @@ const AssessmentItems = () => {
                 variant="outlined"
                 color="error"
                 onClick={handleRemoveSitePlan}
+                disabled={isReportLocked}
                 startIcon={<DeleteIcon />}
                 sx={{
                   borderColor: "#d32f2f",
@@ -2451,6 +2651,7 @@ const AssessmentItems = () => {
               setItemTypeSelectionModalOpen(true);
             }}
             startIcon={<AddIcon />}
+            disabled={isReportLocked}
           >
             <Box
               component="span"
@@ -2856,7 +3057,8 @@ const AssessmentItems = () => {
                                 onClick={() => handleEdit(item)}
                                 color="primary"
                                 size="small"
-                                title="Edit"
+                                title={isReportLocked ? "View only (report approved)" : "Edit"}
+                                disabled={isReportLocked}
                                 sx={{
                                   display: "inline-flex",
                                   "@media (max-width: 600px)": {
@@ -2871,6 +3073,7 @@ const AssessmentItems = () => {
                                 color="error"
                                 size="small"
                                 title="Delete"
+                                disabled={isReportLocked}
                                 sx={{
                                   display: "inline-flex",
                                   "@media (orientation: portrait) and (max-width: 600px)":
@@ -2907,6 +3110,7 @@ const AssessmentItems = () => {
               variant="contained"
               color="primary"
               onClick={handleCompleteAssessment}
+              disabled={isReportLocked}
               sx={{
                 backgroundColor: "#1976d2",
                 "&:hover": {
@@ -2927,7 +3131,7 @@ const AssessmentItems = () => {
                   <Button
                     variant="contained"
                     onClick={handleFinaliseAssessment}
-                    disabled={finalisingAssessment}
+                    disabled={finalisingAssessment || isReportLocked}
                     sx={{
                       backgroundColor: "#ff9800",
                       color: "white",
@@ -2944,6 +3148,7 @@ const AssessmentItems = () => {
                 <Button
                   variant="contained"
                   onClick={handleSamplesSubmittedToLab}
+                  disabled={isReportLocked}
                   sx={{
                     backgroundColor: "#ff9800",
                     color: "white",
@@ -3123,8 +3328,14 @@ const AssessmentItems = () => {
               {editingItem ? "Edit Item" : "Add New Item"}
             </Typography>
           </DialogTitle>
+          {isReportLocked && (
+            <Alert severity="info" sx={{ mx: 3, mt: 1 }}>
+              Report approved – view only. No changes can be saved.
+            </Alert>
+          )}
           <form onSubmit={handleSubmit}>
             <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+              <Box component="fieldset" disabled={isReportLocked} sx={{ border: "none", m: 0, p: 0, minWidth: 0 }}>
               <Grid container spacing={2}>
                 <Grid item xs={12}>
                   <Divider sx={{ my: -3 }}>
@@ -3737,6 +3948,7 @@ const AssessmentItems = () => {
                   />
                 </Grid>
               </Grid>
+              </Box>
             </DialogContent>
             <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
               <Button
@@ -3756,6 +3968,7 @@ const AssessmentItems = () => {
                 variant="contained"
                 startIcon={editingItem ? <EditIcon /> : <AddIcon />}
                 disabled={
+                  isReportLocked ||
                   !form.roomArea.trim() ||
                   !form.locationDescription.trim() ||
                   !form.materialType.trim()
@@ -3855,6 +4068,7 @@ const AssessmentItems = () => {
               variant="contained"
               color="error"
               startIcon={<DeleteIcon />}
+              disabled={isReportLocked}
               sx={{
                 minWidth: 120,
                 borderRadius: 2,
@@ -3917,6 +4131,7 @@ const AssessmentItems = () => {
                   startIcon={<PhotoCameraIcon />}
                   onClick={handleTakePhoto}
                   size="small"
+                  disabled={isReportLocked}
                 >
                   Take Photo
                 </Button>
@@ -3925,6 +4140,7 @@ const AssessmentItems = () => {
                   startIcon={<UploadIcon />}
                   component="label"
                   size="small"
+                  disabled={isReportLocked}
                 >
                   Upload Photo
                   <input
@@ -3932,6 +4148,7 @@ const AssessmentItems = () => {
                     hidden
                     accept="image/*"
                     onChange={handlePhotoUploadForGallery}
+                    disabled={isReportLocked}
                   />
                 </Button>
               </Box>
@@ -4036,6 +4253,7 @@ const AssessmentItems = () => {
                             startIcon={<PhotoCameraIcon />}
                             onClick={handleTakePhoto}
                             size="small"
+                            disabled={isReportLocked}
                           >
                             Take Photo
                           </Button>
@@ -4044,6 +4262,7 @@ const AssessmentItems = () => {
                             startIcon={<UploadIcon />}
                             component="label"
                             size="small"
+                            disabled={isReportLocked}
                           >
                             Upload Photo
                             <input
@@ -4051,6 +4270,7 @@ const AssessmentItems = () => {
                               hidden
                               accept="image/*"
                               onChange={handlePhotoUploadForGallery}
+                              disabled={isReportLocked}
                             />
                           </Button>
                         </Box>
@@ -4109,14 +4329,24 @@ const AssessmentItems = () => {
                                   sx={{
                                     position: "relative",
                                     paddingTop: "75%",
-                                    cursor: "pointer",
+                                    cursor:
+                                      editingArrowPhotoId === photo._id
+                                        ? "crosshair"
+                                        : "pointer",
                                     "&:hover": {
                                       opacity: 0.9,
                                     },
                                   }}
-                                  onClick={() =>
-                                    handleViewFullSizePhoto(photo.data)
-                                  }
+                                  onClick={(e) => {
+                                    if (editingArrowPhotoId === photo._id) {
+                                      handlePhotoImageClickForArrow(
+                                        photo._id,
+                                        e,
+                                      );
+                                    } else {
+                                      handleViewFullSizePhoto(photo);
+                                    }
+                                  }}
                                 >
                                   <img
                                     src={photo.data}
@@ -4130,6 +4360,131 @@ const AssessmentItems = () => {
                                       objectFit: "cover",
                                     }}
                                   />
+
+                                  {/* Arrow overlays (multiple, with delete per arrow) */}
+                                  {getPhotoArrows(photo).map((arr, arrIdx) => {
+                                    const arrowColor =
+                                      arr.color || DEFAULT_ARROW_COLOR;
+                                    const arrowId = arr._id;
+                                    const rot =
+                                      arr.rotation ?? DEFAULT_ARROW_ROTATION;
+                                    const tipOff = getArrowTipOffset(rot);
+                                    return (
+                                      <Box
+                                        key={arrowId || `arrow-${arrIdx}`}
+                                        sx={{
+                                          position: "absolute",
+                                          left: `${(arr.x ?? 0.5) * 100}%`,
+                                          top: `${(arr.y ?? 0.5) * 100}%`,
+                                          transform: `translate(${-tipOff.x * 100}%, ${-tipOff.y * 100}%)`,
+                                          zIndex: 2,
+                                          pointerEvents: "auto",
+                                          display: "flex",
+                                          flexDirection: "column",
+                                          alignItems: "center",
+                                        }}
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <Box
+                                          sx={{
+                                            transform: `rotate(${rot}deg)`,
+                                          }}
+                                        >
+                                          <svg
+                                            width="40"
+                                            height="40"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            style={{ pointerEvents: "none" }}
+                                          >
+                                            <line
+                                              x1="12"
+                                              y1="22"
+                                              x2="12"
+                                              y2="10"
+                                              stroke="rgba(0,0,0,0.5)"
+                                              strokeWidth="2.5"
+                                              strokeLinecap="round"
+                                            />
+                                            <line
+                                              x1="12"
+                                              y1="22"
+                                              x2="12"
+                                              y2="10"
+                                              stroke={arrowColor}
+                                              strokeWidth="2"
+                                              strokeLinecap="round"
+                                            />
+                                            <path
+                                              d="M12 2 L8 10 L16 10 Z"
+                                              fill="rgba(0,0,0,0.4)"
+                                              stroke="rgba(0,0,0,0.6)"
+                                              strokeWidth="1"
+                                              strokeLinejoin="round"
+                                            />
+                                            <path
+                                              d="M12 2 L8 10 L16 10 Z"
+                                              fill={arrowColor}
+                                              stroke={arrowColor}
+                                              strokeWidth="0.5"
+                                              strokeLinejoin="round"
+                                            />
+                                          </svg>
+                                        </Box>
+                                        <IconButton
+                                          size="small"
+                                          sx={{
+                                            minWidth: 0,
+                                            width: 20,
+                                            height: 20,
+                                            color: "white",
+                                            bgcolor: "rgba(0,0,0,0.7)",
+                                            "&:hover": {
+                                              bgcolor: "rgba(244,67,54,0.9)",
+                                            },
+                                            mt: -0.5,
+                                          }}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (arrowId) {
+                                              handleDeletePhotoArrow(
+                                                photo._id,
+                                                arrowId,
+                                              );
+                                            } else {
+                                              handleClearAllArrows(photo._id);
+                                            }
+                                          }}
+                                          title="Remove this arrow"
+                                        >
+                                          <CloseIcon
+                                            sx={{ fontSize: "0.9rem" }}
+                                          />
+                                        </IconButton>
+                                      </Box>
+                                    );
+                                  })}
+
+                                  {editingArrowPhotoId === photo._id && (
+                                    <Box
+                                      sx={{
+                                        position: "absolute",
+                                        bottom: 8,
+                                        left: "50%",
+                                        transform: "translateX(-50%)",
+                                        backgroundColor: "rgba(0, 0, 0, 0.7)",
+                                        color: "white",
+                                        px: 1,
+                                        py: 0.5,
+                                        borderRadius: 1,
+                                        fontSize: "0.7rem",
+                                        zIndex: 3,
+                                      }}
+                                    >
+                                      Click on photo to place arrow
+                                    </Box>
+                                  )}
 
                                   {isPhotoMarkedForDeletion(photo._id) && (
                                     <Box
@@ -4614,6 +4969,7 @@ const AssessmentItems = () => {
                         required={index === 0}
                         variant="outlined"
                         size="small"
+                        disabled={isReportLocked}
                       />
                       {scopeItems.length > 1 && (
                         <IconButton
@@ -4626,6 +4982,7 @@ const AssessmentItems = () => {
                           color="error"
                           sx={{ mt: 1 }}
                           title="Remove this item"
+                          disabled={isReportLocked}
                         >
                           <DeleteIcon />
                         </IconButton>
@@ -4638,6 +4995,7 @@ const AssessmentItems = () => {
                   startIcon={<AddIcon />}
                   onClick={() => setScopeItems([...scopeItems, ""])}
                   sx={{ mt: 2 }}
+                  disabled={isReportLocked}
                 >
                   Add Scope Item
                 </Button>
@@ -4659,6 +5017,7 @@ const AssessmentItems = () => {
                 </Button>
                 <Button
                   onClick={async () => {
+                    if (isReportLocked) return;
                     // Validate that assessment exists
                     if (!assessment) {
                       showSnackbar(
@@ -4719,6 +5078,7 @@ const AssessmentItems = () => {
                     textTransform: "none",
                     fontWeight: 500,
                   }}
+                  disabled={isReportLocked}
                 >
                   Save Scope
                 </Button>
@@ -4730,7 +5090,13 @@ const AssessmentItems = () => {
         {/* Full Size Photo Dialog */}
         <Dialog
           open={fullSizePhotoDialogOpen}
-          onClose={() => setFullSizePhotoDialogOpen(false)}
+          onClose={() => {
+            setFullSizePhotoDialogOpen(false);
+            setFullSizePhotoId(null);
+            setFullSizeArrowMode(false);
+            setSelectedArrowId(null);
+            setMovingArrowId(null);
+          }}
           maxWidth="lg"
           fullWidth
           PaperProps={{
@@ -4741,13 +5107,20 @@ const AssessmentItems = () => {
         >
           <DialogContent sx={{ p: 0, position: "relative" }}>
             <IconButton
-              onClick={() => setFullSizePhotoDialogOpen(false)}
+              onClick={() => {
+                setFullSizePhotoDialogOpen(false);
+                setFullSizePhotoId(null);
+                setFullSizeArrowMode(false);
+                setSelectedArrowId(null);
+                setMovingArrowId(null);
+              }}
               sx={{
                 position: "absolute",
                 top: 10,
                 right: 10,
                 color: "white",
                 bgcolor: "rgba(0, 0, 0, 0.5)",
+                zIndex: 10,
                 "&:hover": {
                   bgcolor: "rgba(0, 0, 0, 0.7)",
                 },
@@ -4755,7 +5128,264 @@ const AssessmentItems = () => {
             >
               <CloseIcon />
             </IconButton>
-            {fullSizePhotoUrl && (
+            {fullSizePhoto && (
+              <Box
+                sx={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  minHeight: "80vh",
+                  p: 2,
+                  pt: 6,
+                }}
+              >
+                <Box
+                  sx={{
+                    display: "flex",
+                    gap: 1,
+                    mb: 2,
+                    flexWrap: "wrap",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Button
+                    variant="contained"
+                    size="small"
+                    startIcon={<ArrowUpwardIcon />}
+                    onClick={() => {
+                      setFullSizeArrowMode((prev) => !prev);
+                      setMovingArrowId(null);
+                    }}
+                    sx={{
+                      bgcolor: fullSizeArrowMode
+                        ? "primary.main"
+                        : "rgba(0, 0, 0, 0.65)",
+                      color: "white",
+                      border: "1px solid rgba(255,255,255,0.4)",
+                      "&:hover": {
+                        bgcolor: fullSizeArrowMode
+                          ? "primary.dark"
+                          : "rgba(0, 0, 0, 0.85)",
+                        borderColor: "rgba(255,255,255,0.6)",
+                      },
+                    }}
+                  >
+                    Add arrow
+                  </Button>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    disabled={
+                      !selectedArrowId || selectedArrowId === "legacy"
+                    }
+                    startIcon={<ArrowUpwardIcon />}
+                    onClick={() => {
+                      setMovingArrowId(selectedArrowId);
+                      setFullSizeArrowMode(false);
+                    }}
+                    sx={{
+                      bgcolor: movingArrowId
+                        ? "primary.main"
+                        : "rgba(0, 0, 0, 0.5)",
+                      color: "white",
+                      "&:hover":
+                        selectedArrowId && selectedArrowId !== "legacy"
+                          ? { bgcolor: "primary.dark" }
+                          : {},
+                    }}
+                  >
+                    Move selected
+                  </Button>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    disabled={!selectedArrowId}
+                    startIcon={<CloseIcon />}
+                    onClick={() => {
+                      if (selectedArrowId) {
+                        if (selectedArrowId === "legacy") {
+                          handleClearAllArrows(fullSizePhotoId);
+                        } else {
+                          handleDeletePhotoArrow(
+                            fullSizePhotoId,
+                            selectedArrowId,
+                          );
+                        }
+                        setSelectedArrowId(null);
+                      }
+                    }}
+                    sx={{
+                      bgcolor: "rgba(244, 67, 54, 0.9)",
+                      color: "white",
+                      "&:hover": { bgcolor: "rgba(244, 67, 54, 1)" },
+                    }}
+                  >
+                    Delete selected
+                  </Button>
+                  <Typography
+                    component="span"
+                    sx={{
+                      color: "rgba(255,255,255,0.9)",
+                      fontSize: "0.85rem",
+                      alignSelf: "center",
+                      ml: 1,
+                    }}
+                  >
+                    Arrow color:
+                  </Typography>
+                  {ARROW_COLORS.map(({ name, hex }) => (
+                    <Box
+                      key={hex}
+                      onClick={() => {
+                        setSelectedArrowColor(hex);
+                        if (
+                          selectedArrowId &&
+                          selectedArrowId !== "legacy"
+                        ) {
+                          handleUpdatePhotoArrow(
+                            fullSizePhotoId,
+                            selectedArrowId,
+                            { color: hex },
+                          );
+                        }
+                      }}
+                      sx={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: "50%",
+                        bgcolor: hex,
+                        border:
+                          selectedArrowColor === hex
+                            ? "3px solid #2196f3"
+                            : "2px solid black",
+                        cursor: "pointer",
+                        flexShrink: 0,
+                        "&:hover": {
+                          borderColor:
+                            selectedArrowColor === hex
+                              ? "#2196f3"
+                              : "rgba(255,255,255,0.8)",
+                          transform: "scale(1.1)",
+                        },
+                        transition: "border-color 0.15s, transform 0.15s",
+                      }}
+                      title={name}
+                    />
+                  ))}
+                </Box>
+                {(fullSizeArrowMode || movingArrowId) && (
+                  <Typography
+                    variant="body2"
+                    sx={{ color: "rgba(0, 0, 0, 0.9)", mb: 1 }}
+                  >
+                    {movingArrowId
+                      ? "Click on the photo to move the selected arrow"
+                      : "Click on the photo to place a new arrow"}
+                  </Typography>
+                )}
+                <Box
+                  sx={{
+                    position: "relative",
+                    display: "inline-flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                  }}
+                >
+                  <img
+                    src={fullSizePhoto.data}
+                    alt="Full size"
+                    style={{
+                      maxWidth: "100%",
+                      maxHeight: "75vh",
+                      objectFit: "contain",
+                      cursor:
+                        fullSizeArrowMode || movingArrowId
+                          ? "crosshair"
+                          : "default",
+                    }}
+                    onClick={handleFullSizePhotoClickForArrow}
+                  />
+                  {getPhotoArrows(fullSizePhoto).map((arr, arrIdx) => {
+                    const arrowColor =
+                      arr.color || DEFAULT_ARROW_COLOR;
+                    const isSelected = selectedArrowId === arr._id;
+                    const rot =
+                      arr.rotation ?? DEFAULT_ARROW_ROTATION;
+                    const tipOff = getArrowTipOffset(rot);
+                    return (
+                      <Box
+                        key={arr._id || `fs-arrow-${arrIdx}`}
+                        sx={{
+                          position: "absolute",
+                          left: `${(arr.x ?? 0.5) * 100}%`,
+                          top: `${(arr.y ?? 0.5) * 100}%`,
+                          transform: `translate(${-tipOff.x * 100}%, ${-tipOff.y * 100}%)`,
+                          pointerEvents: "auto",
+                          cursor: "pointer",
+                          outline: isSelected
+                            ? "3px solid white"
+                            : "none",
+                          outlineOffset: 2,
+                          borderRadius: 1,
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedArrowId(arr._id || "legacy");
+                          setSelectedArrowColor(
+                            arr.color || DEFAULT_ARROW_COLOR,
+                          );
+                        }}
+                      >
+                        <Box sx={{ transform: `rotate(${rot}deg)` }}>
+                          <svg
+                            width="56"
+                            height="56"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                            style={{ pointerEvents: "none" }}
+                          >
+                            <line
+                              x1="12"
+                              y1="22"
+                              x2="12"
+                              y2="10"
+                              stroke="rgba(0,0,0,0.5)"
+                              strokeWidth="2.5"
+                              strokeLinecap="round"
+                            />
+                            <line
+                              x1="12"
+                              y1="22"
+                              x2="12"
+                              y2="10"
+                              stroke={arrowColor}
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                            />
+                            <path
+                              d="M12 2 L8 10 L16 10 Z"
+                              fill="rgba(0,0,0,0.4)"
+                              stroke="rgba(0,0,0,0.6)"
+                              strokeWidth="1"
+                              strokeLinejoin="round"
+                            />
+                            <path
+                              d="M12 2 L8 10 L16 10 Z"
+                              fill={arrowColor}
+                              stroke={arrowColor}
+                              strokeWidth="0.5"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </Box>
+                      </Box>
+                    );
+                  })}
+                </Box>
+              </Box>
+            )}
+            {fullSizePhotoUrl && !fullSizePhoto && (
               <Box
                 sx={{
                   display: "flex",
@@ -4843,6 +5473,7 @@ const AssessmentItems = () => {
                 multiline
                 rows={6}
                 placeholder="Enter job-specific exclusions/caveats that should be included in the assessment report"
+                disabled={isReportLocked}
                 InputProps={{
                   endAdornment: (
                     <InputAdornment position="end">
@@ -4974,7 +5605,7 @@ const AssessmentItems = () => {
               }}
               variant="contained"
               color="primary"
-              disabled={savingExclusions}
+              disabled={savingExclusions || isReportLocked}
               sx={{
                 minWidth: 100,
                 borderRadius: 2,
@@ -5091,6 +5722,7 @@ const AssessmentItems = () => {
                 }}
                 multiline
                 placeholder="Enter discussion and conclusions for the assessment report"
+                disabled={isReportLocked}
                 sx={{
                   flex: 1,
                   display: "flex",
@@ -5245,7 +5877,7 @@ const AssessmentItems = () => {
                 }
               }}
               variant="contained"
-              disabled={savingDiscussion}
+              disabled={savingDiscussion || isReportLocked}
               sx={{
                 minWidth: 100,
                 borderRadius: 2,

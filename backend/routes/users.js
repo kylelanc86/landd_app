@@ -249,7 +249,6 @@ router.post('/', auth, async (req, res) => {
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
               <div style="text-align: left;">
                 <h1 style="color:rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
-                <p style="color: #666; font-size: 16px; margin: 10px 0 0 0;">Environmental Services</p>
               </div>
               <div style="text-align: right;">
                 ${logoBase64 ? `<img src="${logoBase64}" alt="L&D Consulting Logo" style="height: 60px; width: 150px;">` : ''}

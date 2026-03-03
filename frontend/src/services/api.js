@@ -25,8 +25,8 @@ const api = axios.create({
     // HTTP keep-alive is handled automatically by the browser
   },
   withCredentials: true,
-  // Increase timeout for slow networks, but don't wait forever
-  timeout: 30000  // 30 seconds
+  // Increase timeout for slow networks and long-running PDF generation (e.g. DocRaptor)
+  timeout: 130000  // 130 seconds
 });
 
 // Add request interceptor
@@ -235,6 +235,7 @@ export const projectService = {
     // Add status parameter for backend filtering
     if (params.status) queryParams.append('status', params.status);
     if (params.department) queryParams.append('department', params.department);
+    if (params.userId) queryParams.append('userId', params.userId);
     if (params.projectType) queryParams.append('projectType', params.projectType);
     if (params.sortBy) queryParams.append('sortBy', params.sortBy);
     if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
@@ -500,6 +501,23 @@ export const asbestosAssessmentService = {
     // DocRaptor sync limit 60s; 120s allows upload + generation + download on slow connections
     return api.post('/pdf-docraptor-v2/generate-asbestos-assessment-v3', payload, { responseType: 'blob', timeout: 120000 });
   },
+
+  // Start async assessment PDF generation (returns jobId for polling status)
+  startAsbestosAssessmentPdf: (assessmentData, options = {}) => {
+    const id = assessmentData?._id || assessmentData?.id;
+    const payload = {
+      assessmentData: { ...assessmentData, _id: id, id },
+      ...(options.isResidential === true && { isResidential: true }),
+    };
+    return api.post('/pdf-docraptor-v2/start-asbestos-assessment-pdf', payload);
+  },
+
+  // Get async PDF job status (shared with clearance; use for assessment jobId from startAsbestosAssessmentPdf)
+  getAsyncPdfStatus: (jobId) => api.get(`/pdf-docraptor-v2/status/${jobId}`),
+
+  // Download persisted assessment PDF by assessment ID (no regeneration)
+  downloadAssessmentPDFByAssessmentId: (assessmentId) =>
+    api.get(`/pdf-docraptor-v2/download-by-assessment/${assessmentId}`, { responseType: 'blob' }),
 };
 
 // Client Supplied Jobs service

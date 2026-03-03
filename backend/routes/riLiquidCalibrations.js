@@ -204,32 +204,32 @@ router.post('/', auth, checkPermission(['calibrations.create']), async (req, res
     
     const calculatedStatus = isPass ? 'Pass' : 'Fail';
 
-    // Calculate next calibration date (6 months from date opened)
+    // Calculate next calibration date (6 months from calibration date)
     let nextCalibration = null;
     try {
       const calibrationFreqConfig = await CalibrationFrequency.findOne({ 
         equipmentType: 'RI Liquids' 
       });
       
-      const openedDate = new Date(dateOpened);
+      const calibrationDate = new Date(date);
       if (calibrationFreqConfig) {
         if (calibrationFreqConfig.frequencyUnit === 'years') {
-          openedDate.setFullYear(openedDate.getFullYear() + calibrationFreqConfig.frequencyValue);
+          calibrationDate.setFullYear(calibrationDate.getFullYear() + calibrationFreqConfig.frequencyValue);
         } else {
-          openedDate.setMonth(openedDate.getMonth() + calibrationFreqConfig.frequencyValue);
+          calibrationDate.setMonth(calibrationDate.getMonth() + calibrationFreqConfig.frequencyValue);
         }
-        nextCalibration = openedDate;
+        nextCalibration = calibrationDate;
       } else {
         // Default to 6 months
-        openedDate.setMonth(openedDate.getMonth() + 6);
-        nextCalibration = openedDate;
+        calibrationDate.setMonth(calibrationDate.getMonth() + 6);
+        nextCalibration = calibrationDate;
       }
     } catch (error) {
       console.error('Error calculating next calibration date:', error);
       // Default to 6 months
-      const openedDate = new Date(dateOpened);
-      openedDate.setMonth(openedDate.getMonth() + 6);
-      nextCalibration = openedDate;
+      const calibrationDate = new Date(date);
+      calibrationDate.setMonth(calibrationDate.getMonth() + 6);
+      nextCalibration = calibrationDate;
     }
 
     const calibrationData = {
@@ -311,25 +311,25 @@ router.put('/:id', auth, checkPermission(['calibrations.edit']), async (req, res
       calibration.status = isPass ? 'Pass' : 'Fail';
     }
 
-    // Recalculate next calibration if dateOpened changed
-    if (req.body.dateOpened !== undefined) {
+    // Recalculate next calibration if calibration date changed
+    if (req.body.date !== undefined) {
       try {
         const calibrationFreqConfig = await CalibrationFrequency.findOne({ 
           equipmentType: 'RI Liquids' 
         });
         
-        const openedDate = new Date(calibration.dateOpened);
+        const calibrationDate = new Date(calibration.date);
         if (calibrationFreqConfig) {
           if (calibrationFreqConfig.frequencyUnit === 'years') {
-            openedDate.setFullYear(openedDate.getFullYear() + calibrationFreqConfig.frequencyValue);
+            calibrationDate.setFullYear(calibrationDate.getFullYear() + calibrationFreqConfig.frequencyValue);
           } else {
-            openedDate.setMonth(openedDate.getMonth() + calibrationFreqConfig.frequencyValue);
+            calibrationDate.setMonth(calibrationDate.getMonth() + calibrationFreqConfig.frequencyValue);
           }
-          calibration.nextCalibration = openedDate;
+          calibration.nextCalibration = calibrationDate;
         } else {
           // Default to 6 months
-          openedDate.setMonth(openedDate.getMonth() + 6);
-          calibration.nextCalibration = openedDate;
+          calibrationDate.setMonth(calibrationDate.getMonth() + 6);
+          calibration.nextCalibration = calibrationDate;
         }
       } catch (error) {
         console.error('Error recalculating next calibration date:', error);

@@ -7,12 +7,22 @@ const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const { getLegislationForReportTemplate } = require('../services/templateService');
 
+/** Assessment report PDF retention (days) – matches DocRaptor; after this, report is no longer offered for download. */
+const ASSESSMENT_PDF_RETENTION_DAYS = 7;
+const ASSESSMENT_PDF_RETENTION_MS = ASSESSMENT_PDF_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+function isAssessmentPdfExpired(pdfReadyAt) {
+  if (!pdfReadyAt) return true;
+  return Date.now() - new Date(pdfReadyAt).getTime() > ASSESSMENT_PDF_RETENTION_MS;
+}
+
 // GET /api/assessments - list all assessment jobs (populate project and assessor); excludes archived
 // Query param jobType: 'asbestos-assessment' | 'residential-asbestos' - when set, only jobs of that type are returned
+// Query param list=1 - return minimal fields for table display (no full items, photos, blobs); faster and smaller payload
 router.get('/', async (req, res) => {
   try {
     const filter = { archived: { $ne: true } };
-    const { jobType } = req.query;
+    const { jobType, list } = req.query;
     if (jobType === 'residential-asbestos') {
       filter.jobType = 'residential-asbestos';
     } else if (jobType === 'asbestos-assessment') {
@@ -23,7 +33,104 @@ router.get('/', async (req, res) => {
         { jobType: null },
       ];
     }
+
+    if (list === '1' || list === 'true') {
+      // Minimal payload for table lists: lean aggregation with only fields needed for display and row actions
+      const pipeline = [
+        { $match: filter },
+        { $sort: { createdAt: -1 } },
+        {
+          $lookup: {
+            from: 'projects',
+            localField: 'projectId',
+            foreignField: '_id',
+            as: 'projectIdArr',
+            pipeline: [{ $project: { projectID: 1, name: 1, client: 1 } }],
+          },
+        },
+        { $unwind: { path: '$projectIdArr', preserveNullAndEmptyArrays: true } },
+        {
+          $lookup: {
+            from: 'clients',
+            localField: 'projectIdArr.client',
+            foreignField: '_id',
+            as: 'clientArr',
+            pipeline: [{ $project: { name: 1, contact1Name: 1, contact1Email: 1, address: 1 } }],
+          },
+        },
+        {
+          $addFields: {
+            projectId: {
+              $cond: {
+                if: { $eq: [{ $ifNull: ['$projectIdArr', null] }, null] },
+                then: null,
+                else: {
+                  _id: '$projectIdArr._id',
+                  projectID: '$projectIdArr.projectID',
+                  name: '$projectIdArr.name',
+                  client: { $arrayElemAt: ['$clientArr', 0] },
+                },
+              },
+            },
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+            jobType: 1,
+            projectId: 1,
+            assessmentDate: 1,
+            status: 1,
+            LAA: 1,
+            state: 1,
+            secondaryHeader: 1,
+            intrusiveness: 1,
+            reportApprovedBy: 1,
+            reportAuthorisedBy: 1,
+            reportIssueDate: 1,
+            reportViewedAt: 1,
+            authorisationRequestedBy: 1,
+            noSamplesCollected: 1,
+            samplesReceivedDate: 1,
+            labSamplesStatus: 1,
+            analysisDueDate: 1,
+            turnaroundTime: 1,
+            pdfReadyAt: 1,
+            pdfFilename: 1,
+            updatedAt: 1,
+            items: {
+              $map: {
+                input: { $ifNull: ['$items', []] },
+                as: 'item',
+                in: {
+                  sampleReference: '$$item.sampleReference',
+                  asbestosContent: '$$item.asbestosContent',
+                  analysisData: {
+                    $cond: {
+                      if: { $ne: ['$$item.analysisData', null] },
+                      then: { isAnalysed: '$$item.analysisData.isAnalysed' },
+                      else: null,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      ];
+      const jobs = await AsbestosAssessment.aggregate(pipeline);
+      // Hide PDF availability when past retention (download icon disappears)
+      jobs.forEach((job) => {
+        if (isAssessmentPdfExpired(job.pdfReadyAt)) {
+          job.pdfReadyAt = null;
+          job.pdfFilename = null;
+        }
+      });
+      return res.json(jobs);
+    }
+
     const jobs = await AsbestosAssessment.find(filter)
+      .select('-pdfBuffer')
       .sort({ createdAt: -1 })
       .populate({
         path: "projectId",
@@ -34,6 +141,13 @@ router.get('/', async (req, res) => {
         }
       })
       .populate('assessorId');
+    // Hide PDF availability when past retention (download icon disappears)
+    jobs.forEach((job) => {
+      if (isAssessmentPdfExpired(job.pdfReadyAt)) {
+        job.pdfReadyAt = null;
+        job.pdfFilename = null;
+      }
+    });
     res.json(jobs);
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch jobs', error: err.message });
@@ -366,7 +480,7 @@ router.put('/:id', async (req, res) => {
       updateData.intrusiveness = intrusiveness;
     }
 
-    // Fetch existing doc to detect newly set authorisation (for requester notification email) and Fibre ID approval (for sample submitter email)
+    // Fetch existing doc to detect newly set assessment report authorisation (requester email) and Fibre ID approval (sample submitter email)
     const existing = await AsbestosAssessment.findById(req.params.id)
       .select('reportAuthorisedBy reportApprovedBy authorisationRequestedBy')
       .lean();
@@ -386,24 +500,26 @@ router.put('/:id', async (req, res) => {
     
     if (!job) return res.status(404).json({ message: 'Assessment job not found' });
 
-    // Send notification email to the user who requested authorisation when report is newly authorised
-    const wasAlreadyAuthorised = !!(existing && (existing.reportAuthorisedBy || existing.reportApprovedBy));
-    const nowAuthorised = !!(job.reportAuthorisedBy || job.reportApprovedBy);
-    if (existing && !wasAlreadyAuthorised && nowAuthorised && job.authorisationRequestedBy) {
+    // Assessment report authorisation: notify the user who requested authorisation (separate from Fibre ID approval)
+    const assessmentReportWasAuthorised = !!(existing && existing.reportAuthorisedBy);
+    const assessmentReportNowAuthorised = !!job.reportAuthorisedBy;
+    if (existing && !assessmentReportWasAuthorised && assessmentReportNowAuthorised && job.authorisationRequestedBy) {
       try {
         const requester = await User.findById(job.authorisationRequestedBy)
           .select('firstName lastName email');
         if (requester && requester.email) {
           const projectName = job.projectId?.name || 'Unknown Project';
           const projectID = job.projectId?.projectID || 'N/A';
-          const approverName = job.reportAuthorisedBy || job.reportApprovedBy || 'Unknown';
+          const approverName = job.reportAuthorisedBy || 'Unknown';
           const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-          const jobUrl = `${frontendUrl}/surveys/asbestos-assessment`;
+          const surveyPath = job.jobType === 'residential-asbestos' ? 'residential-asbestos' : 'asbestos-assessment';
+          const reportLabel = job.jobType === 'residential-asbestos' ? 'Residential Asbestos Assessment' : 'Asbestos Assessment';
+          const jobUrl = `${frontendUrl}/surveys/${surveyPath}`;
           await sendMail({
             to: requester.email,
-            subject: `Report Authorised - ${projectID}: Asbestos Assessment / Fibre ID Report`,
+            subject: `Report Authorised - ${projectID}: ${reportLabel} Report`,
             text: `
-The Asbestos Assessment / Fibre ID report you requested for authorisation has been authorised.
+The ${reportLabel} report you requested for authorisation has been authorised.
 
 Project: ${projectName} (${projectID})
 Authorised by: ${approverName}
@@ -414,12 +530,11 @@ View the report at: ${jobUrl}
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
                 <div style="margin-bottom: 30px;">
                   <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
-                  <p style="color: #666; font-size: 16px; margin: 10px 0 0 0;">Environmental Services</p>
                 </div>
                 <div style="color: #333; line-height: 1.6;">
                   <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Report Authorised</h2>
                   <p>Hello ${requester.firstName},</p>
-                  <p>The Asbestos Assessment / Fibre ID report you requested for authorisation has been authorised:</p>
+                  <p>The ${reportLabel} report you requested for authorisation has been authorised:</p>
                   <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
                     <p style="margin: 5px 0;"><strong>Project:</strong> ${projectName}</p>
                     <p style="margin: 5px 0;"><strong>Project ID:</strong> ${projectID}</p>
@@ -467,7 +582,6 @@ You can view the assessment and Fibre ID report at: ${jobUrl}
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
                 <div style="margin-bottom: 30px;">
                   <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
-                  <p style="color: #666; font-size: 16px; margin: 10px 0 0 0;">Environmental Services</p>
                 </div>
                 <div style="color: #333; line-height: 1.6;">
                   <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Samples Analysed</h2>
@@ -593,15 +707,17 @@ router.post('/:id/send-for-authorisation', auth, checkPermission('asbestos.edit'
     const projectName = assessment.projectId?.name || 'Unknown Project';
     const projectID = assessment.projectId?.projectID || 'N/A';
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const jobUrl = `${frontendUrl}/surveys/asbestos-assessment`;
+    const surveyPath = assessment.jobType === 'residential-asbestos' ? 'residential-asbestos' : 'asbestos-assessment';
+    const reportLabel = assessment.jobType === 'residential-asbestos' ? 'Residential Asbestos Assessment' : 'Asbestos Assessment';
+    const jobUrl = `${frontendUrl}/surveys/${surveyPath}`;
 
     const emailPromises = reportProoferUsers.map(async (user) => {
       try {
         await sendMail({
           to: user.email,
-          subject: `Report Authorisation Required - ${projectID}: Asbestos Assessment Report`,
+          subject: `Report Authorisation Required - ${projectID}: ${reportLabel} Report`,
           text: `
-An Asbestos Assessment report is ready for authorisation.
+A ${reportLabel} report is ready for authorisation.
 
 Project: ${projectName} (${projectID})
 Requested by: ${requesterName}
@@ -612,12 +728,11 @@ Please review and authorise the report at: ${jobUrl}
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
               <div style="margin-bottom: 30px;">
                 <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
-                <p style="color: #666; font-size: 16px; margin: 10px 0 0 0;">Environmental Services</p>
               </div>
               <div style="color: #333; line-height: 1.6;">
                 <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Report Authorisation Required</h2>
                 <p>Hello ${user.firstName},</p>
-                <p>An Asbestos Assessment report is ready for your authorisation:</p>
+                <p>A ${reportLabel} report is ready for your authorisation:</p>
                 <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
                   <p style="margin: 5px 0;"><strong>Project:</strong> ${projectName}</p>
                   <p style="margin: 5px 0;"><strong>Project ID:</strong> ${projectID}</p>
@@ -928,6 +1043,155 @@ router.patch('/:id/items/:itemId/photos/:photoId/description', async (req, res) 
     res.json({ message: 'Photo description updated successfully', item });
   } catch (err) {
     console.error('Error updating photo description:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// Ensure photo has arrows array (migrate legacy single arrow only if it has a real position)
+function ensureArrowsArray(photo) {
+  if (!photo.arrows) {
+    photo.arrows = [];
+  }
+  const leg = photo.arrow;
+  if (leg != null && typeof leg === 'object') {
+    const hasPosition = leg.x != null || leg.y != null;
+    if (hasPosition) {
+      photo.arrows.push({
+        x: leg.x ?? 0.5,
+        y: leg.y ?? 0.5,
+        rotation: leg.rotation ?? 0,
+        color: leg.color,
+      });
+    }
+    delete photo.arrow;
+  }
+}
+
+// POST /api/assessments/:id/items/:itemId/photos/:photoId/arrows - add arrow
+router.post('/:id/items/:itemId/photos/:photoId/arrows', async (req, res) => {
+  try {
+    const { x, y, rotation, color } = req.body;
+
+    const job = await AsbestosAssessment.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+
+    const item = job.items.id(req.params.itemId);
+    if (!item) return res.status(404).json({ message: 'Assessment item not found' });
+
+    const photo = item.photographs.id(req.params.photoId);
+    if (!photo) return res.status(404).json({ message: 'Photo not found' });
+
+    ensureArrowsArray(photo);
+    photo.arrows.push({
+      x: typeof x === 'number' ? x : 0.5,
+      y: typeof y === 'number' ? y : 0.5,
+      rotation: typeof rotation === 'number' ? rotation : -45,
+      color: color || '#f44336',
+    });
+    item.updatedAt = new Date();
+    await job.save();
+
+    res.status(201).json({ message: 'Arrow added', item });
+  } catch (err) {
+    console.error('Error adding arrow:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// PATCH /api/assessments/:id/items/:itemId/photos/:photoId/arrows/:arrowId - update one arrow
+router.patch('/:id/items/:itemId/photos/:photoId/arrows/:arrowId', async (req, res) => {
+  try {
+    const { x, y, rotation, color } = req.body;
+    const { arrowId } = req.params;
+
+    const job = await AsbestosAssessment.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+
+    const item = job.items.id(req.params.itemId);
+    if (!item) return res.status(404).json({ message: 'Assessment item not found' });
+
+    const photo = item.photographs.id(req.params.photoId);
+    if (!photo) return res.status(404).json({ message: 'Photo not found' });
+
+    ensureArrowsArray(photo);
+    const arrow = photo.arrows.id(arrowId);
+    if (!arrow) return res.status(404).json({ message: 'Arrow not found' });
+
+    if (typeof x === 'number') arrow.x = x;
+    if (typeof y === 'number') arrow.y = y;
+    if (typeof rotation === 'number') arrow.rotation = rotation;
+    if (color !== undefined) arrow.color = color;
+
+    item.updatedAt = new Date();
+    await job.save();
+
+    res.json({ message: 'Arrow updated', item });
+  } catch (err) {
+    console.error('Error updating arrow:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// DELETE /api/assessments/:id/items/:itemId/photos/:photoId/arrows/:arrowId - delete one arrow
+router.delete('/:id/items/:itemId/photos/:photoId/arrows/:arrowId', async (req, res) => {
+  try {
+    const job = await AsbestosAssessment.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+
+    const item = job.items.id(req.params.itemId);
+    if (!item) return res.status(404).json({ message: 'Assessment item not found' });
+
+    const photo = item.photographs.id(req.params.photoId);
+    if (!photo) return res.status(404).json({ message: 'Photo not found' });
+
+    ensureArrowsArray(photo);
+    const arrow = photo.arrows.id(req.params.arrowId);
+    if (!arrow) return res.status(404).json({ message: 'Arrow not found' });
+
+    photo.arrows.pull(req.params.arrowId);
+    item.updatedAt = new Date();
+    await job.save();
+
+    res.json({ message: 'Arrow deleted', item });
+  } catch (err) {
+    console.error('Error deleting arrow:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// PATCH /api/assessments/:id/items/:itemId/photos/:photoId/arrow - legacy: set/remove single arrow (now maps to arrows array)
+router.patch('/:id/items/:itemId/photos/:photoId/arrow', async (req, res) => {
+  try {
+    const { x, y, rotation, color, arrow } = req.body;
+
+    const job = await AsbestosAssessment.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+
+    const item = job.items.id(req.params.itemId);
+    if (!item) return res.status(404).json({ message: 'Assessment item not found' });
+
+    const photo = item.photographs.id(req.params.photoId);
+    if (!photo) return res.status(404).json({ message: 'Photo not found' });
+
+    ensureArrowsArray(photo);
+    if (arrow === null) {
+      photo.arrows = [];
+      delete photo.arrow;
+    } else if (x !== undefined || y !== undefined || rotation !== undefined || color !== undefined) {
+      const existing = photo.arrows[0] || {};
+      photo.arrows = [{
+        x: typeof x === 'number' ? x : (existing.x ?? 0.5),
+        y: typeof y === 'number' ? y : (existing.y ?? 0.5),
+        rotation: typeof rotation === 'number' ? rotation : (existing.rotation ?? -45),
+        color: color !== undefined ? color : (existing.color || '#f44336'),
+      }];
+    }
+    item.updatedAt = new Date();
+    await job.save();
+
+    res.json({ message: 'Photo arrow updated successfully', item });
+  } catch (err) {
+    console.error('Error updating photo arrow:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });

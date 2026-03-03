@@ -1736,11 +1736,11 @@ const ClientSuppliedFibreCountAnalysis = () => {
                     onChange={handleAnalysisDetailsChange}
                   >
                     <FormControlLabel
-                      value="partial 5"
+                      value="5"
                       control={<Radio />}
-                      label="Partial 5"
+                      label="5"
                     />
-                    <FormControlLabel value="6" control={<Radio />} label="6" />
+                    <FormControlLabel value="Partial 6" control={<Radio />} label="Partial 6" />
                   </RadioGroup>
                 </FormControl>
               </Stack>

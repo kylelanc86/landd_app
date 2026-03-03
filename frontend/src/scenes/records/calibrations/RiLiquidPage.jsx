@@ -24,6 +24,8 @@ import {
   MenuItem,
   Alert,
   Stack,
+  Breadcrumbs,
+  Link,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -423,28 +425,44 @@ const RiLiquidPage = () => {
     }
   };
 
+  const handleBackToCalibrations = () => {
+    navigate("/records/laboratory/calibrations/list");
+  };
+
+  const handleBackToRecords = () => {
+    navigate("/records?view=laboratory");
+  };
+
   return (
     <Box m="20px">
-      <Box display="flex" alignItems="center" mb="20px">
-        <IconButton
-          onClick={() => navigate("/records/laboratory/calibrations/list")}
-        >
-          <ArrowBackIcon />
-        </IconButton>
-        <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
-          RI Liquid Calibrations
-        </Typography>
-      </Box>
-
       <Box
         display="flex"
         justifyContent="space-between"
         alignItems="center"
+        flexWrap="wrap"
+        gap={2}
         mb="20px"
       >
-        <Typography variant="h5" component="h2">
-          Active RI Liquid Bottles
-        </Typography>
+        <Breadcrumbs>
+          <Link
+            component="button"
+            variant="body1"
+            onClick={handleBackToRecords}
+            sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
+          >
+            <ArrowBackIcon sx={{ mr: 1 }} />
+            Laboratory Records
+          </Link>
+          <Link
+            component="button"
+            variant="body1"
+            onClick={handleBackToCalibrations}
+            sx={{ cursor: "pointer" }}
+          >
+            Calibrations
+          </Link>
+  
+        </Breadcrumbs>
         <Box display="flex" gap={2}>
           <Button
             variant="outlined"
@@ -465,6 +483,14 @@ const RiLiquidPage = () => {
           </Button>
         </Box>
       </Box>
+      <Typography color="text.primary" variant="h4" mb="20px" component="h1">
+            RI Liquid Calibrations
+          </Typography>
+      <Box mb="20px">
+        <Typography variant="h6" component="h2">
+          Active RI Liquid Bottles
+        </Typography>
+      </Box>
 
       {loading ? (
         <Box display="flex" justifyContent="center" alignItems="center" p={4}>
@@ -477,6 +503,7 @@ const RiLiquidPage = () => {
               <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
                 <TableCell>Bottle ID</TableCell>
                 <TableCell>Date Opened</TableCell>
+                <TableCell>Calibration Date</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Next Calibration Due</TableCell>
                 <TableCell>Actions</TableCell>
@@ -485,7 +512,7 @@ const RiLiquidPage = () => {
             <TableBody>
               {calibrations.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} align="center">
+                  <TableCell colSpan={6} align="center">
                     <Typography variant="body2" color="text.secondary">
                       No calibrations found
                     </Typography>
@@ -499,6 +526,11 @@ const RiLiquidPage = () => {
                       <TableCell>
                         {calibration.dateOpened
                           ? formatDate(calibration.dateOpened)
+                          : "-"}
+                      </TableCell>
+                      <TableCell>
+                        {calibration.date
+                          ? formatDate(calibration.date)
                           : "-"}
                       </TableCell>
                       <TableCell>

@@ -141,7 +141,8 @@ const shiftSchema = new mongoose.Schema({
           enum: ['sampling_point', 'equipment', 'access_point', 'other'],
           default: 'sampling_point'
         },
-        description: { type: String }
+        description: { type: String },
+        sampleNumber: { type: String }
       }],
       bounds: {
         north: { type: Number },

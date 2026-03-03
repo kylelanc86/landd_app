@@ -201,14 +201,14 @@ const projectStatusService = {
         ];
         
         const databaseColors = allStatusObjects.reduce((acc, status) => {
-          if (status.text && status.statusColor) {
-            acc[status.text] = status.statusColor;
+          if (status.text) {
+            acc[status.text] = status.statusColor || '#1976d2';
           }
           return acc;
         }, {});
         
-        // Update hardcoded colors to match database
-        hardcodedStatusColors = { ...hardcodedStatusColors, ...databaseColors };
+        // Replace hardcoded colors with DB so deleted statuses are removed
+        hardcodedStatusColors = { ...databaseColors };
         
         // Store in localStorage
         try {
@@ -238,6 +238,13 @@ const projectStatusService = {
       }
     } catch (error) {
       console.warn('Failed to load status colors from localStorage:', error);
+    }
+  },
+
+  // Replace in-memory colors from an object (e.g. from storage event in another tab). Does not write to localStorage.
+  setHardcodedColorsFromStorage(colorsObj) {
+    if (colorsObj && typeof colorsObj === 'object') {
+      hardcodedStatusColors = { ...colorsObj };
     }
   }
 };

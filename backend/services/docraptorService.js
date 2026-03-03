@@ -4,6 +4,45 @@ class DocRaptorService {
   constructor() {
     this.apiKey = process.env.DOCRAPTOR_API_KEY;
     this.apiUrl = 'https://docraptor.com/docs';
+    this.statusUrl = 'https://docraptor.com/status';
+  }
+
+  _authHeader() {
+    if (!this.apiKey) {
+      throw new Error('DOCRAPTOR_API_KEY environment variable is not set');
+    }
+    return {
+      'Authorization': `Basic ${Buffer.from(this.apiKey + ':').toString('base64')}`
+    };
+  }
+
+  _buildRequestBody(htmlContent, options = {}) {
+    const cleanedHtml = htmlContent
+      .replace(/file:\/\/[^\s"']+/g, '')
+      .replace(/src="\/frontend\/public\/[^"]*"/g, 'src=""');
+    return {
+      document_content: cleanedHtml,
+      document_type: 'pdf',
+      test: process.env.NODE_ENV === 'development',
+      security: {
+        no_copy: true,
+        no_print: false,
+        no_modify: false,
+        no_annotations: false
+      },
+      page_size: 'A4',
+      page_margin: '0in',
+      css: `
+        @page { size: A4; margin: 0; }
+        body { margin: 0; padding: 0; font-family: "Gothic", Arial, sans-serif; width: 100%; height: 100%; }
+        .page { page-break-after: always; margin: 0; padding: 0; width: 100%; height: 100%; position: relative; }
+        .page:last-child { page-break-after: avoid; }
+      `,
+      header_html: null,
+      footer_html: null,
+      javascript: false,
+      ...options
+    };
   }
 
   /**
@@ -21,7 +60,7 @@ class DocRaptorService {
       // DocRaptor sync generation limit is 60s; allow 90s+ for upload/download on slow connections
       const { timeoutMs: optionsTimeout, ...docraptorOptions } = options;
       const envTimeout = parseInt(process.env.DOCRAPTOR_TIMEOUT_MS, 10);
-      const timeoutMs = optionsTimeout != null ? optionsTimeout : (isNaN(envTimeout) ? 90000 : envTimeout);
+      const timeoutMs = optionsTimeout != null ? optionsTimeout : (isNaN(envTimeout) ? 130000 : envTimeout);
 
       // Clean HTML content to remove only problematic file system references
       const cleanedHtml = htmlContent
@@ -74,6 +113,8 @@ class DocRaptorService {
         javascript: false, // Disable JavaScript for better compatibility
         ...docraptorOptions
       };
+
+      // Add timeout to prevent hanging (130s allows DocRaptor + slow connections)
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -157,6 +198,71 @@ class DocRaptorService {
       console.error('DocRaptor connection test failed:', error);
       return false;
     }
+  }
+
+  /**
+   * Start async PDF generation. Returns a status_id to poll for completion.
+   * @param {string} htmlContent - The HTML content to convert
+   * @param {Object} options - Same options as generatePDF (page_size, prince_options, etc.)
+   * @returns {Promise<{ status_id: string }>}
+   */
+  async createAsyncDocument(htmlContent, options = {}) {
+    const requestBody = this._buildRequestBody(htmlContent, {
+      ...options,
+      async: true
+    });
+    const response = await fetch(this.apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...this._authHeader()
+      },
+      body: JSON.stringify(requestBody)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('DocRaptor async API error:', response.status, errorText);
+      throw new Error(`DocRaptor API error: ${response.status} - ${errorText}`);
+    }
+    const json = await response.json();
+    if (!json.status_id) {
+      throw new Error('DocRaptor did not return a status_id');
+    }
+    return { status_id: json.status_id };
+  }
+
+  /**
+   * Get status of an async document.
+   * @param {string} statusId - From createAsyncDocument response
+   * @returns {Promise<{ status: string, download_url?: string, message?: string, validation_errors?: string, number_of_pages?: number }>}
+   */
+  async getStatus(statusId) {
+    const url = `${this.statusUrl}/${statusId}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: this._authHeader()
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`DocRaptor status API error: ${response.status} - ${errorText}`);
+    }
+    return response.json();
+  }
+
+  /**
+   * Fetch the PDF buffer from DocRaptor's download URL (after status is completed).
+   * @param {string} downloadUrl - From getStatus when status is 'completed'
+   * @returns {Promise<Buffer>}
+   */
+  async fetchDocument(downloadUrl) {
+    const response = await fetch(downloadUrl, {
+      method: 'GET',
+      headers: this._authHeader()
+    });
+    if (!response.ok) {
+      throw new Error(`DocRaptor download failed: ${response.status}`);
+    }
+    return response.buffer();
   }
 }
 

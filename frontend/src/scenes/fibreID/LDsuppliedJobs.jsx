@@ -29,10 +29,11 @@ import {
   Mail as MailIcon,
   Add as AddIcon,
   Delete as DeleteIcon,
+  CheckCircle as CheckCircleIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import { asbestosAssessmentService, clientSuppliedJobsService, projectService } from "../../services/api";
-import { getTodayInSydney } from "../../utils/dateUtils";
+import { getTodayInSydney, formatDateInSydney } from "../../utils/dateUtils";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
@@ -82,6 +83,7 @@ const LDsuppliedJobs = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [jobToDelete, setJobToDelete] = useState(null);
   const [reportViewedJobIds, setReportViewedJobIds] = useState(new Set());
+  const [closingJobIds, setClosingJobIds] = useState({});
 
   useEffect(() => {
     fetchAsbestosAssessments();
@@ -142,7 +144,7 @@ const LDsuppliedJobs = () => {
     try {
       setLoading(true);
       // Fetch all asbestos assessments
-      const response = await asbestosAssessmentService.getAsbestosAssessments();
+      const response = await asbestosAssessmentService.getAsbestosAssessments({ list: 1 });
 
       // Show only L&D supplied assessments where sample submission was confirmed (samplesReceivedDate set)
       const allAssessments = response.data || [];
@@ -738,6 +740,21 @@ const LDsuppliedJobs = () => {
     setJobToDelete(null);
   };
 
+  const handleCloseJob = async (job) => {
+    if (!job?._id) return;
+    try {
+      setClosingJobIds((prev) => ({ ...prev, [job._id]: true }));
+      await clientSuppliedJobsService.archive(job._id);
+      await fetchStandaloneLDJobs();
+      showSnackbar("Job closed and removed from list.", "success");
+    } catch (error) {
+      console.error("Error closing job:", error);
+      showSnackbar(error.response?.data?.message || "Failed to close job.", "error");
+    } finally {
+      setClosingJobIds((prev) => ({ ...prev, [job._id]: false }));
+    }
+  };
+
   const getAnalysisDueTime = (assessment) => {
     let dueDate;
 
@@ -924,7 +941,7 @@ const LDsuppliedJobs = () => {
                   <TableCell sx={{ fontWeight: "bold", maxWidth: "80px", color: "inherit" }}>
                     Project ID
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", minWidth: "240px", color: "inherit" }}>
+                  <TableCell sx={{ fontWeight: "bold", minWidth: "160px", color: "inherit" }}>
                     Project Name
                   </TableCell>
                   <TableCell sx={{ fontWeight: "bold", maxWidth: "105px", color: "inherit" }}>
@@ -933,7 +950,7 @@ const LDsuppliedJobs = () => {
                   <TableCell sx={{ fontWeight: "bold", maxWidth: "70px", color: "inherit" }}>
                     No. of Samples
                   </TableCell>
-                  <TableCell sx={{ fontWeight: "bold", maxWidth: "80px", color: "inherit" }}>
+                  <TableCell sx={{ fontWeight: "bold", maxWidth: "70px", color: "inherit" }}>
                     Status
                   </TableCell>
                   <TableCell sx={{ fontWeight: "bold", Width: "110px", color: "inherit" }}>
@@ -943,6 +960,7 @@ const LDsuppliedJobs = () => {
                     sx={{
                       fontWeight: "bold",
                       width: "1%",
+                      minWidth: "300px",
                       whiteSpace: "nowrap",
                       color: "inherit",
                     }}
@@ -996,26 +1014,23 @@ const LDsuppliedJobs = () => {
                         <TableCell>
                           <Typography variant="body2" sx={{ fontWeight: "bold" }}>
                             {assessment.samplesReceivedDate
-                              ? new Date(
+                              ? formatDateInSydney(
                                   assessment.samplesReceivedDate,
-                                ).toLocaleDateString("en-GB", {
-                                  day: "2-digit",
-                                  month: "2-digit",
-                                  year: "numeric",
-                                })
+                                )
                               : "—"}
                           </Typography>
                         </TableCell>
                         <TableCell>
                           <Typography
                             variant="body2"
+                            maxWidth="70px"
                             sx={{ fontWeight: "bold" }}
                           >
                             {sampleCount}
                           </Typography>
                         </TableCell>
-                        <TableCell sx={{ maxWidth: "160px" }}>
-                          <Chip
+<TableCell maxWidth="120px">
+                        <Chip
                             label={getLabStatusLabel(labStatus)}
                             color={getLabStatusColor(labStatus)}
                             size="small"
@@ -1024,9 +1039,8 @@ const LDsuppliedJobs = () => {
                         </TableCell>
                         <TableCell sx={{ maxWidth: "100px" }}>
                           <Typography
-                            variant="body2"
+                            fontSize="0.8rem"                            
                             sx={{
-                              fontWeight: "bold",
                               color: getAnalysisDueColor(assessment),
                             }}
                           >
@@ -1035,7 +1049,7 @@ const LDsuppliedJobs = () => {
                         </TableCell>
                         <TableCell
                           onClick={(e) => e.stopPropagation()}
-                          sx={{ width: "1%", minWidth: "200px" }}
+                          sx={{ width: "1%", minWidth: "300px" }}
                         >
                           <Box
                             sx={{
@@ -1098,9 +1112,11 @@ const LDsuppliedJobs = () => {
                                 <Typography
                                   variant="caption"
                                   sx={{
-                                    color: "text.secondary",
+                                    color: "success.main",
                                     fontStyle: "italic",
-                                    maxWidth: "280px",
+                                    fontSize: "0.7rem",
+                                    mt: 0.5,
+                                    ml: 0.5,
                                   }}
                                 >
                                   Approved
@@ -1240,7 +1256,7 @@ const LDsuppliedJobs = () => {
                           {job.samples?.length || 0}
                         </Typography>
                       </TableCell>
-                      <TableCell sx={{ maxWidth: "160px" }}>
+                      <TableCell sx={{ maxWidth: "120px" }}>
                         <Chip
                           label={job.status || "In Progress"}
                           color={
@@ -1270,7 +1286,7 @@ const LDsuppliedJobs = () => {
                       </TableCell>
                       <TableCell
                         onClick={(e) => e.stopPropagation()}
-                        sx={{ width: "1%", minWidth: "200px" }}
+                        sx={{ width: "1%", minWidth: "300px" }}
                       >
                         <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "flex-start" }}>
                           <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
@@ -1296,6 +1312,14 @@ const LDsuppliedJobs = () => {
                                 sx={{ color: "error.main", fontSize: "0.7rem", mt: 0.5, ml: 0.5 }}
                               >
                                 Not approved
+                              </Typography>
+                            )}
+                            {job.reportApprovedBy && (
+                              <Typography
+                                variant="caption"
+                                sx={{ color: "success.main", fontStyle: "italic", fontSize: "0.7rem", mt: 0.5, ml: 0.5 }}
+                              >
+                                Approved
                               </Typography>
                             )}
                           </Box>
@@ -1335,32 +1359,49 @@ const LDsuppliedJobs = () => {
                                   </Button>
                                 )}
                                 {visibility.showSend && (
-                                  <Button
-                                    variant="outlined"
-                                    size="small"
-                                    color={conditions.alreadySentForAuthorisation ? "inherit" : "primary"}
-                                    startIcon={<MailIcon />}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleSendForAuthorisationForJob(job);
-                                    }}
-                                    disabled={sendingAuthorisationRequests[job._id]}
-                                    sx={
-                                      conditions.alreadySentForAuthorisation
-                                        ? { color: "text.secondary", borderColor: "action.disabled" }
-                                        : undefined
-                                    }
-                                  >
-                                    {sendingAuthorisationRequests[job._id]
-                                      ? "Sending..."
-                                      : conditions.alreadySentForAuthorisation
-                                        ? "Re-send for Authorisation"
-                                        : "Send for Authorisation"}
-                                  </Button>
-                                )}
-                              </>
-                            );
-                          })()}
+                                    <Button
+                                      variant="outlined"
+                                      size="small"
+                                      color={conditions.alreadySentForAuthorisation ? "inherit" : "primary"}
+                                      startIcon={<MailIcon />}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleSendForAuthorisationForJob(job);
+                                      }}
+                                      disabled={sendingAuthorisationRequests[job._id]}
+                                      sx={
+                                        conditions.alreadySentForAuthorisation
+                                          ? { color: "text.secondary", borderColor: "action.disabled" }
+                                          : undefined
+                                      }
+                                    >
+                                      {sendingAuthorisationRequests[job._id]
+                                        ? "Sending..."
+                                        : conditions.alreadySentForAuthorisation
+                                          ? "Re-send for Authorisation"
+                                          : "Send for Authorisation"}
+                                    </Button>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          {job.reportApprovedBy && hasPermission(currentUser, "clientSup.edit") && (
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              color="primary"
+                              startIcon={<CheckCircleIcon />}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCloseJob(job);
+                              }}
+                              disabled={closingJobIds[job._id]}
+                              sx={{ textTransform: "none" }}
+                              title="Remove job from this list (archive)"
+                            >
+                              {closingJobIds[job._id] ? "Closing..." : "Close Job"}
+                            </Button>
+                          )}
                           {hasPermission(currentUser, "clientSup.delete") && (
                             <IconButton
                               onClick={(e) => {

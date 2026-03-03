@@ -44,7 +44,7 @@ import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import DescriptionIcon from "@mui/icons-material/Description";
 import { sampleService, shiftService } from "../../services/api";
 import asbestosRemovalJobService from "../../services/asbestosRemovalJobService";
-import { formatDate, formatTime } from "../../utils/dateUtils";
+import { formatDate, formatDateInSydney, formatTime } from "../../utils/dateUtils";
 import PermissionGate from "../../components/PermissionGate";
 import { useAuth } from "../../context/AuthContext";
 import SitePlanMap from "../../components/SitePlanMap";
@@ -826,7 +826,7 @@ const SampleList = () => {
       {isReportAuthorized && (
         <Alert severity="warning" sx={{ mb: 3 }}>
           This report was finalised by {shift.reportApprovedBy} on{" "}
-          {formatDate(shift.reportIssueDate)}. Contact admin if shift data needs
+          {formatDateInSydney(shift.reportIssueDate)}. Contact admin if shift data needs
           revision.
         </Alert>
       )}

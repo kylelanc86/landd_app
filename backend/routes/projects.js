@@ -165,7 +165,8 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
       sortOrder = 'desc',
       search,
       department,
-      status
+      status,
+      userId: userFilter
     } = req.query;
 
     // Get status arrays from custom data fields
@@ -177,6 +178,17 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
     // Add department filter if specified
     if (department && department !== 'all') {
       query.department = department;
+    }
+
+    // Add user filter: only projects where this user is in the users (assigned) array
+    if (userFilter && userFilter !== 'all') {
+      const mongoose = require('mongoose');
+      const oid = mongoose.Types.ObjectId.isValid(userFilter) && String(userFilter).length === 24
+        ? new mongoose.Types.ObjectId(userFilter)
+        : null;
+      if (oid) {
+        query.users = oid;
+      }
     }
 
     // Handle status filtering

@@ -9,6 +9,7 @@ const Sample = require("../models/Sample");
 const AsbestosClearance = require("../models/clearanceTemplates/asbestos/AsbestosClearance");
 const auth = require("../middleware/auth");
 const checkPermission = require("../middleware/checkPermission");
+const { formatDateSydney } = require("../utils/dateUtils");
 
 const escapeCsvCell = (value) => {
   if (value === null || value === undefined) return "";
@@ -17,8 +18,7 @@ const escapeCsvCell = (value) => {
 
 const formatDate = (dateStr) => {
   if (!dateStr) return "";
-  const d = new Date(dateStr);
-  return d.toLocaleDateString("en-AU");
+  return formatDateSydney(dateStr);
 };
 
 const formatPersonName = (value) => {
@@ -676,7 +676,7 @@ router.get(
         clearances = await AsbestosClearance.find({
           asbestosRemovalJobId: job._id,
         })
-          .select("_id projectId clearanceDate clearanceType status inspectionTime asbestosRemovalist LAA jurisdiction secondaryHeader vehicleEquipmentDescription notes useComplexTemplate jobSpecificExclusions reportApprovedBy reportIssueDate reportViewedAt authorisationRequestedBy")
+          .select("_id projectId clearanceDate clearanceType status inspectionTime asbestosRemovalist LAA jurisdiction secondaryHeader vehicleEquipmentDescription notes useComplexTemplate jobSpecificExclusions reportApprovedBy reportIssueDate reportViewedAt authorisationRequestedBy pdfDownloadUrl pdfJobId pdfReadyAt pdfFilename")
           .populate({
             path: "projectId",
             select: "projectID name",
@@ -800,7 +800,7 @@ router.get(
       const clearances = await AsbestosClearance.find({
         asbestosRemovalJobId: req.params.id,
       })
-        .select("_id projectId clearanceDate clearanceType status inspectionTime asbestosRemovalist LAA jurisdiction secondaryHeader vehicleEquipmentDescription notes useComplexTemplate jobSpecificExclusions reportApprovedBy reportIssueDate")
+        .select("_id projectId clearanceDate clearanceType status inspectionTime asbestosRemovalist LAA jurisdiction secondaryHeader vehicleEquipmentDescription notes useComplexTemplate jobSpecificExclusions reportApprovedBy reportIssueDate reportViewedAt authorisationRequestedBy pdfDownloadUrl pdfJobId pdfReadyAt pdfFilename")
         .populate({
           path: "projectId",
           select: "projectID name",
