@@ -816,14 +816,9 @@ const ResidentialAsbestosAssessment = () => {
     }
   };
 
-  // True when a PDF exists and assessment was not updated after it was generated (safe to just download).
-  const hasRetainedValidPdf = (job) => {
-    const pdfReadyAt = job.pdfReadyAt || job.originalData?.pdfReadyAt;
-    if (!pdfReadyAt) return false;
-    const updatedAt = job.updatedAt ?? job.originalData?.updatedAt;
-    if (!updatedAt) return true; // no updatedAt → assume PDF still valid, try download
-    return new Date(updatedAt) <= new Date(pdfReadyAt);
-  };
+  // True when a retained PDF exists (backend clears PDF fields when content changes, so presence = current).
+  const hasRetainedValidPdf = (job) =>
+    Boolean(job.pdfReadyAt || job.originalData?.pdfReadyAt || job.pdfFilename || job.originalData?.pdfFilename);
 
   const handleDownloadOrGenerateAssessmentReport = async (event, job) => {
     event.stopPropagation();

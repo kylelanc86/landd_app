@@ -16,6 +16,11 @@ function isAssessmentPdfExpired(pdfReadyAt) {
   return Date.now() - new Date(pdfReadyAt).getTime() > ASSESSMENT_PDF_RETENTION_MS;
 }
 
+/** Clear persisted PDF fields when assessment content changes so the UI shows Generate instead of Download. */
+function clearAssessmentPdfFields(doc) {
+  doc.$unset({ pdfBuffer: 1, pdfReadyAt: 1, pdfFilename: 1 });
+}
+
 // GET /api/assessments - list all assessment jobs (populate project and assessor); excludes archived
 // Query param jobType: 'asbestos-assessment' | 'residential-asbestos' - when set, only jobs of that type are returned
 // Query param list=1 - return minimal fields for table display (no full items, photos, blobs); faster and smaller payload
@@ -480,6 +485,8 @@ router.put('/:id', async (req, res) => {
       updateData.intrusiveness = intrusiveness;
     }
 
+    updateData.$unset = { pdfBuffer: 1, pdfReadyAt: 1, pdfFilename: 1 };
+
     // Fetch existing doc to detect newly set assessment report authorisation (requester email) and Fibre ID approval (sample submitter email)
     const existing = await AsbestosAssessment.findById(req.params.id)
       .select('reportAuthorisedBy reportApprovedBy authorisationRequestedBy')
@@ -796,6 +803,7 @@ router.post('/:id/items', async (req, res) => {
       job.status = 'in-progress';
     }
     job.items.push(req.body);
+    clearAssessmentPdfFields(job);
     await job.save();
     res.status(201).json(job.items[job.items.length - 1]);
   } catch (err) {
@@ -831,6 +839,7 @@ router.put('/:id/items/:itemId', async (req, res) => {
       }
     }
 
+    clearAssessmentPdfFields(job);
     await job.save();
     res.json(item);
   } catch (err) {
@@ -866,6 +875,7 @@ router.patch('/:id/status', async (req, res) => {
     
     job.status = status;
     job.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
     
     res.json(job);
@@ -881,6 +891,7 @@ router.patch('/:id/ready-for-analysis', async (req, res) => {
     if (!job) return res.status(404).json({ message: 'Assessment job not found' });
     job.status = "samples-with-lab"; // Updated to use new status
     job.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
     
     res.json(job);
@@ -900,6 +911,7 @@ router.patch('/:id/items/:itemId/ready-for-analysis', async (req, res) => {
     
     item.readyForAnalysis = readyForAnalysis;
     item.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
     
     res.json(item);
@@ -917,6 +929,7 @@ router.delete('/:id/items/:itemId', async (req, res) => {
     if (!item) return res.status(404).json({ message: 'Item not found' });
     // Use pull() to remove subdocument from array (recommended for Mongoose)
     job.items.pull(req.params.itemId);
+    clearAssessmentPdfFields(job);
     await job.save();
     res.json({ message: 'Item deleted' });
   } catch (err) {
@@ -961,6 +974,7 @@ router.post('/:id/items/:itemId/photos', async (req, res) => {
     });
 
     item.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
 
     res.status(201).json(item);
@@ -986,6 +1000,7 @@ router.delete('/:id/items/:itemId/photos/:photoId', async (req, res) => {
 
     item.photographs.splice(photoIndex, 1);
     item.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
 
     res.json({ message: 'Photo deleted successfully', item });
@@ -1011,6 +1026,7 @@ router.patch('/:id/items/:itemId/photos/:photoId/toggle', async (req, res) => {
 
     photo.includeInReport = !photo.includeInReport;
     item.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
 
     res.json({ message: 'Photo inclusion toggled successfully', item });
@@ -1038,6 +1054,7 @@ router.patch('/:id/items/:itemId/photos/:photoId/description', async (req, res) 
 
     photo.description = description !== undefined ? description : photo.description;
     item.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
 
     res.json({ message: 'Photo description updated successfully', item });
@@ -1089,6 +1106,7 @@ router.post('/:id/items/:itemId/photos/:photoId/arrows', async (req, res) => {
       color: color || '#f44336',
     });
     item.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
 
     res.status(201).json({ message: 'Arrow added', item });
@@ -1123,6 +1141,7 @@ router.patch('/:id/items/:itemId/photos/:photoId/arrows/:arrowId', async (req, r
     if (color !== undefined) arrow.color = color;
 
     item.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
 
     res.json({ message: 'Arrow updated', item });
@@ -1150,6 +1169,7 @@ router.delete('/:id/items/:itemId/photos/:photoId/arrows/:arrowId', async (req, 
 
     photo.arrows.pull(req.params.arrowId);
     item.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
 
     res.json({ message: 'Arrow deleted', item });
@@ -1187,6 +1207,7 @@ router.patch('/:id/items/:itemId/photos/:photoId/arrow', async (req, res) => {
       }];
     }
     item.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
 
     res.json({ message: 'Photo arrow updated successfully', item });
@@ -1221,6 +1242,7 @@ router.post('/:id/upload-analysis-certificate', async (req, res) => {
     job.analysisCertificate = true;
     job.analysisCertificateFile = fileData;
     job.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
 
     res.json({ message: 'Analysis certificate uploaded successfully', job });
@@ -1243,6 +1265,7 @@ router.post('/:id/upload-site-plan', async (req, res) => {
     job.sitePlan = true;
     job.sitePlanFile = fileData;
     job.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
 
     res.json({ message: 'Site plan uploaded successfully', job });
@@ -1286,6 +1309,7 @@ router.post('/:id/upload-fibre-analysis-report', async (req, res) => {
     
     job.fibreAnalysisReport = reportData;
     job.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     
     console.log('=== IMMEDIATELY BEFORE SAVE DEBUG ===');
     console.log('About to save - fibreAnalysisReport length:', job.fibreAnalysisReport.length);
@@ -1333,6 +1357,7 @@ router.delete('/:id/analysis-certificate', async (req, res) => {
     job.analysisCertificate = false;
     job.analysisCertificateFile = null;
     job.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
 
     res.json({ message: 'Analysis certificate deleted successfully', job });
@@ -1350,6 +1375,7 @@ router.delete('/:id/site-plan', async (req, res) => {
     job.sitePlan = false;
     job.sitePlanFile = null;
     job.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
 
     res.json({ message: 'Site plan deleted successfully', job });
@@ -1439,6 +1465,7 @@ router.put('/:id/items/:itemNumber/analysis', async (req, res) => {
     }
     
     assessment.updatedAt = new Date();
+    clearAssessmentPdfFields(assessment);
     await assessment.save();
     
     // Populate analysedBy before sending response

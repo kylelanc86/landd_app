@@ -9,6 +9,16 @@ const {
 const { getLegislationForReportTemplate } = require("../services/templateService");
 const { formatDateSydney } = require("../utils/dateUtils");
 
+/** Clear persisted PDF fields when clearance content changes so the UI shows Generate instead of Download. */
+function clearClearancePdfFields(clearance) {
+  clearance.$unset({
+    pdfDownloadUrl: 1,
+    pdfJobId: 1,
+    pdfReadyAt: 1,
+    pdfFilename: 1,
+  });
+}
+
 // Get all asbestos clearances with filtering and pagination
 router.get("/", auth, checkPermission("asbestos.view"), async (req, res) => {
   try {
@@ -323,6 +333,7 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
       clearance.reportViewedAt = reportViewedAt;
     }
 
+    clearClearancePdfFields(clearance);
     const updatedClearance = await clearance.save();
     
     const populatedClearance = await AsbestosClearance.findById(updatedClearance._id)
@@ -403,6 +414,7 @@ router.patch("/:id/status", auth, checkPermission("asbestos.edit"), async (req, 
     clearance.status = status;
     clearance.updatedBy = req.user.id;
 
+    clearClearancePdfFields(clearance);
     const updatedClearance = await clearance.save();
     
     const populatedClearance = await AsbestosClearance.findById(updatedClearance._id)
@@ -457,6 +469,7 @@ router.post("/:id/air-monitoring-report", auth, checkPermission("asbestos.edit")
       clearance.airMonitoringReports = [{ reportData, shiftDate, shiftId }];
     }
 
+    clearClearancePdfFields(clearance);
     const updatedClearance = await clearance.save();
     
     const populatedClearance = await AsbestosClearance.findById(updatedClearance._id)
@@ -674,6 +687,7 @@ router.post("/:id/items", auth, checkPermission("asbestos.edit"), async (req, re
     clearance.items.push(newItem);
     clearance.updatedBy = req.user.id;
 
+    clearClearancePdfFields(clearance);
     const updatedClearance = await clearance.save();
     
     const populatedClearance = await AsbestosClearance.findById(updatedClearance._id)
@@ -724,6 +738,7 @@ router.put("/:id/items/:itemId", auth, checkPermission("asbestos.edit"), async (
 
     clearance.updatedBy = req.user.id;
 
+    clearClearancePdfFields(clearance);
     const updatedClearance = await clearance.save();
     
     const populatedClearance = await AsbestosClearance.findById(updatedClearance._id)
@@ -761,6 +776,7 @@ router.delete("/:id/items/:itemId", auth, checkPermission("asbestos.edit"), asyn
     clearance.items.splice(itemIndex, 1);
     clearance.updatedBy = req.user.id;
 
+    clearClearancePdfFields(clearance);
     const updatedClearance = await clearance.save();
     
     const populatedClearance = await AsbestosClearance.findById(updatedClearance._id)
@@ -822,6 +838,7 @@ router.post("/:id/items/:itemId/photos", auth, checkPermission("asbestos.edit"),
     });
 
     clearance.updatedBy = req.user.id;
+    clearClearancePdfFields(clearance);
     await clearance.save();
 
     res.status(201).json(item);
@@ -851,6 +868,7 @@ router.delete("/:id/items/:itemId/photos/:photoId", auth, checkPermission("asbes
 
     item.photographs.splice(photoIndex, 1);
     clearance.updatedBy = req.user.id;
+    clearClearancePdfFields(clearance);
     await clearance.save();
 
     res.json({ message: "Photo deleted successfully", item });
@@ -880,6 +898,7 @@ router.patch("/:id/items/:itemId/photos/:photoId/toggle", auth, checkPermission(
 
     photo.includeInReport = !photo.includeInReport;
     clearance.updatedBy = req.user.id;
+    clearClearancePdfFields(clearance);
     await clearance.save();
 
     res.json({ message: "Photo inclusion toggled successfully", item });
@@ -911,6 +930,7 @@ router.patch("/:id/items/:itemId/photos/:photoId/description", auth, checkPermis
 
     photo.description = description !== undefined ? description : photo.description;
     clearance.updatedBy = req.user.id;
+    clearClearancePdfFields(clearance);
     await clearance.save();
 
     res.json({ message: "Photo description updated successfully", item });
@@ -954,6 +974,7 @@ router.post("/:id/items/:itemId/photos/:photoId/arrows", auth, checkPermission("
       color: color || "#f44336",
     });
     clearance.updatedBy = req.user.id;
+    clearClearancePdfFields(clearance);
     await clearance.save();
     res.status(201).json({ message: "Arrow added", item });
   } catch (err) {
@@ -979,6 +1000,7 @@ router.patch("/:id/items/:itemId/photos/:photoId/arrows/:arrowId", auth, checkPe
     if (typeof rotation === "number") arrow.rotation = rotation;
     if (color !== undefined) arrow.color = color;
     clearance.updatedBy = req.user.id;
+    clearClearancePdfFields(clearance);
     await clearance.save();
     res.json({ message: "Arrow updated", item });
   } catch (err) {
@@ -1000,6 +1022,7 @@ router.delete("/:id/items/:itemId/photos/:photoId/arrows/:arrowId", auth, checkP
     if (!arrow) return res.status(404).json({ message: "Arrow not found" });
     photo.arrows.pull(req.params.arrowId);
     clearance.updatedBy = req.user.id;
+    clearClearancePdfFields(clearance);
     await clearance.save();
     res.json({ message: "Arrow deleted", item });
   } catch (err) {
@@ -1031,6 +1054,7 @@ router.patch("/:id/items/:itemId/photos/:photoId/arrow", auth, checkPermission("
       }];
     }
     clearance.updatedBy = req.user.id;
+    clearClearancePdfFields(clearance);
     await clearance.save();
     res.json({ message: "Photo arrow updated successfully", item });
   } catch (err) {
@@ -1077,6 +1101,7 @@ router.post("/:id/authorise", auth, checkPermission("asbestos.edit"), async (req
     clearance.reportIssueDate = new Date();
     clearance.updatedBy = req.user.id;
 
+    clearClearancePdfFields(clearance);
     const updatedClearance = await clearance.save();
 
     // Send notification email to the user who requested authorisation

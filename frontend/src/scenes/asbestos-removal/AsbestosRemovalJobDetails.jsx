@@ -68,7 +68,6 @@ import {
   downloadClearancePDFByClearanceId,
 } from "../../utils/templatePDFGenerator";
 import { generateShiftReport } from "../../utils/generateShiftReport";
-import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
 import { useAuth } from "../../context/AuthContext";
 import { useUserLists } from "../../context/UserListsContext";
 import { formatDate } from "../../utils/dateFormat";
@@ -389,7 +388,25 @@ const AsbestosRemovalJobDetails = () => {
               : 0;
             return dateB - dateA; // Newest first
           });
-          setClearances(sortedClearances);
+          // Preserve pdfReadyAt/pdfDownloadUrl from existing state when refetch doesn't have them yet
+          // (e.g. after PDF generation completes, backend may not have persisted before this refetch)
+          setClearances((prev) => {
+            const byId = new Map(prev.map((c) => [String(c._id), c]));
+            return sortedClearances.map((c) => {
+              const existing = byId.get(String(c._id));
+              const hasPdfFromServer = c.pdfReadyAt || c.pdfDownloadUrl;
+              if (!hasPdfFromServer && existing && (existing.pdfReadyAt || existing.pdfDownloadUrl)) {
+                return {
+                  ...c,
+                  pdfReadyAt: existing.pdfReadyAt ?? c.pdfReadyAt,
+                  pdfDownloadUrl: existing.pdfDownloadUrl ?? c.pdfDownloadUrl,
+                  pdfFilename: existing.pdfFilename ?? c.pdfFilename,
+                  updatedAt: existing.updatedAt ?? c.updatedAt,
+                };
+              }
+              return c;
+            });
+          });
           setClearancesLoaded(true); // Mark as loaded when fetched via fetchJobDetails
           const clearancesSetDuration = Math.round(
             getTimestamp() - clearancesStart,
@@ -625,6 +642,19 @@ const AsbestosRemovalJobDetails = () => {
       setActiveTab(0);
     }
   }, [activeTab, clearancesLoaded]);
+
+  // Refetch clearances when user returns to this tab (e.g. after adding items in clearance items page)
+  // so generate/download icon reflects updatedAt vs pdfReadyAt correctly
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible" && jobId && clearancesLoaded) {
+        clearancesLoadingRef.current = false;
+        fetchClearances();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [jobId, clearancesLoaded, fetchClearances]);
 
   useEffect(() => {
     const shiftsSize = JSON.stringify(airMonitoringShifts).length;
@@ -1347,16 +1377,9 @@ const AsbestosRemovalJobDetails = () => {
     }
   };
 
-  // True when a PDF exists and clearance was not updated after it was generated (safe to just download).
-  const hasRetainedValidPdf = (clearance) => {
-    const pdfReadyAt = clearance.pdfReadyAt;
-    const hasPdf = pdfReadyAt || clearance.pdfDownloadUrl;
-    if (!hasPdf) return false;
-    const updatedAt = clearance.updatedAt;
-    if (!updatedAt) return true;
-    if (!pdfReadyAt) return true; // pdfDownloadUrl only, can't compare
-    return new Date(updatedAt) <= new Date(pdfReadyAt);
-  };
+  // True when a retained PDF exists (backend clears PDF fields when content changes, so presence = current).
+  const hasRetainedValidPdf = (clearance) =>
+    Boolean(clearance.pdfReadyAt || clearance.pdfDownloadUrl);
 
   const handleDownloadOrGenerateClearanceReport = async (clearance, event) => {
     event?.stopPropagation();
@@ -1745,12 +1768,6 @@ const AsbestosRemovalJobDetails = () => {
         mx: { xs: 0.34, sm: 0.51, md: 2.5 },
       }}
     >
-      {/* PDF Loading Overlay */}
-      <PDFLoadingOverlay
-        open={clearancePdfStatus === "generating"}
-        message="Generating Asbestos Clearance PDF..."
-      />
-
       {/* Clearance report download dialog */}
       <Dialog
         open={clearanceDownloadDialogOpen}
