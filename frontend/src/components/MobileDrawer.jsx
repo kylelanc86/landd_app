@@ -300,13 +300,11 @@ const MobileDrawer = ({ open, onClose }) => {
               />
             )}
 
-            {isSuperAdmin && (
-              <MenuItem
-                title="Lead Removal"
-                to="/lead-removal"
-                icon={<DangerousIcon />}
-              />
-            )}
+            <MenuItem
+              title="Lead Removal"
+              to="/lead-removal"
+              icon={<DangerousIcon />}
+            />
 
             {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
               <MenuItem

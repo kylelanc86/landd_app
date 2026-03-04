@@ -35,6 +35,7 @@ import {
   Autocomplete,
   IconButton,
   InputAdornment,
+  Tooltip,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import MicIcon from "@mui/icons-material/Mic";
@@ -42,6 +43,7 @@ import MonitorIcon from "@mui/icons-material/Monitor";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import AddIcon from "@mui/icons-material/Add";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
+import DownloadingIcon from "@mui/icons-material/Downloading";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import CloseIcon from "@mui/icons-material/Close";
@@ -60,10 +62,14 @@ import {
 import leadClearanceService from "../../services/leadClearanceService";
 import leadRemovalJobService from "../../services/leadRemovalJobService";
 import customDataFieldGroupService from "../../services/customDataFieldGroupService";
-import { generateHTMLTemplatePDF } from "../../utils/templatePDFGenerator";
+import {
+  startLeadClearancePDFJob,
+  getClearancePDFStatus,
+  downloadLeadClearancePDFByClearanceId,
+  generateHTMLTemplatePDF,
+} from "../../utils/templatePDFGenerator";
 import { generateShiftReport } from "../../utils/generateShiftReport";
 import { generateLeadMonitoringShiftReport } from "../../utils/generateLeadMonitoringShiftReport";
-import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
 import { useAuth } from "../../context/AuthContext";
 import { formatDate } from "../../utils/dateFormat";
 import { getTodayInSydney } from "../../utils/dateUtils";
@@ -163,6 +169,12 @@ const LeadRemovalJobDetails = () => {
   const [reportViewedClearanceIds, setReportViewedClearanceIds] = useState(
     new Set(),
   );
+  // Lead clearance PDF: async job (start → poll → download), same pattern as asbestos
+  const [clearancePdfJobId, setClearancePdfJobId] = useState(null);
+  const [clearancePdfStatus, setClearancePdfStatus] = useState("idle");
+  const [clearancePdfStartingId, setClearancePdfStartingId] = useState(null);
+  const [clearancePdfGeneratingForClearanceId, setClearancePdfGeneratingForClearanceId] = useState(null);
+  const [clearanceDownloadDialogOpen, setClearanceDownloadDialogOpen] = useState(false);
   const [sendingAuthorisationRequests, setSendingAuthorisationRequests] =
     useState({});
   const [
@@ -658,6 +670,74 @@ const LeadRemovalJobDetails = () => {
       timestamp: new Date().toISOString(),
     });
   }, [clearances, logDebug]);
+
+  // Poll lead clearance PDF job; on complete show snackbar and refresh clearances
+  useEffect(() => {
+    if (!clearancePdfJobId || clearancePdfStatus !== "generating") {
+      return;
+    }
+    const POLL_MS = 2500;
+    const poll = async () => {
+      try {
+        const data = await getClearancePDFStatus(clearancePdfJobId);
+        if (data.status === "completed" || data.ready) {
+          const clearanceId = clearancePdfGeneratingForClearanceId;
+          setClearancePdfStatus("idle");
+          setClearancePdfJobId(null);
+          setClearancePdfGeneratingForClearanceId(null);
+          const now = new Date();
+          setClearances((prev) =>
+            prev.map((c) =>
+              String(c._id) === String(clearanceId)
+                ? { ...c, pdfReadyAt: now, updatedAt: now }
+                : c
+            )
+          );
+          try {
+            const { filename } = await downloadLeadClearancePDFByClearanceId(clearanceId);
+            showSnackbar(`Downloaded: ${filename}`, "success");
+            setReportViewedClearanceIds((prev) =>
+              new Set(prev).add(clearanceId),
+            );
+            try {
+              await leadClearanceService.markReportViewed(clearanceId);
+            } catch (e) {
+              console.warn("Failed to persist report viewed:", e);
+            }
+          } catch (e) {
+            showSnackbar(e.message || "Download failed", "error");
+          }
+          return;
+        }
+        if (data.status === "failed") {
+          const errMsg = data.error || data.message || "PDF generation failed";
+          setClearancePdfStatus("idle");
+          setClearancePdfJobId(null);
+          setClearancePdfGeneratingForClearanceId(null);
+          showSnackbar(errMsg, "error");
+          return;
+        }
+      } catch (err) {
+        setClearancePdfStatus("idle");
+        setClearancePdfJobId(null);
+        setClearancePdfGeneratingForClearanceId(null);
+        showSnackbar(err.message || "Status check failed", "error");
+        return;
+      }
+      timerRef.current = setTimeout(poll, POLL_MS);
+    };
+    const timerRef = { current: null };
+    poll();
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [
+    clearancePdfJobId,
+    clearancePdfStatus,
+    clearancePdfGeneratingForClearanceId,
+    fetchJobDetails,
+    showSnackbar,
+  ]);
 
   useEffect(() => {
     logDebug("loading state updated", {
@@ -1551,33 +1631,69 @@ const LeadRemovalJobDetails = () => {
     }
   };
 
-  const handleGeneratePDF = async (clearance, event) => {
-    // Prevent row click when clicking PDF icon
-    event.stopPropagation();
-
+  const handleOpenLeadClearancePdfDialog = async (clearance, event) => {
+    event?.stopPropagation();
+    if (clearancePdfStartingId) return;
+    setClearancePdfStartingId(clearance._id);
+    setClearancePdfGeneratingForClearanceId(clearance._id);
+    showSnackbar("PDF generation has started. You will be notified when it is ready.", "info");
+    setClearancePdfStatus("generating");
+    setClearancePdfJobId(null);
     try {
-      setGeneratingPDF(true);
-
-      // Get the full clearance data with populated project
       const fullClearance = await leadClearanceService.getById(clearance._id);
-
-      // Use lead clearance report template
-      const fileName = await generateHTMLTemplatePDF(
-        "lead-clearance",
-        fullClearance,
-      );
-
-      showSnackbar(
-        `PDF generated successfully! Check your downloads folder for: ${
-          fileName.filename || fileName
-        }`,
-        "success",
-      );
+      const { jobId } = await startLeadClearancePDFJob(fullClearance);
+      setClearancePdfJobId(jobId);
     } catch (err) {
-      console.error("Error generating PDF:", err);
-      showSnackbar("Failed to generate PDF", "error");
+      console.error("Error starting lead clearance PDF:", err);
+      setClearancePdfStatus("idle");
+      setClearancePdfGeneratingForClearanceId(null);
+      showSnackbar(err.message || "Failed to start PDF generation", "error");
     } finally {
-      setGeneratingPDF(false);
+      setClearancePdfStartingId(null);
+    }
+  };
+
+  // Green icon = retained PDF available → click only downloads. Orange = no PDF yet → click generates then downloads.
+  const hasRetainedValidPdf = (clearance) =>
+    !!(clearance.pdfReadyAt || clearance.pdfDownloadUrl);
+
+  const handleDownloadOrGenerateClearanceReport = async (clearance, event) => {
+    event?.stopPropagation();
+    if (hasRetainedValidPdf(clearance)) {
+      setClearanceDownloadDialogOpen(true);
+      const dialogOpenedAt = Date.now();
+      const minDialogMs = 500;
+      try {
+        const { filename } = await downloadLeadClearancePDFByClearanceId(clearance._id);
+        showSnackbar(`Downloaded: ${filename}`, "success");
+        setReportViewedClearanceIds((prev) =>
+          new Set(prev).add(clearance._id),
+        );
+        try {
+          await leadClearanceService.markReportViewed(clearance._id);
+        } catch (e) {
+          console.warn("Failed to persist report viewed:", e);
+        }
+      } catch (err) {
+        console.error("Error downloading lead clearance PDF:", err);
+        const msg = err.message || "";
+        const isNoPdf = /no pdf|not available|retention|generate the pdf first/i.test(msg);
+        if (isNoPdf) {
+          showSnackbar("No PDF available. Starting generation…", "info");
+          handleOpenLeadClearancePdfDialog(clearance, event);
+        } else {
+          showSnackbar(msg || "Failed to download PDF", "error");
+        }
+      } finally {
+        const elapsed = Date.now() - dialogOpenedAt;
+        if (elapsed < minDialogMs) {
+          setTimeout(() => setClearanceDownloadDialogOpen(false), minDialogMs - elapsed);
+        } else {
+          setClearanceDownloadDialogOpen(false);
+        }
+      }
+    } else {
+      handleOpenLeadClearancePdfDialog(clearance, event);
     }
   };
 
@@ -2020,15 +2136,24 @@ const LeadRemovalJobDetails = () => {
         mx: { xs: 0.34, sm: 0.51, md: 2.5 },
       }}
     >
-      {/* PDF Loading Overlay */}
-      <PDFLoadingOverlay
-        open={generatingPDF || generatingShiftReport}
-        message={
-          generatingShiftReport
-            ? "Generating Lead Monitoring Shift Report..."
-            : "Generating Lead Clearance PDF..."
-        }
-      />
+      {/* Clearance report download dialog */}
+      <Dialog
+        open={clearanceDownloadDialogOpen}
+        onClose={() => setClearanceDownloadDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 2 } }}
+      >
+        <DialogTitle>Downloading report</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2, py: 2 }}>
+            <CircularProgress size={24} />
+            <Typography>
+              The report is downloading. Please wait.
+            </Typography>
+          </Box>
+        </DialogContent>
+      </Dialog>
 
       {/* Breadcrumbs */}
       <Breadcrumbs sx={{ marginBottom: { xs: 2, md: 3 } }}>
@@ -2723,63 +2848,44 @@ const LeadRemovalJobDetails = () => {
                           </PermissionGate>
                           {clearance.status === "complete" && (
                             <>
-                              {clearance.reportApprovedBy ||
-                              authorisingClearanceReports[clearance._id] ? (
-                                <Button
-                                  variant="outlined"
-                                  size="small"
-                                  onClick={(e) =>
-                                    handleGeneratePDF(clearance, e)
-                                  }
-                                  disabled={
-                                    generatingPDF ||
-                                    authorisingClearanceReports[clearance._id]
-                                  }
-                                  startIcon={
-                                    authorisingClearanceReports[
-                                      clearance._id
-                                    ] ? (
-                                      <CircularProgress size={16} />
-                                    ) : null
-                                  }
-                                  sx={{
-                                    borderColor: theme.palette.success.main,
-                                    color: theme.palette.success.main,
-                                    "&:hover": {
-                                      borderColor: theme.palette.success.dark,
-                                      backgroundColor:
-                                        theme.palette.success.light,
-                                    },
-                                    mr: 1,
-                                  }}
-                                >
-                                  {authorisingClearanceReports[clearance._id]
-                                    ? "Authorising..."
-                                    : "Download Report"}
-                                </Button>
-                              ) : (
-                                <>
-                                  <Button
-                                    variant="outlined"
+                              <Tooltip
+                                title={
+                                  clearancePdfStartingId === clearance._id ||
+                                  clearancePdfGeneratingForClearanceId === clearance._id
+                                    ? "PDF is generating..."
+                                    : hasRetainedValidPdf(clearance)
+                                      ? "Download report"
+                                      : "Generate and download report"
+                                }
+                              >
+                                <span>
+                                  <IconButton
                                     size="small"
+                                    color={hasRetainedValidPdf(clearance) ? "success" : "warning"}
                                     onClick={(e) =>
-                                      handleViewClearanceReport(clearance, e)
+                                      handleDownloadOrGenerateClearanceReport(clearance, e)
                                     }
-                                    disabled={generatingPDF}
+                                    disabled={
+                                      clearancePdfStartingId === clearance._id ||
+                                      clearancePdfGeneratingForClearanceId === clearance._id
+                                    }
                                     sx={{
-                                      borderColor: theme.palette.success.main,
-                                      color: theme.palette.success.main,
-                                      "&:hover": {
-                                        borderColor: theme.palette.success.dark,
-                                        backgroundColor:
-                                          theme.palette.success.light,
-                                      },
                                       mr: 1,
+                                      ...((clearancePdfStartingId === clearance._id ||
+                                        clearancePdfGeneratingForClearanceId === clearance._id) && {
+                                        "@keyframes pdfSyncSpin": {
+                                          "0%": { transform: "rotate(0deg)" },
+                                          "100%": { transform: "rotate(360deg)" },
+                                        },
+                                        animation: "pdfSyncSpin 1s linear infinite",
+                                      }),
                                     }}
                                   >
-                                    View Report
-                                  </Button>
-                                  {(reportViewedClearanceIds.has(
+                                    <DownloadingIcon />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                              {(reportViewedClearanceIds.has(
                                     clearance._id,
                                   ) ||
                                     !!clearance.reportViewedAt) && (
@@ -2799,7 +2905,9 @@ const LeadRemovalJobDetails = () => {
                                             disabled={
                                               authorisingClearanceReports[
                                                 clearance._id
-                                              ] || generatingPDF
+                                              ] ||
+                                              clearancePdfStartingId === clearance._id ||
+                                              clearancePdfGeneratingForClearanceId === clearance._id
                                             }
                                             startIcon={
                                               authorisingClearanceReports[
@@ -2880,8 +2988,6 @@ const LeadRemovalJobDetails = () => {
                                         )}
                                     </>
                                   )}
-                                </>
-                              )}
                             </>
                           )}
                         </TableCell>

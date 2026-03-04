@@ -206,7 +206,7 @@ router.get(
         clearances = await LeadClearance.find({
           leadRemovalJobId: job._id,
         })
-          .select("_id projectId clearanceDate status inspectionTime leadAbatementContractor consultant secondaryHeader descriptionOfWorks vehicleEquipmentDescription notes jobSpecificExclusions reportApprovedBy reportIssueDate reportViewedAt authorisationRequestedBy")
+          .select("_id projectId clearanceDate status inspectionTime leadAbatementContractor consultant secondaryHeader descriptionOfWorks vehicleEquipmentDescription notes jobSpecificExclusions reportApprovedBy reportIssueDate reportViewedAt authorisationRequestedBy pdfDownloadUrl pdfJobId pdfReadyAt pdfFilename")
           .populate({
             path: "projectId",
             select: "projectID name",
@@ -286,7 +286,7 @@ router.get(
       const clearances = await LeadClearance.find({
         leadRemovalJobId: req.params.id,
       })
-        .select("_id projectId clearanceDate status inspectionTime leadAbatementContractor consultant secondaryHeader descriptionOfWorks vehicleEquipmentDescription notes jobSpecificExclusions reportApprovedBy reportIssueDate")
+        .select("_id projectId clearanceDate status inspectionTime leadAbatementContractor consultant secondaryHeader descriptionOfWorks vehicleEquipmentDescription notes jobSpecificExclusions reportApprovedBy reportIssueDate reportViewedAt authorisationRequestedBy pdfDownloadUrl pdfJobId pdfReadyAt pdfFilename")
         .populate({
           path: "projectId",
           select: "projectID name",

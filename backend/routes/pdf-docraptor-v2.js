@@ -10,6 +10,7 @@ const AsbestosAssessment = require('../models/assessmentTemplates/asbestos/Asbes
 const AsbestosClearance = require('../models/clearanceTemplates/asbestos/AsbestosClearance');
 const CustomDataFieldGroup = require('../models/CustomDataFieldGroup');
 const LeadRemovalJob = require('../models/LeadRemovalJob');
+const LeadClearance = require('../models/clearanceTemplates/lead/LeadClearance');
 const { formatDateSydney, formatClearanceDateSydney, todaySydney } = require('../utils/dateUtils');
 
 // Initialize DocRaptor service
@@ -21,6 +22,12 @@ const asyncPdfJobs = new Map();
 
 // Remove completed/failed jobs older than 1 hour to prevent unbounded growth
 const JOB_RETENTION_MS = 60 * 60 * 1000;
+
+/** Base directory for generated lead clearance merged PDFs (main + appendices). Green-icon download streams from here. */
+const LEAD_CLEARANCE_MERGED_PDF_DIR = path.join(__dirname, '..', 'generated-pdfs', 'lead-clearances');
+
+/** Base directory for generated asbestos clearance merged PDFs (main + air reports + site plan). */
+const ASBESTOS_CLEARANCE_MERGED_PDF_DIR = path.join(__dirname, '..', 'generated-pdfs', 'asbestos-clearances');
 
 /** Assessment report PDF retention (days) – matches DocRaptor; after this, report is no longer available. */
 const ASSESSMENT_PDF_RETENTION_DAYS = 7;
@@ -2151,12 +2158,51 @@ router.get('/status/:jobId', async (req, res) => {
       // Persist to clearance so any user can download without regenerating
       if (job.status === 'completed' && job.downloadUrl && job.clearanceId) {
         try {
-          await AsbestosClearance.findByIdAndUpdate(job.clearanceId, {
-            pdfDownloadUrl: job.downloadUrl,
-            pdfJobId: jobId,
-            pdfReadyAt: new Date(),
-            pdfFilename: job.filename || null
-          });
+          if (job.reportType === 'lead-clearance') {
+            let mergedPdfPath = null;
+            if (job.mergePayload) {
+              try {
+                const mainBuffer = await docRaptorService.fetchDocument(job.downloadUrl);
+                const mergedBuffer = await mergeLeadClearanceAppendices(mainBuffer, job.mergePayload);
+                fs.mkdirSync(LEAD_CLEARANCE_MERGED_PDF_DIR, { recursive: true });
+                const fileName = `${job.clearanceId}.pdf`;
+                const fullPath = path.join(LEAD_CLEARANCE_MERGED_PDF_DIR, fileName);
+                fs.writeFileSync(fullPath, mergedBuffer);
+                mergedPdfPath = `lead-clearances/${fileName}`;
+              } catch (mergeErr) {
+                console.error('Failed to merge/save lead clearance PDF for fast download:', mergeErr);
+              }
+            }
+            await LeadClearance.findByIdAndUpdate(job.clearanceId, {
+              pdfDownloadUrl: job.downloadUrl,
+              pdfJobId: jobId,
+              pdfReadyAt: new Date(),
+              pdfFilename: job.filename || null,
+              ...(mergedPdfPath && { mergedPdfPath })
+            });
+          } else if (job.reportType === 'asbestos-clearance') {
+            let mergedPdfPath = null;
+            if (job.mergePayload) {
+              try {
+                const mainBuffer = await docRaptorService.fetchDocument(job.downloadUrl);
+                const mergedBuffer = await mergeAsbestosClearanceAppendices(mainBuffer, job.mergePayload);
+                fs.mkdirSync(ASBESTOS_CLEARANCE_MERGED_PDF_DIR, { recursive: true });
+                const fileName = `${job.clearanceId}.pdf`;
+                const fullPath = path.join(ASBESTOS_CLEARANCE_MERGED_PDF_DIR, fileName);
+                fs.writeFileSync(fullPath, mergedBuffer);
+                mergedPdfPath = `asbestos-clearances/${fileName}`;
+              } catch (mergeErr) {
+                console.error('Failed to merge/save asbestos clearance PDF for fast download:', mergeErr);
+              }
+            }
+            await AsbestosClearance.findByIdAndUpdate(job.clearanceId, {
+              pdfDownloadUrl: job.downloadUrl,
+              pdfJobId: jobId,
+              pdfReadyAt: new Date(),
+              pdfFilename: job.filename || null,
+              ...(mergedPdfPath && { mergedPdfPath })
+            });
+          }
         } catch (updateErr) {
           console.error('Failed to persist clearance PDF URL:', updateErr);
         }
@@ -2207,6 +2253,8 @@ router.get('/download/:jobId', async (req, res) => {
           console.error('Error merging site plan PDF:', err);
         }
       }
+    } else if (job.reportType === 'lead-clearance' && job.mergePayload) {
+      pdfBuffer = await mergeLeadClearanceAppendices(pdfBuffer, job.mergePayload);
     }
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${job.filename}"`);
@@ -2219,8 +2267,36 @@ router.get('/download/:jobId', async (req, res) => {
 });
 
 /**
- * Download clearance PDF by clearance ID (uses persisted pdfDownloadUrl; no regeneration).
- * Available to any user once a PDF has been generated for this clearance.
+ * Merge asbestos clearance appendices (air reports + site plan) onto the main report PDF buffer.
+ */
+async function mergeAsbestosClearanceAppendices(pdfBuffer, payload) {
+  const airReports = (payload.airReports && payload.airReports.length > 0)
+    ? [...payload.airReports].sort((a, b) => new Date(a.shiftDate || 0) - new Date(b.shiftDate || 0))
+    : (payload.airMonitoringReport ? [{ reportData: payload.airMonitoringReport }] : []);
+  let result = pdfBuffer;
+  for (const report of airReports) {
+    const base64 = report.reportData || report;
+    if (!base64) continue;
+    try {
+      result = await mergePDFs(result, base64);
+    } catch (err) {
+      console.error('Error merging air monitoring PDF:', err);
+    }
+  }
+  if (payload.sitePlan && payload.sitePlanFile && !payload.sitePlanFile.startsWith('/9j/') && !payload.sitePlanFile.startsWith('iVBORw0KGgo') && !payload.sitePlanFile.startsWith('data:image/')) {
+    try {
+      result = await mergePDFs(result, payload.sitePlanFile);
+    } catch (err) {
+      console.error('Error merging site plan PDF:', err);
+    }
+  }
+  return result;
+}
+
+/**
+ * Download asbestos clearance PDF by clearance ID.
+ * When mergedPdfPath exists: streams pre-merged file from disk (fast, no fetch/merge).
+ * Fallback: fetches main from pdfDownloadUrl and merges appendices.
  */
 router.get('/download-by-clearance/:clearanceId', async (req, res) => {
   const { clearanceId } = req.params;
@@ -2229,6 +2305,25 @@ router.get('/download-by-clearance/:clearanceId', async (req, res) => {
     if (!clearance) {
       return res.status(404).json({ error: 'Clearance not found' });
     }
+    if (!clearance.pdfDownloadUrl && !clearance.mergedPdfPath) {
+      return res.status(404).json({
+        error: 'No PDF available for this clearance',
+        hint: 'Generate the PDF first using Generate PDF'
+      });
+    }
+    const filename = clearance.pdfFilename || `clearance_${clearanceId}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    if (clearance.mergedPdfPath) {
+      const fullPath = path.join(__dirname, '..', 'generated-pdfs', clearance.mergedPdfPath);
+      if (fs.existsSync(fullPath)) {
+        const stat = fs.statSync(fullPath);
+        res.setHeader('Content-Length', stat.size);
+        const readStream = fs.createReadStream(fullPath);
+        return readStream.pipe(res);
+      }
+    }
     if (!clearance.pdfDownloadUrl) {
       return res.status(404).json({
         error: 'No PDF available for this clearance',
@@ -2236,28 +2331,17 @@ router.get('/download-by-clearance/:clearanceId', async (req, res) => {
       });
     }
     let pdfBuffer = await docRaptorService.fetchDocument(clearance.pdfDownloadUrl);
-    const airReports = (clearance.airMonitoringReports && clearance.airMonitoringReports.length > 0)
-      ? [...clearance.airMonitoringReports].sort((a, b) => new Date(a.shiftDate || 0) - new Date(b.shiftDate || 0))
-      : (clearance.airMonitoringReport ? [{ reportData: clearance.airMonitoringReport }] : []);
-    for (const report of airReports) {
-      const base64 = report.reportData || report;
-      if (!base64) continue;
-      try {
-        pdfBuffer = await mergePDFs(pdfBuffer, base64);
-      } catch (err) {
-        console.error('Error merging air monitoring PDF:', err);
-      }
+    pdfBuffer = await mergeAsbestosClearanceAppendices(pdfBuffer, clearance);
+    try {
+      fs.mkdirSync(ASBESTOS_CLEARANCE_MERGED_PDF_DIR, { recursive: true });
+      const fileName = `${clearanceId}.pdf`;
+      const mergedPdfPath = `asbestos-clearances/${fileName}`;
+      const fullPath = path.join(__dirname, '..', 'generated-pdfs', mergedPdfPath);
+      fs.writeFileSync(fullPath, pdfBuffer);
+      await AsbestosClearance.findByIdAndUpdate(clearanceId, { mergedPdfPath });
+    } catch (saveErr) {
+      console.warn('Could not cache merged asbestos clearance PDF for future downloads:', saveErr);
     }
-    if (clearance.sitePlan && clearance.sitePlanFile && !clearance.sitePlanFile.startsWith('/9j/') && !clearance.sitePlanFile.startsWith('iVBORw0KGgo') && !clearance.sitePlanFile.startsWith('data:image/')) {
-      try {
-        pdfBuffer = await mergePDFs(pdfBuffer, clearance.sitePlanFile);
-      } catch (err) {
-        console.error('Error merging site plan PDF:', err);
-      }
-    }
-    const filename = clearance.pdfFilename || `clearance_${clearanceId}.pdf`;
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', pdfBuffer.length);
     res.send(pdfBuffer);
   } catch (error) {
@@ -2267,7 +2351,73 @@ router.get('/download-by-clearance/:clearanceId', async (req, res) => {
 });
 
 /**
- * Generate Lead Clearance Report using DocRaptor
+ * Merge lead clearance appendices (covers, photos, site plan, air reports) onto the main report PDF buffer.
+ * Used by download/:jobId (lead-clearance) and download-by-lead-clearance/:clearanceId.
+ */
+async function mergeLeadClearanceAppendices(pdfBuffer, leadClearanceData) {
+  const appendices = getLeadClearanceAppendices(leadClearanceData);
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const logoPath = path.join(__dirname, '../assets/logo.png');
+  const logoBase64 = fs.existsSync(logoPath) ? fs.readFileSync(logoPath).toString('base64') : '';
+  const watermarkPath = path.join(__dirname, '../assets/logo_small hi-res.png');
+  const watermarkBase64 = fs.existsSync(watermarkPath) ? fs.readFileSync(watermarkPath).toString('base64') : '';
+  const siteNameForFooter = leadClearanceData.projectId?.name || leadClearanceData.project?.name || leadClearanceData.siteName || 'Unknown';
+  const appendixFooterText = `Lead Removal Clearance Certificate: ${siteNameForFooter}`;
+
+  let finalPdfBuffer = pdfBuffer;
+  for (const app of appendices) {
+    const coverHtml = generateLeadAppendixCoverPagesHTML([app], {
+      logoBase64,
+      watermarkBase64,
+      footerText: appendixFooterText,
+      frontendUrl,
+    });
+    const coverPdf = await docRaptorService.generatePDF(coverHtml, {
+      page_size: 'A4',
+      prince_options: { page_margin: '0.5in', media: 'print', html_mode: 'quirks' },
+    });
+    finalPdfBuffer = await mergePDFs(finalPdfBuffer, coverPdf);
+
+    if (app.key === 'photographs') {
+      const photosHtml = generateLeadClearancePhotographsHTML(leadClearanceData, {
+        logoBase64,
+        footerText: appendixFooterText,
+        frontendUrl,
+      });
+      const photosPdf = await docRaptorService.generatePDF(photosHtml, {
+        page_size: 'A4',
+        prince_options: { page_margin: '0.5in', media: 'print', html_mode: 'quirks' },
+      });
+      finalPdfBuffer = await mergePDFs(finalPdfBuffer, photosPdf);
+    } else if (app.key === 'sitePlan' && leadClearanceData.sitePlan && leadClearanceData.sitePlanFile) {
+      const file = leadClearanceData.sitePlanFile;
+      if (!file.startsWith('/9j/') && !file.startsWith('iVBORw0KGgo') && !file.startsWith('data:image/')) {
+        try {
+          finalPdfBuffer = await mergePDFs(finalPdfBuffer, file);
+        } catch (err) {
+          console.error('Error merging lead clearance site plan PDF:', err);
+        }
+      }
+    } else if (app.key === 'airMonitoringReports' && leadClearanceData.leadMonitoringReports && leadClearanceData.leadMonitoringReports.length > 0) {
+      const leadReports = [...leadClearanceData.leadMonitoringReports].sort(
+        (a, b) => new Date(a.shiftDate || 0) - new Date(b.shiftDate || 0)
+      );
+      for (const report of leadReports) {
+        const base64 = report.reportData || report;
+        if (!base64) continue;
+        try {
+          finalPdfBuffer = await mergePDFs(finalPdfBuffer, base64);
+        } catch (err) {
+          console.error('Error merging lead monitoring PDF:', err);
+        }
+      }
+    }
+  }
+  return finalPdfBuffer;
+}
+
+/**
+ * Generate Lead Clearance Report using DocRaptor (async: returns jobId for polling, like asbestos clearance).
  */
 router.post('/generate-lead-clearance-v2', async (req, res) => {
   const pdfId = `lead-clearance-v2-${Date.now()}`;
@@ -2288,88 +2438,91 @@ router.post('/generate-lead-clearance-v2', async (req, res) => {
     const sequenceSuffix = leadClearanceData.sequenceNumber ? ` - ${leadClearanceData.sequenceNumber}` : '';
     const filename = `${projectId}_Lead Clearance Report - ${siteName} (${clearanceDate})${sequenceSuffix}.pdf`;
 
-    const pdfBuffer = await docRaptorService.generatePDF(htmlContent, {
+    const { status_id } = await docRaptorService.createAsyncDocument(htmlContent, {
       page_size: 'A4',
-      prince_options: {
-        page_margin: '0.5in',
-        media: 'print',
-        html_mode: 'quirks',
-      },
+      prince_options: { page_margin: '0.5in', media: 'print', html_mode: 'quirks' }
     });
 
-    let finalPdfBuffer = pdfBuffer;
-    const appendices = getLeadClearanceAppendices(leadClearanceData);
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const logoPath = path.join(__dirname, '../assets/logo.png');
-    const logoBase64 = fs.existsSync(logoPath) ? fs.readFileSync(logoPath).toString('base64') : '';
-    const watermarkPath = path.join(__dirname, '../assets/logo_small hi-res.png');
-    const watermarkBase64 = fs.existsSync(watermarkPath) ? fs.readFileSync(watermarkPath).toString('base64') : '';
-    const siteNameForFooter = leadClearanceData.projectId?.name || leadClearanceData.project?.name || leadClearanceData.siteName || 'Unknown';
-    const appendixFooterText = `Lead Removal Clearance Certificate: ${siteNameForFooter}`;
+    const jobId = status_id;
+    const clearanceId = leadClearanceData._id || null;
+    asyncPdfJobs.set(jobId, {
+      statusId: jobId,
+      status: 'queued',
+      downloadUrl: null,
+      error: null,
+      message: null,
+      createdAt: Date.now(),
+      reportType: 'lead-clearance',
+      filename,
+      mergePayload: leadClearanceData,
+      clearanceId
+    });
+    pruneOldJobs();
 
-    for (const app of appendices) {
-      const coverHtml = generateLeadAppendixCoverPagesHTML([app], {
-        logoBase64,
-        watermarkBase64,
-        footerText: appendixFooterText,
-        frontendUrl,
-      });
-      const coverPdf = await docRaptorService.generatePDF(coverHtml, {
-        page_size: 'A4',
-        prince_options: { page_margin: '0.5in', media: 'print', html_mode: 'quirks' },
-      });
-      finalPdfBuffer = await mergePDFs(finalPdfBuffer, coverPdf);
-
-      if (app.key === 'photographs') {
-        const photosHtml = generateLeadClearancePhotographsHTML(leadClearanceData, {
-          logoBase64,
-          footerText: appendixFooterText,
-          frontendUrl,
-        });
-        const photosPdf = await docRaptorService.generatePDF(photosHtml, {
-          page_size: 'A4',
-          prince_options: { page_margin: '0.5in', media: 'print', html_mode: 'quirks' },
-        });
-        finalPdfBuffer = await mergePDFs(finalPdfBuffer, photosPdf);
-      } else if (app.key === 'sitePlan' && leadClearanceData.sitePlan && leadClearanceData.sitePlanFile) {
-        const file = leadClearanceData.sitePlanFile;
-        if (!file.startsWith('/9j/') && !file.startsWith('iVBORw0KGgo') && !file.startsWith('data:image/')) {
-          try {
-            finalPdfBuffer = await mergePDFs(finalPdfBuffer, file);
-          } catch (err) {
-            console.error('Error merging lead clearance site plan PDF:', err);
-          }
-        }
-      } else if (app.key === 'preWorksSamples') {
-        // Pre-works samples content to be merged in a later change
-      } else if (app.key === 'validationSamples') {
-        // Validation samples content to be merged in a later change
-      } else if (app.key === 'airMonitoringReports' && leadClearanceData.leadMonitoringReports && leadClearanceData.leadMonitoringReports.length > 0) {
-        const leadReports = [...leadClearanceData.leadMonitoringReports].sort(
-          (a, b) => new Date(a.shiftDate || 0) - new Date(b.shiftDate || 0)
-        );
-        for (const report of leadReports) {
-          const base64 = report.reportData || report;
-          if (!base64) continue;
-          try {
-            finalPdfBuffer = await mergePDFs(finalPdfBuffer, base64);
-          } catch (err) {
-            console.error('Error merging lead monitoring PDF:', err);
-          }
-        }
-      }
-    }
-
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Content-Length', finalPdfBuffer.length);
-    res.send(finalPdfBuffer);
+    return res.status(201).json({ jobId });
   } catch (error) {
-    console.error(`[${pdfId}] Error generating lead clearance PDF:`, error);
+    console.error(`[${pdfId}] Error starting lead clearance PDF:`, error);
     res.status(500).json({
-      error: 'Failed to generate lead clearance PDF',
+      error: 'Failed to start lead clearance PDF',
       details: error.message,
     });
+  }
+});
+
+/**
+ * Download lead clearance PDF by clearance ID.
+ * Green icon (download only): streams pre-merged file from disk when mergedPdfPath exists (no regeneration).
+ * Fallback: fetches main report from pdfDownloadUrl and merges appendices (slower).
+ */
+router.get('/download-by-lead-clearance/:clearanceId', async (req, res) => {
+  const { clearanceId } = req.params;
+  try {
+    const clearance = await LeadClearance.findById(clearanceId).lean();
+    if (!clearance) {
+      return res.status(404).json({ error: 'Clearance not found' });
+    }
+    if (!clearance.pdfDownloadUrl && !clearance.mergedPdfPath) {
+      return res.status(404).json({
+        error: 'No PDF available for this clearance',
+        hint: 'Generate the PDF first using Generate PDF'
+      });
+    }
+    const filename = clearance.pdfFilename || `lead_clearance_${clearanceId}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    if (clearance.mergedPdfPath) {
+      const fullPath = path.join(__dirname, '..', 'generated-pdfs', clearance.mergedPdfPath);
+      if (fs.existsSync(fullPath)) {
+        const stat = fs.statSync(fullPath);
+        res.setHeader('Content-Length', stat.size);
+        const readStream = fs.createReadStream(fullPath);
+        return readStream.pipe(res);
+      }
+    }
+    if (!clearance.pdfDownloadUrl) {
+      return res.status(404).json({
+        error: 'No PDF available for this clearance',
+        hint: 'Generate the PDF first using Generate PDF'
+      });
+    }
+    let pdfBuffer = await docRaptorService.fetchDocument(clearance.pdfDownloadUrl);
+    pdfBuffer = await mergeLeadClearanceAppendices(pdfBuffer, clearance);
+    try {
+      fs.mkdirSync(LEAD_CLEARANCE_MERGED_PDF_DIR, { recursive: true });
+      const fileName = `${clearanceId}.pdf`;
+      const mergedPdfPath = `lead-clearances/${fileName}`;
+      const fullPath = path.join(__dirname, '..', 'generated-pdfs', mergedPdfPath);
+      fs.writeFileSync(fullPath, pdfBuffer);
+      await LeadClearance.findByIdAndUpdate(clearanceId, { mergedPdfPath });
+    } catch (saveErr) {
+      console.warn('Could not cache merged lead clearance PDF for future downloads:', saveErr);
+    }
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('Download by lead clearance failed', clearanceId, error);
+    return res.status(502).json({ error: 'Download failed', details: error.message });
   }
 });
 

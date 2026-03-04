@@ -229,6 +229,8 @@ const asbestosClearanceSchema = new mongoose.Schema(
     pdfJobId: { type: String, required: false },
     pdfReadyAt: { type: Date, required: false },
     pdfFilename: { type: String, required: false },
+    /** Path to merged PDF (main + appendices) on disk; when set, download streams this file (no fetch/merge). */
+    mergedPdfPath: { type: String, required: false },
   },
   {
     timestamps: true,

@@ -53,7 +53,6 @@ import { useUserLists } from "../../../context/UserListsContext";
 import { hasPermission } from "../../../config/permissions";
 import { getTodaySydney } from "../../../utils/dateUtils";
 import { useSnackbar } from "../../../context/SnackbarContext";
-import PDFLoadingOverlay from "../../../components/PDFLoadingOverlay";
 import {
   startAssessmentPDFJob,
   getAssessmentPDFStatus,
@@ -760,8 +759,6 @@ const ResidentialAsbestosAssessment = () => {
           } catch (e) {
             showSnackbar(e.message || "Download failed", "error");
           }
-          // Delay refresh so backend has persisted the PDF; otherwise list can overwrite optimistic update with stale data
-          setTimeout(() => fetchJobs({ force: true, silent: true }), 800);
           return;
         }
         if (data.status === "failed") {
@@ -816,14 +813,9 @@ const ResidentialAsbestosAssessment = () => {
     }
   };
 
-  // True when a PDF exists and assessment was not updated after it was generated (safe to just download).
-  const hasRetainedValidPdf = (job) => {
-    const pdfReadyAt = job.pdfReadyAt || job.originalData?.pdfReadyAt;
-    if (!pdfReadyAt) return false;
-    const updatedAt = job.updatedAt ?? job.originalData?.updatedAt;
-    if (!updatedAt) return true; // no updatedAt → assume PDF still valid, try download
-    return new Date(updatedAt) <= new Date(pdfReadyAt);
-  };
+  // Green icon = retained PDF available → click only downloads. Orange = no PDF yet → click generates then downloads.
+  const hasRetainedValidPdf = (job) =>
+    !!(job.pdfReadyAt || job.originalData?.pdfReadyAt);
 
   const handleDownloadOrGenerateAssessmentReport = async (event, job) => {
     event.stopPropagation();
@@ -955,10 +947,6 @@ const ResidentialAsbestosAssessment = () => {
 
   return (
     <Container maxWidth="xl">
-      <PDFLoadingOverlay
-        open={!!generatingReportId}
-        message="Generating Residential Asbestos Assessment PDF..."
-      />
       <Box sx={{ mt: 4, mb: 4 }}>
         <Dialog
           open={assessmentDownloadDialogOpen}

@@ -242,6 +242,81 @@ export async function downloadClearancePDFByClearanceId(clearanceId, options = {
 }
 
 /**
+ * Start async lead clearance PDF generation. Returns jobId for polling (use getClearancePDFStatus).
+ * @param {Object} leadClearanceData - Full clearance data (e.g. from getById)
+ * @returns {Promise<{ jobId: string }>}
+ */
+export async function startLeadClearancePDFJob(leadClearanceData) {
+  const startUrl = `${API_BASE}/pdf-docraptor-v2/generate-lead-clearance-v2`;
+  const startRes = await fetch(startUrl, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ leadClearanceData }),
+  });
+  if (!startRes.ok) {
+    const errText = await startRes.text();
+    let errMsg = `Failed to start PDF: ${startRes.status}`;
+    try {
+      const j = JSON.parse(errText);
+      if (j.error || j.details) errMsg = j.details || j.error;
+    } catch (_) {}
+    throw new Error(errMsg);
+  }
+  const data = await startRes.json();
+  if (!data.jobId) throw new Error('Server did not return a job ID');
+  return { jobId: data.jobId };
+}
+
+/**
+ * Download lead clearance PDF by clearance ID (uses persisted PDF; no regeneration).
+ * @param {string} clearanceId - Lead clearance _id
+ * @param {Object} options - { openInNewTab?: boolean }
+ * @returns {Promise<{ filename: string }>}
+ */
+export async function downloadLeadClearancePDFByClearanceId(clearanceId, options = {}) {
+  const { openInNewTab = false } = options;
+  const url = `${API_BASE}/pdf-docraptor-v2/download-by-lead-clearance/${clearanceId}`;
+  const res = await fetch(url, { headers: getAuthHeaders() });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(res.status === 404 ? 'No PDF available. Generate the PDF first.' : `Download failed: ${res.status}`);
+  }
+  const blob = await res.blob();
+  const contentDisposition = res.headers.get('Content-Disposition');
+  let filename = `lead_clearance_${clearanceId}.pdf`;
+  if (contentDisposition) {
+    const m = contentDisposition.match(/filename="(.+)"/);
+    if (m) filename = m[1];
+  }
+  const blobUrl = window.URL.createObjectURL(blob);
+  try {
+    if (openInNewTab) {
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+    setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
+  } catch (e) {
+    window.URL.revokeObjectURL(blobUrl);
+    throw e;
+  }
+  return { filename };
+}
+
+/**
  * Start async assessment PDF generation. Returns jobId for polling.
  * Sends only assessmentId + isResidential so the backend loads the assessment from DB (avoids large body).
  * @param {string|Object} assessmentIdOrData - Assessment ID string, or full assessment object (id used only)
@@ -445,6 +520,37 @@ export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
     // Asbestos clearance uses async DocRaptor flow (start job → poll status → download)
     if (useDocRaptor && type === 'asbestos-clearance') {
       return await generateClearancePDFAsync(data, { openInNewTab, onStatus });
+    }
+
+    // Lead clearance uses same async flow: start job → poll → download by clearance id
+    if (useDocRaptor && type === 'lead-clearance') {
+      const { jobId } = await startLeadClearancePDFJob(data);
+      const statusUrl = `${API_BASE}/pdf-docraptor-v2/status/${jobId}`;
+      const startedAt = Date.now();
+      const reportStatus = (payload) => { if (typeof onStatus === 'function') onStatus(payload); };
+      reportStatus({ status: 'queued', message: 'Preparing PDF…' });
+      while (true) {
+        if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
+          throw new Error('PDF generation timed out. Please try again.');
+        }
+        const statusRes = await fetch(statusUrl, { headers: getAuthHeaders() });
+        if (!statusRes.ok) throw new Error(`Status check failed: ${statusRes.status}`);
+        const statusData = await statusRes.json();
+        if (statusData.status === 'queued') reportStatus({ status: 'queued', message: statusData.message || 'Preparing PDF…' });
+        else if (statusData.status === 'working') reportStatus({ status: 'working', message: statusData.message || 'Generating PDF…' });
+        else if (statusData.status === 'completed' || statusData.ready) {
+          reportStatus({ status: 'completed', message: 'PDF ready' });
+          const clearanceId = data._id || data.id;
+          if (!clearanceId) throw new Error('Clearance ID required to download');
+          const { filename } = await downloadLeadClearancePDFByClearanceId(clearanceId, { openInNewTab });
+          return { success: true, filename };
+        } else if (statusData.status === 'failed') {
+          const errMsg = statusData.error || statusData.message || 'PDF generation failed';
+          reportStatus({ status: 'failed', error: errMsg });
+          throw new Error(errMsg);
+        }
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      }
     }
 
     // All other types: synchronous request (existing behaviour)

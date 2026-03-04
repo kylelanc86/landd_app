@@ -43,7 +43,6 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { clientSuppliedJobsService, projectService } from "../../services/api";
 import { generateShiftReport } from "../../utils/generateShiftReport";
 import { generateFibreIDReport } from "../../utils/generateFibreIDReport";
-import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
 import { useSnackbar } from "../../context/SnackbarContext";
 import { useAuth } from "../../context/AuthContext";
 import { hasPermission } from "../../config/permissions";
@@ -1179,12 +1178,6 @@ const ClientSuppliedJobs = () => {
   return (
     <Container maxWidth="xl">
       <Box sx={{ mt: 4, mb: 4 }}>
-        {/* PDF Loading Overlay */}
-        <PDFLoadingOverlay
-          open={Object.values(generatingPDF).some(Boolean)}
-          message="Generating Fibre ID Report PDF..."
-        />
-
         <Box sx={{ mb: 3 }}>
           <Box
             sx={{

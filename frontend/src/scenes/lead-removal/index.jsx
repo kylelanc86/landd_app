@@ -35,10 +35,8 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import { tokens } from "../../theme/tokens";
 import { useTheme } from "@mui/material/styles";
-import { usePermissions } from "../../hooks/usePermissions";
 import { useAuth } from "../../context/AuthContext";
 import { hasPermission } from "../../config/permissions";
-import { Navigate } from "react-router-dom";
 import { projectService } from "../../services/api";
 import customDataFieldGroupService from "../../services/customDataFieldGroupService";
 import leadRemovalJobService from "../../services/leadRemovalJobService";
@@ -47,7 +45,6 @@ const LeadRemoval = () => {
   const theme = useTheme();
   const colors = tokens;
   const navigate = useNavigate();
-  const { isSuperAdmin } = usePermissions();
   const { currentUser } = useAuth();
 
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
@@ -365,11 +362,6 @@ const LeadRemoval = () => {
     setDeleteDialogOpen(false);
     setJobToDelete(null);
   };
-
-  // Restrict to super admin only
-  if (!isSuperAdmin) {
-    return <Navigate to="/" replace />;
-  }
 
   return (
     <Container maxWidth="xl">

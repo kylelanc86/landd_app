@@ -13,6 +13,9 @@ package-lock.json
 /build
 /dist
 
+# Backend generated PDFs (lead clearance merged files)
+backend/generated-pdfs/
+
 # misc
 .DS_Store
 .env

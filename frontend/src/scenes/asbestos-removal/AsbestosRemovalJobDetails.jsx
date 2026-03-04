@@ -68,7 +68,6 @@ import {
   downloadClearancePDFByClearanceId,
 } from "../../utils/templatePDFGenerator";
 import { generateShiftReport } from "../../utils/generateShiftReport";
-import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
 import { useAuth } from "../../context/AuthContext";
 import { useUserLists } from "../../context/UserListsContext";
 import { formatDate } from "../../utils/dateFormat";
@@ -700,8 +699,6 @@ const AsbestosRemovalJobDetails = () => {
           } catch (e) {
             showSnackbar(e.message || "Download failed", "error");
           }
-          // Delay refresh so backend has persisted the PDF; otherwise list can overwrite optimistic update with stale data
-          setTimeout(() => fetchJobDetails({ silent: true }), 800);
           return;
         }
         if (data.status === "failed") {
@@ -1347,16 +1344,9 @@ const AsbestosRemovalJobDetails = () => {
     }
   };
 
-  // True when a PDF exists and clearance was not updated after it was generated (safe to just download).
-  const hasRetainedValidPdf = (clearance) => {
-    const pdfReadyAt = clearance.pdfReadyAt;
-    const hasPdf = pdfReadyAt || clearance.pdfDownloadUrl;
-    if (!hasPdf) return false;
-    const updatedAt = clearance.updatedAt;
-    if (!updatedAt) return true;
-    if (!pdfReadyAt) return true; // pdfDownloadUrl only, can't compare
-    return new Date(updatedAt) <= new Date(pdfReadyAt);
-  };
+  // Green icon = retained PDF available → click only downloads. Orange = no PDF yet → click generates then downloads.
+  const hasRetainedValidPdf = (clearance) =>
+    !!(clearance.pdfReadyAt || clearance.pdfDownloadUrl);
 
   const handleDownloadOrGenerateClearanceReport = async (clearance, event) => {
     event?.stopPropagation();
@@ -1745,12 +1735,6 @@ const AsbestosRemovalJobDetails = () => {
         mx: { xs: 0.34, sm: 0.51, md: 2.5 },
       }}
     >
-      {/* PDF Loading Overlay */}
-      <PDFLoadingOverlay
-        open={clearancePdfStatus === "generating"}
-        message="Generating Asbestos Clearance PDF..."
-      />
-
       {/* Clearance report download dialog */}
       <Dialog
         open={clearanceDownloadDialogOpen}

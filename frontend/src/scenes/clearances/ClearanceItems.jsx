@@ -63,7 +63,6 @@ import {
   saveFileToDevice, // eslint-disable-line no-unused-vars -- used when save-to-device is re-enabled
 } from "../../utils/imageCompression";
 import { formatDate } from "../../utils/dateUtils";
-import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
 
 const DEFAULT_ARROW_COLOR = "#f44336";
 const DEFAULT_ARROW_ROTATION = -45;
@@ -2365,12 +2364,6 @@ const ClearanceItems = () => {
             </Typography>
           </Box>
         )}
-
-        {/* PDF Loading Overlay */}
-        <PDFLoadingOverlay
-          open={generatingAirMonitoringPDF}
-          message="Generating Air Monitoring Report PDF..."
-        />
 
         <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
           Clearance Items

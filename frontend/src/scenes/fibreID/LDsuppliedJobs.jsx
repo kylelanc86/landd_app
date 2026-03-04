@@ -39,7 +39,6 @@ import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
 import { format } from "date-fns";
 import { generateFibreIDReport } from "../../utils/generateFibreIDReport";
-import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
 import { useSnackbar } from "../../context/SnackbarContext";
 import { useAuth } from "../../context/AuthContext";
 import { hasPermission } from "../../config/permissions";
@@ -872,10 +871,6 @@ const LDsuppliedJobs = () => {
 
   return (
     <Container maxWidth="xl">
-      <PDFLoadingOverlay
-        open={Object.values(generatingPDF).some(Boolean)}
-        message="Generating Fibre ID Report PDF..."
-      />
       <Box sx={{ mt: 4, mb: 4 }}>
         <Box sx={{ mb: 3 }}>
           <Box

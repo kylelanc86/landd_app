@@ -146,6 +146,13 @@ const leadClearanceSchema = new mongoose.Schema(
         jurisdiction: String,
       },
     ],
+    // Persisted clearance report PDF (async generation; shared by all users)
+    pdfDownloadUrl: { type: String, required: false },
+    pdfJobId: { type: String, required: false },
+    pdfReadyAt: { type: Date, required: false },
+    pdfFilename: { type: String, required: false },
+    /** Path to merged PDF (main + appendices) on disk; when set, download streams this file (no regeneration). */
+    mergedPdfPath: { type: String, required: false },
   },
   {
     timestamps: true,

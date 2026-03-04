@@ -599,13 +599,11 @@ const Sidebar = () => {
             />
           )}
 
-          {isSuperAdmin && (
-            <CollapsibleSection
-              title="Lead Removal"
-              to="/lead-removal"
-              icon={<DangerousIcon />}
-            />
-          )}
+          <CollapsibleSection
+            title="Lead Removal"
+            to="/lead-removal"
+            icon={<DangerousIcon />}
+          />
 
           {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
             <CollapsibleSection
