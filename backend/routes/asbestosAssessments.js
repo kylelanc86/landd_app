@@ -18,7 +18,11 @@ function isAssessmentPdfExpired(pdfReadyAt) {
 
 /** Clear persisted PDF fields when assessment content changes so the UI shows Generate instead of Download. */
 function clearAssessmentPdfFields(doc) {
-  doc.$unset({ pdfBuffer: 1, pdfReadyAt: 1, pdfFilename: 1 });
+  const pdfFields = ['pdfBuffer', 'pdfReadyAt', 'pdfFilename'];
+  pdfFields.forEach((field) => {
+    doc[field] = undefined;
+    doc.markModified(field);
+  });
 }
 
 // GET /api/assessments - list all assessment jobs (populate project and assessor); excludes archived
@@ -798,16 +802,28 @@ router.post('/:id/items', async (req, res) => {
   try {
     const job = await AsbestosAssessment.findById(req.params.id);
     if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+    // Ensure items array exists (may be undefined on older documents)
+    if (!Array.isArray(job.items)) {
+      job.items = [];
+      job.markModified('items');
+    }
     const resetStatuses = ['site-works-complete', 'samples-with-lab', 'sample-analysis-complete'];
     if (resetStatuses.includes(job.status)) {
       job.status = 'in-progress';
     }
     job.items.push(req.body);
+    job.markModified('items');
     clearAssessmentPdfFields(job);
     await job.save();
     res.status(201).json(job.items[job.items.length - 1]);
   } catch (err) {
-    res.status(400).json({ message: 'Failed to add item', error: err.message });
+    console.error('Error adding assessment item:', err);
+    const isValidation = err.name === 'ValidationError';
+    res.status(isValidation ? 400 : 500).json({
+      message: isValidation ? 'Validation failed' : 'Failed to add item',
+      error: err.message,
+      ...(isValidation && err.errors && { errors: err.errors }),
+    });
   }
 });
 
