@@ -11,11 +11,10 @@ const { formatDateSydney } = require("../utils/dateUtils");
 
 /** Clear persisted PDF fields when clearance content changes so the UI shows Generate instead of Download. */
 function clearClearancePdfFields(clearance) {
-  clearance.$unset({
-    pdfDownloadUrl: 1,
-    pdfJobId: 1,
-    pdfReadyAt: 1,
-    pdfFilename: 1,
+  const pdfFields = ["pdfDownloadUrl", "pdfJobId", "pdfReadyAt", "pdfFilename"];
+  pdfFields.forEach((field) => {
+    clearance[field] = undefined;
+    clearance.markModified(field);
   });
 }
 
@@ -274,6 +273,12 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
       return res.status(404).json({ message: "Asbestos clearance not found" });
     }
 
+    // Ensure items array exists (may be undefined on older documents)
+    if (!Array.isArray(clearance.items)) {
+      clearance.items = [];
+      clearance.markModified("items");
+    }
+
     const previousProjectId = clearance.projectId
       ? clearance.projectId.toString()
       : null;
@@ -299,6 +304,7 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
     clearance.sitePlanFile = sitePlanFile !== undefined ? sitePlanFile : clearance.sitePlanFile;
     if (sitePlanLegend !== undefined) {
       clearance.sitePlanLegend = sitePlanLegend;
+      clearance.markModified("sitePlanLegend");
     }
     if (sitePlanLegendTitle !== undefined) {
       clearance.sitePlanLegendTitle = sitePlanLegendTitle;
@@ -320,7 +326,7 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
     clearance.jobSpecificExclusions = jobSpecificExclusions !== undefined ? jobSpecificExclusions : clearance.jobSpecificExclusions;
     clearance.notes = notes || clearance.notes;
     clearance.vehicleEquipmentDescription = vehicleEquipmentDescription !== undefined ? vehicleEquipmentDescription : clearance.vehicleEquipmentDescription;
-    clearance.updatedBy = req.user.id;
+    clearance.updatedBy = req.user._id || req.user.id;
     
     // Handle revision fields
     if (revision !== undefined) {
@@ -375,7 +381,13 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
     res.json(populatedClearance);
   } catch (error) {
     console.error("Error updating asbestos clearance:", error);
-    res.status(500).json({ message: "Server error" });
+    const message = error.message || "Server error";
+    const isValidation = error.name === "ValidationError";
+    res.status(isValidation ? 400 : 500).json({
+      message: isValidation ? "Validation failed" : "Server error",
+      error: message,
+      ...(isValidation && error.errors && { errors: error.errors }),
+    });
   }
 });
 
@@ -674,22 +686,27 @@ router.post("/:id/items", auth, checkPermission("asbestos.edit"), async (req, re
       return res.status(404).json({ message: "Asbestos clearance not found" });
     }
 
+    // Ensure items array exists (may be undefined on older documents)
+    if (!Array.isArray(clearance.items)) {
+      clearance.items = [];
+    }
+
     const newItem = {
-      locationDescription,
-      levelFloor,
-      roomArea,
-      materialDescription,
-      asbestosType,
-      photograph,
-      notes,
+      locationDescription: locationDescription ?? "",
+      levelFloor: levelFloor ?? "",
+      roomArea: roomArea ?? "",
+      materialDescription: materialDescription ?? "",
+      asbestosType: asbestosType ?? "non-friable",
+      notes: notes ?? "",
     };
 
     clearance.items.push(newItem);
-    clearance.updatedBy = req.user.id;
+    clearance.markModified("items");
+    clearance.updatedBy = req.user._id || req.user.id;
 
     clearClearancePdfFields(clearance);
     const updatedClearance = await clearance.save();
-    
+
     const populatedClearance = await AsbestosClearance.findById(updatedClearance._id)
       .populate({
         path: "projectId",
@@ -705,7 +722,13 @@ router.post("/:id/items", auth, checkPermission("asbestos.edit"), async (req, re
     res.status(201).json(populatedClearance);
   } catch (error) {
     console.error("Error adding clearance item:", error);
-    res.status(500).json({ message: "Server error" });
+    const message = error.message || "Server error";
+    const isValidation = error.name === "ValidationError";
+    res.status(isValidation ? 400 : 500).json({
+      message: isValidation ? "Validation failed" : "Server error",
+      error: message,
+      ...(isValidation && error.errors && { errors: error.errors }),
+    });
   }
 });
 
