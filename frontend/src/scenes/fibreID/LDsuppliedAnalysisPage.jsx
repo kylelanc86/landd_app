@@ -478,7 +478,7 @@ const LDsuppliedAnalysisPage = () => {
     if (traceAsbestos === "yes" && traceCount && traceAsbestosContent) {
       // Determine result based on trace count
       if (traceCount === "< 5 unequivocal") {
-        return "No asbestos detected";
+        return "No Asbestos Detected";
       } else if (traceCount === "5-19 unequivocal") {
         return `Trace ${traceAsbestosContent} detected`;
       } else if (traceCount === "20+ unequivocal <100 visible") {
@@ -490,7 +490,7 @@ const LDsuppliedAnalysisPage = () => {
 
     // If no fibres detected checkbox is checked
     if (noFibreDetected) {
-      return "No asbestos detected";
+      return "No Asbestos Detected";
     }
 
     // If no fibres in the array
@@ -547,9 +547,13 @@ const LDsuppliedAnalysisPage = () => {
   };
 
   // Sampled items = first occurrence of each unique sampleReference (actual samples for analysis). Referred items (later items with same sampleReference) are excluded.
-  const { sampledItems, isSampledItem } = useMemo(() => {
+  const { sampledItems, isSampledItem, getDisplayLabReference } = useMemo(() => {
     if (!assessment?.items?.length)
-      return { sampledItems: [], isSampledItem: () => false };
+      return {
+        sampledItems: [],
+        isSampledItem: () => false,
+        getDisplayLabReference: () => "",
+      };
     const items = assessment.items;
     const isVA = (item) =>
       item.asbestosContent === "Visually Assessed as Asbestos" ||
@@ -567,8 +571,19 @@ const LDsuppliedAnalysisPage = () => {
     });
     const sampledSet = new Set(sampled);
     const isSampled = (item) => item && sampledSet.has(item);
-    return { sampledItems: sampled, isSampledItem: isSampled };
-  }, [assessment?.items]);
+    const projectID = assessment.projectId?.projectID || "Unknown";
+    const getDisplayLabReference = (item) => {
+      if (!item) return "";
+      const idx = sampled.findIndex((i) => i._id === item._id);
+      if (idx < 0) return item.sampleReference || "";
+      return `${projectID}-Lab${idx + 1}`;
+    };
+    return {
+      sampledItems: sampled,
+      isSampledItem: isSampled,
+      getDisplayLabReference,
+    };
+  }, [assessment?.items, assessment?.projectId?.projectID]);
 
   const areAllItemsAnalysed = () => {
     if (!assessment || !assessment.items || assessment.items.length === 0) {
@@ -908,7 +923,9 @@ const LDsuppliedAnalysisPage = () => {
             L&D Supplied Jobs
           </Link>
           <Typography color="text.primary">
-            {assessmentItem.sampleReference || `Item ${itemNumber}`}
+            {getDisplayLabReference(assessmentItem) ||
+              assessmentItem.sampleReference ||
+              `Item ${itemNumber}`}
           </Typography>
         </Breadcrumbs>
 
@@ -998,7 +1015,9 @@ const LDsuppliedAnalysisPage = () => {
                         }}
                       >
                         <Typography variant="body2">
-                          {item.sampleReference || `Item ${index + 1}`}
+                          {getDisplayLabReference(item) ||
+                            item.sampleReference ||
+                            `Item ${index + 1}`}
                           {item.locationDescription &&
                             ` - ${item.locationDescription}`}
                         </Typography>
@@ -1029,10 +1048,12 @@ const LDsuppliedAnalysisPage = () => {
         <Grid container spacing={2}>
           <Grid item xs={12} md={3}>
             <Typography variant="subtitle2" color="text.secondary">
-              Sample Reference
+              Lab Reference
             </Typography>
             <Typography variant="body1" sx={{ fontWeight: "medium" }}>
-              {assessmentItem.sampleReference || "N/A"}
+              {getDisplayLabReference(assessmentItem) ||
+                assessmentItem.sampleReference ||
+                "N/A"}
             </Typography>
           </Grid>
           <Grid item xs={12} md={3}>
@@ -2041,7 +2062,7 @@ const LDsuppliedAnalysisPage = () => {
           rows={3}
           placeholder={
             noFibreDetected
-              ? "No asbestos detected"
+              ? "No Asbestos Detected"
               : traceAsbestos === "yes" && traceCount && traceAsbestosContent
                 ? "Automatically calculated from trace analysis"
                 : "Summary of all fibre analysis results"

@@ -928,10 +928,12 @@ const AsbestosAssessment = () => {
         );
         return index === firstIndex && item.analysisData?.isAnalysed === true;
       });
+      // Lab reference format: {projectID}-Lab{index+1} to match fibre ID report
+      const projectID = fullAssessment.projectId?.projectID || "Unknown";
       const sampleItemsForReport = sampledItems.map((item, index) => ({
         itemNumber: item.itemNumber || index + 1,
         sampleReference: item.sampleReference || `Sample ${index + 1}`,
-        labReference: item.sampleReference || `Sample ${index + 1}`,
+        labReference: `${projectID}-Lab${index + 1}`,
         locationDescription: item.locationDescription || "N/A",
         analysisData: item.analysisData,
       }));

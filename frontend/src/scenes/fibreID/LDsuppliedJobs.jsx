@@ -33,6 +33,7 @@ import {
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import { asbestosAssessmentService, clientSuppliedJobsService, projectService } from "../../services/api";
+import { formatLabReferenceForDisplay } from "../../utils/formatters";
 import { getTodayInSydney, formatDateInSydney } from "../../utils/dateUtils";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
@@ -378,10 +379,12 @@ const LDsuppliedJobs = () => {
       }
 
       // Transform items to match the format expected by generateFibreIDReport
+      // Lab reference format: {projectID}-Lab{index+1} to match fibre ID report
+      const projectID = fullAssessment.projectId?.projectID || "Unknown";
       const sampleItemsForReport = sampledItems.map((item, index) => ({
         itemNumber: item.itemNumber || index + 1,
         sampleReference: item.sampleReference || `Sample ${index + 1}`,
-        labReference: item.sampleReference || `Sample ${index + 1}`,
+        labReference: `${projectID}-Lab${index + 1}`,
         locationDescription: item.locationDescription || "N/A",
         analysisData: item.analysisData,
       }));
@@ -636,8 +639,12 @@ const LDsuppliedJobs = () => {
         .filter((item) => item.analysisData && item.analysisData.isAnalysed === true)
         .map((item, index) => ({
           itemNumber: index + 1,
-          sampleReference: item.labReference || `Sample ${index + 1}`,
-          labReference: item.labReference || `Sample ${index + 1}`,
+          sampleReference:
+            formatLabReferenceForDisplay(item.labReference) ||
+            `Sample ${index + 1}`,
+          labReference:
+            formatLabReferenceForDisplay(item.labReference) ||
+            `Sample ${index + 1}`,
           locationDescription: item.clientReference || item.sampleDescription || "N/A",
           clientReference: item.clientReference,
           analysisData: item.analysisData,
