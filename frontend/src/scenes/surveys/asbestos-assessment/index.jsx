@@ -859,6 +859,8 @@ const AsbestosAssessment = () => {
     if (hasRetainedValidPdf(job)) {
       setAssessmentDownloadDialogOpen(true);
       try {
+        // Brief delay so backend has time to read pdfReadyAt after persist (avoids 410 race)
+        await new Promise((r) => setTimeout(r, 500));
         const stored = lastPdfJobIdByAssessmentId.current[String(job.id)];
         const freshJobId =
           stored &&
