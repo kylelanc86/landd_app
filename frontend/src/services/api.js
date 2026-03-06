@@ -450,6 +450,7 @@ export const asbestosAssessmentService = {
   createAsbestosAssessment: (data) => api.post('/assessments', data),
   updateAsbestosAssessment: (id, data) => api.put(`/assessments/${id}`, data),
   archiveAsbestosAssessment: (id) => api.patch(`/assessments/${id}/archive`),
+  unlockAsbestosAssessment: (id) => api.patch(`/assessments/${id}/unlock`),
   sendForAuthorisation: (id) => api.post(`/assessments/${id}/send-for-authorisation`),
   recordReportViewed: (id) => api.patch(`/assessments/${id}/report-viewed`),
   deleteAsbestosAssessment: (id) => api.delete(`/assessments/${id}`),

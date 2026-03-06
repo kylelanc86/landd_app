@@ -583,6 +583,10 @@ pdfMake.fonts = {
                     if (asbestosResult === '[Result not set]' && nonAsbestosResults.length > 0 && asbestosResultsFromFibres.length === 0) {
                       asbestosResult = 'No Asbestos Detected';
                     }
+                    // No asbestos fibre types (Chrysotile, Amosite, Crocidolite, UMF): report "No Asbestos Detected" (covers no fibres at all, or only non-asbestos)
+                    if (asbestosResult === '[Result not set]' && asbestosResultsFromFibres.length === 0) {
+                      asbestosResult = 'No Asbestos Detected';
+                    }
                     
                     const result = {
                       nonAsbestos: nonAsbestosResults.length > 0 ? nonAsbestosResults.join('\n\n') : 'None',
@@ -601,18 +605,17 @@ pdfMake.fonts = {
                   // Ensure all values are safe strings to prevent NaN
                   const safeProjectID = (assessment?.projectId?.projectID && assessment.projectId.projectID !== 'undefined' && assessment.projectId.projectID !== 'null') ? assessment.projectId.projectID : 'Unknown';
                   // For client-supplied jobs, use clientReference for sample reference
-                  // For regular jobs, use labReference or sampleReference
+                  // For LD supplied / assessment-linked jobs, use assessment item sample reference (e.g. LD-001), not lab ref
                   const safeSampleRef = (() => {
                     if (isClientSupplied) {
-                      // Client-supplied: prioritize clientReference
                       const ref = item.clientReference || item.labReference || item.sampleReference;
                       if (ref && ref !== 'undefined' && ref !== 'null') {
                         return ref;
                       }
                       return `Sample ${index + 1}`;
                     } else {
-                      // Regular jobs: use existing logic
-                      const ref = item.labReference || item.clientReference || item.sampleReference;
+                      // Regular (LD supplied) jobs: show sample reference from assessment items (LD-XXX)
+                      const ref = item.sampleReference || item.labReference || item.clientReference;
                       if (ref && ref !== 'undefined' && ref !== 'null') {
                         return ref;
                       }

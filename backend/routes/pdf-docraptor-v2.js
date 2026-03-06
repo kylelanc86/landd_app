@@ -25,9 +25,17 @@ const JOB_RETENTION_MS = 60 * 60 * 1000;
 const ASSESSMENT_PDF_RETENTION_DAYS = 7;
 const ASSESSMENT_PDF_RETENTION_MS = ASSESSMENT_PDF_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
+/** Grace period: PDFs written in the last 2 minutes are never considered expired (avoids race after regeneration). */
+const ASSESSMENT_PDF_GRACE_MS = 2 * 60 * 1000;
+
 function isAssessmentPdfExpired(pdfReadyAt) {
   if (!pdfReadyAt) return true;
-  return Date.now() - new Date(pdfReadyAt).getTime() > ASSESSMENT_PDF_RETENTION_MS;
+  const readyAtMs = new Date(pdfReadyAt).getTime();
+  if (Number.isNaN(readyAtMs)) return true;
+  const ageMs = Date.now() - readyAtMs;
+  if (ageMs < 0) return false; // future date, treat as valid
+  if (ageMs < ASSESSMENT_PDF_GRACE_MS) return false; // just generated, never expire
+  return ageMs > ASSESSMENT_PDF_RETENTION_MS;
 }
 function pruneOldJobs() {
   const now = Date.now();
@@ -2401,25 +2409,39 @@ async function runAssessmentPdfV3(assessmentData, isResidential) {
 
   const hasFibreIdReport = !!assessmentData.fibreAnalysisReport;
   const hasSitePlan = !!(assessmentData.sitePlan && assessmentData.sitePlanFile);
+  const isSitePlanImage = hasSitePlan && (
+    assessmentData.sitePlanFile.startsWith('/9j/') ||
+    assessmentData.sitePlanFile.startsWith('iVBORw0KGgo') ||
+    assessmentData.sitePlanFile.startsWith('data:image/')
+  );
 
-  // Merge pre-existing PDFs: fibre analysis report, then site plan (when uploaded as PDF)
+  // Place fibre ID report immediately after Appendix A cover (before Appendix B / site plan)
   if (assessmentData.fibreAnalysisReport) {
     try {
-      merged = await mergePDFs(merged, assessmentData.fibreAnalysisReport);
+      if (hasFibreIdReport && hasSitePlan) {
+        // Main PDF has: ... Appendix A, Appendix B, [site plan image page]. Split after Appendix A, insert fibre, then reattach rest.
+        const part2PageCount = 1 + (isSitePlanImage ? 1 : 0);
+        const srcDoc = await PDFDocument.load(merged);
+        const totalPages = srcDoc.getPageIndices().length;
+        const splitAt = totalPages - part2PageCount;
+        const [part1, part2] = await splitPdfBuffer(merged, splitAt);
+        const fibreBuffer = assessmentData.fibreAnalysisReport.startsWith('data:')
+          ? Buffer.from(assessmentData.fibreAnalysisReport.split(',')[1], 'base64')
+          : Buffer.from(assessmentData.fibreAnalysisReport, 'base64');
+        const toMerge = part2 ? [part1, fibreBuffer, part2] : [part1, fibreBuffer];
+        merged = await mergePdfBuffers(toMerge);
+      } else {
+        merged = await mergePDFs(merged, assessmentData.fibreAnalysisReport);
+      }
     } catch (error) {
       console.error(`[${pdfId}] Error merging fibre analysis PDFs:`, error);
     }
   }
-  if (hasSitePlan && assessmentData.sitePlanFile) {
-    const isSitePlanImage = assessmentData.sitePlanFile.startsWith('/9j/') ||
-      assessmentData.sitePlanFile.startsWith('iVBORw0KGgo') ||
-      assessmentData.sitePlanFile.startsWith('data:image/');
-    if (!isSitePlanImage) {
-      try {
-        merged = await mergePDFs(merged, assessmentData.sitePlanFile);
-      } catch (error) {
-        console.error(`[${pdfId}] Error merging site plan PDF:`, error);
-      }
+  if (hasSitePlan && assessmentData.sitePlanFile && !isSitePlanImage) {
+    try {
+      merged = await mergePDFs(merged, assessmentData.sitePlanFile);
+    } catch (error) {
+      console.error(`[${pdfId}] Error merging site plan PDF:`, error);
     }
   }
 
@@ -2549,21 +2571,29 @@ router.post('/start-asbestos-assessment-pdf', auth, async (req, res) => {
 
 /**
  * Download assessment PDF by assessment ID (uses persisted pdfBuffer; no regeneration).
- * After ASSESSMENT_PDF_RETENTION_DAYS (7), the report is no longer served and stored PDF is cleared.
+ * After ASSESSMENT_PDF_RETENTION_DAYS (7), the report is no longer served.
+ * Query param freshJobId: when provided and the job is completed for this assessment, skip expiry check (for immediate download after regeneration).
  */
 router.get('/download-by-assessment/:assessmentId', auth, async (req, res) => {
   const { assessmentId } = req.params;
+  const freshJobId = req.query.freshJobId;
+  let skipExpiryCheck = false;
+  if (freshJobId) {
+    const job = asyncPdfJobs.get(freshJobId);
+    if (job && job.reportType === 'asbestos-assessment' && job.status === 'completed' && String(job.assessmentId) === String(assessmentId)) {
+      skipExpiryCheck = true;
+    }
+  }
   try {
     // Query without .lean() so Mongoose properly hydrates Buffer; then get plain buffer for response
     const assessment = await AsbestosAssessment.findById(assessmentId).select('pdfBuffer pdfReadyAt pdfFilename');
     if (!assessment) {
       return res.status(404).json({ error: 'Assessment not found' });
     }
-    // Retention: if PDF is past 7 days, clear it and return 410 Gone
-    if (assessment.pdfReadyAt && isAssessmentPdfExpired(assessment.pdfReadyAt)) {
-      await AsbestosAssessment.findByIdAndUpdate(assessmentId, {
-        $unset: { pdfBuffer: 1, pdfReadyAt: 1, pdfFilename: 1 },
-      });
+    // Retention: if PDF is past 7 days, return 410 Gone — unless we have a completed freshJobId for this assessment
+    if (!skipExpiryCheck && assessment.pdfReadyAt && isAssessmentPdfExpired(assessment.pdfReadyAt)) {
+      const ageMs = Date.now() - new Date(assessment.pdfReadyAt).getTime();
+      console.warn(`[download-by-assessment] 410 for ${assessmentId}: pdfReadyAt=${assessment.pdfReadyAt}, ageMs=${ageMs}, graceMs=${ASSESSMENT_PDF_GRACE_MS}`);
       return res.status(410).json({
         error: 'Report no longer available',
         hint: 'Retention period (7 days) has ended. Generate the PDF again if needed.',
@@ -3450,8 +3480,8 @@ const generateAssessmentHTML = async (assessmentData) => {
         ${sampleRegisterPages}
         <div class="page-break"></div>
         
-        <!-- Discussion and Conclusions Page -->
-        ${populatedDiscussionConclusions}
+        <!-- Discussion and Conclusions Page (force new page when odd number of table blocks) -->
+        ${tableBlocks.length % 2 === 1 ? '<div style="page-break-before: always;">' : ''}${populatedDiscussionConclusions}${tableBlocks.length % 2 === 1 ? '</div>' : ''}
         <div class="page-break"></div>
         ${hasRcmPage ? `<!-- Recommended Control Measures Page -->\n        ${populatedRecommendedControlMeasures}\n        <div class="page-break"></div>\n        ` : ''}
         <!-- Additional Sections Page 1 -->
@@ -4117,7 +4147,7 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
         ${!isResidential && remainingTableBlocks.length > 0 ? '<div class="page-break"></div><div class="section-header">Table 1: Assessment Register cont.</div>' : ''}
         ${sampleTablesHtml || (flowTableBlocks.length === 0 ? '<div class="section-body">No items</div>' : '')}
 
-        ${identifiedAsbestosItems.length > 0 ? '<div class="page-break"></div>' : ''}
+        ${(identifiedAsbestosItems.length > 0 || flowTableBlocks.length % 2 === 1) ? '<div class="page-break"></div>' : ''}
         <div class="section-header">${escapeHtml(templateContent?.standardSections?.discussionTitle || 'DISCUSSION AND CONCLUSIONS')}</div>
         <div class="section-body">
           ${asbestosCountLineHtml}
@@ -4155,6 +4185,27 @@ const mergePdfBuffers = async (buffers) => {
     pages.forEach((p) => out.addPage(p));
   }
   return Buffer.from(await out.save());
+};
+
+/**
+ * Split a PDF buffer into two buffers at a given page index (0-based).
+ * @param {Buffer} buffer - Full PDF buffer
+ * @param {number} splitAtPage - First page index that goes into the second part
+ * @returns {Promise<[Buffer, Buffer|null]>} - [part1 (pages 0..splitAtPage-1), part2 (pages splitAtPage..end) or null if splitAtPage >= totalPages]
+ */
+const splitPdfBuffer = async (buffer, splitAtPage) => {
+  const src = await PDFDocument.load(buffer);
+  const indices = src.getPageIndices();
+  const n = indices.length;
+  if (splitAtPage >= n) return [buffer, null];
+  if (splitAtPage <= 0) return [null, buffer];
+  const doc1 = await PDFDocument.create();
+  const doc2 = await PDFDocument.create();
+  const pages1 = await doc1.copyPages(src, indices.slice(0, splitAtPage));
+  pages1.forEach((p) => doc1.addPage(p));
+  const pages2 = await doc2.copyPages(src, indices.slice(splitAtPage, n));
+  pages2.forEach((p) => doc2.addPage(p));
+  return [Buffer.from(await doc1.save()), Buffer.from(await doc2.save())];
 };
 
 /**
@@ -4300,6 +4351,9 @@ async function generateAssessmentSingleHTMLV3(assessmentData, isResidential) {
   /* A4 portrait: 210mm x 297mm - use fixed size so percentage heights resolve (body has no height in single doc) */
   const A4_HEIGHT = '297mm';
   const A4_WIDTH = '210mm';
+  /* A4 landscape: 297mm x 210mm - site plan page needs fixed size so content area does not collapse */
+  const A4_LANDSCAPE_HEIGHT = '210mm';
+  const A4_LANDSCAPE_WIDTH = '297mm';
 
   // Single-doc layout: avoid blank pages, full-page sections use fixed A4 height so cover/content render
   const singleDocLayoutCss = `
@@ -4309,6 +4363,8 @@ async function generateAssessmentSingleHTMLV3(assessmentData, isResidential) {
     .single-doc-cover .cover-page, .single-doc-cover .page, .single-doc-version .page, .single-doc-appendix .page, .single-doc-appendix .appendix-a-page, .single-doc-appendix .appendix-b-page { width: 100% !important; height: 100% !important; min-height: 100% !important; box-sizing: border-box; }
     .single-doc-section { page-break-before: always; break-before: page; }
     .single-doc-cover { page-break-before: avoid; }
+    .single-doc-site-plan-section { width: ${A4_LANDSCAPE_WIDTH}; min-width: ${A4_LANDSCAPE_WIDTH}; height: ${A4_LANDSCAPE_HEIGHT}; min-height: ${A4_LANDSCAPE_HEIGHT}; box-sizing: border-box; }
+    .single-doc-site-plan-section .site-plan-page { width: 100% !important; height: 100% !important; min-height: 100% !important; box-sizing: border-box; }
   `;
 
   /* Version and appendix: same footer formatting as main (green line, layout, at bottom of page) */
@@ -4349,7 +4405,7 @@ async function generateAssessmentSingleHTMLV3(assessmentData, isResidential) {
   if (hasSitePlan) {
     bodyParts.push(`<div class="single-doc-appendix single-doc-section" style="page: appendix">${appendixBBody}</div>`);
     if (isSitePlanImage && sitePlanFragment) {
-      bodyParts.push(`<div class="single-doc-section" style="page: appendix-landscape">${sitePlanFragment}</div>`);
+      bodyParts.push(`<div class="single-doc-site-plan-section single-doc-section" style="page: appendix-landscape">${sitePlanFragment}</div>`);
     }
   }
 

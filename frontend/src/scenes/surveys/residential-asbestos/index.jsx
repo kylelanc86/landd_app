@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Box,
   Typography,
@@ -42,6 +42,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import MailIcon from "@mui/icons-material/Mail";
 import DownloadingIcon from "@mui/icons-material/Downloading";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import { tokens } from "../../../theme/tokens";
 import { useTheme } from "@mui/material/styles";
 import {
@@ -58,8 +59,10 @@ import {
   startAssessmentPDFJob,
   getAssessmentPDFStatus,
   downloadAssessmentPDFByAssessmentId,
+  generateAssessmentPDFAsync,
 } from "../../../utils/templatePDFGenerator";
 import { formatAuthoriserDisplayName } from "../../../utils/formatters";
+import PermissionGate from "../../../components/PermissionGate";
 
 const CACHE_KEY = "residentialAsbestosJobsCache";
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -211,6 +214,9 @@ const ResidentialAsbestosAssessment = () => {
   const [assessmentPdfStartingId, setAssessmentPdfStartingId] = useState(null); // job id while start request in flight
   const [assessmentPdfGeneratingForJobId, setAssessmentPdfGeneratingForJobId] = useState(null); // job id whose PDF is generating (until poll completes)
   const [assessmentDownloadDialogOpen, setAssessmentDownloadDialogOpen] = useState(false);
+  // After a PDF is generated, store jobId so the next download uses freshJobId (avoids 410 until backend grace period)
+  const lastPdfJobIdByAssessmentId = useRef({});
+  const PDF_JOB_GRACE_MS = 2 * 60 * 1000; // 2 min, match backend ASSESSMENT_PDF_GRACE_MS
   const [generatingReportId, setGeneratingReportId] = useState(null); // legacy / other flows
 
   // Delete confirmation state
@@ -220,6 +226,9 @@ const ResidentialAsbestosAssessment = () => {
 
   // Complete (archive) state
   const [completingJobId, setCompletingJobId] = useState(null);
+
+  // Unlock (reopen for editing) state
+  const [unlockingJobId, setUnlockingJobId] = useState(null);
 
   // Approval/authorisation state
   const [reportViewedAssessmentIds, setReportViewedAssessmentIds] = useState(
@@ -651,6 +660,28 @@ const ResidentialAsbestosAssessment = () => {
     }
   };
 
+  const handleUnlock = async (event, job) => {
+    event.stopPropagation();
+    if (unlockingJobId) return;
+    setUnlockingJobId(job.id);
+    try {
+      await asbestosAssessmentService.unlockAsbestosAssessment(job.id);
+      clearJobsCache();
+      await fetchJobs({ force: true, silent: true });
+      showSnackbar("Job unlocked. Status set to report ready for review; you can edit the assessment.", "success");
+    } catch (err) {
+      console.error("Error unlocking assessment:", err);
+      showSnackbar(
+        err.response?.data?.message ||
+          err.message ||
+          "Failed to unlock job. Only admins can unlock assessments.",
+        "error",
+      );
+    } finally {
+      setUnlockingJobId(null);
+    }
+  };
+
   const handleEditClick = (event, job) => {
     event.stopPropagation();
     if (isJobReportLocked(job)) return;
@@ -734,9 +765,17 @@ const ResidentialAsbestosAssessment = () => {
         const data = await getAssessmentPDFStatus(assessmentPdfJobId);
         if (data.status === "completed" || data.ready) {
           const assessmentId = assessmentPdfGeneratingForJobId;
+          const completedJobId = assessmentPdfJobId;
           setAssessmentPdfStatus("idle");
           setAssessmentPdfJobId(null);
           setAssessmentPdfGeneratingForJobId(null);
+          // Store so next download for this assessment can use freshJobId (avoids 410 immediately after generate)
+          if (completedJobId && assessmentId) {
+            lastPdfJobIdByAssessmentId.current[String(assessmentId)] = {
+              jobId: completedJobId,
+              at: Date.now(),
+            };
+          }
           // Optimistic update: mark this job as having a valid PDF so the icon turns green immediately
           const now = new Date();
           setJobs((prev) =>
@@ -754,7 +793,7 @@ const ResidentialAsbestosAssessment = () => {
             )
           );
           try {
-            const { filename } = await downloadAssessmentPDFByAssessmentId(assessmentId);
+            const { filename } = await downloadAssessmentPDFByAssessmentId(assessmentId, completedJobId);
             showSnackbar(`Downloaded: ${filename}`, "success");
             setReportViewedAssessmentIds((prev) => new Set(prev).add(assessmentId));
           } catch (e) {
@@ -825,16 +864,40 @@ const ResidentialAsbestosAssessment = () => {
     if (hasRetainedValidPdf(job)) {
       setAssessmentDownloadDialogOpen(true);
       try {
-        const { filename } = await downloadAssessmentPDFByAssessmentId(job.id);
+        const stored = lastPdfJobIdByAssessmentId.current[String(job.id)];
+        const freshJobId =
+          stored &&
+          stored.jobId &&
+          Date.now() - (stored.at || 0) < PDF_JOB_GRACE_MS
+            ? stored.jobId
+            : undefined;
+        const { filename } = await downloadAssessmentPDFByAssessmentId(
+          job.id,
+          freshJobId,
+        );
         showSnackbar(`Downloaded: ${filename}`, "success");
         setReportViewedAssessmentIds((prev) => new Set(prev).add(job.id));
       } catch (err) {
         console.error("Error downloading assessment report:", err);
+        const status = err.status;
         const msg = err.message || "";
-        const isNoPdf = /no pdf|not available|retention|generate the pdf first/i.test(msg);
-        if (isNoPdf) {
-          showSnackbar("No PDF available. Starting generation…", "info");
-          handleStartAssessmentPdf(event, job);
+        const isExpiredOrMissing =
+          (status === 410 || status === 404) ||
+          /no pdf|not available|retention|generate the pdf first|no longer available/i.test(msg);
+        if (isExpiredOrMissing) {
+          showSnackbar("PDF expired or missing. Regenerating and downloading…", "info");
+          try {
+            const { filename } = await generateAssessmentPDFAsync(job.id, {
+              isResidential: true,
+            });
+            showSnackbar(`Downloaded: ${filename}`, "success");
+            setReportViewedAssessmentIds((prev) => new Set(prev).add(job.id));
+            clearJobsCache();
+            await fetchJobs({ force: true, silent: true });
+          } catch (regenErr) {
+            console.error("Error regenerating assessment PDF:", regenErr);
+            showSnackbar(regenErr.message || "Failed to regenerate PDF", "error");
+          }
         } else {
           showSnackbar(msg || "Failed to download PDF", "error");
         }
@@ -1527,6 +1590,24 @@ const ResidentialAsbestosAssessment = () => {
                               </>
                             );
                           })()}
+                          <PermissionGate
+                            requiredPermissions={["admin.update"]}
+                            fallback={null}
+                          >
+                            {isJobReportLocked(job) &&
+                              currentUser?.role !== "employee" && (
+                              <Tooltip title="Unlock job for editing (Admin only). Sets status to report ready for review.">
+                                <IconButton
+                                  size="small"
+                                  onClick={(event) => handleUnlock(event, job)}
+                                  disabled={unlockingJobId === job.id}
+                                  color="warning"
+                                >
+                                  <RefreshIcon />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </PermissionGate>
                           {!isJobReportLocked(job) && (
                             <Tooltip title="Edit Assessment">
                               <IconButton

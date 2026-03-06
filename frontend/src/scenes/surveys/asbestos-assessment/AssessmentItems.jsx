@@ -187,6 +187,63 @@ const isVisuallyAssessedContent = (ac) => {
   );
 };
 
+/**
+ * For LD supplied jobs linked to an assessment, the fibre ID report uses lab reference (projectID-LabN) as the sample reference.
+ * Returns the string to show in the Sample Reference column: lab ref when applicable, else current item ref or "Refer to sample X".
+ */
+const getDisplaySampleReference = (item, items, assessment) => {
+  const projectID = assessment?.projectId?.projectID;
+  const hasSampled = (items || []).some(
+    (i) =>
+      (i.sampleReference || "").trim() !== "" &&
+      !isVisuallyAssessedContent(i.asbestosContent),
+  );
+  if (!projectID || !hasSampled) {
+    const ref = (item.sampleReference || "").trim();
+    const firstIdx = (items || []).findIndex(
+      (i) => (i.sampleReference || "").trim() === ref,
+    );
+    const isReferred =
+      ref &&
+      firstIdx >= 0 &&
+      items.indexOf(item) !== firstIdx;
+    return isReferred
+      ? `Refer to sample ${item.sampleReference}`
+      : item.sampleReference || "N/A";
+  }
+  // Build ordered list of unique sample refs (primary sampled items only, first occurrence order)
+  const seen = new Set();
+  const orderedRefs = (items || [])
+    .filter(
+      (i) =>
+        (i.sampleReference || "").trim() !== "" &&
+        !isVisuallyAssessedContent(i.asbestosContent),
+    )
+    .map((i) => (i.sampleReference || "").trim())
+    .filter((r) => {
+      if (seen.has(r)) return false;
+      seen.add(r);
+      return true;
+    });
+  const refToLabIndex = Object.fromEntries(
+    orderedRefs.map((r, idx) => [r, idx + 1]),
+  );
+  const currentRef = (item.sampleReference || "").trim();
+  const firstIdxWithRef = (items || []).findIndex(
+    (i) => (i.sampleReference || "").trim() === currentRef,
+  );
+  const currentIdx = (items || []).findIndex((i) => i._id === item._id);
+  const isReferred =
+    currentRef !== "" &&
+    firstIdxWithRef >= 0 &&
+    firstIdxWithRef !== currentIdx;
+  const labN = refToLabIndex[currentRef];
+  const labRef = labN ? `${projectID}-Lab${labN}` : null;
+  if (isReferred && labRef) return `Refer to sample ${labRef}`;
+  if (labRef) return labRef;
+  return item.sampleReference || "N/A";
+};
+
 /** Text appended to discussion/conclusions for residential assessments (ceiling void and subfloor). */
 const RESIDENTIAL_CEILING_SUBFLOOR_TEXT =
   "The assessment of the ceiling void was limited to a visual inspection from the access hatch. A combination of insulation batts and loose-fill insulation was identified within the ceiling void, these materials were visually assessed as synthetic mineral fibres (SMF). No suspect ACM was identified during the assessment of the ceiling void however, it is common for ACM to be present within ceiling voids in the forms of debris and/or packers. It is recommended that persons accessing the ceiling void wear a minimum P2 respirator and coveralls.\n\nNo suspect ACM was identified during the assessment of the subfloor, it is common for ACM to be present within subfloors in the form of debris, packers, and/or formwork. It is recommended that persons accessing the crawl space wear a minimum P2 respirator and coveralls.";
@@ -2969,19 +3026,7 @@ const AssessmentItems = () => {
                                 },
                             }}
                           >
-                            {(() => {
-                              const ref = (item.sampleReference || "").trim();
-                              const firstIdx = items.findIndex(
-                                (i) => (i.sampleReference || "").trim() === ref,
-                              );
-                              const isReferred =
-                                ref &&
-                                firstIdx >= 0 &&
-                                items.indexOf(item) !== firstIdx;
-                              return isReferred
-                                ? `Refer to sample ${item.sampleReference}`
-                                : item.sampleReference || "N/A";
-                            })()}
+                            {getDisplaySampleReference(item, items, assessment)}
                           </TableCell>
                           <TableCell
                             sx={{
@@ -3454,9 +3499,25 @@ const AssessmentItems = () => {
                           }
                         }}
                         helperText={
-                          form.sampleReference
-                            ? "'LD-' prefix will be added automatically"
-                            : "'LD-' prefix will be added automatically"
+                          (() => {
+                            const base = form.sampleReference
+                              ? "'LD-' prefix will be added automatically"
+                              : "'LD-' prefix will be added automatically";
+                            if (editingItem && assessment?.projectId?.projectID) {
+                              const labDisplay = getDisplaySampleReference(
+                                editingItem,
+                                items,
+                                assessment,
+                              );
+                              const isLabRef =
+                                labDisplay &&
+                                labDisplay.includes("-Lab") &&
+                                !labDisplay.startsWith("Refer to");
+                              if (isLabRef)
+                                return `${base} · Fibre ID report: ${labDisplay}`;
+                            }
+                            return base;
+                          })()
                         }
                         InputProps={{
                           startAdornment: (

@@ -509,6 +509,15 @@ const LDsuppliedAnalysisPage = () => {
       return "**Analysis Incomplete**";
     }
 
+    // No asbestos fibre types (Chrysotile, Amosite, Crocidolite, UMF): reported result is No Asbestos Detected
+    const hasAsbestosType = fibres.some((f) => {
+      const r = (f.result || '').trim();
+      if (!r) return false;
+      const isUMF = /^umf$/i.test(r) || /^unidentified\s+mineral\s+fibre$/i.test(r);
+      return r.includes('Asbestos') || isUMF;
+    });
+    if (!hasAsbestosType) return "No Asbestos Detected";
+
     return uniqueResults.join(", ");
   }, [fibres, traceAsbestos, traceAsbestosContent, traceCount, noFibreDetected]);
 

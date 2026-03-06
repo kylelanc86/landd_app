@@ -900,6 +900,36 @@ router.patch('/:id/status', async (req, res) => {
   }
 });
 
+// PATCH /api/assessments/:id/unlock - unlock job for editing (admin only); sets status to report-ready-for-review, clears authorisation
+router.patch('/:id/unlock', auth, checkPermission(['admin.update']), async (req, res) => {
+  try {
+    const job = await AsbestosAssessment.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+
+    if (!['report-ready-for-review', 'complete'].includes(job.status)) {
+      return res.status(400).json({
+        message: `Cannot unlock assessment with status: ${job.status}. Only report-ready-for-review or complete jobs can be unlocked.`
+      });
+    }
+
+    job.status = 'report-ready-for-review';
+    job.reportAuthorisedBy = undefined;
+    job.reportAuthorisedAt = undefined;
+    job.markModified('reportAuthorisedBy');
+    job.markModified('reportAuthorisedAt');
+    job.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
+    await job.save();
+
+    res.json({
+      message: 'Assessment unlocked successfully. Job is now report ready for review and can be edited.',
+      job
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message || 'Failed to unlock assessment' });
+  }
+});
+
 // PATCH /api/assessments/:id/ready-for-analysis - mark entire assessment as ready for analysis (DEPRECATED)
 router.patch('/:id/ready-for-analysis', async (req, res) => {
   try {
@@ -1478,6 +1508,19 @@ router.put('/:id/items/:itemNumber/analysis', async (req, res) => {
     if (allItemsAnalysed && assessment.status === 'samples-with-lab') {
       assessment.status = 'sample-analysis-complete';
       assessment.labSamplesStatus = 'analysis-complete'; // Keep Sample Analysis column in sync with LD supplied jobs
+    }
+
+    // If fibre ID report was previously approved, editing analysis data invalidates that approval — require re-approval
+    if (assessment.reportApprovedBy) {
+      assessment.reportApprovedBy = undefined;
+      assessment.reportIssueDate = undefined;
+      assessment.fibreAnalysisReport = undefined;
+      assessment.markModified('reportApprovedBy');
+      assessment.markModified('reportIssueDate');
+      assessment.markModified('fibreAnalysisReport');
+      if (['report-ready-for-review', 'complete'].includes(assessment.status)) {
+        assessment.status = 'sample-analysis-complete';
+      }
     }
     
     assessment.updatedAt = new Date();

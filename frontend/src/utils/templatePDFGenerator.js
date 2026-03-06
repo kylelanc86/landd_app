@@ -289,10 +289,14 @@ export async function getAssessmentPDFStatus(jobId) {
 /**
  * Download assessment PDF by assessment ID (uses persisted PDF; no regeneration).
  * @param {string} assessmentId - Assessment _id
+ * @param {string} [freshJobId] - If provided, backend skips expiry check (use after regeneration so 410 is not returned)
  * @returns {Promise<{ filename: string }>}
  */
-export async function downloadAssessmentPDFByAssessmentId(assessmentId) {
-  const res = await fetch(`${API_BASE}/pdf-docraptor-v2/download-by-assessment/${assessmentId}`, { headers: getAuthHeaders() });
+export async function downloadAssessmentPDFByAssessmentId(assessmentId, freshJobId) {
+  const url = freshJobId
+    ? `${API_BASE}/pdf-docraptor-v2/download-by-assessment/${assessmentId}?freshJobId=${encodeURIComponent(freshJobId)}`
+    : `${API_BASE}/pdf-docraptor-v2/download-by-assessment/${assessmentId}`;
+  const res = await fetch(url, { headers: getAuthHeaders() });
   if (!res.ok) {
     const errText = await res.text();
     let message = `Download failed: ${res.status}`;
@@ -306,7 +310,9 @@ export async function downloadAssessmentPDFByAssessmentId(assessmentId) {
     } catch {
       if (res.status === 404) message = 'No PDF available. Generate the PDF first.';
     }
-    throw new Error(message);
+    const err = new Error(message);
+    err.status = res.status;
+    throw err;
   }
   const blob = await res.blob();
   const contentDisposition = res.headers.get('Content-Disposition');
@@ -325,6 +331,49 @@ export async function downloadAssessmentPDFByAssessmentId(assessmentId) {
   document.body.removeChild(link);
   setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
   return { filename };
+}
+
+/**
+ * Async assessment PDF flow: start job, poll until complete, then download by assessment ID.
+ * Use when the stored PDF has expired (410) or is missing — regenerates and downloads in one go.
+ * @param {string} assessmentId - Assessment _id
+ * @param {{ isResidential?: boolean, onStatus?: (payload: { status: string, message?: string }) => void }} options
+ * @returns {Promise<{ success: true, filename: string }>}
+ */
+export async function generateAssessmentPDFAsync(assessmentId, options = {}) {
+  const { isResidential = false, onStatus } = options;
+  const reportStatus = (payload) => {
+    if (typeof onStatus === 'function') onStatus(payload);
+  };
+
+  const { jobId } = await startAssessmentPDFJob(assessmentId, { isResidential });
+  const startedAt = Date.now();
+
+  reportStatus({ status: 'queued', message: 'Preparing PDF…' });
+  while (true) {
+    if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
+      throw new Error('PDF generation timed out. Please try again.');
+    }
+    const statusData = await getAssessmentPDFStatus(jobId);
+    const { status, error: statusError, message } = statusData;
+
+    if (status === 'queued') {
+      reportStatus({ status: 'queued', message: message || 'Preparing PDF…' });
+    } else if (status === 'working') {
+      reportStatus({ status: 'working', message: message || 'Generating PDF…' });
+    } else if (status === 'completed' || statusData.ready) {
+      reportStatus({ status: 'completed', message: 'PDF ready' });
+      // Pass jobId so backend skips expiry check (freshJobId) and returns the PDF we just generated
+      const { filename } = await downloadAssessmentPDFByAssessmentId(assessmentId, jobId);
+      return { success: true, filename };
+    } else if (status === 'failed') {
+      const errMsg = statusError || message || 'PDF generation failed';
+      reportStatus({ status: 'failed', error: errMsg });
+      throw new Error(errMsg);
+    }
+
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+  }
 }
 
 /**
