@@ -1024,11 +1024,7 @@ const LDsuppliedAnalysisPage = () => {
                         }}
                       >
                         <Typography variant="body2">
-                          {getDisplayLabReference(item) ||
-                            item.sampleReference ||
-                            `Item ${index + 1}`}
-                          {item.locationDescription &&
-                            ` - ${item.locationDescription}`}
+                          {getDisplayLabReference(item)}
                         </Typography>
                         {item.analysisData?.isAnalysed && (
                           <Typography
@@ -1057,6 +1053,14 @@ const LDsuppliedAnalysisPage = () => {
         <Grid container spacing={2}>
           <Grid item xs={12} md={3}>
             <Typography variant="subtitle2" color="text.secondary">
+              Sample Reference
+            </Typography>
+            <Typography variant="body1" sx={{ fontWeight: "medium" }}>
+              {assessmentItem.sampleReference || "N/A"}
+            </Typography>
+          </Grid>
+          <Grid item xs={12} md={3}>
+            <Typography variant="subtitle2" color="text.secondary">
               Lab Reference
             </Typography>
             <Typography variant="body1" sx={{ fontWeight: "medium" }}>
@@ -1072,28 +1076,6 @@ const LDsuppliedAnalysisPage = () => {
             <Typography variant="body1" sx={{ fontWeight: "medium" }}>
               {assessmentItem.materialType || "N/A"}
             </Typography>
-          </Grid>
-          <Grid item xs={12} md={3}>
-            <Typography variant="subtitle2" color="text.secondary">
-              Analysis Date
-            </Typography>
-            <TextField
-              fullWidth
-              type="date"
-              value={analysisDate.toISOString().split("T")[0]}
-              onChange={(e) => setAnalysisDate(new Date(e.target.value))}
-              disabled={assessmentItem?.analysisData?.isAnalysed}
-              InputLabelProps={{
-                shrink: true,
-              }}
-              size="small"
-              sx={{
-                "& .MuiInputBase-input.Mui-disabled": {
-                  backgroundColor: "#f5f5f5",
-                  color: "#666",
-                },
-              }}
-            />
           </Grid>
         </Grid>
       </Paper>

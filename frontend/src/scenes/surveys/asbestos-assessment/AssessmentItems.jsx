@@ -188,30 +188,31 @@ const isVisuallyAssessedContent = (ac) => {
 };
 
 /**
- * For LD supplied jobs linked to an assessment, the fibre ID report uses lab reference (projectID-LabN) as the sample reference.
- * Returns the string to show in the Sample Reference column: lab ref when applicable, else current item ref or "Refer to sample X".
+ * Returns the string to show in the Sample Reference column: the assessment sample reference (e.g. LD-001).
+ * For referred items (same sample as another row), returns "Refer to sample {ref}".
+ * This matches the Fibre ID report, where "Sample Reference" is the assessment ref; lab ref (e.g. PROJ-Lab1) is "L&D ID Reference".
  */
-const getDisplaySampleReference = (item, items, assessment) => {
-  const projectID = assessment?.projectId?.projectID;
-  const hasSampled = (items || []).some(
-    (i) =>
-      (i.sampleReference || "").trim() !== "" &&
-      !isVisuallyAssessedContent(i.asbestosContent),
+const getDisplaySampleReference = (item, items) => {
+  const ref = (item.sampleReference || "").trim();
+  const firstIdx = (items || []).findIndex(
+    (i) => (i.sampleReference || "").trim() === ref,
   );
-  if (!projectID || !hasSampled) {
-    const ref = (item.sampleReference || "").trim();
-    const firstIdx = (items || []).findIndex(
-      (i) => (i.sampleReference || "").trim() === ref,
-    );
-    const isReferred =
-      ref &&
-      firstIdx >= 0 &&
-      items.indexOf(item) !== firstIdx;
-    return isReferred
-      ? `Refer to sample ${item.sampleReference}`
-      : item.sampleReference || "N/A";
-  }
-  // Build ordered list of unique sample refs (primary sampled items only, first occurrence order)
+  const isReferred =
+    ref &&
+    firstIdx >= 0 &&
+    items.indexOf(item) !== firstIdx;
+  return isReferred
+    ? `Refer to sample ${item.sampleReference}`
+    : item.sampleReference || "N/A";
+};
+
+/**
+ * Returns the lab reference (e.g. PROJ-Lab1) for an item when linked to a project, for use in Fibre ID report context.
+ * Returns null if not applicable (no project, or item is not a sampled item).
+ */
+const getLabReferenceForItem = (item, items, assessment) => {
+  const projectID = assessment?.projectId?.projectID;
+  if (!projectID) return null;
   const seen = new Set();
   const orderedRefs = (items || [])
     .filter(
@@ -237,11 +238,9 @@ const getDisplaySampleReference = (item, items, assessment) => {
     currentRef !== "" &&
     firstIdxWithRef >= 0 &&
     firstIdxWithRef !== currentIdx;
+  if (isReferred) return null; // Referred items share the same lab ref as the primary; show only on primary
   const labN = refToLabIndex[currentRef];
-  const labRef = labN ? `${projectID}-Lab${labN}` : null;
-  if (isReferred && labRef) return `Refer to sample ${labRef}`;
-  if (labRef) return labRef;
-  return item.sampleReference || "N/A";
+  return labN ? `${projectID}-Lab${labN}` : null;
 };
 
 /** Text appended to discussion/conclusions for residential assessments (ceiling void and subfloor). */
@@ -689,17 +688,23 @@ const AssessmentItems = () => {
     return `LD-${trimmed}`;
   };
 
-  // Helper function to check if sample reference is unique
+  // Helper function to check if sample reference is unique among primary sampled items only.
+  // Referred items share a sample reference with their primary by design and must not count as duplicates.
   const isSampleReferenceUnique = (sampleRef, excludeItemId = null) => {
     if (!sampleRef || sampleRef.trim() === "") {
       return true; // Empty is allowed (not required)
     }
     const normalizedRef = ensureSampleReferencePrefix(sampleRef);
-    return !items.some(
-      (item) =>
-        item.sampleReference === normalizedRef &&
-        (!excludeItemId || item._id !== excludeItemId),
-    );
+    return !items.some((item, index) => {
+      const itemRefNormalized = ensureSampleReferencePrefix(item.sampleReference);
+      if (itemRefNormalized !== normalizedRef) return false;
+      if (excludeItemId && item._id === excludeItemId) return false;
+      // Only count as duplicate if this item is the primary for this ref (first occurrence)
+      const firstIndexWithRef = items.findIndex(
+        (i) => ensureSampleReferencePrefix(i.sampleReference) === normalizedRef,
+      );
+      return index === firstIndexWithRef;
+    });
   };
 
   // Helper function to get all unique sample references from existing items
@@ -3504,17 +3509,12 @@ const AssessmentItems = () => {
                               ? "'LD-' prefix will be added automatically"
                               : "'LD-' prefix will be added automatically";
                             if (editingItem && assessment?.projectId?.projectID) {
-                              const labDisplay = getDisplaySampleReference(
+                              const labRef = getLabReferenceForItem(
                                 editingItem,
                                 items,
                                 assessment,
                               );
-                              const isLabRef =
-                                labDisplay &&
-                                labDisplay.includes("-Lab") &&
-                                !labDisplay.startsWith("Refer to");
-                              if (isLabRef)
-                                return `${base} · Fibre ID report: ${labDisplay}`;
+                              
                             }
                             return base;
                           })()
