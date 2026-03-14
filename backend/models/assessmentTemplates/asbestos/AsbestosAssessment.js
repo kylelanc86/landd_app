@@ -177,7 +177,7 @@ const AsbestosAssessmentSchema = new mongoose.Schema({
   labSamplesStatus: { type: String, enum: ['samples-in-lab', 'analysis-complete'] }, // L&D supplied jobs table status only (independent of assessment workflow status)
   noSamplesCollected: { type: Boolean, default: false }, // When true, assessment was finalised without sending samples to lab (visual inspection only)
   analyst: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Analyst for all samples in this assessment
-  items: [AssessmentItemSchema],
+  items: { type: [AssessmentItemSchema], default: [] },
   assessmentScope: [{ type: String }], // Array of scope items for the assessment
   jobSpecificExclusions: { type: String }, // Job-specific exclusions/caveats for the assessment report
   discussionConclusions: { type: String }, // Discussion and conclusions text for the assessment report

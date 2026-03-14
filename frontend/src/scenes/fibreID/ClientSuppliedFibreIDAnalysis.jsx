@@ -41,6 +41,7 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { clientSuppliedJobsService } from "../../services/api";
 import customDataFieldGroupService from "../../services/customDataFieldGroupService";
 import { useUserLists } from "../../context/UserListsContext";
+import { formatLabReferenceForDisplay } from "../../utils/formatters";
 
 const ClientSuppliedFibreIDAnalysis = () => {
   const navigate = useNavigate();
@@ -172,9 +173,10 @@ const ClientSuppliedFibreIDAnalysis = () => {
         const savedData = sampleData.analysisData;
         console.log("Loading saved analysis data:", savedData);
 
-        // Check if this was saved as "no fibres detected" or "No asbestos detected"
+        // Check if this was saved as "no fibres detected" or no-asbestos result (accept both casings for legacy data)
         const wasNoFibreDetected =
           savedData.finalResult === "No fibres detected" ||
+          savedData.finalResult === "No Asbestos Detected" ||
           savedData.finalResult === "No asbestos detected" ||
           (savedData.fibres && savedData.fibres.length === 0);
 
@@ -191,7 +193,8 @@ const ClientSuppliedFibreIDAnalysis = () => {
         setAshing(savedData.ashing || "no");
         setCrucibleNo(savedData.crucibleNo || "");
         setFibres(savedData.fibres || []);
-        setFinalResult(savedData.finalResult || "");
+        const loadedFinalResult = savedData.finalResult || "";
+        setFinalResult(/^no asbestos detected$/i.test(loadedFinalResult.trim()) ? "No Asbestos Detected" : loadedFinalResult);
         setTraceAsbestos(savedData.traceAsbestos || "no");
         setTraceAsbestosContent(savedData.traceAsbestosContent || "");
         setTraceCount(savedData.traceCount || "");
@@ -468,7 +471,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
     if (traceAsbestos === "yes" && traceCount && traceAsbestosContent) {
       // Determine result based on trace count
       if (traceCount === "< 5 unequivocal") {
-        return "No asbestos detected";
+        return "No Asbestos Detected";
       } else if (traceCount === "5-19 unequivocal") {
         return `Trace ${traceAsbestosContent} detected`;
       } else if (traceCount === "20+ unequivocal <100 visible") {
@@ -480,7 +483,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
 
     // If no fibres detected checkbox is checked
     if (noFibreDetected) {
-      return "No asbestos detected";
+      return "No Asbestos Detected";
     }
 
     // If no fibres in the array
@@ -498,6 +501,15 @@ const ClientSuppliedFibreIDAnalysis = () => {
     if (uniqueResults.length === 0) {
       return "**Analysis Incomplete**";
     }
+
+    // No asbestos fibre types (Chrysotile, Amosite, Crocidolite, UMF): reported result is No Asbestos Detected
+    const hasAsbestosType = fibres.some((f) => {
+      const r = (f.result || '').trim();
+      if (!r) return false;
+      const isUMF = /^umf$/i.test(r) || /^unidentified\s+mineral\s+fibre$/i.test(r);
+      return r.includes('Asbestos') || isUMF;
+    });
+    if (!hasAsbestosType) return "No Asbestos Detected";
 
     return uniqueResults.join(", ");
   };
@@ -1442,7 +1454,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
                       }}
                     >
                       <Typography variant="body2">
-                        {sampleItem.labReference || `Sample ${index + 1}`}
+                        {formatLabReferenceForDisplay(sampleItem.labReference) || `Sample ${index + 1}`}
                         {sampleItem.clientReference &&
                           ` - ${sampleItem.clientReference}`}
                       </Typography>
@@ -1475,7 +1487,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
               Lab Reference
             </Typography>
             <Typography variant="body1" sx={{ fontWeight: "medium" }}>
-              {sample.labReference || "N/A"}
+              {formatLabReferenceForDisplay(sample.labReference) || "N/A"}
             </Typography>
           </Grid>
           <Grid item xs={12} md={3}>
@@ -2412,7 +2424,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
           rows={3}
           placeholder={
             noFibreDetected
-              ? "No asbestos detected"
+              ? "No Asbestos Detected"
               : traceAsbestos === "yes" && traceCount && traceAsbestosContent
               ? "Automatically calculated from trace analysis"
               : "Summary of all fibre analysis results"

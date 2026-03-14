@@ -16,6 +16,15 @@ function isAssessmentPdfExpired(pdfReadyAt) {
   return Date.now() - new Date(pdfReadyAt).getTime() > ASSESSMENT_PDF_RETENTION_MS;
 }
 
+/** Clear persisted PDF fields when assessment content changes so the UI shows Generate instead of Download. */
+function clearAssessmentPdfFields(doc) {
+  const pdfFields = ['pdfBuffer', 'pdfReadyAt', 'pdfFilename'];
+  pdfFields.forEach((field) => {
+    doc[field] = undefined;
+    doc.markModified(field);
+  });
+}
+
 // GET /api/assessments - list all assessment jobs (populate project and assessor); excludes archived
 // Query param jobType: 'asbestos-assessment' | 'residential-asbestos' - when set, only jobs of that type are returned
 // Query param list=1 - return minimal fields for table display (no full items, photos, blobs); faster and smaller payload
@@ -480,6 +489,8 @@ router.put('/:id', async (req, res) => {
       updateData.intrusiveness = intrusiveness;
     }
 
+    updateData.$unset = { pdfBuffer: 1, pdfReadyAt: 1, pdfFilename: 1 };
+
     // Fetch existing doc to detect newly set assessment report authorisation (requester email) and Fibre ID approval (sample submitter email)
     const existing = await AsbestosAssessment.findById(req.params.id)
       .select('reportAuthorisedBy reportApprovedBy authorisationRequestedBy')
@@ -791,15 +802,28 @@ router.post('/:id/items', async (req, res) => {
   try {
     const job = await AsbestosAssessment.findById(req.params.id);
     if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+    // Ensure items array exists (may be undefined on older documents)
+    if (!Array.isArray(job.items)) {
+      job.items = [];
+      job.markModified('items');
+    }
     const resetStatuses = ['site-works-complete', 'samples-with-lab', 'sample-analysis-complete'];
     if (resetStatuses.includes(job.status)) {
       job.status = 'in-progress';
     }
     job.items.push(req.body);
+    job.markModified('items');
+    clearAssessmentPdfFields(job);
     await job.save();
     res.status(201).json(job.items[job.items.length - 1]);
   } catch (err) {
-    res.status(400).json({ message: 'Failed to add item', error: err.message });
+    console.error('Error adding assessment item:', err);
+    const isValidation = err.name === 'ValidationError';
+    res.status(isValidation ? 400 : 500).json({
+      message: isValidation ? 'Validation failed' : 'Failed to add item',
+      error: err.message,
+      ...(isValidation && err.errors && { errors: err.errors }),
+    });
   }
 });
 
@@ -831,6 +855,7 @@ router.put('/:id/items/:itemId', async (req, res) => {
       }
     }
 
+    clearAssessmentPdfFields(job);
     await job.save();
     res.json(item);
   } catch (err) {
@@ -866,11 +891,42 @@ router.patch('/:id/status', async (req, res) => {
     
     job.status = status;
     job.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
     
     res.json(job);
   } catch (err) {
     res.status(400).json({ message: 'Failed to update assessment status', error: err.message });
+  }
+});
+
+// PATCH /api/assessments/:id/unlock - unlock job for editing (admin only); sets status to report-ready-for-review, clears authorisation
+router.patch('/:id/unlock', auth, checkPermission(['admin.update']), async (req, res) => {
+  try {
+    const job = await AsbestosAssessment.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+
+    if (!['report-ready-for-review', 'complete'].includes(job.status)) {
+      return res.status(400).json({
+        message: `Cannot unlock assessment with status: ${job.status}. Only report-ready-for-review or complete jobs can be unlocked.`
+      });
+    }
+
+    job.status = 'report-ready-for-review';
+    job.reportAuthorisedBy = undefined;
+    job.reportAuthorisedAt = undefined;
+    job.markModified('reportAuthorisedBy');
+    job.markModified('reportAuthorisedAt');
+    job.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
+    await job.save();
+
+    res.json({
+      message: 'Assessment unlocked successfully. Job is now report ready for review and can be edited.',
+      job
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message || 'Failed to unlock assessment' });
   }
 });
 
@@ -881,6 +937,7 @@ router.patch('/:id/ready-for-analysis', async (req, res) => {
     if (!job) return res.status(404).json({ message: 'Assessment job not found' });
     job.status = "samples-with-lab"; // Updated to use new status
     job.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
     
     res.json(job);
@@ -900,6 +957,7 @@ router.patch('/:id/items/:itemId/ready-for-analysis', async (req, res) => {
     
     item.readyForAnalysis = readyForAnalysis;
     item.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
     
     res.json(item);
@@ -917,6 +975,7 @@ router.delete('/:id/items/:itemId', async (req, res) => {
     if (!item) return res.status(404).json({ message: 'Item not found' });
     // Use pull() to remove subdocument from array (recommended for Mongoose)
     job.items.pull(req.params.itemId);
+    clearAssessmentPdfFields(job);
     await job.save();
     res.json({ message: 'Item deleted' });
   } catch (err) {
@@ -961,6 +1020,7 @@ router.post('/:id/items/:itemId/photos', async (req, res) => {
     });
 
     item.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
 
     res.status(201).json(item);
@@ -986,6 +1046,7 @@ router.delete('/:id/items/:itemId/photos/:photoId', async (req, res) => {
 
     item.photographs.splice(photoIndex, 1);
     item.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
 
     res.json({ message: 'Photo deleted successfully', item });
@@ -1011,6 +1072,7 @@ router.patch('/:id/items/:itemId/photos/:photoId/toggle', async (req, res) => {
 
     photo.includeInReport = !photo.includeInReport;
     item.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
 
     res.json({ message: 'Photo inclusion toggled successfully', item });
@@ -1038,6 +1100,7 @@ router.patch('/:id/items/:itemId/photos/:photoId/description', async (req, res) 
 
     photo.description = description !== undefined ? description : photo.description;
     item.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
 
     res.json({ message: 'Photo description updated successfully', item });
@@ -1089,6 +1152,7 @@ router.post('/:id/items/:itemId/photos/:photoId/arrows', async (req, res) => {
       color: color || '#f44336',
     });
     item.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
 
     res.status(201).json({ message: 'Arrow added', item });
@@ -1123,6 +1187,7 @@ router.patch('/:id/items/:itemId/photos/:photoId/arrows/:arrowId', async (req, r
     if (color !== undefined) arrow.color = color;
 
     item.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
 
     res.json({ message: 'Arrow updated', item });
@@ -1150,6 +1215,7 @@ router.delete('/:id/items/:itemId/photos/:photoId/arrows/:arrowId', async (req, 
 
     photo.arrows.pull(req.params.arrowId);
     item.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
 
     res.json({ message: 'Arrow deleted', item });
@@ -1187,6 +1253,7 @@ router.patch('/:id/items/:itemId/photos/:photoId/arrow', async (req, res) => {
       }];
     }
     item.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
 
     res.json({ message: 'Photo arrow updated successfully', item });
@@ -1221,6 +1288,7 @@ router.post('/:id/upload-analysis-certificate', async (req, res) => {
     job.analysisCertificate = true;
     job.analysisCertificateFile = fileData;
     job.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
 
     res.json({ message: 'Analysis certificate uploaded successfully', job });
@@ -1243,6 +1311,7 @@ router.post('/:id/upload-site-plan', async (req, res) => {
     job.sitePlan = true;
     job.sitePlanFile = fileData;
     job.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
 
     res.json({ message: 'Site plan uploaded successfully', job });
@@ -1286,6 +1355,7 @@ router.post('/:id/upload-fibre-analysis-report', async (req, res) => {
     
     job.fibreAnalysisReport = reportData;
     job.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     
     console.log('=== IMMEDIATELY BEFORE SAVE DEBUG ===');
     console.log('About to save - fibreAnalysisReport length:', job.fibreAnalysisReport.length);
@@ -1333,6 +1403,7 @@ router.delete('/:id/analysis-certificate', async (req, res) => {
     job.analysisCertificate = false;
     job.analysisCertificateFile = null;
     job.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
 
     res.json({ message: 'Analysis certificate deleted successfully', job });
@@ -1350,6 +1421,7 @@ router.delete('/:id/site-plan', async (req, res) => {
     job.sitePlan = false;
     job.sitePlanFile = null;
     job.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
     await job.save();
 
     res.json({ message: 'Site plan deleted successfully', job });
@@ -1437,8 +1509,22 @@ router.put('/:id/items/:itemNumber/analysis', async (req, res) => {
       assessment.status = 'sample-analysis-complete';
       assessment.labSamplesStatus = 'analysis-complete'; // Keep Sample Analysis column in sync with LD supplied jobs
     }
+
+    // If fibre ID report was previously approved, editing analysis data invalidates that approval — require re-approval
+    if (assessment.reportApprovedBy) {
+      assessment.reportApprovedBy = undefined;
+      assessment.reportIssueDate = undefined;
+      assessment.fibreAnalysisReport = undefined;
+      assessment.markModified('reportApprovedBy');
+      assessment.markModified('reportIssueDate');
+      assessment.markModified('fibreAnalysisReport');
+      if (['report-ready-for-review', 'complete'].includes(assessment.status)) {
+        assessment.status = 'sample-analysis-complete';
+      }
+    }
     
     assessment.updatedAt = new Date();
+    clearAssessmentPdfFields(assessment);
     await assessment.save();
     
     // Populate analysedBy before sending response

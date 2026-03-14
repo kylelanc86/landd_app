@@ -99,29 +99,30 @@ const asbestosClearanceSchema = new mongoose.Schema(
       required: false,
     },
     // Array of clearance items embedded directly in the clearance job
-    items: [{
-      locationDescription: {
-        type: String,
-        required: true,
-      },
-      levelFloor: {
-        type: String,
-        required: false,
-      },
-      roomArea: {
-        type: String,
-        required: true,
-      },
-      materialDescription: {
-        type: String,
-        required: true,
-      },
-      asbestosType: {
-        type: String,
-        enum: ["non-friable", "friable"],
-        required: true,
-      },
-      photographs: [{
+    items: {
+      type: [{
+        locationDescription: {
+          type: String,
+          required: true,
+        },
+        levelFloor: {
+          type: String,
+          required: false,
+        },
+        roomArea: {
+          type: String,
+          required: true,
+        },
+        materialDescription: {
+          type: String,
+          required: true,
+        },
+        asbestosType: {
+          type: String,
+          enum: ["non-friable", "friable"],
+          required: true,
+        },
+        photographs: [{
         data: {
           type: String, // Base64 image data
           required: true,
@@ -155,10 +156,12 @@ const asbestosClearanceSchema = new mongoose.Schema(
           color: { type: String, default: "#f44336" },
         }],
       }],
-      notes: {
-        type: String,
-      },
-    }],
+        notes: {
+          type: String,
+        },
+      }],
+      default: [],
+    },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

@@ -105,3 +105,53 @@ export const formatAuthoriserDisplayName = (fullName) => {
   if (spaceIndex <= 0) return trimmed.length > 0 ? `${trimmed[0]}.` : "";
   return `${trimmed[0]}. ${trimmed.slice(spaceIndex + 1)}`;
 };
+
+/**
+ * Formats a fibre ID lab reference for display so it always shows the "Lab" suffix.
+ * Converts legacy format "PROJ-1" to "PROJ-Lab1"; leaves "PROJ-Lab1" unchanged.
+ * @param {string} labRef - Stored lab reference (e.g. "LDJ01234-1" or "LDJ01234-Lab1")
+ * @returns {string} - Display form (e.g. "LDJ01234-Lab1")
+ */
+export const formatLabReferenceForDisplay = (labRef) => {
+  if (!labRef || typeof labRef !== "string") return labRef || "";
+  const trimmed = labRef.trim();
+  if (!trimmed) return "";
+  if (/-Lab\d+$/.test(trimmed)) return trimmed;
+  const match = trimmed.match(/^(.+)-(\d+)$/);
+  if (match) return `${match[1]}-Lab${match[2]}`;
+  return trimmed;
+};
+
+/**
+ * Parses the numeric suffix from a lab reference for sorting (e.g. "PROJ-Lab10" -> 10, "PROJ-5" -> 5).
+ * @param {string} labRef - Lab reference string
+ * @returns {number} - The number after -Lab or after last -, or 0 if not parseable
+ */
+export const parseLabReferenceNumber = (labRef) => {
+  if (!labRef || typeof labRef !== "string") return 0;
+  const labMatch = labRef.match(/-Lab(\d+)$/);
+  if (labMatch) return parseInt(labMatch[1], 10);
+  const numMatch = labRef.match(/-(\d+)$/);
+  if (numMatch) return parseInt(numMatch[1], 10);
+  return 0;
+};
+
+/**
+ * Comparator for sorting lab references numerically (Lab1, Lab2, ..., Lab9, Lab10, Lab11)
+ * instead of lexicographically (Lab1, Lab10, Lab11, Lab2, ...).
+ * Use with Array.prototype.sort: items.sort(compareLabReference).
+ * @param {string} a - First lab reference
+ * @param {string} b - Second lab reference
+ * @returns {number} - Negative if a < b, positive if a > b, 0 if equal
+ */
+export const compareLabReference = (a, b) => {
+  const refA = (a && a.labReference) || (typeof a === "string" ? a : "") || "";
+  const refB = (b && b.labReference) || (typeof b === "string" ? b : "") || "";
+  const prefixA = refA.replace(/-Lab?\d+$/, "") || refA;
+  const prefixB = refB.replace(/-Lab?\d+$/, "") || refB;
+  const cmpPrefix = prefixA.localeCompare(prefixB);
+  if (cmpPrefix !== 0) return cmpPrefix;
+  const numA = parseLabReferenceNumber(refA);
+  const numB = parseLabReferenceNumber(refB);
+  return numA - numB;
+};

@@ -40,6 +40,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useUserLists } from "../../context/UserListsContext";
 import { useSnackbar } from "../../context/SnackbarContext";
 import { getTodayInSydney } from "../../utils/dateUtils";
+import { formatLabReferenceForDisplay, compareLabReference } from "../../utils/formatters";
 
 const ANALYSIS_PROGRESS_KEY = "ldc_client_supplied_analysis_progress";
 
@@ -76,7 +77,7 @@ const SampleSummary = React.memo(
           >
             <Box>
               <Typography variant="h5">
-                {sample.labReference || "N/A"}
+                {formatLabReferenceForDisplay(sample.labReference) || "N/A"}
               </Typography>
               <Typography variant="body1" color="text.secondary">
                 Cowl Number: {sample.cowlNumber || "N/A"}
@@ -321,13 +322,9 @@ const ClientSuppliedFibreCountAnalysis = () => {
           [];
         setGraticuleCalibrations(graticuleData);
 
-        // Sort samples by labReference and add unique IDs
+        // Sort samples by lab reference (numeric order: Lab1, Lab2, ..., Lab10, not text order)
         const sortedSamples = (samplesResponse.data || [])
-          .sort((a, b) => {
-            const labRefA = a.labReference || "";
-            const labRefB = b.labReference || "";
-            return labRefA.localeCompare(labRefB);
-          })
+          .sort(compareLabReference)
           .map((sample, index) => ({ ...sample, _id: index })); // Add unique ID based on index
 
         // Initialize analyses for each sample
@@ -1858,7 +1855,7 @@ const ClientSuppliedFibreCountAnalysis = () => {
           Fibre Counts -{" "}
           {activeSampleId !== null &&
             activeSampleId !== undefined &&
-            samples.find((s) => s._id === activeSampleId)?.labReference}
+            (formatLabReferenceForDisplay(samples.find((s) => s._id === activeSampleId)?.labReference) || "N/A")}
         </DialogTitle>
         <DialogContent>
           {activeSampleId !== null &&

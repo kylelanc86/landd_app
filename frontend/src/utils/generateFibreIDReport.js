@@ -1,5 +1,6 @@
 import pdfMake from "pdfmake/build/pdfmake";
 import { formatDateInSydney } from '../utils/dateUtils';
+import { compareLabReference } from '../utils/formatters';
 
 // Helper to format date as DD/MM/YYYY in Sydney timezone (for report issue date, sample date)
 function formatDate(dateStr) {
@@ -72,10 +73,8 @@ pdfMake.fonts = {
     console.warn('Failed to load NATA logo, proceeding without it');
   }
 
-  // Sort sample items by lab reference
-  const sortedSampleItems = [...sampleItems].sort((a, b) => {
-    return (a.labReference || '').localeCompare(b.labReference || '');
-  });
+  // Sort sample items by lab reference (numeric order: Lab1, Lab2, ..., Lab9, Lab10, not text order)
+  const sortedSampleItems = [...sampleItems].sort(compareLabReference);
 
   // Build the document definition
   const docDefinition = {
@@ -556,20 +555,22 @@ pdfMake.fonts = {
                       item.analysisData?.traceCount && 
                       item.analysisData?.traceAsbestosContent;
                     
-                    // Determine asbestos result - trace analysis takes priority
-                    let asbestosResult = 'No Asbestos Detected';
+                    // Determine asbestos result - trace analysis takes priority.
+                    // Default only used if analysis data is missing (PDF generation is gated on all samples analysed).
+                    let asbestosResult = '[Result not set]';
                     
                     if (item.analysisData?.finalResult) {
                       const finalResult = item.analysisData.finalResult;
                       
                       // Use finalResult if:
                       // 1. Trace analysis is present (hasTraceAnalysis)
-                      // 2. Result is "No asbestos detected" (from trace < 5 or "No fibres detected" checkbox)
+                      // 2. Result is no-asbestos (from trace < 5 or "No fibres detected" checkbox); accept either casing for legacy data
                       // 3. Result contains "Trace" (trace analysis results)
+                      const isNoAsbestos = /^no asbestos detected$/i.test(finalResult.trim());
                       if (hasTraceAnalysis || 
-                          finalResult === "No asbestos detected" || 
+                          isNoAsbestos || 
                           finalResult.includes("Trace")) {
-                        asbestosResult = finalResult;
+                        asbestosResult = isNoAsbestos ? "No Asbestos Detected" : finalResult;
                       } else if (asbestosResultsFromFibres.length > 0) {
                         // Fall back to fibre analysis results if no trace analysis
                         asbestosResult = asbestosResultsFromFibres.join('\n\n');
@@ -577,6 +578,14 @@ pdfMake.fonts = {
                     } else if (asbestosResultsFromFibres.length > 0) {
                       // Use fibre analysis results if no finalResult
                       asbestosResult = asbestosResultsFromFibres.join('\n\n');
+                    }
+                    // Non-asbestos fibres identified but no asbestos: report "No Asbestos Detected"
+                    if (asbestosResult === '[Result not set]' && nonAsbestosResults.length > 0 && asbestosResultsFromFibres.length === 0) {
+                      asbestosResult = 'No Asbestos Detected';
+                    }
+                    // No asbestos fibre types (Chrysotile, Amosite, Crocidolite, UMF): report "No Asbestos Detected" (covers no fibres at all, or only non-asbestos)
+                    if (asbestosResult === '[Result not set]' && asbestosResultsFromFibres.length === 0) {
+                      asbestosResult = 'No Asbestos Detected';
                     }
                     
                     const result = {
@@ -586,7 +595,7 @@ pdfMake.fonts = {
                     
                     // Ensure we never return undefined values
                     if (!result.nonAsbestos) result.nonAsbestos = 'None';
-                    if (!result.asbestos) result.asbestos = 'No Asbestos Detected';
+                    if (!result.asbestos) result.asbestos = '[Result not set]';
                     
                     return result;
                   };
@@ -596,18 +605,17 @@ pdfMake.fonts = {
                   // Ensure all values are safe strings to prevent NaN
                   const safeProjectID = (assessment?.projectId?.projectID && assessment.projectId.projectID !== 'undefined' && assessment.projectId.projectID !== 'null') ? assessment.projectId.projectID : 'Unknown';
                   // For client-supplied jobs, use clientReference for sample reference
-                  // For regular jobs, use labReference or sampleReference
+                  // For LD supplied / assessment-linked jobs, use assessment item sample reference (e.g. LD-001), not lab ref
                   const safeSampleRef = (() => {
                     if (isClientSupplied) {
-                      // Client-supplied: prioritize clientReference
                       const ref = item.clientReference || item.labReference || item.sampleReference;
                       if (ref && ref !== 'undefined' && ref !== 'null') {
                         return ref;
                       }
                       return `Sample ${index + 1}`;
                     } else {
-                      // Regular jobs: use existing logic
-                      const ref = item.labReference || item.clientReference || item.sampleReference;
+                      // Regular (LD supplied) jobs: show sample reference from assessment items (LD-XXX)
+                      const ref = item.sampleReference || item.labReference || item.clientReference;
                       if (ref && ref !== 'undefined' && ref !== 'null') {
                         return ref;
                       }
@@ -619,7 +627,7 @@ pdfMake.fonts = {
                     (item.analysisData?.sampleDescription || item.locationDescription || item.clientReference) : 'No description';
                   const safeSampleMass = (sampleMass && sampleMass !== 'undefined' && sampleMass !== 'null') ? sampleMass : 'Unknown';
                   const safeNonAsbestos = (fibreResults.nonAsbestos && fibreResults.nonAsbestos !== 'undefined' && fibreResults.nonAsbestos !== 'null') ? fibreResults.nonAsbestos : 'None';
-                  const safeAsbestos = (fibreResults.asbestos && fibreResults.asbestos !== 'undefined' && fibreResults.asbestos !== 'null') ? fibreResults.asbestos : 'No asbestos detected';
+                  const safeAsbestos = (fibreResults.asbestos && fibreResults.asbestos !== 'undefined' && fibreResults.asbestos !== 'null') ? fibreResults.asbestos : '[Result not set]';
                   
                   // Check for any problematic values
                   const allValues = [safeProjectID, safeSampleRef, safeAnalysisDate, safeDescription, safeSampleMass, safeNonAsbestos, safeAsbestos];

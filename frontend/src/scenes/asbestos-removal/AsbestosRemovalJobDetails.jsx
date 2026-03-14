@@ -388,7 +388,25 @@ const AsbestosRemovalJobDetails = () => {
               : 0;
             return dateB - dateA; // Newest first
           });
-          setClearances(sortedClearances);
+          // Preserve pdfReadyAt/pdfDownloadUrl from existing state when refetch doesn't have them yet
+          // (e.g. after PDF generation completes, backend may not have persisted before this refetch)
+          setClearances((prev) => {
+            const byId = new Map(prev.map((c) => [String(c._id), c]));
+            return sortedClearances.map((c) => {
+              const existing = byId.get(String(c._id));
+              const hasPdfFromServer = c.pdfReadyAt || c.pdfDownloadUrl;
+              if (!hasPdfFromServer && existing && (existing.pdfReadyAt || existing.pdfDownloadUrl)) {
+                return {
+                  ...c,
+                  pdfReadyAt: existing.pdfReadyAt ?? c.pdfReadyAt,
+                  pdfDownloadUrl: existing.pdfDownloadUrl ?? c.pdfDownloadUrl,
+                  pdfFilename: existing.pdfFilename ?? c.pdfFilename,
+                  updatedAt: existing.updatedAt ?? c.updatedAt,
+                };
+              }
+              return c;
+            });
+          });
           setClearancesLoaded(true); // Mark as loaded when fetched via fetchJobDetails
           const clearancesSetDuration = Math.round(
             getTimestamp() - clearancesStart,
@@ -624,6 +642,19 @@ const AsbestosRemovalJobDetails = () => {
       setActiveTab(0);
     }
   }, [activeTab, clearancesLoaded]);
+
+  // Refetch clearances when user returns to this tab (e.g. after adding items in clearance items page)
+  // so generate/download icon reflects updatedAt vs pdfReadyAt correctly
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible" && jobId && clearancesLoaded) {
+        clearancesLoadingRef.current = false;
+        fetchClearances();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [jobId, clearancesLoaded, fetchClearances]);
 
   useEffect(() => {
     const shiftsSize = JSON.stringify(airMonitoringShifts).length;
@@ -1346,7 +1377,7 @@ const AsbestosRemovalJobDetails = () => {
 
   // Green icon = retained PDF available → click only downloads. Orange = no PDF yet → click generates then downloads.
   const hasRetainedValidPdf = (clearance) =>
-    !!(clearance.pdfReadyAt || clearance.pdfDownloadUrl);
+    Boolean(clearance.pdfReadyAt || clearance.pdfDownloadUrl);
 
   const handleDownloadOrGenerateClearanceReport = async (clearance, event) => {
     event?.stopPropagation();

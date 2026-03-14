@@ -43,6 +43,8 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { clientSuppliedJobsService, projectService } from "../../services/api";
 import { generateShiftReport } from "../../utils/generateShiftReport";
 import { generateFibreIDReport } from "../../utils/generateFibreIDReport";
+import { formatLabReferenceForDisplay } from "../../utils/formatters";
+import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
 import { useSnackbar } from "../../context/SnackbarContext";
 import { useAuth } from "../../context/AuthContext";
 import { hasPermission } from "../../config/permissions";
@@ -811,8 +813,12 @@ const ClientSuppliedJobs = () => {
           )
           .map((item, index) => ({
             itemNumber: index + 1,
-            sampleReference: item.labReference || `Sample ${index + 1}`,
-            labReference: item.labReference || `Sample ${index + 1}`,
+            sampleReference:
+              formatLabReferenceForDisplay(item.labReference) ||
+              `Sample ${index + 1}`,
+            labReference:
+              formatLabReferenceForDisplay(item.labReference) ||
+              `Sample ${index + 1}`,
             locationDescription:
               item.clientReference || item.sampleDescription || "N/A",
             clientReference: item.clientReference,
@@ -853,8 +859,12 @@ const ClientSuppliedJobs = () => {
         // Transform sample items to match air monitoring format
         const transformedSamples = sampleItems.map((item, index) => {
           return {
-            fullSampleID: item.labReference || `Sample-${index + 1}`,
-            sampleID: item.labReference || `Sample-${index + 1}`,
+            fullSampleID:
+              formatLabReferenceForDisplay(item.labReference) ||
+              `Sample-${index + 1}`,
+            sampleID:
+              formatLabReferenceForDisplay(item.labReference) ||
+              `Sample-${index + 1}`,
             location: item.clientReference || item.locationDescription || "N/A",
             // No time or flowrate for client supplied
             startTime: null,

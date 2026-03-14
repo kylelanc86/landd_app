@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon",
+    "dev": "node scripts/dev.js",
     "install:prod": "npm ci --only=production --no-audit --no-fund",
     "cleanup-tokens": "node scripts/cleanupTokenBlacklist.js",
     "migrate": "node scripts/runMigration.js"

@@ -9,6 +9,15 @@ const {
 const { getLegislationForReportTemplate } = require("../services/templateService");
 const { formatDateSydney } = require("../utils/dateUtils");
 
+/** Clear persisted PDF fields when clearance content changes so the UI shows Generate instead of Download. */
+function clearClearancePdfFields(clearance) {
+  const pdfFields = ["pdfDownloadUrl", "pdfJobId", "pdfReadyAt", "pdfFilename"];
+  pdfFields.forEach((field) => {
+    clearance[field] = undefined;
+    clearance.markModified(field);
+  });
+}
+
 // Get all asbestos clearances with filtering and pagination
 router.get("/", auth, checkPermission("asbestos.view"), async (req, res) => {
   try {
@@ -264,6 +273,12 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
       return res.status(404).json({ message: "Asbestos clearance not found" });
     }
 
+    // Ensure items array exists (may be undefined on older documents)
+    if (!Array.isArray(clearance.items)) {
+      clearance.items = [];
+      clearance.markModified("items");
+    }
+
     const previousProjectId = clearance.projectId
       ? clearance.projectId.toString()
       : null;
@@ -289,6 +304,7 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
     clearance.sitePlanFile = sitePlanFile !== undefined ? sitePlanFile : clearance.sitePlanFile;
     if (sitePlanLegend !== undefined) {
       clearance.sitePlanLegend = sitePlanLegend;
+      clearance.markModified("sitePlanLegend");
     }
     if (sitePlanLegendTitle !== undefined) {
       clearance.sitePlanLegendTitle = sitePlanLegendTitle;
@@ -310,7 +326,7 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
     clearance.jobSpecificExclusions = jobSpecificExclusions !== undefined ? jobSpecificExclusions : clearance.jobSpecificExclusions;
     clearance.notes = notes || clearance.notes;
     clearance.vehicleEquipmentDescription = vehicleEquipmentDescription !== undefined ? vehicleEquipmentDescription : clearance.vehicleEquipmentDescription;
-    clearance.updatedBy = req.user.id;
+    clearance.updatedBy = req.user._id || req.user.id;
     
     // Handle revision fields
     if (revision !== undefined) {
@@ -323,6 +339,7 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
       clearance.reportViewedAt = reportViewedAt;
     }
 
+    clearClearancePdfFields(clearance);
     const updatedClearance = await clearance.save();
     
     const populatedClearance = await AsbestosClearance.findById(updatedClearance._id)
@@ -364,7 +381,13 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
     res.json(populatedClearance);
   } catch (error) {
     console.error("Error updating asbestos clearance:", error);
-    res.status(500).json({ message: "Server error" });
+    const message = error.message || "Server error";
+    const isValidation = error.name === "ValidationError";
+    res.status(isValidation ? 400 : 500).json({
+      message: isValidation ? "Validation failed" : "Server error",
+      error: message,
+      ...(isValidation && error.errors && { errors: error.errors }),
+    });
   }
 });
 
@@ -403,6 +426,7 @@ router.patch("/:id/status", auth, checkPermission("asbestos.edit"), async (req, 
     clearance.status = status;
     clearance.updatedBy = req.user.id;
 
+    clearClearancePdfFields(clearance);
     const updatedClearance = await clearance.save();
     
     const populatedClearance = await AsbestosClearance.findById(updatedClearance._id)
@@ -457,6 +481,7 @@ router.post("/:id/air-monitoring-report", auth, checkPermission("asbestos.edit")
       clearance.airMonitoringReports = [{ reportData, shiftDate, shiftId }];
     }
 
+    clearClearancePdfFields(clearance);
     const updatedClearance = await clearance.save();
     
     const populatedClearance = await AsbestosClearance.findById(updatedClearance._id)
@@ -661,21 +686,27 @@ router.post("/:id/items", auth, checkPermission("asbestos.edit"), async (req, re
       return res.status(404).json({ message: "Asbestos clearance not found" });
     }
 
+    // Ensure items array exists (may be undefined on older documents)
+    if (!Array.isArray(clearance.items)) {
+      clearance.items = [];
+    }
+
     const newItem = {
-      locationDescription,
-      levelFloor,
-      roomArea,
-      materialDescription,
-      asbestosType,
-      photograph,
-      notes,
+      locationDescription: locationDescription ?? "",
+      levelFloor: levelFloor ?? "",
+      roomArea: roomArea ?? "",
+      materialDescription: materialDescription ?? "",
+      asbestosType: asbestosType ?? "non-friable",
+      notes: notes ?? "",
     };
 
     clearance.items.push(newItem);
-    clearance.updatedBy = req.user.id;
+    clearance.markModified("items");
+    clearance.updatedBy = req.user._id || req.user.id;
 
+    clearClearancePdfFields(clearance);
     const updatedClearance = await clearance.save();
-    
+
     const populatedClearance = await AsbestosClearance.findById(updatedClearance._id)
       .populate({
         path: "projectId",
@@ -691,7 +722,13 @@ router.post("/:id/items", auth, checkPermission("asbestos.edit"), async (req, re
     res.status(201).json(populatedClearance);
   } catch (error) {
     console.error("Error adding clearance item:", error);
-    res.status(500).json({ message: "Server error" });
+    const message = error.message || "Server error";
+    const isValidation = error.name === "ValidationError";
+    res.status(isValidation ? 400 : 500).json({
+      message: isValidation ? "Validation failed" : "Server error",
+      error: message,
+      ...(isValidation && error.errors && { errors: error.errors }),
+    });
   }
 });
 
@@ -724,6 +761,7 @@ router.put("/:id/items/:itemId", auth, checkPermission("asbestos.edit"), async (
 
     clearance.updatedBy = req.user.id;
 
+    clearClearancePdfFields(clearance);
     const updatedClearance = await clearance.save();
     
     const populatedClearance = await AsbestosClearance.findById(updatedClearance._id)
@@ -761,6 +799,7 @@ router.delete("/:id/items/:itemId", auth, checkPermission("asbestos.edit"), asyn
     clearance.items.splice(itemIndex, 1);
     clearance.updatedBy = req.user.id;
 
+    clearClearancePdfFields(clearance);
     const updatedClearance = await clearance.save();
     
     const populatedClearance = await AsbestosClearance.findById(updatedClearance._id)
@@ -822,6 +861,7 @@ router.post("/:id/items/:itemId/photos", auth, checkPermission("asbestos.edit"),
     });
 
     clearance.updatedBy = req.user.id;
+    clearClearancePdfFields(clearance);
     await clearance.save();
 
     res.status(201).json(item);
@@ -851,6 +891,7 @@ router.delete("/:id/items/:itemId/photos/:photoId", auth, checkPermission("asbes
 
     item.photographs.splice(photoIndex, 1);
     clearance.updatedBy = req.user.id;
+    clearClearancePdfFields(clearance);
     await clearance.save();
 
     res.json({ message: "Photo deleted successfully", item });
@@ -880,6 +921,7 @@ router.patch("/:id/items/:itemId/photos/:photoId/toggle", auth, checkPermission(
 
     photo.includeInReport = !photo.includeInReport;
     clearance.updatedBy = req.user.id;
+    clearClearancePdfFields(clearance);
     await clearance.save();
 
     res.json({ message: "Photo inclusion toggled successfully", item });
@@ -911,6 +953,7 @@ router.patch("/:id/items/:itemId/photos/:photoId/description", auth, checkPermis
 
     photo.description = description !== undefined ? description : photo.description;
     clearance.updatedBy = req.user.id;
+    clearClearancePdfFields(clearance);
     await clearance.save();
 
     res.json({ message: "Photo description updated successfully", item });
@@ -954,6 +997,7 @@ router.post("/:id/items/:itemId/photos/:photoId/arrows", auth, checkPermission("
       color: color || "#f44336",
     });
     clearance.updatedBy = req.user.id;
+    clearClearancePdfFields(clearance);
     await clearance.save();
     res.status(201).json({ message: "Arrow added", item });
   } catch (err) {
@@ -979,6 +1023,7 @@ router.patch("/:id/items/:itemId/photos/:photoId/arrows/:arrowId", auth, checkPe
     if (typeof rotation === "number") arrow.rotation = rotation;
     if (color !== undefined) arrow.color = color;
     clearance.updatedBy = req.user.id;
+    clearClearancePdfFields(clearance);
     await clearance.save();
     res.json({ message: "Arrow updated", item });
   } catch (err) {
@@ -1000,6 +1045,7 @@ router.delete("/:id/items/:itemId/photos/:photoId/arrows/:arrowId", auth, checkP
     if (!arrow) return res.status(404).json({ message: "Arrow not found" });
     photo.arrows.pull(req.params.arrowId);
     clearance.updatedBy = req.user.id;
+    clearClearancePdfFields(clearance);
     await clearance.save();
     res.json({ message: "Arrow deleted", item });
   } catch (err) {
@@ -1031,6 +1077,7 @@ router.patch("/:id/items/:itemId/photos/:photoId/arrow", auth, checkPermission("
       }];
     }
     clearance.updatedBy = req.user.id;
+    clearClearancePdfFields(clearance);
     await clearance.save();
     res.json({ message: "Photo arrow updated successfully", item });
   } catch (err) {
@@ -1077,6 +1124,7 @@ router.post("/:id/authorise", auth, checkPermission("asbestos.edit"), async (req
     clearance.reportIssueDate = new Date();
     clearance.updatedBy = req.user.id;
 
+    clearClearancePdfFields(clearance);
     const updatedClearance = await clearance.save();
 
     // Send notification email to the user who requested authorisation

@@ -36,7 +36,8 @@ import {
 } from "@mui/icons-material";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { clientSuppliedJobsService } from "../../services/api";
-import { compressImage } from "../../utils/imageCompression";
+import { compressImage, getBase64SizeKB } from "../../utils/imageCompression";
+import { formatLabReferenceForDisplay, compareLabReference } from "../../utils/formatters";
 
 const ClientSuppliedSamples = () => {
   const navigate = useNavigate();
@@ -57,6 +58,8 @@ const ClientSuppliedSamples = () => {
   const [uploadingCOC, setUploadingCOC] = useState(false);
   const [cocDialogOpen, setCocDialogOpen] = useState(false);
   const [cocFullScreenOpen, setCocFullScreenOpen] = useState(false);
+  const [cocFullScreenIndex, setCocFullScreenIndex] = useState(0);
+  const [cocClickedIndex, setCocClickedIndex] = useState(null);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
 
@@ -137,12 +140,7 @@ const ClientSuppliedSamples = () => {
 
   // Removed fetchUsers - analyst selection is now only on the analysis page
 
-  const filteredSamples = samples.sort((a, b) => {
-    // Sort by labReference in ascending order
-    const labRefA = a.labReference || "";
-    const labRefB = b.labReference || "";
-    return labRefA.localeCompare(labRefB);
-  });
+  const filteredSamples = [...samples].sort(compareLabReference);
 
   const handleBackToJobs = () => {
     if (
@@ -170,10 +168,10 @@ const ClientSuppliedSamples = () => {
       }));
       setSampleRows(existingRows);
     } else {
-      // Start with one empty row with auto-generated lab reference
+      // Start with one empty row with auto-generated lab reference (Lab suffix to match fibre ID report format)
       setSampleRows([
         {
-          labReference: `${job?.projectId?.projectID || "PROJ"}-1`,
+          labReference: `${job?.projectId?.projectID || "PROJ"}-Lab1`,
           clientReference: "",
           cowlNumber: "",
         },
@@ -187,24 +185,26 @@ const ClientSuppliedSamples = () => {
 
   const handleAddRow = () => {
     // Get all existing lab references (from both current rows and saved samples)
-    const existingLabRefs = new Set([
+    const existingLabRefs = [
       ...sampleRows.map((row) => row.labReference),
       ...samples.map((sample) => sample.labReference),
-    ]);
+    ].filter(Boolean);
 
-    // Find the next available number
-    let newRowNumber = 1;
-    while (
-      existingLabRefs.has(
-        `${job?.projectId?.projectID || "PROJ"}-${newRowNumber}`
-      )
-    ) {
-      newRowNumber++;
-    }
-
-    const newLabReference = `${
-      job?.projectId?.projectID || "PROJ"
-    }-${newRowNumber}`;
+    // Parse numeric part: support both "PROJ-Lab3" and legacy "PROJ-3"
+    const getLabNumber = (ref) => {
+      if (!ref || typeof ref !== "string") return 0;
+      const labMatch = ref.match(/-Lab(\d+)$/);
+      if (labMatch) return parseInt(labMatch[1], 10);
+      const numMatch = ref.match(/-(\d+)$/);
+      if (numMatch) return parseInt(numMatch[1], 10);
+      return 0;
+    };
+    const maxN = existingLabRefs.length
+      ? Math.max(...existingLabRefs.map(getLabNumber))
+      : 0;
+    const newRowNumber = maxN + 1;
+    const prefix = job?.projectId?.projectID || "PROJ";
+    const newLabReference = `${prefix}-Lab${newRowNumber}`;
     setSampleRows([
       ...sampleRows,
       {
@@ -218,10 +218,11 @@ const ClientSuppliedSamples = () => {
   const handleRemoveRow = (index) => {
     if (sampleRows.length > 1) {
       const newRows = sampleRows.filter((_, i) => i !== index);
-      // Update lab references for remaining rows
+      // Update lab references for remaining rows (Lab suffix to match fibre ID report format)
+      const prefix = job?.projectId?.projectID || "PROJ";
       const updatedRows = newRows.map((row, i) => ({
         ...row,
-        labReference: `${job?.projectId?.projectID || "PROJ"}-${i + 1}`,
+        labReference: `${prefix}-Lab${i + 1}`,
       }));
       setSampleRows(updatedRows);
     }
@@ -363,11 +364,17 @@ const ClientSuppliedSamples = () => {
     return `${projectID}-Chain of Custody-${dateStr}.${fileExtension}`;
   };
 
+  /** Normalize chainOfCustody to array (supports legacy single object). */
+  const getCOCItems = (jobObj) => {
+    const coc = jobObj?.chainOfCustody;
+    if (!coc) return [];
+    return Array.isArray(coc) ? coc : [coc];
+  };
+
   const handleCOCUpload = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
-    // Validate file type
     const validTypes = [
       "application/pdf",
       "image/jpeg",
@@ -384,35 +391,44 @@ const ClientSuppliedSamples = () => {
       return;
     }
 
-    // Validate file size (max 5MB before compression)
-    const maxSizeMB = 5;
-    if (file.size > maxSizeMB * 1024 * 1024) {
-      setSnackbar({
-        open: true,
-        message: `File size exceeds ${maxSizeMB}MB. Please choose a smaller file.`,
-        severity: "error",
-      });
-      return;
+    const isImage = file.type.startsWith("image/");
+    if (!isImage) {
+      const maxSizeMB = 5;
+      if (file.size > maxSizeMB * 1024 * 1024) {
+        setSnackbar({
+          open: true,
+          message: `File size exceeds ${maxSizeMB}MB. Please choose a smaller file.`,
+          severity: "error",
+        });
+        return;
+      }
     }
 
     try {
       setUploadingCOC(true);
       const compressedFile = await compressFile(file);
+      const existingItems = getCOCItems(job);
 
-      // Generate filename using naming convention
-      const fileName = generateCOCFilename(file, job);
+      let fileName = generateCOCFilename(file, job);
+      if (existingItems.length > 0) {
+        const ext = fileName.includes(".") ? fileName.split(".").pop() : "jpg";
+        const base = fileName.replace(/\.[^.]+$/, "") || fileName;
+        fileName = `${base}-${existingItems.length + 1}.${ext}`;
+      }
 
-      // Update job with COC data
+      const fileSizeBytes = Math.round((compressedFile.length * 3) / 4);
+      const newItem = {
+        fileName,
+        fileType: file.type,
+        uploadedAt: new Date().toISOString(),
+        data: compressedFile,
+        fileSizeBytes,
+      };
+      const updatedItems = [...existingItems, newItem];
+
       await clientSuppliedJobsService.update(jobId, {
-        chainOfCustody: {
-          fileName: fileName,
-          fileType: file.type,
-          uploadedAt: new Date().toISOString(),
-          data: compressedFile,
-        },
+        chainOfCustody: updatedItems,
       });
-
-      // Refresh job details to show the uploaded COC
       await fetchJobDetails();
 
       setSnackbar({
@@ -429,18 +445,23 @@ const ClientSuppliedSamples = () => {
       });
     } finally {
       setUploadingCOC(false);
-      // Reset the file input
       event.target.value = "";
     }
   };
 
-  const handleDownloadCOC = () => {
-    if (!job?.chainOfCustody?.data) return;
+  const handleDownloadCOC = (itemOrIndex) => {
+    const items = getCOCItems(job);
+    const item =
+      itemOrIndex === undefined
+        ? items[0]
+        : typeof itemOrIndex === "number"
+          ? items[itemOrIndex]
+          : itemOrIndex;
+    if (!item?.data) return;
 
     try {
-      // Convert base64 to blob
-      const byteString = atob(job.chainOfCustody.data.split(",")[1]);
-      const mimeString = job.chainOfCustody.data
+      const byteString = atob(item.data.split(",")[1]);
+      const mimeString = item.data
         .split(",")[0]
         .split(":")[1]
         .split(";")[0];
@@ -450,12 +471,10 @@ const ClientSuppliedSamples = () => {
         ia[i] = byteString.charCodeAt(i);
       }
       const blob = new Blob([ab], { type: mimeString });
-
-      // Create download link
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = job.chainOfCustody.fileName || "chain-of-custody.pdf";
+      link.download = item.fileName || "chain-of-custody";
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -475,10 +494,9 @@ const ClientSuppliedSamples = () => {
       await clientSuppliedJobsService.update(jobId, {
         chainOfCustody: null,
       });
-
-      // Refresh job details
       await fetchJobDetails();
-
+      setCocDialogOpen(false);
+      setCocClickedIndex(null);
       setSnackbar({
         open: true,
         message: "Chain of Custody form removed",
@@ -489,6 +507,30 @@ const ClientSuppliedSamples = () => {
       setSnackbar({
         open: true,
         message: "Failed to remove Chain of Custody form",
+        severity: "error",
+      });
+    }
+  };
+
+  const handleDeleteCOCItem = async (index) => {
+    const items = getCOCItems(job);
+    const nextItems = items.filter((_, i) => i !== index);
+    try {
+      await clientSuppliedJobsService.update(jobId, {
+        chainOfCustody: nextItems.length === 0 ? null : nextItems,
+      });
+      await fetchJobDetails();
+      setCocClickedIndex(null);
+      setSnackbar({
+        open: true,
+        message: "Item removed from Chain of Custody",
+        severity: "success",
+      });
+    } catch (error) {
+      console.error("Error removing COC item:", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to remove item",
         severity: "error",
       });
     }
@@ -569,16 +611,19 @@ const ClientSuppliedSamples = () => {
                 {samples.length > 0 ? "Edit Samples" : "Add Samples"}
               </Button>
 
-              {/* Upload/View COC Button */}
+              {/* Upload/View COC Button - opens same modal as ClientSuppliedJobs */}
               <Button
                 variant="outlined"
                 startIcon={
-                  job?.chainOfCustody ? <DescriptionIcon /> : <UploadFileIcon />
+                  getCOCItems(job).length > 0 ? <DescriptionIcon /> : <UploadFileIcon />
                 }
-                onClick={() => setCocDialogOpen(true)}
+                onClick={() => {
+                  setCocClickedIndex(null);
+                  setCocDialogOpen(true);
+                }}
                 disabled={uploadingCOC}
               >
-                {job?.chainOfCustody
+                {getCOCItems(job).length > 0
                   ? location.pathname.startsWith("/laboratory-services/ld-supplied") ||
                     location.pathname.startsWith("/fibre-id/ld-supplied")
                     ? "View/Edit COC/Site sheets"
@@ -671,7 +716,7 @@ const ClientSuppliedSamples = () => {
                             variant="body2"
                             sx={{ fontWeight: "medium" }}
                           >
-                            {sample.labReference}
+                            {formatLabReferenceForDisplay(sample.labReference)}
                           </Typography>
                         </TableCell>
                         <TableCell>
@@ -770,11 +815,14 @@ const ClientSuppliedSamples = () => {
           </Alert>
         </Snackbar>
 
-        {/* COC View/Edit Dialog */}
+        {/* COC View/Edit Dialog - matches ClientSuppliedJobs Upload COC modal */}
         <Dialog
           open={cocDialogOpen}
-          onClose={() => setCocDialogOpen(false)}
-          maxWidth="sm"
+          onClose={() => {
+            setCocDialogOpen(false);
+            setCocClickedIndex(null);
+          }}
+          maxWidth="md"
           fullWidth
         >
           <DialogTitle>
@@ -788,178 +836,208 @@ const ClientSuppliedSamples = () => {
               <Typography variant="h6">
                 {location.pathname.startsWith("/laboratory-services/ld-supplied") ||
                 location.pathname.startsWith("/fibre-id/ld-supplied")
-                  ? "Chain of Custody/Sample Sheets"
+                  ? "Chain of Custody / Site Sheets"
                   : "Chain of Custody"}
               </Typography>
-              <MuiIconButton onClick={() => setCocDialogOpen(false)}>
+              <MuiIconButton
+                onClick={() => {
+                  setCocDialogOpen(false);
+                  setCocClickedIndex(null);
+                }}
+              >
                 <CloseIcon />
               </MuiIconButton>
             </Box>
           </DialogTitle>
           <DialogContent>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              {job?.chainOfCustody
-                ? `File: ${job.chainOfCustody.fileName}`
-                : location.pathname.startsWith("/laboratory-services/ld-supplied") ||
-                  location.pathname.startsWith("/fibre-id/ld-supplied")
-                ? "No Chain of Custody/Sample Sheets file uploaded yet."
-                : "No Chain of Custody file uploaded yet."}
-              <br />
-              {job?.chainOfCustody?.uploadedAt &&
-                `Uploaded: ${new Date(
-                  job.chainOfCustody.uploadedAt
-                ).toLocaleString("en-GB")}`}
-            </Typography>
+            {(() => {
+              const cocItems = getCOCItems(job);
+              return (
+                <>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    {cocItems.length === 0
+                      ? (location.pathname.startsWith("/laboratory-services/ld-supplied") ||
+                         location.pathname.startsWith("/fibre-id/ld-supplied")
+                          ? "No Chain of Custody / Site Sheets files uploaded yet. Add one or more images or a PDF."
+                          : "No Chain of Custody files uploaded yet. Add one or more images or a PDF.")
+                      : `${cocItems.length} file${cocItems.length !== 1 ? "s" : ""} uploaded. Click an image to see file size.`}
+                  </Typography>
 
-            <Box sx={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
-              {/* Action Buttons - Left Side */}
-              <Box
-                sx={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 1.5,
-                  minWidth: "160px",
-                }}
-              >
-                {job?.chainOfCustody && (
-                  <>
+                  <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap", mb: 2 }}>
                     <Button
-                      variant="outlined"
-                      startIcon={<DownloadIcon />}
-                      onClick={handleDownloadCOC}
+                      variant="contained"
+                      startIcon={<UploadFileIcon />}
+                      disabled={uploadingCOC}
                       size="small"
+                      onClick={() => fileInputRef.current?.click()}
                     >
-                      Download
+                      {uploadingCOC ? "Uploading..." : "Upload File"}
                     </Button>
                     <Button
                       variant="outlined"
-                      color="error"
-                      startIcon={<DeleteIcon />}
-                      onClick={() => {
-                        handleDeleteCOC();
-                        setCocDialogOpen(false);
-                      }}
+                      disabled={uploadingCOC}
                       size="small"
+                      onClick={() => cameraInputRef.current?.click()}
                     >
-                      Remove
+                      {uploadingCOC ? "Uploading..." : "Take Photo"}
                     </Button>
-                  </>
-                )}
-                <Button
-                  variant="contained"
-                  startIcon={<UploadFileIcon />}
-                  disabled={uploadingCOC}
-                  size="small"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  {uploadingCOC
-                    ? "Uploading..."
-                    : job?.chainOfCustody
-                    ? "Replace"
-                    : "Upload File"}
-                </Button>
-                <Button
-                  variant="outlined"
-                  disabled={uploadingCOC}
-                  size="small"
-                  onClick={() => cameraInputRef.current?.click()}
-                >
-                  {uploadingCOC ? "Uploading..." : "Take Photo"}
-                </Button>
-              </Box>
+                    {cocItems.length > 0 && (
+                      <Button
+                        variant="outlined"
+                        color="error"
+                        startIcon={<DeleteIcon />}
+                        onClick={() => handleDeleteCOC()}
+                        size="small"
+                      >
+                        Remove all
+                      </Button>
+                    )}
+                  </Box>
 
-              {/* Preview - Right Side */}
-              {job?.chainOfCustody && (
-                <Box sx={{ flex: 1, minWidth: "220px" }}>
-                  {/* Preview COC if it's an image */}
-                  {job.chainOfCustody.fileType?.startsWith("image/") && (
-                    <Box
-                      sx={{
-                        border: "1px solid #ddd",
-                        borderRadius: 1,
-                        overflow: "hidden",
-                        maxHeight: "400px",
-                        display: "flex",
-                        justifyContent: "center",
-                        alignItems: "center",
-                        backgroundColor: "#f5f5f5",
-                        cursor: "pointer",
-                        "&:hover": {
-                          opacity: 0.9,
-                        },
-                      }}
-                      onClick={() => setCocFullScreenOpen(true)}
-                      title="Click to view full size"
-                    >
-                      <img
-                        src={job.chainOfCustody.data}
-                        alt="Chain of Custody"
-                        style={{
-                          maxHeight: "400px",
-                          maxWidth: "100%",
-                          objectFit: "contain",
-                          display: "block",
-                        }}
-                      />
-                    </Box>
-                  )}
+                  <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    {cocItems.map((item, index) => {
+                      const isImage = item.fileType?.startsWith("image/");
+                      const sizeKB =
+                        item.fileSizeBytes != null
+                          ? (item.fileSizeBytes / 1024).toFixed(1)
+                          : getBase64SizeKB(item.data).toFixed(1);
+                      const showSize = cocClickedIndex === index;
+                      return (
+                        <Box
+                          key={index}
+                          sx={{
+                            border: "1px solid",
+                            borderColor: "divider",
+                            borderRadius: 1,
+                            p: 1,
+                            display: "flex",
+                            flexWrap: "wrap",
+                            alignItems: "flex-start",
+                            gap: 1,
+                          }}
+                        >
+                          <Box sx={{ display: "flex", gap: 1, alignItems: "center", flex: "1 1 200px" }}>
+                            {isImage ? (
+                              <Box
+                                sx={{
+                                  flex: "0 0 auto",
+                                  maxWidth: 160,
+                                  maxHeight: 160,
+                                  borderRadius: 1,
+                                  overflow: "hidden",
+                                  backgroundColor: "#f5f5f5",
+                                  cursor: "pointer",
+                                  "&:hover": { opacity: 0.9 },
+                                }}
+                                onClick={() => {
+                                  setCocClickedIndex(showSize ? null : index);
+                                }}
+                                title="Click to show file size"
+                              >
+                                <img
+                                  src={item.data}
+                                  alt={item.fileName || "COC"}
+                                  style={{
+                                    width: "100%",
+                                    height: "100%",
+                                    objectFit: "contain",
+                                    display: "block",
+                                  }}
+                                />
+                              </Box>
+                            ) : (
+                              <Box
+                                sx={{
+                                  width: 80,
+                                  height: 80,
+                                  borderRadius: 1,
+                                  bgcolor: "#f5f5f5",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  cursor: "pointer",
+                                  "&:hover": { bgcolor: "#e8e8e8" },
+                                }}
+                                onClick={() => handleDownloadCOC(item)}
+                              >
+                                <DescriptionIcon sx={{ fontSize: 40, color: "primary.main" }} />
+                              </Box>
+                            )}
+                            <Box sx={{ minWidth: 0, flex: 1 }}>
+                              <Typography variant="body2" noWrap title={item.fileName}>
+                                {item.fileName || `File ${index + 1}`}
+                              </Typography>
+                              <Typography variant="caption" display="block" sx={{ mt: 0.5, fontWeight: 500 }}>
+                                File size: {sizeKB} KB
+                              </Typography>
+                              {item.uploadedAt && (
+                                <Typography variant="caption" color="text.secondary">
+                                  {new Date(item.uploadedAt).toLocaleString("en-GB")}
+                                </Typography>
+                              )}
+                            </Box>
+                          </Box>
+                          <Box sx={{ display: "flex", gap: 0.5 }}>
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              startIcon={<DownloadIcon />}
+                              onClick={() => handleDownloadCOC(index)}
+                            >
+                              Download
+                            </Button>
+                            <IconButton
+                              size="small"
+                              color="error"
+                              onClick={() => handleDeleteCOCItem(index)}
+                              title="Remove this file"
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                            {isImage && (
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                onClick={() => {
+                                  setCocFullScreenIndex(index);
+                                  setCocFullScreenOpen(true);
+                                }}
+                              >
+                                Full size
+                              </Button>
+                            )}
+                          </Box>
+                        </Box>
+                      );
+                    })}
+                  </Box>
 
-                  {/* Show PDF icon for PDFs */}
-                  {job.chainOfCustody.fileType === "application/pdf" && (
-                    <Box
-                      sx={{
-                        p: 4,
-                        border: "1px solid #ddd",
-                        borderRadius: 1,
-                        textAlign: "center",
-                        backgroundColor: "#f5f5f5",
-                        cursor: "pointer",
-                        "&:hover": {
-                          backgroundColor: "#e8e8e8",
-                        },
-                      }}
-                      onClick={handleDownloadCOC}
-                      title="Click to download PDF"
-                    >
-                      <DescriptionIcon
-                        sx={{ fontSize: 60, color: "#1976d2", mb: 1 }}
-                      />
-                      <Typography variant="body2">
-                        PDF Document
-                        <br />
-                        Click to download
-                      </Typography>
-                    </Box>
-                  )}
-                </Box>
-              )}
-            </Box>
-
-            <input
-              type="file"
-              hidden
-              ref={fileInputRef}
-              accept=".pdf,.jpg,.jpeg,.png,.webp"
-              onChange={(e) => {
-                handleCOCUpload(e);
-                setCocDialogOpen(false);
-              }}
-            />
-            <input
-              type="file"
-              hidden
-              ref={cameraInputRef}
-              accept="image/*"
-              capture="environment"
-              onChange={(e) => {
-                handleCOCUpload(e);
-                setCocDialogOpen(false);
-              }}
-            />
+                  <input
+                    type="file"
+                    hidden
+                    ref={fileInputRef}
+                    accept=".pdf,.jpg,.jpeg,.png,.webp"
+                    onChange={(e) => {
+                      handleCOCUpload(e);
+                    }}
+                  />
+                  <input
+                    type="file"
+                    hidden
+                    ref={cameraInputRef}
+                    accept="image/*"
+                    capture="environment"
+                    onChange={(e) => {
+                      handleCOCUpload(e);
+                    }}
+                  />
+                </>
+              );
+            })()}
           </DialogContent>
         </Dialog>
 
-        {/* Full Screen COC Viewer */}
+        {/* Full Screen COC Viewer - matches ClientSuppliedJobs, supports multiple images */}
         <Dialog
           open={cocFullScreenOpen}
           onClose={() => setCocFullScreenOpen(false)}
@@ -981,7 +1059,15 @@ const ClientSuppliedSamples = () => {
               }}
             >
               <Typography variant="h6">
-                Chain of Custody - {job?.chainOfCustody?.fileName}
+                {(() => {
+                  const items = getCOCItems(job);
+                  const item = items[cocFullScreenIndex];
+                  const total = items.length;
+                  const label = item?.fileName || `Image ${cocFullScreenIndex + 1}`;
+                  return total > 1
+                    ? `Chain of Custody – ${label} (${cocFullScreenIndex + 1} of ${total})`
+                    : `Chain of Custody – ${label}`;
+                })()}
               </Typography>
               <MuiIconButton onClick={() => setCocFullScreenOpen(false)}>
                 <CloseIcon />
@@ -996,17 +1082,48 @@ const ClientSuppliedSamples = () => {
               p: 2,
             }}
           >
-            {job?.chainOfCustody?.fileType?.startsWith("image/") && (
-              <img
-                src={job.chainOfCustody.data}
-                alt="Chain of Custody Full Size"
-                style={{
-                  maxWidth: "100%",
-                  maxHeight: "100%",
-                  objectFit: "contain",
-                }}
-              />
-            )}
+            {(() => {
+              const items = getCOCItems(job);
+              const item = items[cocFullScreenIndex];
+              if (!item?.data) return null;
+              if (item.fileType?.startsWith("image/")) {
+                return (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, width: "100%", height: "100%" }}>
+                    {items.length > 1 && (
+                      <IconButton
+                        disabled={cocFullScreenIndex <= 0}
+                        onClick={() => setCocFullScreenIndex((i) => Math.max(0, i - 1))}
+                        sx={{ flexShrink: 0 }}
+                      >
+                        <ArrowBackIcon />
+                      </IconButton>
+                    )}
+                    <img
+                      src={item.data}
+                      alt={item.fileName || "Chain of Custody"}
+                      style={{
+                        maxWidth: "100%",
+                        maxHeight: "100%",
+                        objectFit: "contain",
+                        flex: 1,
+                      }}
+                    />
+                    {items.length > 1 && (
+                      <IconButton
+                        disabled={cocFullScreenIndex >= items.length - 1}
+                        onClick={() =>
+                          setCocFullScreenIndex((i) => Math.min(items.length - 1, i + 1))
+                        }
+                        sx={{ flexShrink: 0 }}
+                      >
+                        <ArrowBackIcon sx={{ transform: "rotate(180deg)" }} />
+                      </IconButton>
+                    )}
+                  </Box>
+                );
+              }
+              return null;
+            })()}
           </DialogContent>
         </Dialog>
 
@@ -1077,7 +1194,7 @@ const ClientSuppliedSamples = () => {
                               e.target.value
                             )
                           }
-                          placeholder={`${job.projectId?.projectID}-${
+                          placeholder={`${job.projectId?.projectID}-Lab${
                             index + 1
                           }`}
                         />
