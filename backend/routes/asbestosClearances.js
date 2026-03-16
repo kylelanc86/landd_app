@@ -9,6 +9,11 @@ const {
 const { getLegislationForReportTemplate } = require("../services/templateService");
 const { formatDateSydney } = require("../utils/dateUtils");
 
+// Exclude soft-deleted clearances from list queries
+const notDeletedClearanceFilter = {
+  $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
+};
+
 /** Clear persisted PDF fields when clearance content changes so the UI shows Generate instead of Download. */
 function clearClearancePdfFields(clearance) {
   const pdfFields = ["pdfDownloadUrl", "pdfJobId", "pdfReadyAt", "pdfFilename"];
@@ -36,6 +41,8 @@ router.get("/", auth, checkPermission("asbestos.view"), async (req, res) => {
     if (projectId) {
       filter.projectId = projectId;
     }
+
+    Object.assign(filter, notDeletedClearanceFilter);
 
     const sortOptions = {};
     sortOptions[sortBy] = sortOrder === "desc" ? -1 : 1;
@@ -506,32 +513,30 @@ router.post("/:id/air-monitoring-report", auth, checkPermission("asbestos.edit")
 // Get air monitoring reports for a project
 router.get("/air-monitoring-reports/:projectId", auth, async (req, res) => {
   try {
+    const mongoose = require('mongoose');
     const { projectId } = req.params;
-    
-    // Get all jobs for this project - check both regular Job and AsbestosRemovalJob
-    const Job = require('../models/Job');
+
+    if (!mongoose.Types.ObjectId.isValid(projectId)) {
+      return res.status(400).json({ message: "Invalid project ID" });
+    }
+    const projectObjectId = new mongoose.Types.ObjectId(projectId);
+
+    // Shifts are only linked to AsbestosRemovalJob or LeadRemovalJob (no generic Job model)
     const AsbestosRemovalJob = require('../models/AsbestosRemovalJob');
     const Shift = require('../models/Shift');
-    
-    // Get regular jobs
-    const regularJobs = await Job.find({ projectId: projectId }).populate('projectId', 'name projectID');
-    
-    // Get asbestos removal jobs - only completed ones
-    const asbestosJobs = await AsbestosRemovalJob.find({ 
-      projectId: projectId,
-      status: "completed"
-    }).populate('projectId', 'name projectID');
-    
-    // Combine both job types
-    const allJobs = [...regularJobs, ...asbestosJobs];
+
+    // Get all asbestos removal jobs for this project (any status) so shift reports
+    // are visible for in-progress jobs as well as completed ones
+    const allJobs = await AsbestosRemovalJob.find({ projectId: projectObjectId })
+      .populate('projectId', 'name projectID');
     
     console.log(`Found ${allJobs.length} jobs for project ${projectId}:`, allJobs.map(job => ({ id: job._id, name: job.name, type: job.constructor.modelName })));
     
     const airMonitoringReports = [];
     
-    // Get shifts for each job
+    // Get shifts for each job (match by job id + reportable status; allow any jobModel so legacy shifts aren't excluded)
     for (const job of allJobs) {
-      const shifts = await Shift.find({ 
+      const shifts = await Shift.find({
         job: job._id,
         $or: [
           { status: "analysis_complete" },
@@ -539,7 +544,8 @@ router.get("/air-monitoring-reports/:projectId", auth, async (req, res) => {
           { status: "complete" },
           { reportApprovedBy: { $exists: true, $ne: null } }
         ]
-      }).populate('job', 'name')
+      })
+        .populate('job', 'name')
         .populate('supervisor', 'firstName lastName')
         .populate('defaultSampler', 'firstName lastName');
       
@@ -631,13 +637,18 @@ router.get("/air-monitoring-reports-by-job/:jobId", auth, async (req, res) => {
   }
 });
 
-// Delete asbestos clearance
+// Soft-delete asbestos clearance (restorable from archived data page)
 router.delete("/:id", auth, checkPermission("asbestos.delete"), async (req, res) => {
   try {
-    const clearance = await AsbestosClearance.findByIdAndDelete(req.params.id);
+    const clearance = await AsbestosClearance.findById(req.params.id);
     if (!clearance) {
       return res.status(404).json({ message: "Asbestos clearance not found" });
     }
+    if (clearance.deletedAt) {
+      return res.status(400).json({ message: "Clearance is already archived" });
+    }
+    clearance.deletedAt = new Date();
+    await clearance.save();
 
     const projectIdForSync = clearance.projectId
       ? clearance.projectId.toString()
@@ -654,9 +665,51 @@ router.delete("/:id", auth, checkPermission("asbestos.delete"), async (req, res)
       }
     }
 
-    res.json({ message: "Asbestos clearance deleted successfully" });
+    res.json({ message: "Asbestos clearance archived" });
   } catch (error) {
     console.error("Error deleting asbestos clearance:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Restore soft-deleted asbestos clearance
+router.patch("/:id/restore", auth, checkPermission("asbestos.edit"), async (req, res) => {
+  try {
+    const clearance = await AsbestosClearance.findById(req.params.id);
+    if (!clearance) {
+      return res.status(404).json({ message: "Asbestos clearance not found" });
+    }
+    if (!clearance.deletedAt) {
+      return res.status(400).json({ message: "Clearance is not archived" });
+    }
+    clearance.deletedAt = null;
+    await clearance.save();
+
+    const projectIdForSync = clearance.projectId
+      ? clearance.projectId.toString()
+      : null;
+    if (projectIdForSync) {
+      try {
+        await syncClearanceForProject(projectIdForSync);
+      } catch (syncError) {
+        console.error(
+          "Error syncing after clearance restore:",
+          { projectId: projectIdForSync, error: syncError }
+        );
+      }
+    }
+
+    const populated = await AsbestosClearance.findById(clearance._id)
+      .populate({
+        path: "projectId",
+        select: "projectID name client",
+        populate: { path: "client", select: "name" },
+      })
+      .populate("createdBy", "firstName lastName")
+      .populate("updatedBy", "firstName lastName");
+    res.json(populated);
+  } catch (error) {
+    console.error("Error restoring asbestos clearance:", error);
     res.status(500).json({ message: "Server error" });
   }
 });

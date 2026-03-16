@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { useSnackbar } from "../../context/SnackbarContext";
 import {
@@ -39,9 +39,8 @@ import CancelIcon from "@mui/icons-material/Cancel";
 import UploadIcon from "@mui/icons-material/Upload";
 import ReportCategories from "./ReportCategories";
 import ReportsList from "./ReportsList";
-import ArchivedDataDialog from "./ArchivedDataDialog";
-import { useNavigate } from "react-router-dom";
-import {
+import { useNavigate, Link } from "react-router-dom";
+import api, {
   projectService,
   sampleService,
   clientService,
@@ -67,6 +66,7 @@ const ProjectReports = () => {
   const [logModalOpen, setLogModalOpen] = useState(false);
   const [availableCategories, setAvailableCategories] = useState([]);
   const [checkingReports, setCheckingReports] = useState(true);
+  const categoryCheckIdRef = useRef(0);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [uploadForm, setUploadForm] = useState({
     reportType: "",
@@ -97,9 +97,6 @@ const ProjectReports = () => {
   const [cocDialogOpen, setCocDialogOpen] = useState(false);
   const [cocFullScreenOpen, setCocFullScreenOpen] = useState(false);
   const [selectedCOC, setSelectedCOC] = useState(null);
-
-  // Archived data dialog state
-  const [archivedDialogOpen, setArchivedDialogOpen] = useState(false);
 
   const { showSnackbar } = useSnackbar();
 
@@ -355,6 +352,7 @@ const ProjectReports = () => {
   const checkAvailableCategories = useCallback(async () => {
     if (!projectId) return;
 
+    const checkId = ++categoryCheckIdRef.current;
     setCheckingReports(true);
     const available = [];
 
@@ -374,60 +372,36 @@ const ProjectReports = () => {
         console.log("No asbestos assessment reports found");
       }
 
-      // Check asbestos removal jobs (air monitoring + clearances) - only from completed jobs
+      // Check asbestos removal jobs (air monitoring + clearances)
       try {
-        const { default: asbestosRemovalJobService } =
-          await import("../../services/asbestosRemovalJobService");
-
-        // First check if there are any completed asbestos removal jobs for this project
-        const completedJobsResponse = await asbestosRemovalJobService.getAll();
-        const completedJobs =
-          completedJobsResponse.jobs || completedJobsResponse.data || [];
-        const hasCompletedJobs = completedJobs.some(
-          (job) =>
-            (job.projectId === projectId || job.projectId?._id === projectId) &&
-            job.status === "completed",
-        );
-
-        // Only check for reports if there are completed jobs
-        if (hasCompletedJobs) {
-          // Check air monitoring reports (only from completed jobs)
-          const airMonitoringResponse = await fetch(
-            `${
-              process.env.REACT_APP_API_URL || "http://localhost:5000/api"
-            }/asbestos-clearances/air-monitoring-reports/${projectId}`,
-            {
-              headers: {
-                Authorization: `Bearer ${localStorage.getItem("token")}`,
-              },
-            },
+        // Check air monitoring reports (same api as clearances)
+        let hasAirMonitoring = false;
+        try {
+          const res = await api.get(
+            `/asbestos-clearances/air-monitoring-reports/${projectId}`,
           );
+          const raw = res?.data;
+          const list = Array.isArray(raw) ? raw : raw?.data ?? raw?.reports ?? [];
+          hasAirMonitoring = list.length > 0;
+        } catch (airMonitoringError) {
+          console.log("No air monitoring reports found");
+        }
 
-          let hasAirMonitoring = false;
-          if (airMonitoringResponse.ok) {
-            const airMonitoringReports = await airMonitoringResponse.json();
-            hasAirMonitoring =
-              Array.isArray(airMonitoringReports) &&
-              airMonitoringReports.length > 0;
-          }
+        // Check clearances using the dedicated endpoint
+        let hasClearances = false;
+        try {
+          const clearanceReports =
+            await reportService.getClearanceReports(projectId);
+          hasClearances =
+            clearanceReports &&
+            Array.isArray(clearanceReports) &&
+            clearanceReports.length > 0;
+        } catch (clearanceError) {
+          console.log("No asbestos clearance reports found");
+        }
 
-          // Check clearances using the dedicated endpoint
-          let hasClearances = false;
-          try {
-            const clearanceReports =
-              await reportService.getClearanceReports(projectId);
-            hasClearances =
-              clearanceReports &&
-              Array.isArray(clearanceReports) &&
-              clearanceReports.length > 0;
-          } catch (clearanceError) {
-            console.log("No asbestos clearance reports found");
-          }
-
-          // Only show the category when there are actual reports to display
-          if (hasAirMonitoring || hasClearances) {
-            available.push("asbestos-removal-jobs");
-          }
+        if (hasAirMonitoring || hasClearances) {
+          available.push("asbestos-removal-jobs");
         }
       } catch (error) {
         console.log("No asbestos removal job reports found");
@@ -500,12 +474,18 @@ const ProjectReports = () => {
         console.log("No uploaded reports found");
       }
 
-      setAvailableCategories(available);
+      if (categoryCheckIdRef.current === checkId) {
+        setAvailableCategories(available);
+      }
     } catch (error) {
       console.error("Error checking available categories:", error);
-      setAvailableCategories([]);
+      if (categoryCheckIdRef.current === checkId) {
+        setAvailableCategories([]);
+      }
     } finally {
-      setCheckingReports(false);
+      if (categoryCheckIdRef.current === checkId) {
+        setCheckingReports(false);
+      }
     }
   }, [projectId]);
 
@@ -585,22 +565,17 @@ const ProjectReports = () => {
           break;
 
         case "asbestos-removal-jobs":
-          // Get air monitoring reports for this project using the dedicated endpoint
+          // Get air monitoring reports (same api client as clearances for consistent auth/baseURL)
           try {
-            const airMonitoringResponse = await fetch(
-              `${
-                process.env.REACT_APP_API_URL || "http://localhost:5000/api"
-              }/asbestos-clearances/air-monitoring-reports/${projectId}`,
-              {
-                headers: {
-                  Authorization: `Bearer ${localStorage.getItem("token")}`,
-                },
-              },
+            const res = await api.get(
+              `/asbestos-clearances/air-monitoring-reports/${projectId}`,
             );
+            const raw = res?.data;
+            const airMonitoringReports = Array.isArray(raw)
+              ? raw
+              : raw?.data ?? raw?.reports ?? [];
 
-            if (airMonitoringResponse.ok) {
-              const airMonitoringReports = await airMonitoringResponse.json();
-
+            if (airMonitoringReports.length > 0) {
               // Map air monitoring reports to report format
               const shiftReports = airMonitoringReports.map((report) => ({
                 id: report._id,
@@ -770,360 +745,6 @@ const ProjectReports = () => {
       setSelectedCategory(null);
     }
   }, [availableCategories, selectedCategory]);
-
-  const handleViewReport = async (report) => {
-    try {
-      // Use report.id, or fallback to report.data._id or report.data.id
-      const reportId = report.id || report.data?._id || report.data?.id;
-      setProcessingReport({ reportId: reportId, action: "view" });
-      const reportTypeName =
-        report.type === "shift"
-          ? "Air Monitoring"
-          : report.type === "clearance"
-            ? "Clearance"
-            : report.type === "fibre_id"
-              ? "Fibre ID"
-              : report.type === "asbestos_assessment"
-                ? "Asbestos Assessment"
-                : "Report";
-      showSnackbar(`Opening ${reportTypeName} report...`, "info");
-
-      if (report.type === "shift") {
-        const { shift, job } = report.data;
-        const samplesResponse = await sampleService.getByShift(shift._id);
-
-        // Ensure we have the complete sample data including analysis
-        const samplesWithAnalysis = await Promise.all(
-          samplesResponse.data.map(async (sample) => {
-            if (!sample.analysis) {
-              const completeSample = await sampleService.getById(sample._id);
-              return completeSample.data;
-            }
-            return sample;
-          }),
-        );
-
-        // Ensure project and client are fully populated
-        let projectData = job.projectId;
-        if (projectData && typeof projectData === "string") {
-          const projectResponse = await projectService.getById(projectData);
-          projectData = projectResponse.data;
-        }
-        if (
-          projectData &&
-          projectData.client &&
-          typeof projectData.client === "string"
-        ) {
-          const clientResponse = await clientService.getById(
-            projectData.client,
-          );
-          projectData.client = clientResponse.data;
-        }
-
-        // Get the full job data with all necessary fields
-        const { default: asbestosRemovalJobService } =
-          await import("../../services/asbestosRemovalJobService");
-        const fullJobDataResponse = await asbestosRemovalJobService.getById(
-          job._id,
-        );
-        const fullJobData = fullJobDataResponse.data; // Extract the actual data from axios response
-
-        // Debug logging to see what data we're getting
-        console.log("Full job data response:", fullJobDataResponse);
-        console.log("Full job data:", fullJobData);
-        console.log("Project data:", projectData);
-        console.log("Project client data:", projectData?.client);
-
-        // Create enhanced job object with all required data
-        // The backend now provides the client data in fullJobData.projectId.client
-        const enhancedJob = {
-          ...fullJobData,
-          // Use the project data from the job response (which now includes populated client)
-          projectId: fullJobData.projectId || projectData,
-          // Ensure asbestos removalist is available
-          asbestosRemovalist: fullJobData.asbestosRemovalist,
-          // Ensure description is available
-          description:
-            fullJobData.description ||
-            `Asbestos removal work at ${
-              fullJobData.projectId?.name || projectData?.name
-            }`,
-        };
-
-        // Get sampler information from samples (more reliable than shift fields)
-        const uniqueSamplers = [
-          ...new Set(
-            samplesWithAnalysis
-              .map((sample) => {
-                if (
-                  sample.collectedBy &&
-                  typeof sample.collectedBy === "object"
-                ) {
-                  return `${sample.collectedBy.firstName || ""} ${
-                    sample.collectedBy.lastName || ""
-                  }`.trim();
-                }
-                return sample.collectedBy || "";
-              })
-              .filter(Boolean),
-          ),
-        ];
-
-        const primarySampler = uniqueSamplers[0] || "N/A";
-
-        // Enhance shift data with any missing fields
-        const enhancedShift = {
-          ...shift,
-          // Ensure analysis date is available (use shift date if analysis date not available)
-          analysisDate: shift.analysisDate || shift.date,
-          // Ensure description of works is available
-          descriptionOfWorks:
-            shift.descriptionOfWorks || enhancedJob.description,
-          // Use sampler information from samples as fallback
-          supervisor:
-            shift.supervisor ||
-            (primarySampler !== "N/A"
-              ? {
-                  firstName: primarySampler.split(" ")[0],
-                  lastName: primarySampler.split(" ").slice(1).join(" "),
-                }
-              : null),
-          defaultSampler: shift.defaultSampler,
-        };
-
-        // Debug logging to see the final enhanced objects
-        console.log("Enhanced job object:", enhancedJob);
-        console.log("Enhanced shift object:", enhancedShift);
-        console.log("Original shift data:", shift);
-        console.log("Shift supervisor:", shift?.supervisor);
-        console.log("Shift defaultSampler:", shift?.defaultSampler);
-        console.log("Samples with analysis:", samplesWithAnalysis);
-        console.log("Unique samplers from samples:", uniqueSamplers);
-        console.log("Primary sampler:", primarySampler);
-
-        generateShiftReport({
-          shift: enhancedShift,
-          job: enhancedJob,
-          samples: samplesWithAnalysis,
-          project: projectData,
-          openInNewTab: true,
-          sitePlanData: enhancedShift.sitePlan
-            ? {
-                sitePlan: enhancedShift.sitePlan,
-                sitePlanData: enhancedShift.sitePlanData,
-              }
-            : null,
-        });
-      } else if (report.type === "clearance") {
-        // Generate clearance report PDF using the new template system
-        const { generateHTMLTemplatePDF } =
-          await import("../../utils/templatePDFGenerator");
-
-        // Get the full clearance data
-        const { default: asbestosClearanceService } =
-          await import("../../services/asbestosClearanceService");
-        // Use report.id or report.data.id (backend returns 'id', not '_id')
-        const clearanceId = report.id || report.data?.id || report.data?._id;
-        const fullClearance =
-          await asbestosClearanceService.getById(clearanceId);
-
-        // Debug logging to see what clearance data we're getting
-        console.log("=== CLEARANCE DATA FROM REPORTS PAGE ===");
-        console.log("Full clearance data:", fullClearance);
-        console.log("Clearance createdBy:", fullClearance?.createdBy);
-        console.log("Clearance LAA field:", fullClearance?.LAA);
-        console.log("Clearance clearanceType:", fullClearance?.clearanceType);
-        console.log("Clearance projectId:", fullClearance?.projectId);
-        console.log("=== END CLEARANCE DATA DEBUG ===");
-
-        // Fix the LAA field to use the populated user data instead of the user ID
-        const enhancedClearance = {
-          ...fullClearance,
-          LAA:
-            fullClearance.createdBy?.firstName &&
-            fullClearance.createdBy?.lastName
-              ? `${fullClearance.createdBy.firstName} ${fullClearance.createdBy.lastName}`
-              : fullClearance.LAA,
-        };
-
-        console.log("Enhanced clearance LAA field:", enhancedClearance.LAA);
-
-        // Generate and open the PDF in a new tab
-        await generateHTMLTemplatePDF("asbestos-clearance", enhancedClearance, {
-          openInNewTab: true,
-        });
-      } else if (report.type === "asbestos_assessment") {
-        // For asbestos assessment reports, we'll navigate to the assessment details page
-        // This assumes there's a route like /asbestos-assessment/:id
-        navigate(`/asbestos-assessment/${report.data.id || report.data._id}`);
-      } else if (report.type === "fibre_id") {
-        // Generate and open the fibre ID report PDF
-        const jobId = report.data.id || report.data._id;
-
-        // Fetch the full job data with samples
-        const jobResponse = await clientSuppliedJobsService.getById(jobId);
-        const fullJob = jobResponse.data;
-
-        // Get samples from the job
-        const sampleItems = fullJob.samples || [];
-
-        // Get analyst from first analysed sample or job analyst
-        let analyst = null;
-        const analysedSample = sampleItems.find((s) => s.analysedBy);
-        if (analysedSample?.analysedBy) {
-          if (
-            typeof analysedSample.analysedBy === "object" &&
-            analysedSample.analysedBy.firstName
-          ) {
-            analyst = `${analysedSample.analysedBy.firstName} ${analysedSample.analysedBy.lastName}`;
-          } else if (typeof analysedSample.analysedBy === "string") {
-            analyst = analysedSample.analysedBy;
-          }
-        } else if (fullJob.analyst) {
-          analyst = fullJob.analyst;
-        }
-
-        // If no analyst found, default to "Unknown Analyst"
-        if (!analyst) {
-          analyst = "Unknown Analyst";
-        }
-
-        // Prepare sample items for the report
-        const sampleItemsForReport = sampleItems
-          .filter(
-            (item) =>
-              item.analysisData && item.analysisData.isAnalysed === true,
-          )
-          .map((item, index) => ({
-            itemNumber: index + 1,
-            sampleReference: item.labReference || `Sample ${index + 1}`,
-            labReference: item.labReference || `Sample ${index + 1}`,
-            locationDescription:
-              item.clientReference || item.sampleDescription || "N/A",
-            clientReference: item.clientReference,
-            analysisData: item.analysisData,
-          }));
-
-        // Create an assessment-like object for the report generator
-        const assessmentForReport = {
-          _id: fullJob._id,
-          projectId: fullJob.projectId,
-          jobType: fullJob.jobType,
-          status: fullJob.status,
-          analysisDate: fullJob.analysisDate,
-          sampleReceiptDate: fullJob.sampleReceiptDate,
-          revision: fullJob.revision || 0,
-        };
-
-        // Generate and open the PDF in a new tab
-        await generateFibreIDReport({
-          assessment: assessmentForReport,
-          sampleItems: sampleItemsForReport,
-          analyst: analyst,
-          openInNewTab: true,
-          returnPdfData: false,
-          reportApprovedBy: fullJob.reportApprovedBy || null,
-          reportIssueDate: fullJob.reportIssueDate || null,
-        });
-      } else if (report.type === "fibre_count") {
-        // Generate and open the fibre count report PDF
-        const jobId = report.data.id || report.data._id;
-
-        // Fetch the full job data with samples
-        const jobResponse = await clientSuppliedJobsService.getById(jobId);
-        const fullJob = jobResponse.data;
-
-        // Get samples from the job
-        const sampleItems = fullJob.samples || [];
-
-        // Get analyst from first analyzed sample or job analyst
-        let analyst = null;
-        const analysedSample = sampleItems.find((s) => s.analysedBy);
-        if (analysedSample?.analysedBy) {
-          if (
-            typeof analysedSample.analysedBy === "object" &&
-            analysedSample.analysedBy.firstName
-          ) {
-            analyst = `${analysedSample.analysedBy.firstName} ${analysedSample.analysedBy.lastName}`;
-          } else if (typeof analysedSample.analysedBy === "string") {
-            analyst = analysedSample.analysedBy;
-          }
-        } else if (fullJob.analyst) {
-          analyst = fullJob.analyst;
-        }
-
-        // If no analyst found, default to "Unknown Analyst"
-        if (!analyst) {
-          analyst = "Unknown Analyst";
-        }
-
-        // Transform sample items to match air monitoring format
-        const transformedSamples = sampleItems.map((item, index) => {
-          return {
-            fullSampleID: item.labReference || `Sample-${index + 1}`,
-            sampleID: item.labReference || `Sample-${index + 1}`,
-            location: item.clientReference || item.locationDescription || "N/A",
-            // No time or flowrate for client supplied
-            startTime: null,
-            endTime: null,
-            averageFlowrate: null,
-            // Use analysisData from sample item
-            analysis: item.analysisData
-              ? {
-                  fieldsCounted: item.analysisData.fieldsCounted,
-                  fibresCounted: item.analysisData.fibresCounted,
-                  edgesDistribution: item.analysisData.edgesDistribution,
-                  backgroundDust: item.analysisData.backgroundDust,
-                  // No reported concentration for client supplied
-                  reportedConcentration: null,
-                }
-              : null,
-          };
-        });
-
-        // Create a mock shift-like object for PDF generation
-        const mockShift = {
-          descriptionOfWorks:
-            fullJob.projectId?.name || "Client Supplied Fibre Count",
-          date: fullJob.sampleReceiptDate || new Date(),
-          analysedBy: analyst || "N/A",
-          analysisDate: fullJob.analysisDate || new Date(),
-          reportApprovedBy: fullJob.reportApprovedBy || null,
-          reportIssueDate: fullJob.reportIssueDate || null,
-        };
-
-        // Create a job-like object with projectId populated
-        const jobForPDF = {
-          projectId: fullJob.projectId,
-          asbestosRemovalist: null, // Not applicable for client supplied
-        };
-
-        // Generate the PDF using air monitoring format
-        await generateShiftReport({
-          shift: mockShift,
-          job: jobForPDF,
-          samples: transformedSamples,
-          project: fullJob.projectId,
-          openInNewTab: true,
-          isClientSupplied: true, // Flag to indicate we want fibre count format
-        });
-      } else if (report.type === "uploaded") {
-        // Download the uploaded report file
-        const downloadUrl = `${
-          process.env.REACT_APP_API_URL || "http://localhost:5000/api"
-        }/uploaded-reports/download/${report.data._id}`;
-        window.open(downloadUrl, "_blank");
-      }
-
-      showSnackbar(`${reportTypeName} report opened`, "success");
-    } catch (err) {
-      console.error("Error viewing report:", err);
-      setError("Failed to view report");
-      showSnackbar("Failed to open report. Please try again.", "error");
-    } finally {
-      setProcessingReport({ reportId: null, action: null });
-    }
-  };
 
   const handleExportCSV = async (report) => {
     try {
@@ -1523,8 +1144,42 @@ const ProjectReports = () => {
           openInNewTab: false,
         });
       } else if (report.type === "asbestos_assessment") {
-        // For asbestos assessment reports, we'll navigate to the assessment details page where download is available
-        navigate(`/asbestos-assessment/${report.data.id || report.data._id}`);
+        const assessmentId =
+          report.id || report.data?.id || report.data?._id;
+        const { default: asbestosAssessmentService } =
+          await import("../../services/asbestosAssessmentService");
+        const fullAssessment = await asbestosAssessmentService.getById(
+          assessmentId,
+        );
+        const isResidential =
+          fullAssessment?.jobType === "residential-asbestos";
+        const pdfBlob = await asbestosAssessmentService.generateAsbestosAssessmentPdf(
+          fullAssessment,
+          { isResidential },
+        );
+        const url = window.URL.createObjectURL(pdfBlob);
+        const link = document.createElement("a");
+        link.href = url;
+        const projectId =
+          fullAssessment?.projectId?.projectID ||
+          fullAssessment?.jobReference ||
+          "Unknown";
+        const siteName =
+          fullAssessment?.projectId?.name ||
+          fullAssessment?.siteName ||
+          "Unknown";
+        const dateStr = fullAssessment?.assessmentDate
+          ? new Date(fullAssessment.assessmentDate)
+              .toLocaleDateString("en-GB")
+              .replace(/\//g, "-")
+          : "Unknown";
+        const prefix = isResidential ? "Residential " : "";
+        link.download = `${projectId}: ${prefix}Asbestos Assessment Report - ${siteName} (${dateStr}).pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        showSnackbar("Asbestos assessment report downloaded", "success");
       } else if (report.type === "fibre_id") {
         // Generate and download the fibre ID report PDF
         const jobId = report.data.id || report.data._id;
@@ -2134,13 +1789,20 @@ const ProjectReports = () => {
           </Box>
 
           <Box sx={{ display: "flex", gap: 2, ml: 2 }}>
-            <Button
-              variant="outlined"
-              startIcon={<ArchiveIcon />}
-              onClick={() => setArchivedDialogOpen(true)}
-            >
-              Deleted / Archived Data
-            </Button>
+            {isAdmin && (
+              <Button
+                component={Link}
+                to={
+                  projectId
+                    ? `/reports/project/${projectId}/archived-data`
+                    : "/reports/archived-data"
+                }
+                variant="outlined"
+                startIcon={<ArchiveIcon />}
+              >
+                Deleted / Archived Data
+              </Button>
+            )}
             <Button
               variant="outlined"
               startIcon={<UploadIcon />}
@@ -2277,7 +1939,6 @@ const ProjectReports = () => {
             loading={loading}
             error={error}
             category={selectedCategory}
-            onView={handleViewReport}
             onDownload={handleDownloadReport}
             onRevise={handleReviseReport}
             onViewCOC={handleViewCOC}
@@ -2286,13 +1947,6 @@ const ProjectReports = () => {
           />
         </>
       )}
-
-      {/* Archived Data Dialog */}
-      <ArchivedDataDialog
-        open={archivedDialogOpen}
-        onClose={() => setArchivedDialogOpen(false)}
-        projectId={projectId}
-      />
 
       {/* Project Log Modal */}
       {logModalOpen && (

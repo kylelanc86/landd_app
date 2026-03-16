@@ -119,6 +119,11 @@ const shiftSchema = new mongoose.Schema({
     default: 0,
     min: 0
   },
+  deletedAt: {
+    type: Date,
+    required: false,
+    default: null
+  },
   sitePlan: {
     type: Boolean,
     default: false

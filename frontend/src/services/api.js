@@ -318,6 +318,7 @@ export const shiftService = {
   create: (data) => api.post('/air-monitoring-shifts', data),
   update: (id, data) => api.patch(`/air-monitoring-shifts/${id}`, data),
   reopen: (id) => api.patch(`/air-monitoring-shifts/${id}/reopen`),
+  restore: (id) => api.patch(`/air-monitoring-shifts/${id}/restore`),
   delete: (id) => api.delete(`/air-monitoring-shifts/${id}`),
   sendForAuthorisation: (id) =>
     api.post(`/air-monitoring-shifts/${id}/send-for-authorisation`),

@@ -18,6 +18,11 @@ const {
 const { sendMail } = require("../services/mailer");
 const { formatDateSydney } = require("../utils/dateUtils");
 
+// Exclude soft-deleted shifts from list queries (restorable from archived data page)
+const notDeletedShiftFilter = {
+  $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
+};
+
 // Debug middleware removed
 router.use((req, res, next) => {
   next();
@@ -30,10 +35,10 @@ router.use(fileUpload({
   responseOnLimit: 'File size limit (20MB) exceeded',
 }));
 
-// Get all shifts
+// Get all shifts (excludes soft-deleted)
 router.get('/', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
-    const shifts = await Shift.find()
+    const shifts = await Shift.find(notDeletedShiftFilter)
       .populate('job')
       .populate('samples');
     res.json(shifts);
@@ -60,7 +65,7 @@ router.get('/job/:jobId', auth, checkPermission(['jobs.view']), async (req, res)
       return res.status(404).json({ message: 'Job not found' });
     }
 
-    const shiftFilter = { job: jobId, jobModel };
+    const shiftFilter = { job: jobId, jobModel, ...notDeletedShiftFilter };
     const shifts = await Shift.find(shiftFilter)
       .populate({
         path: 'job',
@@ -81,11 +86,14 @@ router.get('/job/:jobId', auth, checkPermission(['jobs.view']), async (req, res)
   }
 });
 
-// Get shifts by multiple job IDs
+// Get shifts by multiple job IDs (excludes soft-deleted)
 router.post('/jobs', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
     const { jobIds } = req.body;
-    const shifts = await Shift.find({ job: { $in: jobIds } })
+    const shifts = await Shift.find({
+      job: { $in: jobIds },
+      ...notDeletedShiftFilter,
+    })
       .populate('job')
       .populate('samples');
     res.json(shifts);
@@ -551,49 +559,52 @@ router.patch('/:id/reopen', auth, checkPermission(['admin.update']), async (req,
   }
 });
 
-// Delete a shift
+// Soft-delete a shift (restorable from archived data page)
 router.delete('/:id', auth, checkPermission(['jobs.delete']), async (req, res) => {
   try {
     const shift = await Shift.findById(req.params.id);
     if (!shift) {
       return res.status(404).json({ message: 'Shift not found' });
     }
-    
-    // Rename orphaned samples before deleting the shift
-    // Append 'X' to fullSampleID and sampleNumber to prevent duplicate key errors
-    const samples = await Sample.find({ shift: req.params.id });
-    for (const sample of samples) {
-      try {
-        const currentFullSampleID = sample.fullSampleID;
-        const currentSampleNumber = sample.sampleNumber;
-        sample.fullSampleID = currentFullSampleID + 'X';
-        sample.sampleNumber = currentSampleNumber + 'X';
-        await sample.save();
-      } catch (saveError) {
-        // If there's a duplicate key error, try appending another X
-        if (saveError.message.includes('duplicate key') || saveError.code === 11000) {
-          sample.fullSampleID = sample.fullSampleID + 'X';
-          sample.sampleNumber = sample.sampleNumber + 'X';
-          try {
-            await sample.save();
-          } catch (retryError) {
-            console.error(`Failed to rename sample ${sample.fullSampleID} even after retry:`, retryError);
-          }
-        } else {
-          console.error(`Failed to rename sample ${sample.fullSampleID}:`, saveError);
-        }
-      }
+    if (shift.deletedAt) {
+      return res.status(400).json({ message: 'Shift is already archived' });
     }
-    
-    await Shift.findByIdAndDelete(req.params.id);
-    
+    shift.deletedAt = new Date();
+    await shift.save();
     if (
       shift.job &&
       (shift.jobModel === 'AsbestosRemovalJob' || !shift.jobModel)
     ) {
       await syncAirMonitoringForJob(shift.job);
     }
-    res.json({ message: 'Shift deleted' });
+    res.json({ message: 'Shift archived' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Restore a soft-deleted shift
+router.patch('/:id/restore', auth, checkPermission(['jobs.edit']), async (req, res) => {
+  try {
+    const shift = await Shift.findById(req.params.id);
+    if (!shift) {
+      return res.status(404).json({ message: 'Shift not found' });
+    }
+    if (!shift.deletedAt) {
+      return res.status(400).json({ message: 'Shift is not archived' });
+    }
+    shift.deletedAt = null;
+    await shift.save();
+    if (
+      shift.job &&
+      (shift.jobModel === 'AsbestosRemovalJob' || !shift.jobModel)
+    ) {
+      await syncAirMonitoringForJob(shift.job);
+    }
+    const populated = await Shift.findById(shift._id)
+      .populate('job')
+      .populate('samples');
+    res.json(populated);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

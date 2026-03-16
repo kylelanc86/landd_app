@@ -27,7 +27,13 @@ const asbestosClearanceService = {
     return response.data;
   },
 
-  // Delete asbestos clearance
+  // Restore soft-deleted asbestos clearance
+  restore: async (id) => {
+    const response = await axios.patch(`${API_BASE_URL}/${id}/restore`);
+    return response.data;
+  },
+
+  // Delete (soft-delete) asbestos clearance
   delete: async (id) => {
     const response = await axios.delete(`${API_BASE_URL}/${id}`);
     return response.data;

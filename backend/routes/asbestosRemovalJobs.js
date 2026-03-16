@@ -7,7 +7,15 @@ const Project = require("../models/Project");
 const Shift = require("../models/Shift");
 const Sample = require("../models/Sample");
 const AsbestosClearance = require("../models/clearanceTemplates/asbestos/AsbestosClearance");
+const AsbestosAssessment = require("../models/assessmentTemplates/asbestos/AsbestosAssessment");
 const auth = require("../middleware/auth");
+
+const notDeletedShiftFilter = {
+  $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
+};
+const notDeletedClearanceFilter = {
+  $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
+};
 const checkPermission = require("../middleware/checkPermission");
 const { formatDateSydney } = require("../utils/dateUtils");
 
@@ -154,7 +162,7 @@ router.get("/", auth, checkPermission("asbestos.view"), async (req, res) => {
   }
 });
 
-// Get archived data as flat list (shifts and clearances from archived jobs + legacy clearances)
+// Get archived data (archived jobs + individually deleted shifts/clearances/assessments)
 router.get(
   "/archived-data",
   auth,
@@ -169,7 +177,8 @@ router.get(
       }
 
       const archivedJobs = await AsbestosRemovalJob.find(archivedQuery)
-        .select("_id projectId projectName")
+        .select("_id projectId projectName asbestosRemovalist createdAt updatedAt")
+        .sort({ updatedAt: -1 })
         .populate({
           path: "projectId",
           select: "projectID name client",
@@ -177,89 +186,123 @@ router.get(
         })
         .lean();
 
-      const archivedJobIds = archivedJobs.map((j) => j._id.toString());
-      const jobToProject = new Map();
-      archivedJobs.forEach((job) => {
-        const pid = job.projectId?._id?.toString() || job.projectId?.toString();
-        if (pid) jobToProject.set(job._id.toString(), job.projectId);
-      });
-
-      const items = [];
-
-      if (archivedJobIds.length > 0) {
-        const shifts = await Shift.find({
-          job: { $in: archivedJobIds },
-          $or: [
-            { jobModel: "AsbestosRemovalJob" },
-            { jobModel: { $exists: false } },
-            { jobModel: null },
-          ],
-        })
-          .select("_id job name date status")
-          .lean();
-
-        shifts.forEach((shift) => {
-          const jobId = shift.job?.toString();
-          const project = jobId ? jobToProject.get(jobId) : null;
-          const clientName = project?.client && typeof project.client === "object" ? project.client.name : "—";
-          items.push({
-            _id: shift._id.toString(),
-            reportType: "Air Monitoring Shift",
-            date: shift.date,
-            client: clientName || "—",
-            LAA: "—",
-            itemType: "shift",
-            name: shift.name,
-          });
-        });
-      }
-
-      const clearancesFromArchived = await AsbestosClearance.find({
-        asbestosRemovalJobId: { $in: archivedJobIds },
-      })
-        .select("_id projectId clearanceDate clearanceType status asbestosRemovalist LAA")
-        .populate({
-          path: "projectId",
-          select: "projectID name client",
-          populate: { path: "client", select: "name" },
-        })
-        .lean();
-
-      const legacyClearanceQuery = {
+      // Individually archived (soft-deleted) shifts and clearances only – for "items" table and restore arrays
+      const deletedShiftFilter = {
+        deletedAt: { $exists: true, $ne: null },
         $or: [
-          { asbestosRemovalJobId: null },
-          { asbestosRemovalJobId: { $exists: false } },
+          { jobModel: "AsbestosRemovalJob" },
+          { jobModel: { $exists: false } },
+          { jobModel: null },
         ],
       };
       if (filterProjectId) {
-        legacyClearanceQuery.projectId = filterProjectId;
+        const projectJobIds = await AsbestosRemovalJob.find(
+          { projectId: filterProjectId },
+          "_id"
+        ).then((jobs) => jobs.map((j) => j._id));
+        deletedShiftFilter.job = { $in: projectJobIds };
       }
-      const legacyClearances = await AsbestosClearance.find(legacyClearanceQuery)
-        .select("_id projectId clearanceDate clearanceType status asbestosRemovalist LAA")
+      const archivedShiftsDocs = await Shift.find(deletedShiftFilter)
+        .select("_id job name date deletedAt jobModel")
+        .populate({
+          path: "job",
+          select: "projectId projectName",
+          populate: {
+            path: "projectId",
+            select: "projectID name client",
+            populate: { path: "client", select: "name" },
+          },
+        })
+        .sort({ deletedAt: -1 })
+        .lean();
+
+      const deletedClearanceFilter = { deletedAt: { $exists: true, $ne: null } };
+      if (filterProjectId) deletedClearanceFilter.projectId = filterProjectId;
+      const archivedClearancesDocs = await AsbestosClearance.find(deletedClearanceFilter)
+        .select("_id projectId clearanceDate clearanceType asbestosRemovalist LAA deletedAt")
         .populate({
           path: "projectId",
           select: "projectID name client",
           populate: { path: "client", select: "name" },
         })
+        .sort({ deletedAt: -1 })
         .lean();
 
-      const allClearances = [...clearancesFromArchived, ...legacyClearances];
-      allClearances.forEach((c) => {
-        const clientName = c.projectId?.client && typeof c.projectId.client === "object" ? c.projectId.client.name : "—";
-        items.push({
-          _id: c._id.toString(),
-          reportType: c.clearanceType || "Clearance",
-          date: c.clearanceDate,
-          client: clientName || "—",
-          LAA: c.LAA || "—",
-          itemType: "clearance",
-        });
+      // Return archived jobs for restore UI (same shape as lean docs, client name for display)
+      const archivedJobsForResponse = archivedJobs.map((j) => ({
+        _id: j._id.toString(),
+        projectId: j.projectId,
+        projectName: j.projectName,
+        asbestosRemovalist: j.asbestosRemovalist,
+        createdAt: j.createdAt,
+        updatedAt: j.updatedAt,
+        clientName:
+          j.projectId?.client && typeof j.projectId.client === "object"
+            ? j.projectId.client.name
+            : "—",
+        projectID: j.projectId?.projectID ?? "—",
+      }));
+
+      // Build restore arrays from same individually-deleted docs
+      const archivedShifts = archivedShiftsDocs.map((s) => ({
+        _id: s._id.toString(),
+        name: s.name,
+        date: s.date,
+        deletedAt: s.deletedAt,
+        jobId: s.job?._id?.toString(),
+        projectID: s.job?.projectId?.projectID ?? "—",
+        projectName: s.job?.projectName ?? "—",
+        clientName:
+          s.job?.projectId?.client && typeof s.job.projectId.client === "object"
+            ? s.job.projectId.client.name
+            : "—",
+      }));
+
+      const archivedClearances = archivedClearancesDocs.map((c) => ({
+        _id: c._id.toString(),
+        clearanceDate: c.clearanceDate,
+        clearanceType: c.clearanceType,
+        asbestosRemovalist: c.asbestosRemovalist,
+        LAA: c.LAA,
+        deletedAt: c.deletedAt,
+        projectID: c.projectId?.projectID ?? "—",
+        clientName:
+          c.projectId?.client && typeof c.projectId.client === "object"
+            ? c.projectId.client.name
+            : "—",
+      }));
+
+      const deletedAssessmentFilter = { deletedAt: { $exists: true, $ne: null } };
+      if (filterProjectId) deletedAssessmentFilter.projectId = filterProjectId;
+      const archivedAssessmentsDocs = await AsbestosAssessment.find(deletedAssessmentFilter)
+        .select("_id projectId assessmentDate jobType status LAA deletedAt")
+        .populate({
+          path: "projectId",
+          select: "projectID name client",
+          populate: { path: "client", select: "name" },
+        })
+        .sort({ deletedAt: -1 })
+        .lean();
+      const archivedAssessments = archivedAssessmentsDocs.map((a) => ({
+        _id: a._id.toString(),
+        assessmentDate: a.assessmentDate,
+        jobType: a.jobType || "asbestos-assessment",
+        status: a.status,
+        LAA: a.LAA,
+        deletedAt: a.deletedAt,
+        projectID: a.projectId?.projectID ?? "—",
+        clientName:
+          a.projectId?.client && typeof a.projectId.client === "object"
+            ? a.projectId.client.name
+            : "—",
+      }));
+
+      res.json({
+        archivedJobs: archivedJobsForResponse,
+        archivedShifts,
+        archivedClearances,
+        archivedAssessments,
       });
-
-      // Sort by date descending
-      items.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
-
-      res.json({ items });
     } catch (error) {
       console.error("Error fetching archived data:", error);
       res.status(500).json({ message: "Server error" });
@@ -675,6 +718,7 @@ router.get(
         // Fetch clearances for this asbestos removal job only (filter by asbestosRemovalJobId)
         clearances = await AsbestosClearance.find({
           asbestosRemovalJobId: job._id,
+          ...notDeletedClearanceFilter,
         })
           .select("_id projectId clearanceDate clearanceType status inspectionTime asbestosRemovalist LAA jurisdiction secondaryHeader vehicleEquipmentDescription notes useComplexTemplate jobSpecificExclusions reportApprovedBy reportIssueDate reportViewedAt authorisationRequestedBy pdfDownloadUrl pdfJobId pdfReadyAt pdfFilename updatedAt")
           .populate({
@@ -694,7 +738,7 @@ router.get(
       const jobIdStr = job._id.toString();
 
       const shiftsStart = performance.now();
-      // Fetch shifts for this asbestos removal job only
+      // Fetch shifts for this asbestos removal job only (exclude soft-deleted)
       const shiftDocs = await Shift.find({
         job: jobIdStr,
         $or: [
@@ -702,6 +746,7 @@ router.get(
           { jobModel: { $exists: false } },
           { jobModel: null },
         ],
+        ...notDeletedShiftFilter,
       })
         .select("_id job date status jobModel reportApprovedBy reportIssueDate reportViewedAt authorisationRequestedBy")
         .lean();
@@ -799,6 +844,7 @@ router.get(
       // Fetch clearances for this asbestos removal job only (filter by asbestosRemovalJobId)
       const clearances = await AsbestosClearance.find({
         asbestosRemovalJobId: req.params.id,
+        ...notDeletedClearanceFilter,
       })
         .select("_id projectId clearanceDate clearanceType status inspectionTime asbestosRemovalist LAA jurisdiction secondaryHeader vehicleEquipmentDescription notes useComplexTemplate jobSpecificExclusions reportApprovedBy reportIssueDate reportViewedAt authorisationRequestedBy pdfDownloadUrl pdfJobId pdfReadyAt pdfFilename updatedAt")
         .populate({
@@ -904,14 +950,15 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
       const Shift = require('../models/Shift');
       const AsbestosClearance = require('../models/clearanceTemplates/asbestos/AsbestosClearance');
       
-      // Check all shifts for this job are complete AND authorised
-      const shifts = await Shift.find({ 
+      // Check all shifts for this job are complete AND authorised (exclude soft-deleted)
+      const shifts = await Shift.find({
         job: job._id,
         $or: [
           { jobModel: { $exists: false } },
           { jobModel: null },
           { jobModel: "AsbestosRemovalJob" },
-        ]
+        ],
+        ...notDeletedShiftFilter,
       }).select("status reportApprovedBy").lean();
       
       if (shifts.length > 0) {
@@ -929,14 +976,17 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
       // Check all clearances for this project are complete AND authorised
       const projectIdToCheck = job.projectId?._id?.toString() || job.projectId?.toString() || job.projectId;
       if (projectIdToCheck) {
-        const clearances = await AsbestosClearance.find({ projectId: projectIdToCheck })
+        const clearances = await AsbestosClearance.find({
+          projectId: projectIdToCheck,
+          ...notDeletedClearanceFilter,
+        })
           .select("status reportApprovedBy").lean();
-        
+
         if (clearances.length > 0) {
           const unauthorisedClearances = clearances.filter(
             (clearance) => clearance.status !== "complete" || !clearance.reportApprovedBy
           );
-          
+
           if (unauthorisedClearances.length > 0) {
             return res.status(400).json({
               message: `Cannot complete job: ${unauthorisedClearances.length} clearance(s) are not complete or not authorised. All clearances must be complete and authorised before completing the job.`
@@ -958,27 +1008,6 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
 
     const updatedJob = await job.save();
 
-    // If job status is being updated to "completed", also update associated shifts
-    if (status === "completed" && previousStatus !== "completed") {
-      try {
-        const Shift = require('../models/Shift');
-        
-        // Update all shifts associated with this job to "complete" status
-        const shiftUpdateResult = await Shift.updateMany(
-          { job: job._id },
-          { 
-            status: "complete",
-            updatedBy: req.user.id
-          }
-        );
-        
-        console.log(`Updated ${shiftUpdateResult.modifiedCount} shifts to complete status for job ${job._id}`);
-      } catch (shiftError) {
-        console.error("Error updating shifts when completing asbestos removal job:", shiftError);
-        // Don't fail the main request if shift update fails
-      }
-    }
-    
     const populatedJob = await AsbestosRemovalJob.findById(updatedJob._id)
       .populate({
         path: "projectId",
@@ -1015,14 +1044,15 @@ router.patch("/:id/status", auth, checkPermission("asbestos.edit"), async (req, 
       const Shift = require('../models/Shift');
       const AsbestosClearance = require('../models/clearanceTemplates/asbestos/AsbestosClearance');
       
-      // Check all shifts for this job are complete AND authorised
-      const shifts = await Shift.find({ 
+      // Check all shifts for this job are complete AND authorised (exclude soft-deleted)
+      const shifts = await Shift.find({
         job: job._id,
         $or: [
           { jobModel: { $exists: false } },
           { jobModel: null },
           { jobModel: "AsbestosRemovalJob" },
-        ]
+        ],
+        ...notDeletedShiftFilter,
       }).select("status reportApprovedBy").lean();
       
       if (shifts.length > 0) {
@@ -1040,14 +1070,17 @@ router.patch("/:id/status", auth, checkPermission("asbestos.edit"), async (req, 
       // Check all clearances for this project are complete AND authorised
       const projectIdToCheck = job.projectId?._id?.toString() || job.projectId?.toString() || job.projectId;
       if (projectIdToCheck) {
-        const clearances = await AsbestosClearance.find({ projectId: projectIdToCheck })
+        const clearances = await AsbestosClearance.find({
+          projectId: projectIdToCheck,
+          ...notDeletedClearanceFilter,
+        })
           .select("status reportApprovedBy").lean();
-        
+
         if (clearances.length > 0) {
           const unauthorisedClearances = clearances.filter(
             (clearance) => clearance.status !== "complete" || !clearance.reportApprovedBy
           );
-          
+
           if (unauthorisedClearances.length > 0) {
             return res.status(400).json({
               message: `Cannot complete job: ${unauthorisedClearances.length} clearance(s) are not complete or not authorised. All clearances must be complete and authorised before completing the job.`
@@ -1056,33 +1089,12 @@ router.patch("/:id/status", auth, checkPermission("asbestos.edit"), async (req, 
         }
       }
     }
-    
+
     job.status = status;
     job.updatedBy = req.user.id;
 
     const updatedJob = await job.save();
 
-    // If job status is being updated to "completed", also update associated shifts
-    if (status === "completed" && previousStatus !== "completed") {
-      try {
-        const Shift = require('../models/Shift');
-        
-        // Update all shifts associated with this job to "complete" status
-        const shiftUpdateResult = await Shift.updateMany(
-          { job: job._id },
-          { 
-            status: "complete",
-            updatedBy: req.user.id
-          }
-        );
-        
-        console.log(`Updated ${shiftUpdateResult.modifiedCount} shifts to complete status for job ${job._id}`);
-      } catch (shiftError) {
-        console.error("Error updating shifts when completing asbestos removal job:", shiftError);
-        // Don't fail the main request if shift update fails
-      }
-    }
-    
     const populatedJob = await AsbestosRemovalJob.findById(updatedJob._id)
       .populate({
         path: "projectId",
@@ -1101,6 +1113,44 @@ router.patch("/:id/status", auth, checkPermission("asbestos.edit"), async (req, 
     res.status(500).json({ message: "Server error" });
   }
 });
+
+// Restore archived asbestos removal job (set status back to in_progress)
+router.patch(
+  "/:id/restore",
+  auth,
+  checkPermission("asbestos.edit"),
+  async (req, res) => {
+    try {
+      const job = await AsbestosRemovalJob.findById(req.params.id);
+      if (!job) {
+        return res.status(404).json({ message: "Asbestos removal job not found" });
+      }
+      if (job.status !== "archived") {
+        return res
+          .status(400)
+          .json({ message: "Job is not archived; nothing to restore" });
+      }
+      job.status = "in_progress";
+      job.updatedBy = req.user?.id;
+      await job.save();
+      const populatedJob = await AsbestosRemovalJob.findById(job._id)
+        .populate({
+          path: "projectId",
+          select: "projectID name client",
+          populate: {
+            path: "client",
+            select: "name contact1Name contact1Email invoiceEmail contact2Email",
+          },
+        })
+        .populate("createdBy", "firstName lastName")
+        .populate("updatedBy", "firstName lastName");
+      res.json(populatedJob);
+    } catch (error) {
+      console.error("Error restoring asbestos removal job:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  }
+);
 
 // Delete asbestos removal job
 router.delete("/:id", auth, checkPermission("asbestos.delete"), async (req, res) => {

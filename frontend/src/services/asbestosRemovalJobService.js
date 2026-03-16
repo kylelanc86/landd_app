@@ -29,7 +29,9 @@ const asbestosRemovalJobService = {
   create: (data) => axiosInstance.post("/asbestos-removal-jobs", data),
   
   update: (id, data) => axiosInstance.put(`/asbestos-removal-jobs/${id}`, data),
-  
+
+  restore: (id) => axiosInstance.patch(`/asbestos-removal-jobs/${id}/restore`),
+
   delete: (id) => axiosInstance.delete(`/asbestos-removal-jobs/${id}`),
 };
 

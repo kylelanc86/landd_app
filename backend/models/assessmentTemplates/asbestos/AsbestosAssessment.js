@@ -213,6 +213,7 @@ const AsbestosAssessmentSchema = new mongoose.Schema({
   authorisationRequestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // User who requested authorisation (send-for-authorisation)
   reportViewedAt: { type: Date }, // When Fibre ID report was viewed (L&D Supplied Jobs – used to show Authorise / Send for Authorisation)
   archived: { type: Boolean, default: false }, // When true, job is removed from the assessment table (completed)
+  deletedAt: { type: Date, required: false, default: null }, // Soft delete; when set, excluded from lists and restorable from archived data page
   revision: { type: Number, default: 0 }, // Report revision number
   // Persisted assessment report PDF (async generation)
   pdfBuffer: { type: Buffer, required: false },

@@ -193,6 +193,9 @@ const Audits = lazy(() => import("./scenes/records/audits"));
 const ProjectReports = lazy(
   () => import("./scenes/reports/ProjectReports.jsx"),
 );
+const ArchivedDataPage = lazy(
+  () => import("./scenes/reports/ArchivedDataPage"),
+);
 
 function App() {
   const [theme, colorMode] = useMode();
@@ -1321,6 +1324,34 @@ function App() {
                                       >
                                         <Suspense fallback={<LoadingSpinner />}>
                                           <ProjectReports />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled("ADVANCED.REPORTS") && (
+                                  <Route
+                                    path="/reports/archived-data"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["projects.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <ArchivedDataPage />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled("ADVANCED.REPORTS") && (
+                                  <Route
+                                    path="/reports/project/:projectId/archived-data"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["projects.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <ArchivedDataPage />
                                         </Suspense>
                                       </PermissionRoute>
                                     }

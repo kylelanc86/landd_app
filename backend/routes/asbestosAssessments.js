@@ -25,12 +25,17 @@ function clearAssessmentPdfFields(doc) {
   });
 }
 
-// GET /api/assessments - list all assessment jobs (populate project and assessor); excludes archived
+// Exclude soft-deleted assessments from list queries
+const notDeletedAssessmentFilter = {
+  $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
+};
+
+// GET /api/assessments - list all assessment jobs (populate project and assessor); excludes archived and soft-deleted
 // Query param jobType: 'asbestos-assessment' | 'residential-asbestos' - when set, only jobs of that type are returned
 // Query param list=1 - return minimal fields for table display (no full items, photos, blobs); faster and smaller payload
 router.get('/', async (req, res) => {
   try {
-    const filter = { archived: { $ne: true } };
+    const filter = { archived: { $ne: true }, ...notDeletedAssessmentFilter };
     const { jobType, list } = req.query;
     if (jobType === 'residential-asbestos') {
       filter.jobType = 'residential-asbestos';
@@ -1263,14 +1268,38 @@ router.patch('/:id/items/:itemId/photos/:photoId/arrow', async (req, res) => {
   }
 });
 
-// DELETE /api/assessments/:id - delete assessment job
+// Soft-delete assessment job (restorable from archived data page)
 router.delete('/:id', async (req, res) => {
   try {
-    const job = await AsbestosAssessment.findByIdAndDelete(req.params.id);
+    const job = await AsbestosAssessment.findById(req.params.id);
     if (!job) return res.status(404).json({ message: 'Assessment job not found' });
-    res.json({ message: 'Assessment job deleted' });
+    if (job.deletedAt) return res.status(400).json({ message: 'Assessment is already archived' });
+    job.deletedAt = new Date();
+    await job.save();
+    res.json({ message: 'Assessment job archived' });
   } catch (err) {
     res.status(400).json({ message: 'Failed to delete assessment job', error: err.message });
+  }
+});
+
+// Restore soft-deleted assessment job
+router.patch('/:id/restore', async (req, res) => {
+  try {
+    const job = await AsbestosAssessment.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+    if (!job.deletedAt) return res.status(400).json({ message: 'Assessment is not archived' });
+    job.deletedAt = null;
+    await job.save();
+    const populated = await AsbestosAssessment.findById(job._id)
+      .populate({
+        path: 'projectId',
+        select: 'projectID name client',
+        populate: { path: 'client', select: 'name' },
+      })
+      .populate('assessorId', 'firstName lastName');
+    res.json(populated);
+  } catch (err) {
+    res.status(400).json({ message: 'Failed to restore assessment job', error: err.message });
   }
 });
 

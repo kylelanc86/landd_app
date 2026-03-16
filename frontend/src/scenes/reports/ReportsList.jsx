@@ -17,7 +17,6 @@ import {
   Button,
 } from "@mui/material";
 import {
-  Visibility as VisibilityIcon,
   Download as DownloadIcon,
   Edit as EditIcon,
   Description as DescriptionIcon,
@@ -30,7 +29,6 @@ const ReportsList = ({
   loading,
   error,
   category,
-  onView,
   onDownload,
   onPrint,
   onRevise,
@@ -215,28 +213,6 @@ const ReportsList = ({
                   <Box
                     sx={{ display: "flex", gap: 1, justifyContent: "center" }}
                   >
-                    <Tooltip title="View Report">
-                      <IconButton
-                        size="small"
-                        onClick={() => onView(report)}
-                        color="primary"
-                        disabled={
-                          (processingReport.reportId === report.id ||
-                            processingReport.reportId === report.data?._id ||
-                            processingReport.reportId === report.data?.id) &&
-                          processingReport.action === "view"
-                        }
-                      >
-                        {(processingReport.reportId === report.id ||
-                          processingReport.reportId === report.data?._id ||
-                          processingReport.reportId === report.data?.id) &&
-                        processingReport.action === "view" ? (
-                          <CircularProgress size={20} />
-                        ) : (
-                          <VisibilityIcon />
-                        )}
-                      </IconButton>
-                    </Tooltip>
                     <Tooltip title="Download Report">
                       <IconButton
                         size="small"
@@ -299,10 +275,11 @@ const ReportsList = ({
                           </IconButton>
                         </Tooltip>
                       )}
-                    {/* Only show revise button for completed reports */}
+                    {/* Only show revise button for completed reports (include shift_complete for air mon shift reports) */}
                     {(report.status === "complete" ||
                       report.status === "completed" ||
-                      report.status === "Completed") &&
+                      report.status === "Completed" ||
+                      report.status === "shift_complete") &&
                       onRevise && (
                         <Button
                           size="small"

@@ -25,7 +25,13 @@ const asbestosAssessmentService = {
     return response.data;
   },
 
-  // Delete an asbestos assessment
+  // Restore soft-deleted asbestos assessment
+  restore: async (id) => {
+    const response = await api.patch(`/assessments/${id}/restore`);
+    return response.data;
+  },
+
+  // Delete (soft-delete) an asbestos assessment
   delete: async (id) => {
     const response = await api.delete(`/assessments/${id}`);
     return response.data;

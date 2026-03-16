@@ -10,10 +10,23 @@ const Sample = require('../models/Sample');
 const Invoice = require('../models/Invoice');
 const AsbestosAssessment = require('../models/assessmentTemplates/asbestos/AsbestosAssessment');
 
+const notDeletedAssessmentFilter = {
+  $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
+};
+const notDeletedShiftFilter = {
+  $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
+};
+const notDeletedClearanceFilter = {
+  $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
+};
+
 // Get Asbestos Assessment Reports
 router.get('/asbestos-assessment/:projectId', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
-    const assessments = await AsbestosAssessment.find({ projectId: req.params.projectId })
+    const assessments = await AsbestosAssessment.find({
+      projectId: req.params.projectId,
+      ...notDeletedAssessmentFilter,
+    })
       .populate('projectId')
       .populate('assessorId');
 
@@ -49,6 +62,7 @@ router.get('/air-monitoring/:projectId', auth, checkPermission(['projects.view']
           { jobModel: { $exists: false } },
           { jobModel: null },
         ],
+        ...notDeletedShiftFilter,
       });
       for (const shift of shifts) {
         if (shift.status === 'analysis_complete' || shift.status === 'shift_complete') {
@@ -77,9 +91,10 @@ router.get('/clearance/:projectId', auth, checkPermission(['projects.view']), as
   try {
     const AsbestosClearance = require('../models/clearanceTemplates/asbestos/AsbestosClearance');
     
-    const clearances = await AsbestosClearance.find({ 
+    const clearances = await AsbestosClearance.find({
       projectId: req.params.projectId,
-      status: { $in: ['complete', 'Site Work Complete'] }
+      status: { $in: ['complete', 'Site Work Complete'] },
+      ...notDeletedClearanceFilter,
     })
       .populate('projectId', 'name projectID')
       .populate('createdBy', 'firstName lastName')
