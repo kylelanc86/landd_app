@@ -219,7 +219,7 @@ export async function generateLeadMonitoringShiftReport({
             alignment: "justify",
           },
           {
-            text: "Work should immediately cease until a review is conducted of the controls used for these lead abatement works and improvements to control measures have been implemented. Work may only recommence once improvements to control measures have been assessed as satisfactory.",
+            text: "Work should immediately cease until a review is conducted of the controls used for these lead works and improvements to control measures have been implemented. Work may only recommence once improvements to control measures have been assessed as satisfactory.",
             alignment: "justify",
             margin: [0, 8, 0, 0],
           }
@@ -291,7 +291,7 @@ export async function generateLeadMonitoringShiftReport({
       {
         stack: [
           {
-            text: `Following discussions with ${clientName}, Lancaster and Dickenson Consulting (L & D) were contracted to undertake air monitoring during lead abatement works at ${siteName} (herein referred to as 'the Site').`,
+            text: `Following discussions with ${clientName}, Lancaster and Dickenson Consulting (L & D) were contracted to undertake air monitoring during lead works at ${siteName} (herein referred to as 'the Site').`,
             alignment: "justify",
           },
           {
@@ -322,7 +322,7 @@ export async function generateLeadMonitoringShiftReport({
         table: {
           headerRows: 1,
           dontBreakRows: true,
-          widths: ["15%", "40%", "12%", "12%", "10%", "11%"],
+          widths: ["14%", "34%", "10%", "10%", "10%", "11%", "11%"],
           body: [
             [
               { text: "Sample ref.", style: "tableHeader" },
@@ -330,6 +330,7 @@ export async function generateLeadMonitoringShiftReport({
               { text: "Start time", style: "tableHeader" },
               { text: "Finish time", style: "tableHeader" },
               { text: "Flowrate (L/min)", style: "tableHeader" },
+              { text: "Lead Content (µg/filter)", style: "tableHeader" },
               { text: "Lead Conc. (mg/m³)", style: "tableHeader" },
             ],
             ...sortedSamples.map((s) => [
@@ -356,6 +357,10 @@ export async function generateLeadMonitoringShiftReport({
                     : s.averageFlowrate != null
                       ? Number(s.averageFlowrate).toFixed(1)
                       : "-",
+                style: "tableContent",
+              },
+              {
+                text: s.leadContent != null && String(s.leadContent).trim() !== "" ? String(s.leadContent).trim() : "-",
                 style: "tableContent",
               },
               {
