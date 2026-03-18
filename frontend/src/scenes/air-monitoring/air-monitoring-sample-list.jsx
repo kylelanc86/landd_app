@@ -31,6 +31,8 @@ import {
   DialogActions,
   Collapse,
   useMediaQuery,
+  Select,
+  MenuItem,
 } from "@mui/material";
 import { useParams, useNavigate } from "react-router-dom";
 import AddIcon from "@mui/icons-material/Add";
@@ -84,6 +86,17 @@ const SampleList = () => {
   const [descriptionSectionExpanded, setDescriptionSectionExpanded] =
     useState(true);
   const [descriptionModalOpen, setDescriptionModalOpen] = useState(false);
+  const [jobShifts, setJobShifts] = useState([]);
+  const [duplicateConfirmDialogOpen, setDuplicateConfirmDialogOpen] =
+    useState(false);
+  const [duplicatePreviewDialogOpen, setDuplicatePreviewDialogOpen] =
+    useState(false);
+  const [previousShiftSamples, setPreviousShiftSamples] = useState([]);
+  const [previewDescriptionOfWorks, setPreviewDescriptionOfWorks] = useState("");
+  const [editablePreviewSamples, setEditablePreviewSamples] = useState([]);
+  const [duplicateInProgress, setDuplicateInProgress] = useState(false);
+
+  const SAMPLE_TYPE_OPTIONS = ["Background", "Clearance", "Exposure", "-"];
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const showDescriptionButton = useMediaQuery(theme.breakpoints.down("md"));
   const isMobileOrTablet = useMediaQuery("(max-width: 960px)");
@@ -199,6 +212,42 @@ const SampleList = () => {
 
     fetchData();
   }, [shiftId]);
+
+  // Fetch job shifts when we have a job (for duplicate-from-previous-shift)
+  const jobIdForShifts =
+    (shift?.job && typeof shift.job === "object" ? shift.job._id : shift?.job) ?? null;
+  const jobModelForShifts = shift?.jobModel;
+  useEffect(() => {
+    if (!jobIdForShifts || jobModelForShifts !== "AsbestosRemovalJob") {
+      setJobShifts([]);
+      return;
+    }
+    shiftService
+      .getByJob(jobIdForShifts)
+      .then((res) => setJobShifts(res.data || []))
+      .catch(() => setJobShifts([]));
+  }, [jobIdForShifts, jobModelForShifts]);
+
+  // Previous shift = shift immediately before current one (by date)
+  const previousShift = useMemo(() => {
+    if (!shiftId || !shift || jobShifts.length < 2) return null;
+    const sorted = [...jobShifts].sort(
+      (a, b) => new Date(a.date) - new Date(b.date),
+    );
+    const idx = sorted.findIndex((s) => s._id === shiftId);
+    if (idx <= 0) return null;
+    return sorted[idx - 1] || null;
+  }, [shiftId, shift, jobShifts]);
+
+  const canShowDuplicateFromPrevious =
+    shift &&
+    job &&
+    shift.jobModel === "AsbestosRemovalJob" &&
+    samples.length === 0 &&
+    jobShifts.length > 1 &&
+    previousShift &&
+    ["analysis_complete", "shift_complete"].includes(previousShift.status) &&
+    !isReportAuthorized;
 
   // Memoize validation function to avoid recreating it on every render
   const validateSamplesCompleteMemo = useCallback((samplesToValidate) => {
@@ -640,6 +689,116 @@ const SampleList = () => {
     setSitePlanDialogOpen(true);
   };
 
+  const handleOpenDuplicateConfirm = () => {
+    setDuplicateConfirmDialogOpen(true);
+  };
+
+  const handleDuplicateConfirmNo = () => {
+    setDuplicateConfirmDialogOpen(false);
+  };
+
+  const handleDuplicateConfirmYes = async () => {
+    if (!previousShift) return;
+    setDuplicateConfirmDialogOpen(false);
+    try {
+      const [samplesRes, shiftRes] = await Promise.all([
+        sampleService.getByShift(previousShift._id),
+        shiftService.getById(previousShift._id),
+      ]);
+      const list = samplesRes.data || [];
+      const prevShiftData = shiftRes.data || {};
+      setPreviousShiftSamples(list);
+      setPreviewDescriptionOfWorks(prevShiftData.descriptionOfWorks ?? "");
+      setEditablePreviewSamples(
+        list.map((s) => ({
+          location: s.location ?? "",
+          type: s.type ?? "",
+        })),
+      );
+      setDuplicatePreviewDialogOpen(true);
+    } catch (err) {
+      console.error("Error fetching previous shift samples:", err);
+      showSnackbar("Failed to load previous shift samples.", "error");
+    }
+  };
+
+  const handleDuplicatePreviewCancel = () => {
+    setDuplicatePreviewDialogOpen(false);
+    setPreviousShiftSamples([]);
+    setPreviewDescriptionOfWorks("");
+    setEditablePreviewSamples([]);
+  };
+
+  const setEditablePreviewSampleField = (index, field, value) => {
+    setEditablePreviewSamples((prev) => {
+      const next = [...prev];
+      if (!next[index]) next[index] = { location: "", type: "" };
+      next[index] = { ...next[index], [field]: value };
+      return next;
+    });
+  };
+
+  const handleDuplicatePreviewConfirm = async () => {
+    const projectID = job?.projectId?.projectID || shift?.job?.projectId?.projectID;
+    if (!projectID || !nextSampleNumber) {
+      showSnackbar("Missing project or sample number. Please refresh and try again.", "error");
+      return;
+    }
+    setDuplicateInProgress(true);
+    try {
+      const jobId = shift?.job?._id || shift?.job;
+      let nextNum = nextSampleNumber;
+      const samplesToCreate = editablePreviewSamples.length
+        ? editablePreviewSamples
+        : previousShiftSamples.map((s) => ({
+            location: s.location ?? "",
+            type: s.type ?? "",
+          }));
+      for (let i = 0; i < samplesToCreate.length; i++) {
+        const row = samplesToCreate[i];
+        const sampleNumber = `AM${nextNum}`;
+        await sampleService.create({
+          shift: shiftId,
+          job: jobId,
+          jobModel: "AsbestosRemovalJob",
+          sampleNumber,
+          fullSampleID: `${projectID}-${sampleNumber}`,
+          type: row.type || undefined,
+          location: row.location || undefined,
+          status: "pending",
+        });
+        nextNum += 1;
+      }
+      if (previewDescriptionOfWorks != null && previewDescriptionOfWorks.trim() !== "") {
+        await shiftService.update(shiftId, {
+          descriptionOfWorks: previewDescriptionOfWorks.trim(),
+        });
+        setDescriptionOfWorks(previewDescriptionOfWorks.trim());
+      }
+      setDuplicatePreviewDialogOpen(false);
+      setPreviousShiftSamples([]);
+      setPreviewDescriptionOfWorks("");
+      setEditablePreviewSamples([]);
+      const descCopied = previewDescriptionOfWorks != null && previewDescriptionOfWorks.trim() !== "";
+      showSnackbar(
+        `Created ${previousShiftSamples.length} sample(s) from previous shift${descCopied ? " and copied description of works" : ""}.`,
+        "success",
+      );
+      setNextSampleNumber(nextNum);
+      const [shiftResponse, samplesResponse] = await Promise.all([
+        shiftService.getById(shiftId),
+        sampleService.getByShift(shiftId),
+      ]);
+      setShift(shiftResponse.data);
+      setSamples(samplesResponse.data || []);
+    } catch (err) {
+      console.error("Error duplicating samples:", err);
+      showSnackbar("Failed to create samples. Please try again.", "error");
+    } finally {
+      setDuplicateInProgress(false);
+    }
+  };
+
   const handleCloseSitePlan = () => {
     setSitePlanDialogOpen(false);
   };
@@ -1064,6 +1223,27 @@ const SampleList = () => {
               Site Plan
             </Box>
           </Button>
+          {canShowDuplicateFromPrevious && (
+            <IconButton
+              onClick={handleOpenDuplicateConfirm}
+              disabled={isReportAuthorized}
+              size="small"
+              sx={{
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                backgroundColor: theme.palette.background.paper,
+                border: `0px solid ${theme.palette.divider}`,
+                opacity: 0.2,
+                color: "transparent",
+                "&:hover": {
+                  backgroundColor: theme.palette.action.hover,
+                  opacity: 0.5,
+                },
+              }}
+              title="Duplicate sample locations from previous shift"
+            />
+          )}
           {sitePlanData?.sitePlan && (
             <Button
               variant="outlined"
@@ -1957,6 +2137,134 @@ const SampleList = () => {
             }}
           >
             Delete Sample
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Duplicate from previous shift – confirm */}
+      <Dialog
+        open={duplicateConfirmDialogOpen}
+        onClose={handleDuplicateConfirmNo}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 2 } }}
+      >
+        <DialogTitle>Duplicate description of works and samples from previous shift?</DialogTitle>
+        <DialogActions>
+          <Button onClick={handleDuplicateConfirmNo}>No</Button>
+          <Button onClick={handleDuplicateConfirmYes} variant="contained" color="primary">
+            Yes
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Duplicate from previous shift – preview */}
+      <Dialog
+        open={duplicatePreviewDialogOpen}
+        onClose={handleDuplicatePreviewCancel}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 2 } }}
+      >
+        <DialogTitle>Review samples to create</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Edit description of works and sample details below, then confirm to
+            create.
+          </Typography>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600, mt: 2, mb: 1 }}>
+            Description of works
+          </Typography>
+          <TextField
+            fullWidth
+            multiline
+            minRows={3}
+            maxRows={6}
+            value={previewDescriptionOfWorks}
+            onChange={(e) => setPreviewDescriptionOfWorks(e.target.value)}
+            placeholder="Description of works for this shift"
+            variant="outlined"
+            size="small"
+            sx={{ mb: 2 }}
+          />
+          <Typography variant="subtitle2" sx={{ fontWeight: 600, mt: 2, mb: 1 }}>
+            Samples
+          </Typography>
+          <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 320 }}>
+            <Table size="small" stickyHeader>
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 600 }}>Sample ref</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Location</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Type</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {previousShiftSamples.map((s, i) => {
+                  const projectID = job?.projectId?.projectID || shift?.job?.projectId?.projectID;
+                  const newRef = projectID
+                    ? `AM${nextSampleNumber + i}`
+                    : `#${i + 1}`;
+                  const editable = editablePreviewSamples[i] ?? {
+                    location: s.location ?? "",
+                    type: s.type ?? "",
+                  };
+                  return (
+                    <TableRow key={s._id || i}>
+                      <TableCell>{newRef}</TableCell>
+                      <TableCell>
+                        <TextField
+                          size="small"
+                          fullWidth
+                          value={editable.location}
+                          onChange={(e) =>
+                            setEditablePreviewSampleField(i, "location", e.target.value)
+                          }
+                          placeholder="Location"
+                          variant="outlined"
+                          sx={{ "& .MuiInputBase-root": { backgroundColor: "background.paper" } }}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          size="small"
+                          fullWidth
+                          value={editable.type || ""}
+                          onChange={(e) =>
+                            setEditablePreviewSampleField(i, "type", e.target.value)
+                          }
+                          displayEmpty
+                          variant="outlined"
+                          sx={{ minWidth: 120, "& .MuiSelect-select": { py: 0.75 } }}
+                        >
+                          <MenuItem value="">
+                            <em>—</em>
+                          </MenuItem>
+                          {SAMPLE_TYPE_OPTIONS.map((opt) => (
+                            <MenuItem key={opt} value={opt}>
+                              {opt}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDuplicatePreviewCancel} disabled={duplicateInProgress}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDuplicatePreviewConfirm}
+            variant="contained"
+            color="primary"
+            disabled={duplicateInProgress}
+          >
+            {duplicateInProgress ? "Creating…" : "Confirm"}
           </Button>
         </DialogActions>
       </Dialog>

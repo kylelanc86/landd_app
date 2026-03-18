@@ -139,7 +139,14 @@ export async function generateLeadMonitoringShiftReport({
     }
   }
 
-  const siteName = project?.name || job?.projectName || "N/A";
+  const siteName =
+    project?.name ||
+    job?.projectName ||
+    job?.projectId?.name ||
+    (job?.projectId?.projectId && typeof job.projectId.projectId === "object"
+      ? job.projectId.projectId.name
+      : null) ||
+    "N/A";
   const shiftDate = shift?.date ? formatDateLong(shift.date) : "N/A";
   const pdfGenerationDate = formatDateLong(new Date().toISOString());
   const clientName =
@@ -177,6 +184,18 @@ export async function generateLeadMonitoringShiftReport({
     }).length > 0 &&
     samplesAboveLimit.length === 0;
 
+  // Show "(and below the Practical Quantitation Limit)" only when all samples have lead content (μg/filter) equal to '<1'
+  const allSamplesBelowPQL =
+    sortedSamples.length > 0 &&
+    sortedSamples.every((s) => {
+      const v = s.leadContent;
+      if (v == null || v === "") return false;
+      const str = String(v).trim();
+      if (!str.startsWith("<")) return false;
+      const num = parseFloat(str.slice(1).trim());
+      return !isNaN(num) && num === 1;
+    });
+
   const discussionContent = allBelowLimit
     ? {
         stack: [
@@ -185,9 +204,11 @@ export async function generateLeadMonitoringShiftReport({
             alignment: "justify",
           },
           {
-            text: "However, as all levels fell well below the exposure standard (and below the Practical Quantitation Limit), it can be concluded that the lead works did not pose a measurable lead exposure risk to building occupants.",
+            text: allSamplesBelowPQL
+              ? "However, as all levels fell well below the exposure standard (and below the Practical Quantitation Limit), it can be concluded that the lead works did not pose a measurable lead exposure risk to building occupants."
+              : "However, as all levels fell well below the exposure standard, it can be concluded that the lead works did not pose a measurable lead exposure risk to building occupants.",
             alignment: "justify",
-            margin: [0, 12, 0, 0],
+            margin: [0, 5, 0, 0],
           },
         ],
       }
@@ -198,13 +219,10 @@ export async function generateLeadMonitoringShiftReport({
             alignment: "justify",
           },
           {
-            text: "Work should immediately stop and a review conducted of the controls used for these lead abatement works. ",
+            text: "Work should immediately cease until a review is conducted of the controls used for these lead abatement works and improvements to control measures have been implemented. Work may only recommence once improvements to control measures have been assessed as satisfactory.",
             alignment: "justify",
-          },
-          {
-            text: "Work may only recommence once improvements to control measures have been implemented and assessed.",
-            alignment: "justify",
-          },
+            margin: [0, 8, 0, 0],
+          }
         ]
       : { text: "[No lead concentration data available for conclusions.]", alignment: "justify" };
 
@@ -252,44 +270,44 @@ export async function generateLeadMonitoringShiftReport({
           ],
         },
         layout: "noBorders",
-        margin: [0, 0, 0, 16],
+        margin: [0, 0, 0, 10],
       },
       // Title
-      
       {
         text: [
           { text: "Lead Air Monitoring Results: ", bold: true },
           { text: `${siteName} - ${shiftDate}`, bold: false },
+          ...(shift?.reportApprovedBy ? [] : [{ text: " [DRAFT]", bold: true }]),
         ],
-        margin: [0, 0, 0, 16],
+        margin: [0, 0, 0, 10],
         fontSize: 10,
       },
       // Introduction
       {
         text: "Introduction",
         style: "header",
-        margin: [0, 0, 0, 6],
+        margin: [0, 0, 0, 8],
       },
       {
         stack: [
           {
-            text: `Following discussions with ${clientName}, Lancaster and Dickenson Consulting (L & D) were contracted to undertake air monitoring during lead abatement works at ${siteAddress} (herein referred to as 'the Site').`,
+            text: `Following discussions with ${clientName}, Lancaster and Dickenson Consulting (L & D) were contracted to undertake air monitoring during lead abatement works at ${siteName} (herein referred to as 'the Site').`,
             alignment: "justify",
           },
           {
             text: `Lead abatement works were undertaken by ${leadRemovalContractor}. ${sampler} from L&D visited the Site on ${shiftDate}.`,
             alignment: "justify",
-            margin: [0, 8, 0, 0],
+            margin: [0, 4, 0, 0],
           },
 
           {
             text: "Table 1 below outlines the samples that formed part of the inspection. The certificate of analysis for the samples is presented in Appendix A of this report.",
             alignment: "justify",
-            margin: [0, 8, 0, 0],
+            margin: [0, 4, 0, 0],
           },
         ],
         style: "body",
-        margin: [0, 0, 0, 16],
+        margin: [0, 0, 0, 10],
       },
       // Table 1
       {
@@ -297,14 +315,14 @@ export async function generateLeadMonitoringShiftReport({
           { text: "Table 1: ", bold: true },
           { text: "Lead Air Monitoring Results", bold: false },
         ],
-        fontSize: 10,
+        fontSize: 9,
         margin: [0, 0, 0, 6],
       },
       {
         table: {
           headerRows: 1,
           dontBreakRows: true,
-          widths: ["15%", "30%", "12%", "12%", "10%", "20%"],
+          widths: ["15%", "40%", "12%", "12%", "10%", "11%"],
           body: [
             [
               { text: "Sample ref.", style: "tableHeader" },
@@ -312,7 +330,7 @@ export async function generateLeadMonitoringShiftReport({
               { text: "Start time", style: "tableHeader" },
               { text: "Finish time", style: "tableHeader" },
               { text: "Flowrate (L/min)", style: "tableHeader" },
-              { text: "Lead Concentration (mg/m³)", style: "tableHeader" },
+              { text: "Lead Conc. (mg/m³)", style: "tableHeader" },
             ],
             ...sortedSamples.map((s) => [
               { text: s.fullSampleID || "-", style: "tableContent" },
@@ -336,7 +354,7 @@ export async function generateLeadMonitoringShiftReport({
                   s.status === "failed"
                     ? { text: "Failed", color: "red", bold: true }
                     : s.averageFlowrate != null
-                      ? String(s.averageFlowrate)
+                      ? Number(s.averageFlowrate).toFixed(1)
                       : "-",
                 style: "tableContent",
               },
@@ -352,10 +370,10 @@ export async function generateLeadMonitoringShiftReport({
           vLineWidth: () => 0.5,
           paddingLeft: () => 4,
           paddingRight: () => 4,
-          paddingTop: () => 4,
-          paddingBottom: () => 4,
+          paddingTop: () => 7,
+          paddingBottom: () => 7,
         },
-        margin: [0, 0, 0, 16],
+        margin: [0, 0, 0, 10],
       },
       // Discussion & Conclusions
       {
@@ -371,26 +389,27 @@ export async function generateLeadMonitoringShiftReport({
             : { text: discussionContent.text ?? discussionContent }),
         style: "body",
         alignment: "justify",
-        margin: [0, 0, 0, 8],
+        margin: [0, 0, 0, 5],
       },
-      // Sign-off (no section header)
+      // Sign-off (no section header) — new page if more than 6 samples so table doesn't crowd it
+      ...(sortedSamples.length > 5 ? [{ text: "", pageBreak: "before" }] : []),
       {
         stack: [
           {
             text: "Please do not hesitate to contact the undersigned should you have any queries regarding this report.",
             style: "body",
             alignment: "justify",
-            margin: [0, 0, 0, 8],
+            margin: [0, 0, 0, 5],
           },
           {
             text: "For and on behalf of Lancaster and Dickenson Consulting.",
             style: "body",
             alignment: "justify",
-            margin: [0, 0, 0, 8],
+            margin: [0, 0, 0, 5],
           },
           ...(samplerSignature
             ? [
-                { image: "samplerSignature", width: 95, margin: [0, 0, 0, 8] },
+                { image: "samplerSignature", width: 95, margin: [0, 0, 0, 5] },
               ]
             : []),
           {
@@ -442,36 +461,13 @@ export async function generateLeadMonitoringShiftReport({
   const mainContent = appendixStartIndex >= 0 ? content.slice(0, appendixStartIndex) : content;
   const appendixContent = appendixStartIndex >= 0 ? content.slice(appendixStartIndex) : [];
 
-  // Generate a main-only PDF to get the number of pages before the first appendix cover
-  const mainOnlyDocDef = {
-    pageSize: "A4",
-    pageMargins: [40, 105, 40, 58],
-    defaultStyle: { font: "Gothic", fontSize: 10, alignment: "justify" },
-    images: {
-      ...(companyLogo ? { companyLogo } : {}),
-      ...(samplerSignature ? { samplerSignature } : {}),
-      ...(watermarkLogo ? { watermarkLogo } : {}),
-    },
-    header: undefined,
-    styles: {
-      header: { fontSize: 11, bold: true, margin: [0, 0, 0, 4], alignment: "justify" },
-      body: { fontSize: 10, margin: [0, 0, 0, 6], lineHeight: 1.4, alignment: "justify" },
-      tableHeader: { fontSize: 9, bold: true, fillColor: "#f0f0f0" },
-      tableContent: { fontSize: 9 },
-    },
-    content: mainContent,
-  };
-  const mainOnlyBlob = await new Promise((resolve, reject) => {
-    pdfMake.createPdf(mainOnlyDocDef).getBlob((blob) => (blob ? resolve(blob) : reject(new Error("Failed to get main-only PDF blob"))));
-  });
-  const { PDFDocument } = await import("pdf-lib");
-  const mainOnlyPdf = await PDFDocument.load(await mainOnlyBlob.arrayBuffer());
-  const mainPageCount = mainOnlyPdf.getPageCount();
+  // Main report is 2 pages when we inject a page break before sign-off (e.g. >5 samples), else 1
+  const mainPageCount = sortedSamples.length > 5 ? 2 : 1;
 
   const docDefinition = {
     pageSize: "A4",
     pageMargins: [40, 105, 40, 58],
-    defaultStyle: { font: "Gothic", fontSize: 10, alignment: "justify" },
+    defaultStyle: { font: "Gothic", fontSize: 9, alignment: "justify" },
     images: {
       ...(companyLogo ? { companyLogo } : {}),
       ...(samplerSignature ? { samplerSignature } : {}),
@@ -533,10 +529,10 @@ export async function generateLeadMonitoringShiftReport({
         }
       : undefined,
     styles: {
-      header: { fontSize: 11, bold: true, margin: [0, 0, 0, 4], alignment: "justify" },
-      body: { fontSize: 10, margin: [0, 0, 0, 6], lineHeight: 1.4, alignment: "justify" },
-      tableHeader: { fontSize: 9, bold: true, fillColor: "#f0f0f0" },
-      tableContent: { fontSize: 9 },
+      header: { fontSize: 10, bold: true, margin: [0, 0, 0, 3], alignment: "justify" },
+      body: { fontSize: 9, margin: [0, 0, 0, 3], lineHeight: 1.35, alignment: "justify" },
+      tableHeader: { fontSize: 8, bold: true, fillColor: "#f0f0f0" },
+      tableContent: { fontSize: 8 },
     },
     content: [...mainContent, ...appendixContent],
     footer: (currentPage, pageCount) => {

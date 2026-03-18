@@ -1566,6 +1566,8 @@ const generateLeadClearanceHTML = async (clearanceData, pdfId = 'unknown') => {
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const logoPath = path.join(__dirname, '../assets/logo.png');
   const logoBase64 = fs.existsSync(logoPath) ? fs.readFileSync(logoPath).toString('base64') : '';
+  const watermarkPath = path.join(__dirname, '../assets/logo_small hi-res.png');
+  const watermarkBase64 = fs.existsSync(watermarkPath) ? fs.readFileSync(watermarkPath).toString('base64') : '';
   const backgroundPath = path.join(__dirname, '../assets/clearance_front - Copy.jpg');
   const backgroundBase64 = fs.existsSync(backgroundPath) ? fs.readFileSync(backgroundPath).toString('base64') : '';
 
@@ -1652,11 +1654,86 @@ const generateLeadClearanceHTML = async (clearanceData, pdfId = 'unknown') => {
     ? await replacePlaceholders(String(clearanceData.jobSpecificExclusions).trim(), templateData)
     : 'None specified.';
 
-  const leadSignOffTemplate = 'Please do not hesitate to contact the undersigned should you have any queries regarding this report.<br /><br />For and on behalf of Lancaster and Dickenson Consulting.<br /><br />[SIGNATURE_IMAGE]<br /><span class="sign-off-name">[LAA_NAME]</span><br /><span class="sign-off-company">Lancaster &amp; Dickenson Consulting</span>';
+  const leadSignOffTemplate = 'Please do not hesitate to contact the undersigned should you have any queries regarding this report.<br /><br />For and on behalf of Lancaster and Dickenson Consulting.<br />[SIGNATURE_IMAGE]<br /><span class="sign-off-name">[LAA_NAME]</span><br /><span class="sign-off-company">Lancaster &amp; Dickenson Consulting</span>';
   const leadSignOffHtml = await replacePlaceholders(leadSignOffTemplate, templateData);
 
   const appendicesForText = getLeadClearanceAppendices(clearanceData);
   const attachmentTextLead = generateLeadAttachmentText(appendicesForText);
+
+  // Version control page (same structure as asbestos clearance)
+  const leadTemplateDir = path.join(__dirname, '../templates/DocRaptor/LeadClearance');
+  const versionControlTemplate = fs.existsSync(path.join(leadTemplateDir, 'VersionControl.html'))
+    ? fs.readFileSync(path.join(leadTemplateDir, 'VersionControl.html'), 'utf8')
+    : fs.readFileSync(path.join(__dirname, '../templates/DocRaptor/AsbestosClearance/VersionControl.html'), 'utf8');
+  const versionControlTemplateWithUrl = versionControlTemplate.replace(/\[FRONTEND_URL\]/g, frontendUrl);
+
+  const pdfGenerationDate = formatDateSydney(new Date());
+  const laaName = (clearanceData.createdBy?.firstName && clearanceData.createdBy?.lastName)
+    ? `${clearanceData.createdBy.firstName} ${clearanceData.createdBy.lastName}`
+    : consultant;
+  const versionControlFilename = `${jobRef}_Lead Clearance Report - ${siteAddress} (${clearanceDateStr})${clearanceData.sequenceNumber ? ` - ${clearanceData.sequenceNumber}` : ''}`;
+
+  const generateLeadRevisionHistory = () => {
+    const revision = clearanceData.revision || 0;
+    const approvedBy = reportAuthoriserText;
+    if (revision === 0) {
+      return `
+          <tr>
+            <td>Original Issue</td>
+            <td>0</td>
+            <td>${approvedBy}</td>
+            <td>${pdfGenerationDate}</td>
+          </tr>
+        `;
+    }
+    let revisionRows = `
+          <tr>
+            <td>Original Issue</td>
+            <td>0</td>
+            <td>${approvedBy}</td>
+            <td>${pdfGenerationDate}</td>
+          </tr>
+        `;
+    if (clearanceData.revisionReasons && clearanceData.revisionReasons.length > 0) {
+      clearanceData.revisionReasons.forEach((revisionData) => {
+        const revisionDate = revisionData.revisedAt ? formatDateSydney(revisionData.revisedAt) : pdfGenerationDate;
+        revisionRows += `
+              <tr>
+                <td>${escapeHtml(revisionData.reason || '')}</td>
+                <td>${revisionData.revisionNumber}</td>
+                <td>${approvedBy}</td>
+                <td>${revisionDate}</td>
+              </tr>
+            `;
+      });
+    } else {
+      for (let i = 1; i <= revision; i++) {
+        revisionRows += `
+              <tr>
+                <td>Report Revision</td>
+                <td>${i}</td>
+                <td>${approvedBy}</td>
+                <td>${pdfGenerationDate}</td>
+              </tr>
+            `;
+      }
+    }
+    return revisionRows;
+  };
+
+  const populatedVersionControl = versionControlTemplateWithUrl
+    .replace(/\[REPORT_TITLE\]/g, 'LEAD REMOVAL CLEARANCE CERTIFICATE')
+    .replace(/\[SITE_ADDRESS\]/g, escapeHtml(siteAddress))
+    .replace(/\[CLIENT_NAME\]/g, escapeHtml(clearanceData.projectId?.client?.name || clearanceData.clientName || 'Unknown Client'))
+    .replace(/\[CLEARANCE_DATE\]/g, pdfGenerationDate)
+    .replace(/\[LAA_NAME\]/g, escapeHtml(laaName))
+    .replace(/\[FILENAME\]/g, escapeHtml(versionControlFilename))
+    .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
+    .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`)
+    .replace(/\[FOOTER_TEXT\]/g, escapeHtml(footerText))
+    .replace(/<tr>\s*<td style="height: 32px"><\/td>\s*<td><\/td>\s*<td><\/td>\s*<td><\/td>\s*<\/tr>/g, generateLeadRevisionHistory());
+
+  const mainReportPageCount = hasDustOrSoilSamples ? 3 : 2;
 
   const baseStyles = `
     /* DocRaptor-optimized CSS with Gothic fonts (match asbestos clearance certificates) */
@@ -1696,6 +1773,9 @@ const generateLeadClearanceHTML = async (clearanceData, pdfId = 'unknown') => {
     .content { padding: 10px 48px 24px 48px; }
     .section-header { font-size: 0.9rem; font-weight: 700; text-transform: uppercase; margin: 20px 0 10px 0; color: #222; }
     .paragraph { font-size: 0.8rem; margin-bottom: 8px; color: #222; line-height: 1.5; text-align: justify; }
+    .content .clearance-table-title { font-size: 0.8rem; font-weight: 700; margin: 10px 0 8px 0; color: #222; line-height: 1.5; }
+    .content .job-exclusions { margin-top: 0; margin-bottom: 0; padding: 0; }
+    .content .clearance-certification .job-exclusions .paragraph { margin: 0; }
     .clearance-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; margin: 10px 0; }
     .clearance-table th { background-color: #f5f5f5; border: 1px solid #ddd; padding: 8px; text-align: left; font-weight: 700; color: #222; }
     .clearance-table td { border: 1px solid #ddd; padding: 8px; text-align: left; color: #222; vertical-align: top; }
@@ -1711,12 +1791,17 @@ const generateLeadClearanceHTML = async (clearanceData, pdfId = 'unknown') => {
     .cover-page .cover-content p { font-size: 1.3rem; margin: 0 0 10px 0; color: #222; }
     .cover-company-details { font-size: 0.75rem; color: #222; line-height: 1.5; position: absolute; bottom: 150px; left: 24px; z-index: 6; width: calc(50% - 48px); }
     .cover-logo { position: absolute; right: 32px; bottom: 32px; width: 300px; background: rgba(255,255,255,0.95); padding: 5px; border-radius: 3px; z-index: 10; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-    .sign-off-block { margin-top: 24px; font-size: 0.8rem; color: #222; line-height: 1.5; }
+    .sign-off-block { font-size: 0.8rem; color: #222; line-height: 1.5; }
+    .sign-off-block img { margin-top: 0; padding-top: 0; display: block; }
     .sign-off-block .sign-off-name { margin-top: 8px; }
     .sign-off-block .sign-off-company { margin-top: 4px; font-weight: 500; }
     .content ul, .content .paragraph ul { margin: 0 0 8px 0; padding-left: 24px; list-style-position: outside; }
     .content ul li, .content .paragraph ul li { margin-bottom: 6px; }
     .content ul li:last-child, .content .paragraph ul li:last-child { margin-bottom: 0; }
+    .footer-content { width: 100%; display: flex; justify-content: space-between; align-items: flex-end; }
+    .footer-text { flex: 1; }
+    .page-number { font-size: 0.75rem; color: #222; font-weight: 500; margin-left: 20px; }
+    .page-break { page-break-after: always; }
   `;
 
   const coverPage = `
@@ -1750,21 +1835,25 @@ const generateLeadClearanceHTML = async (clearanceData, pdfId = 'unknown') => {
       <div class="header-line"></div>
       <div class="content">
         <div class="section-header">INSPECTION DETAILS</div>
-        ${sectionHtml.inspectionDetailsContent ? `<div class="paragraph">${sectionHtml.inspectionDetailsContent}</div>` : ''}
-        ${attachmentTextLead ? `<p class="paragraph">${escapeHtml(attachmentTextLead)}</p>` : ''}
-        <div class="section-header">Table 1: Lead Clearance Items</div>
+        ${sectionHtml.inspectionDetailsContent || attachmentTextLead ? `<div class="paragraph">${sectionHtml.inspectionDetailsContent || ''}${sectionHtml.inspectionDetailsContent && attachmentTextLead ? ' ' : ''}${attachmentTextLead ? escapeHtml(attachmentTextLead) : ''}</div>` : ''}
+        <div class="clearance-table-title">Table 1: Lead Clearance Items</div>
         <table class="clearance-table">
           <thead><tr>${thLevelFloor}${tableHeaders}</tr></thead>
           <tbody>${tableBody}</tbody>
         </table>
         <div class="section-header">CLEARANCE CERTIFICATION</div>
+        <div class="clearance-certification">
         ${sectionHtml.clearanceCertificationContent ? `<div class="paragraph">${sectionHtml.clearanceCertificationContent}</div>` : `<p class="paragraph">This lead removal clearance certificate is issued on the basis of the inspection detailed above. Report authoriser: ${reportAuthoriserText}</p>`}
-        ${jobExclusionsHtml && jobExclusionsHtml !== 'None specified.' ? `<p class="paragraph">${jobExclusionsHtml}</p>` : ''}
+        ${jobExclusionsHtml && jobExclusionsHtml !== 'None specified.' ? `<div class="job-exclusions"><p class="paragraph">${jobExclusionsHtml}</p></div>` : ''}
+        </div>
         <div class="sign-off-block">${leadSignOffHtml}</div>
       </div>
       <div class="footer">
         <div class="footer-border-line"></div>
-        <div class="footer-text">${escapeHtml(footerText)}</div>
+        <div class="footer-content">
+          <div class="footer-text">${escapeHtml(footerText)}</div>
+          <div class="page-number">Page 1 of ${mainReportPageCount}</div>
+        </div>
       </div>
     </div>`;
 
@@ -1789,7 +1878,10 @@ const generateLeadClearanceHTML = async (clearanceData, pdfId = 'unknown') => {
       </div>
       <div class="footer">
         <div class="footer-border-line"></div>
-        <div class="footer-text">${escapeHtml(footerText)}</div>
+        <div class="footer-content">
+          <div class="footer-text">${escapeHtml(footerText)}</div>
+          <div class="page-number">Page 2 of ${mainReportPageCount}</div>
+        </div>
       </div>
     </div>`;
 
@@ -1806,7 +1898,10 @@ const generateLeadClearanceHTML = async (clearanceData, pdfId = 'unknown') => {
       </div>
       <div class="footer">
         <div class="footer-border-line"></div>
-        <div class="footer-text">${escapeHtml(footerText)}</div>
+        <div class="footer-content">
+          <div class="footer-text">${escapeHtml(footerText)}</div>
+          <div class="page-number">Page 3 of ${mainReportPageCount}</div>
+        </div>
       </div>
     </div>`;
 
@@ -1828,7 +1923,10 @@ const generateLeadClearanceHTML = async (clearanceData, pdfId = 'unknown') => {
       </div>
       <div class="footer">
         <div class="footer-border-line"></div>
-        <div class="footer-text">${escapeHtml(footerText)}</div>
+        <div class="footer-content">
+          <div class="footer-text">${escapeHtml(footerText)}</div>
+          <div class="page-number">Page 2 of 2</div>
+        </div>
       </div>
     </div>`;
 
@@ -1836,7 +1934,7 @@ const generateLeadClearanceHTML = async (clearanceData, pdfId = 'unknown') => {
     ? `${backgroundPage}${statementOfLimitationsPage}`
     : regulatoryAndLimitationsPage;
 
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><title>Lead Clearance Report</title><style>${baseStyles}</style></head><body>${coverPage}${inspectionPage}${pagesAfterInspection}</body></html>`;
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><title>Lead Clearance Report</title><style>${baseStyles}</style></head><body>${coverPage}<div style="page-break-before: always; height: 0; margin: 0; padding: 0; overflow: hidden;"></div>${populatedVersionControl}${inspectionPage}${pagesAfterInspection}</body></html>`;
 };
 
 /**

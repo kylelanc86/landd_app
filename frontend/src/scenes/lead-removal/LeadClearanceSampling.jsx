@@ -34,6 +34,8 @@ import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
+  Check as CheckIcon,
+  Close as CloseIcon,
 } from "@mui/icons-material";
 
 const SURFACE_TYPE_OPTIONS = [
@@ -87,6 +89,8 @@ const LeadClearanceSampling = () => {
   const [clearanceItemsLoading, setClearanceItemsLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingSample, setEditingSample] = useState(null);
+  const [editingLeadContent, setEditingLeadContent] = useState(null);
+  const [leadContentInput, setLeadContentInput] = useState("");
   const [form, setForm] = useState({
     sampleType: "pre-works",
     sample: "dust",
@@ -198,6 +202,47 @@ const LeadClearanceSampling = () => {
   const setSamplesForType = (type, samples) => {
     if (type === "pre-works") setPreWorksSamples(samples);
     else setValidationSamples(samples);
+  };
+
+  const sampleHasLeadContent = (sample) => {
+    const v = sample?.leadContent;
+    if (v == null || v === "") return false;
+    if (v === "NaN" || (typeof v === "number" && Number.isNaN(v)))
+      return false;
+    return true;
+  };
+
+  const handleSaveLeadContent = (sample, sampleType) => {
+    const value = leadContentInput.trim();
+    const samples = getSamplesForType(sampleType);
+    const updated = samples.map((s) => {
+      if (s.id !== sample.id) return s;
+      const next = { ...s, leadContent: value };
+      if (s.sample === "dust" && value !== "") {
+        const { num: lead, hasLessThan } = parseLeadContentForNumber(value);
+        const area = parseFloat(s.sampleArea);
+        if (!Number.isNaN(lead) && !Number.isNaN(area) && area > 0) {
+          const conc = lead / 1000 / (area / 1000);
+          next.leadConcentration = hasLessThan ? `< ${conc}` : conc;
+        }
+      } else if (s.sample === "soil") {
+        next.leadConcentration = value;
+      }
+      return next;
+    });
+    setSamplesForType(sampleType, updated);
+    const nextPreWorks =
+      sampleType === "pre-works" ? updated : preWorksSamples;
+    const nextValidation =
+      sampleType === "validation" ? updated : validationSamples;
+    leadClearanceService
+      .updateSampling(clearanceId, {
+        preWorksSamples: nextPreWorks,
+        validationSamples: nextValidation,
+      })
+      .catch(() => {});
+    setEditingLeadContent(null);
+    setLeadContentInput("");
   };
 
   const handleSubmit = (e) => {
@@ -319,7 +364,17 @@ const LeadClearanceSampling = () => {
       .catch(() => {});
   };
 
-  const SampleTable = ({ title, samples, sampleType }) => (
+  const SampleTable = ({
+    title,
+    samples,
+    sampleType,
+    editingLeadContent,
+    setEditingLeadContent,
+    leadContentInput,
+    setLeadContentInput,
+    handleSaveLeadContent,
+    sampleHasLeadContent,
+  }) => (
     <Card sx={{ mt: 3 }}>
       <CardContent>
         <Typography variant="h6" gutterBottom>
@@ -395,18 +450,117 @@ const LeadClearanceSampling = () => {
                       {sample.sampleArea ? `${sample.sampleArea} cm²` : "—"}
                     </TableCell>
                     <TableCell align="right">
-                      {sample.leadContent}
-                      {sample.sample === "dust" ? " µg" : " mg/kg"}
+                      {(() => {
+                        const isEditing =
+                          editingLeadContent?.sampleId === sample.id &&
+                          editingLeadContent?.sampleType === sampleType;
+                        const empty = !sampleHasLeadContent(sample);
+                        const unit =
+                          sample.sample === "dust" ? " µg" : " mg/kg";
+                        if (isEditing) {
+                          return (
+                            <Box
+                              sx={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 0.5,
+                              }}
+                            >
+                              <TextField
+                                size="small"
+                                placeholder="Lead content"
+                                value={leadContentInput}
+                                onChange={(e) =>
+                                  setLeadContentInput(e.target.value)
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter")
+                                    handleSaveLeadContent(sample, sampleType);
+                                  if (e.key === "Escape") {
+                                    setEditingLeadContent(null);
+                                    setLeadContentInput("");
+                                  }
+                                }}
+                                sx={{
+                                  width: 100,
+                                  "& .MuiInputBase-input": {
+                                    fontSize: "0.8125rem",
+                                  },
+                                  "& .MuiInputBase-input::placeholder": {
+                                    fontSize: "0.75rem",
+                                    opacity: 0.5,
+                                    fontStyle: "italic",  
+                                  },
+                                }}
+                                inputProps={{
+                                  "aria-label": "Lead content",
+                                }}
+                              />
+                              <Typography variant="caption" component="span">
+                                {unit.trim()}
+                              </Typography>
+                              <IconButton
+                                size="small"
+                                onClick={() =>
+                                  handleSaveLeadContent(sample, sampleType)
+                                }
+                                aria-label="Save lead content"
+                              >
+                                <CheckIcon fontSize="small" />
+                              </IconButton>
+                              <IconButton
+                                size="small"
+                                onClick={() => {
+                                  setEditingLeadContent(null);
+                                  setLeadContentInput("");
+                                }}
+                                aria-label="Cancel"
+                              >
+                                <CloseIcon fontSize="small" />
+                              </IconButton>
+                            </Box>
+                          );
+                        }
+                        if (empty) {
+                          return (
+                            <Link
+                              component="button"
+                              variant="body2"
+                              onClick={() => {
+                                setEditingLeadContent({
+                                  sampleId: sample.id,
+                                  sampleType,
+                                });
+                                setLeadContentInput(sample.leadContent ?? "");
+                              }}
+                            >
+                              Add lead content
+                            </Link>
+                          );
+                        }
+                        return (
+                          <>
+                            {sample.leadContent}
+                            {unit}
+                          </>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell align="right">
-                      {sample.sample === "dust"
-                        ? (() => {
-                            const n = Number(sample.leadConcentration);
-                            return Number.isNaN(n)
-                              ? sample.leadConcentration
-                              : n.toFixed(4);
-                          })()
-                        : sample.leadContent}{" "}
+                      {(() => {
+                        const noLeadContent =
+                          sample.leadContent == null ||
+                          sample.leadContent === "" ||
+                          sample.leadContent === "NaN" ||
+                          (typeof sample.leadContent === "number" &&
+                            Number.isNaN(sample.leadContent));
+                        if (noLeadContent) return "-";
+                        if (sample.sample === "dust") {
+                          const n = Number(sample.leadConcentration);
+                          return Number.isNaN(n) ? "-" : n.toFixed(4);
+                        }
+                        return sample.leadContent;
+                      })()}{" "}
                       {sample.sample === "dust" ? "mg/m²" : "mg/kg"}
                     </TableCell>
                     <TableCell>
@@ -516,11 +670,23 @@ const LeadClearanceSampling = () => {
         title="Pre-works Sampling"
         samples={preWorksSamples}
         sampleType="pre-works"
+        editingLeadContent={editingLeadContent}
+        setEditingLeadContent={setEditingLeadContent}
+        leadContentInput={leadContentInput}
+        setLeadContentInput={setLeadContentInput}
+        handleSaveLeadContent={handleSaveLeadContent}
+        sampleHasLeadContent={sampleHasLeadContent}
       />
       <SampleTable
         title="Validation Sampling"
         samples={validationSamples}
         sampleType="validation"
+        editingLeadContent={editingLeadContent}
+        setEditingLeadContent={setEditingLeadContent}
+        leadContentInput={leadContentInput}
+        setLeadContentInput={setLeadContentInput}
+        handleSaveLeadContent={handleSaveLeadContent}
+        sampleHasLeadContent={sampleHasLeadContent}
       />
 
       <Dialog
@@ -614,12 +780,37 @@ const LeadClearanceSampling = () => {
                       select
                       label="Link to pre-works sample (optional)"
                       value={form.linkedPreWorksSampleId || ""}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const linkedId = e.target.value;
+                        const linkedSample = linkedId
+                          ? preWorksSamples.find((s) => s.id === linkedId)
+                          : null;
                         setForm({
                           ...form,
-                          linkedPreWorksSampleId: e.target.value,
-                        })
-                      }
+                          linkedPreWorksSampleId: linkedId,
+                          ...(linkedSample && {
+                            sampleRef: linkedSample.sampleRef?.startsWith(
+                              "LD-"
+                            )
+                              ? linkedSample.sampleRef.substring(3)
+                              : linkedSample.sampleRef || "",
+                            roomArea: linkedSample.roomArea || "",
+                            locationDescription:
+                              linkedSample.locationDescription || "",
+                            surfaceType: linkedSample.surfaceType || "",
+                            sampleArea:
+                              linkedSample.sampleArea &&
+                              SAMPLE_AREA_OPTIONS.some(
+                                (o) =>
+                                  o.value ===
+                                  String(linkedSample.sampleArea)
+                              )
+                                ? String(linkedSample.sampleArea)
+                                : "",
+                            sample: linkedSample.sample || "dust",
+                          }),
+                        });
+                      }}
                       SelectProps={{ native: true }}
                       InputLabelProps={{ shrink: true }}
                     >
@@ -808,14 +999,15 @@ const LeadClearanceSampling = () => {
                         !Number.isNaN(leadConcentration)
                           ? `${leadConcentration.toFixed(4)} mg/m²`
                           : typeof leadConcentration === "string" &&
-                              leadConcentration !== ""
+                              leadConcentration !== "" &&
+                              leadConcentration !== "NaN"
                             ? `${leadConcentration} mg/m²`
-                            : "—"}
+                            : "-"}
                       </>
                     ) : (
                       <>
                         Lead concentration:{" "}
-                        {form.leadContent ? `${form.leadContent} mg/kg` : "—"}
+                        {form.leadContent ? `${form.leadContent} mg/kg` : "-"}
                       </>
                     )}
                   </Typography>

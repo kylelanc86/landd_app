@@ -852,38 +852,44 @@ const replacePlaceholders = async (content, data) => {
     '{JOB_SPECIFIC_EXCLUSIONS}': data.jobSpecificExclusions ? data.jobSpecificExclusions : '',
     '{LEGISLATION}': (() => {
       if (data.selectedLegislation && Array.isArray(data.selectedLegislation) && data.selectedLegislation.length > 0) {
-        // Filter legislation based on clearance jurisdiction if available
+        // Filter legislation based on clearance jurisdiction if available.
+        // Treat missing item.jurisdiction as ACT for backwards compatibility.
         let filteredLegislation = data.selectedLegislation;
         if (data.jurisdiction) {
-          filteredLegislation = data.selectedLegislation.filter(item => 
-            item.jurisdiction === data.jurisdiction
+          filteredLegislation = data.selectedLegislation.filter((item) =>
+            (item?.jurisdiction || 'ACT') === data.jurisdiction
           );
         }
-        
+
         if (filteredLegislation.length > 0) {
-          return filteredLegislation.map(item => {
-            const title = item.legislationTitle || item.text || 'Unknown Legislation';
-            return `[BULLET]${title}`;
-          }).join('\n');
+          return filteredLegislation
+            .map((item) => {
+              const title = item.legislationTitle || item.text || 'Unknown Legislation';
+              return `[BULLET]${title}`;
+            })
+            .join('\n');
         }
       }
       return '[BULLET]No legislation items selected';
     })(),
     '[LEGISLATION]': (() => {
       if (data.selectedLegislation && Array.isArray(data.selectedLegislation) && data.selectedLegislation.length > 0) {
-        // Filter legislation based on clearance jurisdiction if available
+        // Filter legislation based on clearance jurisdiction if available.
+        // Treat missing item.jurisdiction as ACT for backwards compatibility.
         let filteredLegislation = data.selectedLegislation;
         if (data.jurisdiction) {
-          filteredLegislation = data.selectedLegislation.filter(item => 
-            item.jurisdiction === data.jurisdiction
+          filteredLegislation = data.selectedLegislation.filter((item) =>
+            (item?.jurisdiction || 'ACT') === data.jurisdiction
           );
         }
-        
+
         if (filteredLegislation.length > 0) {
-          return filteredLegislation.map(item => {
-            const title = item.legislationTitle || item.text || 'Unknown Legislation';
-            return `[BULLET]${title}`;
-          }).join('\n');
+          return filteredLegislation
+            .map((item) => {
+              const title = item.legislationTitle || item.text || 'Unknown Legislation';
+              return `[BULLET]${title}`;
+            })
+            .join('\n');
         }
       }
       return '[BULLET]No legislation items selected';
@@ -978,7 +984,7 @@ const getLegislationForReportTemplate = async (templateType, jurisdiction) => {
     _id: item._id,
     text: item.text,
     legislationTitle: item.legislationTitle,
-    jurisdiction: item.jurisdiction,
+    jurisdiction: item.jurisdiction || 'ACT',
   }));
 };
 

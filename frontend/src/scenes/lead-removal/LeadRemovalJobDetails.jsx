@@ -174,6 +174,7 @@ const LeadRemovalJobDetails = () => {
   const [clearancePdfStatus, setClearancePdfStatus] = useState("idle");
   const [clearancePdfStartingId, setClearancePdfStartingId] = useState(null);
   const [clearancePdfGeneratingForClearanceId, setClearancePdfGeneratingForClearanceId] = useState(null);
+  const clearancePdfCompletionHandledRef = useRef(null); // guard against double-download when poll runs twice
   const [clearanceDownloadDialogOpen, setClearanceDownloadDialogOpen] = useState(false);
   const [sendingAuthorisationRequests, setSendingAuthorisationRequests] =
     useState({});
@@ -681,6 +682,13 @@ const LeadRemovalJobDetails = () => {
       try {
         const data = await getClearancePDFStatus(clearancePdfJobId);
         if (data.status === "completed" || data.ready) {
+          if (clearancePdfCompletionHandledRef.current === clearancePdfJobId) {
+            setClearancePdfStatus("idle");
+            setClearancePdfJobId(null);
+            setClearancePdfGeneratingForClearanceId(null);
+            return;
+          }
+          clearancePdfCompletionHandledRef.current = clearancePdfJobId;
           const clearanceId = clearancePdfGeneratingForClearanceId;
           setClearancePdfStatus("idle");
           setClearancePdfJobId(null);
@@ -975,12 +983,23 @@ const LeadRemovalJobDetails = () => {
             const clientResponse = await clientService.getById(project.client);
             project.client = clientResponse.data;
           }
+          // Ensure project name is available (from page job state or fetched job/project)
+          const projectName =
+            job?.projectName ||
+            job?.projectId?.name ||
+            project?.name ||
+            jobResponse.data?.projectName ||
+            jobResponse.data?.projectId?.name;
+          const projectForReport = {
+            ...(project || {}),
+            name: projectName || (project && project.name),
+          };
 
           await generateLeadMonitoringShiftReport({
             shift: latestShift,
             job: jobResponse.data,
             samples: samplesWithAnalysis,
-            project: project || {},
+            project: projectForReport,
             openInNewTab: !shift.reportApprovedBy,
           });
           setReportViewedShiftIds((prev) => new Set(prev).add(shift._id));
@@ -1160,6 +1179,17 @@ const LeadRemovalJobDetails = () => {
           const clientResponse = await clientService.getById(project.client);
           project.client = clientResponse.data;
         }
+        // Ensure project name is available for the PDF
+        const projectName =
+          job?.projectName ||
+          job?.projectId?.name ||
+          project?.name ||
+          jobResponse.data?.projectName ||
+          jobResponse.data?.projectId?.name;
+        const projectForReport = {
+          ...(project || {}),
+          name: projectName || (project && project.name),
+        };
 
         const shiftForReport = {
           ...currentShift.data,
@@ -1173,7 +1203,7 @@ const LeadRemovalJobDetails = () => {
             shift: shiftForReport,
             job: jobResponse.data,
             samples: samplesWithAnalysis,
-            project: project || {},
+            project: projectForReport,
             openInNewTab: false, // Always download when authorised
           });
         } else {
@@ -1366,6 +1396,14 @@ const LeadRemovalJobDetails = () => {
             response.data?.recipients?.length || 0
           } signatory user(s)`,
         "success",
+      );
+      // Update local state so button turns grey and shows "Re-send for Authorisation" without refresh
+      setAirMonitoringShifts((prev) =>
+        prev.map((s) =>
+          s._id === shift._id
+            ? { ...s, authorisationRequestedBy: currentUser?._id ?? true }
+            : s,
+        ),
       );
     } catch (error) {
       console.error("Error sending authorisation request emails:", error);
@@ -1639,6 +1677,7 @@ const LeadRemovalJobDetails = () => {
     showSnackbar("PDF generation has started. You will be notified when it is ready.", "info");
     setClearancePdfStatus("generating");
     setClearancePdfJobId(null);
+    clearancePdfCompletionHandledRef.current = null;
     try {
       const fullClearance = await leadClearanceService.getById(clearance._id);
       const { jobId } = await startLeadClearancePDFJob(fullClearance);
@@ -1817,6 +1856,14 @@ const LeadRemovalJobDetails = () => {
             response?.recipients?.length || 0
           } report proofer user(s)`,
         "success",
+      );
+      // Update local state so button turns grey and shows "Re-send for Authorisation" without refresh
+      setClearances((prev) =>
+        prev.map((c) =>
+          c._id === clearance._id
+            ? { ...c, authorisationRequestedBy: currentUser?._id ?? true }
+            : c,
+        ),
       );
     } catch (error) {
       console.error("Error sending authorisation request emails:", error);
@@ -3645,7 +3692,7 @@ const LeadRemovalJobDetails = () => {
                         >
                           {conc != null
                             ? `→ ${formatLeadConcentration(conc, hasLessThan)} mg/m³`
-                            : "(needs flowrate & times)"}
+                            : "(needs lead content data)"}
                         </Typography>
                       );
                     })()}

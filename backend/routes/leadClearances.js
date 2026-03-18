@@ -2,14 +2,26 @@ const express = require("express");
 const router = express.Router();
 const LeadClearance = require("../models/clearanceTemplates/lead/LeadClearance");
 const LeadRemovalJob = require("../models/LeadRemovalJob");
+const User = require("../models/User");
 const auth = require("../middleware/auth");
 const checkPermission = require("../middleware/checkPermission");
+const { sendMail } = require("../services/mailer");
+const { formatDateSydney } = require("../utils/dateUtils");
 
 // Use same permission names as asbestos for role consistency
 const permView = "asbestos.view";
 const permCreate = "asbestos.create";
 const permEdit = "asbestos.edit";
 const permDelete = "asbestos.delete";
+
+/** Clear persisted PDF fields when clearance content changes so the UI shows Generate instead of Download. */
+function clearClearancePdfFields(clearance) {
+  const pdfFields = ["pdfDownloadUrl", "pdfJobId", "pdfReadyAt", "pdfFilename", "mergedPdfPath"];
+  pdfFields.forEach((field) => {
+    clearance[field] = undefined;
+    clearance.markModified(field);
+  });
+}
 
 // Get all lead clearances with filtering
 router.get("/", auth, checkPermission(permView), async (req, res) => {
@@ -233,6 +245,7 @@ router.put("/:id", auth, checkPermission(permEdit), async (req, res) => {
     if (items !== undefined) clearance.items = items;
     clearance.updatedBy = req.user.id;
 
+    clearClearancePdfFields(clearance);
     const updated = await clearance.save();
     const populated = await LeadClearance.findById(updated._id)
       .populate({
@@ -282,6 +295,7 @@ router.patch("/:id/status", auth, checkPermission(permEdit), async (req, res) =>
     }
     clearance.status = status;
     clearance.updatedBy = req.user.id;
+    clearClearancePdfFields(clearance);
     const updated = await clearance.save();
     const populated = await LeadClearance.findById(updated._id)
       .populate({
@@ -387,6 +401,7 @@ router.patch("/:id/sampling", auth, checkPermission(permEdit), async (req, res) 
     if (Array.isArray(preWorksSamples)) clearance.sampling.preWorksSamples = preWorksSamples;
     if (Array.isArray(validationSamples)) clearance.sampling.validationSamples = validationSamples;
     clearance.updatedBy = req.user.id;
+    clearClearancePdfFields(clearance);
     await clearance.save();
     res.json({
       preWorksSamples: clearance.sampling.preWorksSamples || [],
@@ -435,7 +450,7 @@ router.post("/:id/items", auth, checkPermission(permEdit), async (req, res) => {
 
     clearance.items.push(newItem);
     clearance.updatedBy = req.user.id;
-
+    clearClearancePdfFields(clearance);
     const updatedClearance = await clearance.save();
 
     const populated = await LeadClearance.findById(updatedClearance._id)
@@ -479,7 +494,7 @@ router.put("/:id/items/:itemId", auth, checkPermission(permEdit), async (req, re
     if (notes !== undefined) existingItem.notes = notes;
 
     clearance.updatedBy = req.user.id;
-
+    clearClearancePdfFields(clearance);
     const updatedClearance = await clearance.save();
 
     const populated = await LeadClearance.findById(updatedClearance._id)
@@ -513,7 +528,7 @@ router.delete("/:id/items/:itemId", auth, checkPermission(permEdit), async (req,
 
     clearance.items.splice(itemIndex, 1);
     clearance.updatedBy = req.user.id;
-
+    clearClearancePdfFields(clearance);
     const updatedClearance = await clearance.save();
 
     const populated = await LeadClearance.findById(updatedClearance._id)
@@ -566,6 +581,7 @@ router.post("/:id/items/:itemId/photos", auth, checkPermission(permEdit), async 
     });
 
     clearance.updatedBy = req.user.id;
+    clearClearancePdfFields(clearance);
     await clearance.save();
 
     res.status(201).json(item);
@@ -595,6 +611,7 @@ router.delete("/:id/items/:itemId/photos/:photoId", auth, checkPermission(permEd
 
     item.photographs.splice(photoIndex, 1);
     clearance.updatedBy = req.user.id;
+    clearClearancePdfFields(clearance);
     await clearance.save();
 
     res.json({ message: "Photo deleted successfully", item });
@@ -624,6 +641,7 @@ router.patch("/:id/items/:itemId/photos/:photoId/toggle", auth, checkPermission(
 
     photo.includeInReport = !photo.includeInReport;
     clearance.updatedBy = req.user.id;
+    clearClearancePdfFields(clearance);
     await clearance.save();
 
     res.json({ message: "Photo inclusion toggled successfully", item });
@@ -655,6 +673,7 @@ router.patch("/:id/items/:itemId/photos/:photoId/description", auth, checkPermis
 
     photo.description = description !== undefined ? description : photo.description;
     clearance.updatedBy = req.user.id;
+    clearClearancePdfFields(clearance);
     await clearance.save();
 
     res.json({ message: "Photo description updated", item });
@@ -664,10 +683,17 @@ router.patch("/:id/items/:itemId/photos/:photoId/description", auth, checkPermis
   }
 });
 
-// Send for authorisation (parity with asbestos)
+// Send for authorisation (parity with asbestos: save, respond immediately, send emails in background)
 router.post("/:id/send-for-authorisation", auth, checkPermission(permEdit), async (req, res) => {
   try {
-    const clearance = await LeadClearance.findById(req.params.id);
+    const clearance = await LeadClearance.findById(req.params.id)
+      .populate({
+        path: "projectId",
+        select: "projectID name client",
+        populate: { path: "client", select: "name" },
+      })
+      .populate("createdBy", "firstName lastName");
+
     if (!clearance) {
       return res.status(404).json({ message: "Lead clearance not found" });
     }
@@ -676,19 +702,127 @@ router.post("/:id/send-for-authorisation", auth, checkPermission(permEdit), asyn
         message: "Clearance must be complete before sending for authorisation",
       });
     }
+    if (clearance.reportApprovedBy) {
+      return res.status(400).json({
+        message: "Report has already been authorised",
+      });
+    }
+
+    const reportProoferUsers = await User.find({
+      reportProofer: true,
+      isActive: true,
+    }).select("firstName lastName email");
+
+    if (reportProoferUsers.length === 0) {
+      return res.status(400).json({
+        message: "No report proofer users found",
+      });
+    }
+
+    const projectName = clearance.projectId?.name || "Unknown Project";
+    const projectID = clearance.projectId?.projectID || "N/A";
+    const clientName = clearance.projectId?.client?.name || "the client";
+    const requesterName =
+      req.user?.firstName && req.user?.lastName
+        ? `${req.user.firstName} ${req.user.lastName}`
+        : req.user?.email || "A user";
+
     clearance.authorisationRequestedBy = req.user.id;
     clearance.authorisationRequestedByEmail = req.user?.email || null;
     clearance.updatedBy = req.user.id;
-    const updated = await clearance.save();
-    const populated = await LeadClearance.findById(updated._id)
-      .populate({
-        path: "projectId",
-        select: "projectID name client",
-        populate: { path: "client", select: "name" },
-      })
-      .populate("createdBy", "firstName lastName")
-      .populate("updatedBy", "firstName lastName");
-    res.json(populated);
+    await clearance.save();
+
+    const clearanceDate = clearance.clearanceDate
+      ? formatDateSydney(clearance.clearanceDate)
+      : "N/A";
+    const clearanceTypeLabel = "Lead clearance";
+
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    let jobId = clearance.leadRemovalJobId
+      ? clearance.leadRemovalJobId.toString()
+      : null;
+    if (!jobId && clearance.projectId) {
+      const projectId =
+        clearance.projectId._id?.toString() || clearance.projectId?.toString();
+      const job = await LeadRemovalJob.findOne({ projectId })
+        .select("_id")
+        .sort({ createdAt: -1 })
+        .lean();
+      jobId = job?._id?.toString();
+    }
+    const clearanceUrl = jobId
+      ? `${frontendUrl}/lead-removal/jobs/${jobId}/details`
+      : `${frontendUrl}/projects`;
+
+    // Respond immediately; send emails in the background (consistent with asbestos)
+    const emailPayload = {
+      sendMail,
+      reportProoferUsers,
+      projectID,
+      clearanceTypeLabel,
+      projectName,
+      clientName,
+      clearanceDate,
+      requesterName,
+      clearanceUrl,
+    };
+    setImmediate(() => {
+      Promise.all(
+        emailPayload.reportProoferUsers.map(async (user) => {
+          await emailPayload.sendMail({
+            to: user.email,
+            subject: `Report Authorisation Required - ${emailPayload.projectID}: ${emailPayload.clearanceTypeLabel}`,
+            text: `
+A lead clearance report is ready for authorisation.
+
+Project: ${emailPayload.projectName} (${emailPayload.projectID})
+Client: ${emailPayload.clientName}
+Clearance Type: ${emailPayload.clearanceTypeLabel}
+Clearance Date: ${emailPayload.clearanceDate}
+Requested by: ${emailPayload.requesterName}
+
+Review the report at: ${emailPayload.clearanceUrl}
+            `.trim(),
+            html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+              <div style="margin-bottom: 30px;">
+                <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
+              </div>
+              <div style="color: #333; line-height: 1.6;">
+                <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Report Authorisation Required</h2>
+                <p>Hello ${user.firstName},</p>
+                <p>A lead clearance report is ready for your authorisation:</p>
+                <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
+                  <p style="margin: 5px 0;"><strong>Project:</strong> ${emailPayload.projectName}</p>
+                  <p style="margin: 5px 0;"><strong>Project ID:</strong> ${emailPayload.projectID}</p>
+                  <p style="margin: 5px 0;"><strong>Client:</strong> ${emailPayload.clientName}</p>
+                  <p style="margin: 5px 0;"><strong>Clearance Type:</strong> ${emailPayload.clearanceTypeLabel}</p>
+                  <p style="margin: 5px 0;"><strong>Clearance Date:</strong> ${emailPayload.clearanceDate}</p>
+                  <p style="margin: 5px 0;"><strong>Requested by:</strong> ${emailPayload.requesterName}</p>
+                </div>
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="${emailPayload.clearanceUrl}" style="background-color: rgb(25, 138, 44); color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Review Report</a>
+                </div>
+                <p>Please review and authorise the report at your earliest convenience.</p>
+                <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;">
+                <p style="color: #666; font-size: 12px;">This is an automated message, please do not reply to this email.</p>
+              </div>
+            </div>
+          `,
+          });
+        })
+      ).catch((err) => {
+        console.error("Background send authorisation emails (lead clearance) failed:", err);
+      });
+    });
+
+    return res.json({
+      message: `Authorisation request emails are being sent to ${reportProoferUsers.length} report proofer user(s)`,
+      recipients: reportProoferUsers.map((user) => ({
+        email: user.email,
+        name: `${user.firstName} ${user.lastName}`,
+      })),
+    });
   } catch (error) {
     console.error("Error sending lead clearance for authorisation:", error);
     res.status(500).json({ message: "Server error" });

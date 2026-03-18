@@ -1069,25 +1069,41 @@ router.post(
         typeof shift.job?.id === 'string'
           ? shift.job.id
           : shift.job?._id?.toString() || shift.job?.toString();
-      const jobUrl = `${frontendUrl}/asbestos-removal/jobs/${jobId}/details`;
+      const isLeadJob = shift.jobModel === 'LeadRemovalJob';
+      const jobUrl = jobId
+        ? `${frontendUrl}/${isLeadJob ? 'lead-removal' : 'asbestos-removal'}/jobs/${jobId}/details`
+        : `${frontendUrl}/projects`;
 
-      await Promise.all(
-        signatoryUsers.map(async (user) => {
-          await sendMail({
-            to: user.email,
-            subject: `Report Authorisation Required - ${projectID}: ${shiftName}`,
-            text: `
+      // Respond immediately so the UI is not blocked; send emails in the background
+      const emailPayload = {
+        sendMail,
+        signatoryUsers,
+        projectID,
+        projectName,
+        clientName,
+        shiftName,
+        shiftDate,
+        requesterName,
+        jobUrl,
+      };
+      setImmediate(() => {
+        Promise.all(
+          emailPayload.signatoryUsers.map(async (user) => {
+            await emailPayload.sendMail({
+              to: user.email,
+              subject: `Report Authorisation Required - ${emailPayload.projectID}: ${emailPayload.shiftName}`,
+              text: `
 An air monitoring shift report is ready for authorisation.
 
-Project: ${projectName} (${projectID})
-Client: ${clientName}
-Shift: ${shiftName}
-Shift Date: ${shiftDate}
-Requested by: ${requesterName}
+Project: ${emailPayload.projectName} (${emailPayload.projectID})
+Client: ${emailPayload.clientName}
+Shift: ${emailPayload.shiftName}
+Shift Date: ${emailPayload.shiftDate}
+Requested by: ${emailPayload.requesterName}
 
-Review the report at: ${jobUrl}
-            `.trim(),
-            html: `
+Review the report at: ${emailPayload.jobUrl}
+              `.trim(),
+              html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
                 <div style="margin-bottom: 30px;">
                   <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
@@ -1097,15 +1113,15 @@ Review the report at: ${jobUrl}
                   <p>Hello ${user.firstName},</p>
                   <p>An air monitoring shift report is ready for your authorisation:</p>
                   <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
-                    <p style="margin: 5px 0;"><strong>Project:</strong> ${projectName}</p>
-                    <p style="margin: 5px 0;"><strong>Project ID:</strong> ${projectID}</p>
-                    <p style="margin: 5px 0;"><strong>Client:</strong> ${clientName}</p>
-                    <p style="margin: 5px 0;"><strong>Shift:</strong> ${shiftName}</p>
-                    <p style="margin: 5px 0;"><strong>Shift Date:</strong> ${shiftDate}</p>
-                    <p style="margin: 5px 0;"><strong>Requested by:</strong> ${requesterName}</p>
+                    <p style="margin: 5px 0;"><strong>Project:</strong> ${emailPayload.projectName}</p>
+                    <p style="margin: 5px 0;"><strong>Project ID:</strong> ${emailPayload.projectID}</p>
+                    <p style="margin: 5px 0;"><strong>Client:</strong> ${emailPayload.clientName}</p>
+                    <p style="margin: 5px 0;"><strong>Shift:</strong> ${emailPayload.shiftName}</p>
+                    <p style="margin: 5px 0;"><strong>Shift Date:</strong> ${emailPayload.shiftDate}</p>
+                    <p style="margin: 5px 0;"><strong>Requested by:</strong> ${emailPayload.requesterName}</p>
                   </div>
                   <div style="text-align: center; margin: 30px 0;">
-                    <a href="${jobUrl}" style="background-color: rgb(25, 138, 44); color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Review Report</a>
+                    <a href="${emailPayload.jobUrl}" style="background-color: rgb(25, 138, 44); color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Review Report</a>
                   </div>
                   <p>Please review and authorise the report at your earliest convenience.</p>
                   <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;">
@@ -1113,12 +1129,15 @@ Review the report at: ${jobUrl}
                 </div>
               </div>
             `,
-          });
-        })
-      );
+            });
+          })
+        ).catch((err) => {
+          console.error('Background send authorisation emails (shift) failed:', err);
+        });
+      });
 
       return res.json({
-        message: `Authorisation request emails sent successfully to ${signatoryUsers.length} signatory user(s)`,
+        message: `Authorisation request emails are being sent to ${signatoryUsers.length} signatory user(s)`,
         recipients: signatoryUsers.map((user) => ({
           email: user.email,
           name: `${user.firstName} ${user.lastName}`,

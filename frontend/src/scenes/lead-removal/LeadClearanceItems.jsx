@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
 import { useSnackbar } from "../../context/SnackbarContext";
@@ -52,6 +52,7 @@ import leadClearanceService from "../../services/leadClearanceService";
 import { compressImage, needsCompression } from "../../utils/imageCompression";
 import leadRemovalJobService from "../../services/leadRemovalJobService";
 import PermissionGate from "../../components/PermissionGate";
+import { usePermissions } from "../../hooks/usePermissions";
 import SitePlanDrawing from "../../components/SitePlanDrawing";
 
 const WORKS_COMPLETED_OPTIONS = ["All surfaces HEPA vacuumed and wet-wiped", "Flaking lead paint removed, and surfaces overpainted"];
@@ -65,6 +66,7 @@ const LeadClearanceItems = () => {
   const navigate = useNavigate();
   const { clearanceId } = useParams();
   const { showSnackbar } = useSnackbar();
+  const { isSuperAdmin } = usePermissions();
   const isPortrait = useMediaQuery("(orientation: portrait)");
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const isMobileLandscape = useMediaQuery(
@@ -101,6 +103,7 @@ const LeadClearanceItems = () => {
   const [videoRef, setVideoRef] = useState(null);
 
   const [preWorksSamples, setPreWorksSamples] = useState([]);
+  const [validationSamples, setValidationSamples] = useState([]);
   const [form, setForm] = useState({
     locationDescription: "",
     levelFloor: "",
@@ -129,6 +132,7 @@ const LeadClearanceItems = () => {
       setItems(itemsData || []);
       setClearance(clearanceData);
       setPreWorksSamples(Array.isArray(samplingData?.preWorksSamples) ? samplingData.preWorksSamples : []);
+      setValidationSamples(Array.isArray(samplingData?.validationSamples) ? samplingData.validationSamples : []);
       setJobCompleted(clearanceData?.status === "complete");
 
       if (clearanceData?.leadRemovalJobId) {
@@ -160,6 +164,46 @@ const LeadClearanceItems = () => {
   useEffect(() => {
     fetchData();
   }, [clearanceId]);
+
+  const canCompleteClearance = useMemo(() => {
+    if (!items?.length) return false;
+
+    const hasLeadContent = (sample) => {
+      const v = sample?.leadContent;
+      if (v == null || v === "") return false;
+      if (v === "NaN" || (typeof v === "number" && Number.isNaN(v)))
+        return false;
+      return true;
+    };
+
+    const itemIds = new Set((items || []).map((i) => i._id));
+    const preWorksSampleRefsOrIds = new Set();
+    (items || []).forEach((item) => {
+      (item.samples || []).forEach((s) => preWorksSampleRefsOrIds.add(s));
+    });
+
+    for (const s of preWorksSamples || []) {
+      if (!hasLeadContent(s)) return false;
+      const refOrId = s.sampleRef || s.id || s._id;
+      if (!refOrId || !preWorksSampleRefsOrIds.has(refOrId)) return false;
+    }
+    for (const s of validationSamples || []) {
+      if (!hasLeadContent(s)) return false;
+      const itemId = s.linkedClearanceItemId?._id || s.linkedClearanceItemId;
+      if (!itemId || !itemIds.has(itemId)) return false;
+    }
+
+    const validationTypeNeedingSampling = "Visual inspection and validation sampling";
+    for (const item of items || []) {
+      if (item.leadValidationType !== validationTypeNeedingSampling) continue;
+      const hasLinkedValidation = (validationSamples || []).some(
+        (s) => (s.linkedClearanceItemId?._id || s.linkedClearanceItemId) === item._id,
+      );
+      if (!hasLinkedValidation) return false;
+    }
+
+    return true;
+  }, [items, preWorksSamples, validationSamples]);
 
   const resetForm = () => {
     setForm({
@@ -658,8 +702,8 @@ const LeadClearanceItems = () => {
             : "Unknown Date"}
         </Typography>
         
-          <Typography variant="body1" fontWeight="bold" fontStyle="italic" gutterBottom>
-            Description: {clearance.descriptionOfWorks}
+          <Typography variant="body1" fontStyle="italic" gutterBottom>
+            <Box component="span" fontWeight="bold">Description:</Box> {clearance.descriptionOfWorks}
           </Typography>
       
 
@@ -690,24 +734,30 @@ const LeadClearanceItems = () => {
             >
               Job Specific Exclusions
             </Button>
-            <Button
-              variant="contained"
-              sx={{
-                backgroundColor: "#FF8B00",
-                "&:hover": { backgroundColor: "#CD7000" },
-              }}
-              onClick={() =>
-                navigate(`/lead-clearances/${clearanceId}/sampling`)
-              }
-            >
-              Dust/Soil Sampling
-            </Button>
+            {isSuperAdmin && (
+              <Button
+                variant="contained"
+                sx={{
+                  backgroundColor: "#FF8B00",
+                  "&:hover": { backgroundColor: "#CD7000" },
+                }}
+                onClick={() =>
+                  navigate(`/lead-clearances/${clearanceId}/sampling`)
+                }
+              >
+                Dust/Soil Sampling
+              </Button>
+            )}
           </Box>
           <Button
             variant="contained"
             color={jobCompleted ? "error" : "primary"}
             onClick={jobCompleted ? handleReopenJob : handleCompleteJob}
-            disabled={!items || items.length === 0}
+            disabled={
+              !items ||
+              items.length === 0 ||
+              (!jobCompleted && !canCompleteClearance)
+            }
           >
             {jobCompleted ? "REOPEN CLEARANCE" : "COMPLETE CLEARANCE"}
           </Button>

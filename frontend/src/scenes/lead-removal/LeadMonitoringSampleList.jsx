@@ -35,6 +35,7 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  CircularProgress,
 } from "@mui/material";
 import { useParams, useNavigate } from "react-router-dom";
 import AddIcon from "@mui/icons-material/Add";
@@ -78,6 +79,50 @@ function formatLeadConcentrationForDisplay(v) {
   const n = parseFloat(numStr);
   if (isNaN(n)) return v;
   const formatted = n.toFixed(4);
+  return hasLessThan ? `<${formatted}` : formatted;
+}
+
+function parseLeadContentForCalculation(str) {
+  if (str == null || str === "") return { value: NaN, hasLessThan: false };
+  const s = String(str).trim();
+  const hasLessThan = s.startsWith("<");
+  const numStr = hasLessThan ? s.slice(1).trim() : s;
+  const value = parseFloat(numStr);
+  return { value, hasLessThan: hasLessThan && !isNaN(value) };
+}
+
+function calculateDurationMinutes(startTime, endTime) {
+  if (!startTime || !endTime) return 0;
+  const [sh, sm] = startTime.split(":").map(Number);
+  const [eh, em] = endTime.split(":").map(Number);
+  let start = (sh || 0) * 60 + (sm || 0);
+  let end = (eh || 0) * 60 + (em || 0);
+  if (end < start) end += 24 * 60;
+  return end - start;
+}
+
+function calculateLeadConcentrationFromContent(leadContent, flowrate, minutes) {
+  const { value: content, hasLessThan } =
+    parseLeadContentForCalculation(leadContent);
+  const flow = parseFloat(flowrate);
+  if (
+    isNaN(content) ||
+    content < 0 ||
+    isNaN(flow) ||
+    flow <= 0 ||
+    !minutes ||
+    minutes <= 0
+  )
+    return { concentration: null, hasLessThan: false };
+  const concentration = content / (flow * minutes);
+  return { concentration, hasLessThan };
+}
+
+function formatLeadConcentrationForSave(val, hasLessThan = false) {
+  if (val == null || val === "") return null;
+  const num = parseFloat(val);
+  if (isNaN(num)) return null;
+  const formatted = num.toFixed(4);
   return hasLessThan ? `<${formatted}` : formatted;
 }
 
@@ -132,6 +177,15 @@ const LeadMonitoringSampleList = () => {
   const [descriptionSectionExpanded, setDescriptionSectionExpanded] =
     useState(true);
   const [descriptionModalOpen, setDescriptionModalOpen] = useState(false);
+  const [viewEditAnalysisModalOpen, setViewEditAnalysisModalOpen] =
+    useState(false);
+  const [viewEditAnalysisSamples, setViewEditAnalysisSamples] = useState([]);
+  const [viewEditAnalysisLeadContent, setViewEditAnalysisLeadContent] =
+    useState({});
+  const [viewEditAnalysisFile, setViewEditAnalysisFile] = useState(null);
+  const [viewEditAnalysisSaving, setViewEditAnalysisSaving] = useState(false);
+  const [viewEditAnalysisSamplesLoading, setViewEditAnalysisSamplesLoading] =
+    useState(false);
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const showDescriptionButton = useMediaQuery(theme.breakpoints.down("md"));
   const isMobileOrTablet = useMediaQuery("(max-width: 960px)");
@@ -247,6 +301,137 @@ const LeadMonitoringSampleList = () => {
 
     fetchData();
   }, [shiftId]);
+
+  const refreshShiftAndSamples = useCallback(async () => {
+    if (!shiftId) return;
+    try {
+      const [shiftResponse, samplesResponse] = await Promise.all([
+        shiftService.getById(shiftId),
+        leadAirSampleService.getByShift(shiftId),
+      ]);
+      setShift(shiftResponse.data);
+      setSamples(samplesResponse.data || []);
+    } catch (err) {
+      console.error("Error refreshing shift and samples:", err);
+    }
+  }, [shiftId]);
+
+  const handleOpenViewEditAnalysisModal = useCallback(async () => {
+    if (!shiftId || !shift) return;
+    setViewEditAnalysisModalOpen(true);
+    setViewEditAnalysisLeadContent({});
+    setViewEditAnalysisFile(null);
+    setViewEditAnalysisSamplesLoading(true);
+    setViewEditAnalysisSamples([]);
+    try {
+      const res = await leadAirSampleService.getByShift(shiftId);
+      const list = (res.data || []).sort((a, b) => {
+        const numA =
+          parseInt(
+            String(a.sampleNumber || a.fullSampleID || "").replace(/^LP/i, ""),
+            10,
+          ) || 0;
+        const numB =
+          parseInt(
+            String(b.sampleNumber || b.fullSampleID || "").replace(/^LP/i, ""),
+            10,
+          ) || 0;
+        return numA - numB;
+      });
+      setViewEditAnalysisSamples(list);
+      const initial = {};
+      list.forEach((s) => {
+        initial[s._id] = s.leadContent ?? "";
+      });
+      setViewEditAnalysisLeadContent(initial);
+    } catch (err) {
+      console.error("Error loading samples for view/edit analysis:", err);
+      showSnackbar("Failed to load samples", "error");
+    } finally {
+      setViewEditAnalysisSamplesLoading(false);
+    }
+  }, [shiftId, shift, showSnackbar]);
+
+  const handleCloseViewEditAnalysisModal = useCallback(() => {
+    setViewEditAnalysisModalOpen(false);
+    setViewEditAnalysisSamples([]);
+    setViewEditAnalysisLeadContent({});
+    setViewEditAnalysisFile(null);
+  }, []);
+
+  const handleSaveViewEditAnalysis = useCallback(async () => {
+    if (!shift?._id) return;
+    setViewEditAnalysisSaving(true);
+    try {
+      if (viewEditAnalysisFile) {
+        await shiftService.uploadAnalysisReport(shift._id, viewEditAnalysisFile);
+      }
+      for (const sample of viewEditAnalysisSamples) {
+        const contentVal = viewEditAnalysisLeadContent[sample._id];
+        const contentStr = String(contentVal ?? "").trim();
+        const contentChanged =
+          contentVal !== undefined &&
+          contentStr !== String(sample.leadContent || "").trim();
+        const leadContentToSave = contentStr || (sample.leadContent ?? null);
+        if (!leadContentToSave) continue;
+
+        const flowrate = parseFloat(sample.averageFlowrate) || 0;
+        const minutes = calculateDurationMinutes(
+          sample.startTime,
+          sample.endTime,
+        );
+        const { concentration, hasLessThan } =
+          calculateLeadConcentrationFromContent(
+            contentStr || sample.leadContent,
+            flowrate,
+            minutes,
+          );
+        const leadConcentrationToSave =
+          concentration != null
+            ? formatLeadConcentrationForSave(concentration, hasLessThan)
+            : null;
+
+        if (contentChanged || leadContentToSave) {
+          await leadAirSampleService.update(sample._id, {
+            leadContent: leadContentToSave,
+            leadConcentration: leadConcentrationToSave,
+          });
+        }
+      }
+      if (viewEditAnalysisFile) {
+        const allEntered = viewEditAnalysisSamples.every(
+          (s) =>
+            String(viewEditAnalysisLeadContent[s._id] ?? "").trim() !== "",
+        );
+        await shiftService.update(shift._id, {
+          status: allEntered ? "shift_complete" : "analysis_complete",
+        });
+        showSnackbar(
+          allEntered
+            ? "Analysis report updated, lead content saved, and shift marked complete."
+            : "Analysis report updated - lead content incomplete.",
+          "success",
+        );
+      } else {
+        showSnackbar("Lead content saved.", "success");
+      }
+      await refreshShiftAndSamples();
+      handleCloseViewEditAnalysisModal();
+    } catch (err) {
+      console.error("Error saving view/edit analysis:", err);
+      showSnackbar(err.response?.data?.message || "Failed to save", "error");
+    } finally {
+      setViewEditAnalysisSaving(false);
+    }
+  }, [
+    shift,
+    viewEditAnalysisSamples,
+    viewEditAnalysisLeadContent,
+    viewEditAnalysisFile,
+    showSnackbar,
+    refreshShiftAndSamples,
+    handleCloseViewEditAnalysisModal,
+  ]);
 
   // Memoize validation function to avoid recreating it on every render
   const validateSamplesCompleteMemo = useCallback((samplesToValidate) => {
@@ -1695,6 +1880,23 @@ const LeadMonitoringSampleList = () => {
           shift?.status
         ) && (
           <>
+            {["analysis_complete", "shift_complete"].includes(shift?.status) && (
+              <Button
+                variant="outlined"
+                color="primary"
+                onClick={handleOpenViewEditAnalysisModal}
+                disabled={isReportAuthorized}
+                startIcon={<EditIcon />}
+                sx={{
+                  "&:hover": {
+                    borderColor: theme.palette.primary.dark,
+                    backgroundColor: theme.palette.action.hover,
+                  },
+                }}
+              >
+                View / Edit Analysis Results
+              </Button>
+            )}
             {["samples_submitted_to_lab", "analysis_complete", "shift_complete"].includes(
               shift?.status
             ) ? (
@@ -1744,6 +1946,173 @@ const LeadMonitoringSampleList = () => {
           </>
         )}
       </Box>
+
+      {/* View / Edit Analysis Report & Lead Content */}
+      <Dialog
+        open={viewEditAnalysisModalOpen}
+        onClose={handleCloseViewEditAnalysisModal}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+          },
+        }}
+      >
+        <DialogTitle sx={{ pb: 1, px: 3, pt: 3 }}>
+          View / Edit Analysis Results
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 1, pb: 2 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Update the PDF analysis report and/or lead content (μg/filter) for
+            each sample.
+          </Typography>
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              PDF Report
+            </Typography>
+            {shift?.analysisReportPath && !viewEditAnalysisFile && (
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ mb: 1 }}
+              >
+                Current file: {shift.analysisReportOriginalName || "analysis-report.pdf"}
+              </Typography>
+            )}
+            <Button
+              variant="outlined"
+              component="label"
+              size="small"
+              sx={{ textTransform: "none" }}
+            >
+              {viewEditAnalysisFile
+                ? viewEditAnalysisFile.name
+                : shift?.analysisReportPath
+                  ? "Choose new file to replace"
+                  : "Choose PDF file"}
+              <input
+                type="file"
+                hidden
+                accept=".pdf,application/pdf"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) setViewEditAnalysisFile(f);
+                }}
+              />
+            </Button>
+          </Box>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>
+            Lead content
+          </Typography>
+          {viewEditAnalysisSamplesLoading ? (
+            <Box sx={{ py: 2, display: "flex", justifyContent: "center" }}>
+              <CircularProgress size={24} />
+            </Box>
+          ) : viewEditAnalysisSamples.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              No samples in this shift.
+            </Typography>
+          ) : (
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+              {viewEditAnalysisSamples.map((sample) => {
+                const displayLabel =
+                  sample.fullSampleID ||
+                  sample.sampleNumber ||
+                  sample._id ||
+                  "—";
+                return (
+                  <Box
+                    key={sample._id}
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 2,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <Typography
+                      variant="body2"
+                      sx={{ minWidth: 60, fontWeight: 500 }}
+                    >
+                      {displayLabel}
+                    </Typography>
+                    <TextField
+                      size="small"
+                      placeholder="Lead content"
+                      value={viewEditAnalysisLeadContent[sample._id] ?? ""}
+                      onChange={(e) =>
+                        setViewEditAnalysisLeadContent((prev) => ({
+                          ...prev,
+                          [sample._id]: e.target.value,
+                        }))
+                      }
+                      disabled={isReportAuthorized}
+                      sx={{ width: 90 }}
+                      inputProps={{
+                        "aria-label": `Lead content for sample ${displayLabel}`,
+                        style: { padding: "6px 8px", fontSize: "0.875rem" },
+                      }}
+                    />
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ whiteSpace: "nowrap" }}
+                    >
+                      (μg/filter)
+                    </Typography>
+                    {(() => {
+                      const content =
+                        viewEditAnalysisLeadContent[sample._id] ?? "";
+                      const flowrate = parseFloat(sample.averageFlowrate) || 0;
+                      const minutes = calculateDurationMinutes(
+                        sample.startTime,
+                        sample.endTime,
+                      );
+                      const { concentration: conc, hasLessThan } =
+                        calculateLeadConcentrationFromContent(
+                          content,
+                          flowrate,
+                          minutes,
+                        );
+                      return (
+                        <Typography
+                          variant="body2"
+                          color={
+                            conc != null ? "text.secondary" : "text.disabled"
+                          }
+                          sx={{ whiteSpace: "nowrap", fontStyle: "italic" }}
+                        >
+                          {conc != null
+                            ? `→ ${formatLeadConcentrationForSave(conc, hasLessThan)} mg/m³`
+                            : "(needs lead content data)"}
+                        </Typography>
+                      );
+                    })()}
+                  </Box>
+                );
+              })}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2 }}>
+          <Button
+            onClick={handleCloseViewEditAnalysisModal}
+            variant="outlined"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSaveViewEditAnalysis}
+            variant="contained"
+            color="primary"
+            disabled={viewEditAnalysisSaving || isReportAuthorized}
+          >
+            {viewEditAnalysisSaving ? "Saving…" : "Save"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Description Required for Complete Sampling Dialog */}
       <Dialog
@@ -2181,7 +2550,7 @@ const LeadMonitoringSampleList = () => {
             onClick={handleCocRegeneratePdf}
             disabled={!cocDialogTurnaroundType}
           >
-            Regenerate PDF
+            Generate COC PDF
           </Button>
         </DialogActions>
       </Dialog>

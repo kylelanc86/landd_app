@@ -52,6 +52,7 @@ import {
   Description as DescriptionIcon,
   Map as MapIcon,
   ArrowUpward as ArrowUpwardIcon,
+  ContentCopy as ContentCopyIcon,
 } from "@mui/icons-material";
 import MicIcon from "@mui/icons-material/Mic";
 import WarningIcon from "@mui/icons-material/Warning";
@@ -940,9 +941,13 @@ const AssessmentItems = () => {
 
     // Handle sample reference based on item type
     let sampleRef = item.sampleReference || "";
+    // Temporary ref from duplicate flow: show as empty so user enters the real one
+    if (sampleRef.startsWith("LD-DUP-")) {
+      sampleRef = "";
+    }
     // For referred items, keep the full format (LD-XXX) for the dropdown
     // For sampled items, strip the prefix for the text field
-    if (!isReferredItemCheck && sampleRef.startsWith("LD-")) {
+    else if (!isReferredItemCheck && sampleRef.startsWith("LD-")) {
       sampleRef = sampleRef.substring(3);
     }
     // Check if material type matches a dropdown option
@@ -987,6 +992,109 @@ const AssessmentItems = () => {
     }
 
     setDialogOpen(true);
+  };
+
+  /**
+   * Duplicate an item: create a new item via API (with new _id; sample reference
+   * cleared if source is a sampled item), then open the edit item modal for it.
+   */
+  const handleDuplicate = async (item) => {
+    if (isReportLocked) return;
+
+    const isVisuallyAssessedItemCheck =
+      item.asbestosContent === "Visually Assessed as Asbestos" ||
+      item.asbestosContent === "Visually Assessed as Non-Asbestos";
+    const currentRef = (item.sampleReference || "").trim();
+    const firstIndexWithThisRef = items.findIndex(
+      (i) => (i.sampleReference || "").trim() === currentRef,
+    );
+    const currentIndex = items.findIndex((i) => i._id === item._id);
+    const isReferredItemCheck =
+      currentRef !== "" &&
+      firstIndexWithThisRef !== -1 &&
+      firstIndexWithThisRef !== currentIndex;
+    const isNonACMItem =
+      (!item.sampleReference || item.sampleReference.trim() === "") &&
+      (!item.asbestosType || item.asbestosType.trim() === "") &&
+      (!item.condition || item.condition.trim() === "") &&
+      (!item.risk || item.risk.trim() === "") &&
+      (item.recommendationActions === "No Action Required" ||
+        item.recommendations === "No Action Required");
+
+    const isSampledItem =
+      !isVisuallyAssessedItemCheck && !isReferredItemCheck;
+
+    // For duplicated sampled items use a temporary ref so backend validation passes; edit modal will show it as empty for user to fill in
+    const tempSampledRef =
+      "LD-DUP-" +
+      Date.now() +
+      "-" +
+      Math.random().toString(36).slice(2, 9);
+    const sampleRefForCreate =
+      isVisuallyAssessedItemCheck
+        ? null
+        : isReferredItemCheck
+          ? item.sampleReference
+          : isSampledItem
+            ? tempSampledRef
+            : item.sampleReference
+              ? ensureSampleReferencePrefix(
+                  (item.sampleReference || "").toUpperCase(),
+                )
+              : "";
+
+    const recommendationsValue =
+      isNonACMItem ||
+      (isVisuallyAssessedItemCheck &&
+        item.asbestosContent === "Visually Assessed as Non-Asbestos")
+        ? "No Action Required"
+        : (item.recommendationActions || item.recommendations || "").trim();
+
+    const itemData = {
+      sampleReference: sampleRefForCreate === null ? null : sampleRefForCreate,
+      levelFloor: item.levelFloor || "",
+      roomArea: item.roomArea || "",
+      locationDescription: item.locationDescription || "",
+      materialType: item.materialType || "",
+      asbestosContent: isVisuallyAssessedItemCheck
+        ? item.asbestosContent
+        : item.asbestosContent || "",
+      asbestosType:
+        isNonACMItem ||
+        (isVisuallyAssessedItemCheck &&
+          item.asbestosContent === "Visually Assessed as Non-Asbestos")
+          ? null
+          : item.asbestosType || "",
+      condition:
+        isNonACMItem ||
+        (isVisuallyAssessedItemCheck &&
+          item.asbestosContent === "Visually Assessed as Non-Asbestos")
+          ? null
+          : item.condition || "",
+      risk:
+        isNonACMItem ||
+        (isVisuallyAssessedItemCheck &&
+          item.asbestosContent === "Visually Assessed as Non-Asbestos")
+          ? null
+          : item.risk || "",
+      recommendationActions: recommendationsValue,
+      notes: item.notes || "",
+    };
+
+    try {
+      const newItem = await asbestosAssessmentService.addItem(id, itemData);
+      await asbestosAssessmentService.update(id, {
+        projectId: assessment.projectId?._id || assessment.projectId,
+        assessmentDate: assessment.assessmentDate,
+      });
+      showSnackbar("Item duplicated successfully", "success");
+      await fetchData();
+      // Open edit modal for the new item (sample reference is already empty for sampled items)
+      handleEdit(newItem);
+    } catch (err) {
+      console.error("Error duplicating item:", err);
+      showSnackbar("Failed to duplicate item", "error");
+    }
   };
 
   const handleDelete = (item) => {
@@ -2471,12 +2579,8 @@ const AssessmentItems = () => {
   return (
     <PermissionGate requiredPermissions={["asbestos.view"]}>
       <Box m="8px">
-        <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
-          Assessment Items
-        </Typography>
-
-        {/* Breadcrumbs */}
-        <Breadcrumbs sx={{ marginBottom: 3 }}>
+      {/* Breadcrumbs */}
+        <Breadcrumbs sx={{ mb: 3, mt: 3 }}>
           <Link
             component="button"
             variant="body1"
@@ -2489,6 +2593,11 @@ const AssessmentItems = () => {
               : "Asbestos Assessment"}
           </Link>
         </Breadcrumbs>
+        <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
+          Assessment Items
+        </Typography>
+
+ 
 
         {/* Project Info */}
         {assessment && (
@@ -3103,6 +3212,23 @@ const AssessmentItems = () => {
                               >
                                 <PhotoCameraIcon />
                               </IconButton>
+                              {!isReportLocked && (
+                                <IconButton
+                                  onClick={() => handleDuplicate(item)}
+                                  color="primary"
+                                  size="small"
+                                  title="Duplicate item"
+                                  sx={{
+                                    display: "inline-flex",
+                                    "@media (orientation: portrait) and (max-width: 600px)":
+                                      {
+                                        display: "none",
+                                      },
+                                  }}
+                                >
+                                  <ContentCopyIcon />
+                                </IconButton>
+                              )}
                               <IconButton
                                 onClick={() => handleEdit(item)}
                                 color="primary"
@@ -3394,6 +3520,107 @@ const AssessmentItems = () => {
                     </Typography>
                   </Divider>
                 </Grid>
+                {editingItem && (() => {
+                  const currentRef = (editingItem.sampleReference || "").trim();
+                  const otherItemsWithSameRef = (items || []).filter(
+                    (i) =>
+                      i._id !== editingItem._id &&
+                      (i.sampleReference || "").trim() === currentRef,
+                  );
+                  const isSampledWithReferredItems =
+                    !isVisuallyAssessedItem &&
+                    !isReferredItem &&
+                    currentRef !== "" &&
+                    otherItemsWithSameRef.length > 0;
+                  return (
+                  <Grid item xs={12} md={6}>
+                    <FormControl fullWidth disabled={isSampledWithReferredItems}>
+                      <InputLabel>Item type</InputLabel>
+                      <Select
+                        value={
+                          isVisuallyAssessedItem
+                            ? "visually-assessed"
+                            : isReferredItem
+                              ? "referred"
+                              : "sampled"
+                        }
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          if (value === "sampled") {
+                            setIsReferredItem(false);
+                            setIsVisuallyAssessedItem(false);
+                            setIsNonACM(false);
+                            setVisuallyAssessedType("asbestos");
+                            setForm((prev) => ({
+                              ...prev,
+                              sampleReference: "",
+                              asbestosContent: "",
+                              recommendations:
+                                prev.recommendations ||
+                                "Maintain material in good condition",
+                            }));
+                          } else if (value === "referred") {
+                            setIsReferredItem(true);
+                            setIsVisuallyAssessedItem(false);
+                            setIsNonACM(false);
+                            setVisuallyAssessedType("asbestos");
+                            const available = getAvailableSampleReferences();
+                            const currentRef = form.sampleReference?.trim();
+                            const withPrefix = currentRef.startsWith("LD-")
+                              ? currentRef
+                              : currentRef
+                                ? `LD-${currentRef}`
+                                : "";
+                            const newRef =
+                              available.includes(withPrefix) && withPrefix
+                                ? withPrefix
+                                : available.length > 0
+                                  ? available[0]
+                                  : "";
+                            setForm((prev) => ({
+                              ...prev,
+                              sampleReference: newRef,
+                              asbestosContent: "",
+                              recommendations:
+                                prev.recommendations ||
+                                "Maintain material in good condition",
+                            }));
+                          } else {
+                            setIsVisuallyAssessedItem(true);
+                            setIsReferredItem(false);
+                            setVisuallyAssessedType("asbestos");
+                            setIsNonACM(false);
+                            setForm((prev) => ({
+                              ...prev,
+                              sampleReference: "",
+                              recommendations:
+                                "Maintain material in good condition",
+                              asbestosContent: "Visually Assessed as Asbestos",
+                            }));
+                          }
+                        }}
+                        label="Item type"
+                      >
+                        <MenuItem value="sampled">Sampled</MenuItem>
+                        <MenuItem value="referred">Referred</MenuItem>
+                        <MenuItem value="visually-assessed">
+                          Visually assessed
+                        </MenuItem>
+                      </Select>
+                      {isSampledWithReferredItems && (
+                        <Typography
+                          variant="caption"
+                          color="error"
+                          sx={{ display: "block", mt: 0.5 }}
+                        >
+                          Cannot change type: other items refer to this
+                          sample.
+                        </Typography>
+                      )}
+                    </FormControl>
+                  </Grid>
+                  );
+                })()}
                 {isVisuallyAssessedItem ? (
                   <Grid item xs={12}>
                     <FormControl component="fieldset">

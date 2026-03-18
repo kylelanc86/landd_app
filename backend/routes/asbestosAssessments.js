@@ -843,6 +843,7 @@ router.put('/:id/items/:itemId', async (req, res) => {
     const oldSampleRef = item.sampleReference ? String(item.sampleReference).trim() : '';
     Object.assign(item, req.body);
     item.updatedAt = new Date();
+    job.markModified('items');
 
     // When sample reference is changed on an item, cascade the new value to all other items that had the old value
     if (req.body.sampleReference !== undefined) {

@@ -80,6 +80,7 @@ const trimOriginalDataForCache = (orig) => {
     LAA: orig.LAA,
     reportApprovedBy: orig.reportApprovedBy,
     reportAuthorisedBy: orig.reportAuthorisedBy,
+    authorisationRequestedBy: orig.authorisationRequestedBy,
     reportIssueDate: orig.reportIssueDate,
     pdfReadyAt: orig.pdfReadyAt,
     pdfFilename: orig.pdfFilename,
@@ -1534,6 +1535,10 @@ const ResidentialAsbestosAssessment = () => {
                               canSendForApproval &&
                               (job.status === "report-ready-for-review" ||
                                 job.status === "complete");
+                            const alreadySentForAuthorisation = !!(
+                              job.originalData?.authorisationRequestedBy ||
+                              job.authorisationRequestedBy
+                            );
 
                             return (
                               <>
@@ -1567,7 +1572,7 @@ const ResidentialAsbestosAssessment = () => {
                                   <Button
                                     variant="outlined"
                                     size="small"
-                                    color="primary"
+                                    color={alreadySentForAuthorisation ? "inherit" : "primary"}
                                     startIcon={<MailIcon />}
                                     onClick={(event) =>
                                       handleSendForAuthorisation(event, job)
@@ -1575,11 +1580,21 @@ const ResidentialAsbestosAssessment = () => {
                                     disabled={
                                       sendingAuthorisationRequests[job.id]
                                     }
-                                    sx={{ textTransform: "none" }}
+                                    sx={
+                                      alreadySentForAuthorisation
+                                        ? {
+                                            textTransform: "none",
+                                            color: "text.secondary",
+                                            borderColor: "grey.400",
+                                          }
+                                        : { textTransform: "none" }
+                                    }
                                   >
                                     {sendingAuthorisationRequests[job.id]
                                       ? "Sending..."
-                                      : "Send for Authorisation"}
+                                      : alreadySentForAuthorisation
+                                        ? "Re-send for Authorisation"
+                                        : "Send for Authorisation"}
                                   </Button>
                                 )}
                               </>

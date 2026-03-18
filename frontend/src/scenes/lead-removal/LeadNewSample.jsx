@@ -16,6 +16,10 @@ import {
   Backdrop,
   CircularProgress,
   Paper,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from "@mui/material";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -59,7 +63,6 @@ const LeadNewSample = () => {
     pumpNo: "",
     flowmeter: "",
     cowlNo: "",
-    filterSize: "25mm",
     startTime: "",
     endTime: "",
     nextDay: false,
@@ -87,42 +90,20 @@ const LeadNewSample = () => {
     useState(false);
   const [showCollectionSection, setShowCollectionSection] = useState(false);
   const [collectionFieldsEdited, setCollectionFieldsEdited] = useState(false);
+  const [showFlowrateWarningDialog, setShowFlowrateWarningDialog] =
+    useState(false);
 
   // Lead monitoring: only field blank is simplified (no neg air exhaust option)
   const isSimplifiedSample = form.isFieldBlank;
 
-  // Check if the selected pump has a 1.5 L/min calibration available
-  // If not, 13mm filter size should not be available (since 13mm requires 1.5 L/min)
-  const hasOnePointFiveFlowrate = useMemo(() => {
-    return availableFlowrates.some(
-      (flowrate) => Math.abs(flowrate - 1.5) < 0.01,
-    );
-  }, [availableFlowrates]);
-
-  // Filter available flowrates based on filter size
-  // 1.5 L/min should only be offered when filter size is 13mm
-  // For 13mm filters, 1.5 L/min is the only permitted option
-  // For 25mm filters, 1.5 L/min should be excluded
-  const filteredFlowrates = useMemo(() => {
-    if (!form.filterSize) {
-      // If no filter size selected, exclude 1.5 L/min
-      return availableFlowrates.filter(
+  // Lead monitoring uses 25mm IOM only: exclude 1.5 L/min (13mm flowrate)
+  const filteredFlowrates = useMemo(
+    () =>
+      availableFlowrates.filter(
         (flowrate) => Math.abs(flowrate - 1.5) > 0.01,
-      );
-    }
-
-    if (form.filterSize === "13mm") {
-      // For 13mm, only show 1.5 L/min if available
-      return availableFlowrates.filter(
-        (flowrate) => Math.abs(flowrate - 1.5) < 0.01,
-      );
-    } else {
-      // For 25mm (or other sizes), exclude 1.5 L/min
-      return availableFlowrates.filter(
-        (flowrate) => Math.abs(flowrate - 1.5) > 0.01,
-      );
-    }
-  }, [availableFlowrates, form.filterSize]);
+      ),
+    [availableFlowrates],
+  );
 
   // Calculate days until calibration is due
   const calculateDaysUntilCalibration = useCallback((calibrationDue) => {
@@ -1047,6 +1028,84 @@ const LeadNewSample = () => {
     }
   };
 
+  // Lead uses 25mm IOM; warn if flowrate is not 2 L/min
+  const shouldShowFlowrateWarning = () => {
+    if (isSimplifiedSample || form.isNegAirExhaust) return false;
+    const flowrate =
+      parseFloat(form.averageFlowrate) || parseFloat(form.initialFlowrate);
+    if (!flowrate || isNaN(flowrate)) return false;
+    return Math.abs(flowrate - 2) >= 0.01;
+  };
+
+  const performSave = async () => {
+    if (!projectID || !job?._id || !shiftId) return;
+
+    const currentShiftSampleCount = shiftSamples.length;
+    const shiftUpdatePayload = {};
+    if (currentShiftSampleCount === 0 && form.sampler) {
+      shiftUpdatePayload.defaultSampler = form.sampler;
+    }
+    if (currentShiftSampleCount === 0 && form.flowmeter) {
+      shiftUpdatePayload.defaultFlowmeter = form.flowmeter;
+    }
+
+    if (Object.keys(shiftUpdatePayload).length > 0) {
+      try {
+        await shiftService.update(shiftId, shiftUpdatePayload);
+      } catch (updateError) {
+        console.error(
+          "[NewSample] Error updating shift defaults:",
+          updateError,
+        );
+      }
+    }
+
+    let normalizedType = form.isFieldBlank ? "-" : form.type;
+    if (!form.isFieldBlank && normalizedType === "-") {
+      normalizedType = "Background";
+    }
+    let normalizedLocation = form.location;
+    if (!form.isFieldBlank && normalizedLocation === FIELD_BLANK_LOCATION) {
+      normalizedLocation = "";
+    }
+    let sampleNumber = form.sampleNumber?.toString().trim() || "";
+    if (sampleNumber && !sampleNumber.startsWith("LP")) {
+      const num =
+        parseInt(sampleNumber.replace(/\D/g, ""), 10) || sampleNumber;
+      sampleNumber = `LP${num}`;
+    }
+    const sampleData = {
+      ...form,
+      shift: shiftId,
+      job: job._id,
+      jobModel: shift.jobModel,
+      fullSampleID: `${projectID}-${sampleNumber}`,
+      sampleNumber: sampleNumber,
+      sampler: form.sampler,
+      collectedBy: form.sampler,
+      isFieldBlank: form.isFieldBlank || false,
+      type: normalizedType,
+      location: normalizedLocation,
+      flowmeter: form.flowmeter || null,
+      cowlNo: form.cowlNo?.trim() || null,
+      nextDay: form.nextDay || false,
+      initialFlowrate: form.initialFlowrate
+        ? parseFloat(form.initialFlowrate)
+        : null,
+      finalFlowrate: form.finalFlowrate
+        ? parseFloat(form.finalFlowrate)
+        : null,
+      averageFlowrate: form.averageFlowrate
+        ? parseFloat(form.averageFlowrate)
+        : null,
+    };
+
+    await leadAirSampleService.create(sampleData);
+    setShiftSamples((prev) => [...prev, sampleData]);
+    setProjectSamples((prev) => [...prev, sampleData]);
+    navigate(`/lead-removal/shift/${shiftId}/samples`);
+  };
+
   const validateForm = async () => {
     const errors = {};
 
@@ -1165,102 +1224,15 @@ const LeadNewSample = () => {
       "[NewSample] Form validation passed, proceeding with submission",
     );
 
+    if (shouldShowFlowrateWarning()) {
+      setShowFlowrateWarningDialog(true);
+      console.timeEnd(`${logLabel} total`);
+      return;
+    }
+
     setIsSubmitting(true);
-
     try {
-      if (!projectID) {
-        throw new Error("Project ID is required");
-      }
-
-      if (!job?._id) {
-        throw new Error("Job ID is required");
-      }
-
-      if (!shiftId) {
-        throw new Error("Shift ID is required");
-      }
-
-      const currentShiftSampleCount = shiftSamples.length;
-      const shiftUpdatePayload = {};
-      // If this is the first sample in the shift and we have a sampler, set it as the default
-      if (currentShiftSampleCount === 0 && form.sampler) {
-        shiftUpdatePayload.defaultSampler = form.sampler;
-      }
-
-      // If this is the first sample in the shift and we have a flowmeter, set it as the default
-      if (currentShiftSampleCount === 0 && form.flowmeter) {
-        shiftUpdatePayload.defaultFlowmeter = form.flowmeter;
-      }
-
-      if (Object.keys(shiftUpdatePayload).length > 0) {
-        console.time(`${logLabel} shiftUpdate`);
-        try {
-          await shiftService.update(shiftId, shiftUpdatePayload);
-        } catch (updateError) {
-          console.error(
-            "[NewSample] Error updating shift defaults:",
-            updateError,
-          );
-        } finally {
-          console.timeEnd(`${logLabel} shiftUpdate`);
-        }
-      }
-
-      // Create the sample
-      console.time(`${logLabel} create`);
-      // Cowl no: use as-is, no prefix (lead sampling)
-      // Normalize type: if isFieldBlank is false but type is "-", set to "Background"
-      let normalizedType = form.isFieldBlank ? "-" : form.type;
-      if (!form.isFieldBlank && normalizedType === "-") {
-        normalizedType = "Background";
-      }
-      // Normalize location: if isFieldBlank is false but location is "Field blank", clear it
-      let normalizedLocation = form.location;
-      if (!form.isFieldBlank && normalizedLocation === FIELD_BLANK_LOCATION) {
-        normalizedLocation = "";
-      }
-      // Normalize sample number to LP1, LP2, ... (same as air monitoring AM1, AM2)
-      let sampleNumber = form.sampleNumber?.toString().trim() || "";
-      if (sampleNumber && !sampleNumber.startsWith("LP")) {
-        const num =
-          parseInt(sampleNumber.replace(/\D/g, ""), 10) || sampleNumber;
-        sampleNumber = `LP${num}`;
-      }
-      const sampleData = {
-        ...form,
-        shift: shiftId,
-        job: job._id,
-        jobModel: shift.jobModel, // Add jobModel from shift
-        fullSampleID: `${projectID}-${sampleNumber}`,
-        sampleNumber: sampleNumber,
-        sampler: form.sampler,
-        collectedBy: form.sampler,
-        isFieldBlank: form.isFieldBlank || false, // Explicitly set boolean
-        type: normalizedType, // Set type to "-" for field blanks, normalize otherwise
-        location: normalizedLocation, // Clear "Field blank" location if not a field blank
-        flowmeter: form.flowmeter || null, // Explicitly include flowmeter
-        cowlNo: form.cowlNo?.trim() || null,
-        nextDay: form.nextDay || false, // Ensure boolean value
-        initialFlowrate: form.initialFlowrate
-          ? parseFloat(form.initialFlowrate)
-          : null,
-        finalFlowrate: form.finalFlowrate
-          ? parseFloat(form.finalFlowrate)
-          : null,
-        averageFlowrate: form.averageFlowrate
-          ? parseFloat(form.averageFlowrate)
-          : null,
-      };
-
-      await leadAirSampleService.create(sampleData);
-      console.timeEnd(`${logLabel} create`);
-
-      // Update local cache to reflect the new sample
-      setShiftSamples((prev) => [...prev, sampleData]);
-      setProjectSamples((prev) => [...prev, sampleData]);
-
-      // Navigate back to lead monitoring sample list
-      navigate(`/lead-removal/shift/${shiftId}/samples`);
+      await performSave();
     } catch (error) {
       if (console.timeLog) {
         try {
@@ -1270,8 +1242,6 @@ const LeadNewSample = () => {
         }
       }
       console.error("Error creating sample:", error);
-
-      // Check for duplicate key error
       const errorMessage =
         error.response?.data?.message ||
         error.message ||
@@ -1289,13 +1259,42 @@ const LeadNewSample = () => {
       } else {
         setError(errorMessage);
       }
-      setIsSubmitting(false);
     } finally {
+      setIsSubmitting(false);
       try {
         console.timeEnd(`${logLabel} total`);
       } catch (endError) {
         // ignore console timer errors (e.g., double-ending)
       }
+    }
+  };
+
+  const handleProceedWithSave = async () => {
+    setShowFlowrateWarningDialog(false);
+    setIsSubmitting(true);
+    try {
+      await performSave();
+    } catch (error) {
+      console.error("Error creating sample:", error);
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to create sample";
+      if (
+        errorMessage.includes("duplicate key") ||
+        errorMessage.includes("E11000")
+      ) {
+        const attemptedFullSampleID = projectID
+          ? `${projectID}-${form.sampleNumber}`
+          : form.sampleNumber;
+        setError(
+          `Sample number ${attemptedFullSampleID} already exists. This may occur if samples exist from a deleted job/shift. Please refresh the page to recalculate the next available sample number.`,
+        );
+      } else {
+        setError(errorMessage);
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -2087,6 +2086,36 @@ const LeadNewSample = () => {
           </Box>
         </Stack>
       </Box>
+
+      <Dialog
+        open={showFlowrateWarningDialog}
+        onClose={() => setShowFlowrateWarningDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Flowrate notice</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Lead monitoring conducted with 25mm IOM sampling head should be
+            conducted at a flowrate of 2L/min.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setShowFlowrateWarningDialog(false)}
+            variant="outlined"
+          >
+            Revise Sample Details
+          </Button>
+          <Button
+            onClick={handleProceedWithSave}
+            variant="contained"
+            color="primary"
+          >
+            Proceed with Sample Save
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

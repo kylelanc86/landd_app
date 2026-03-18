@@ -1117,6 +1117,14 @@ const AsbestosRemovalJobDetails = () => {
           } signatory user(s)`,
         "success",
       );
+      // Update local state so button turns grey and shows "Re-send for Authorisation" without refresh
+      setAirMonitoringShifts((prev) =>
+        prev.map((s) =>
+          s._id === shift._id
+            ? { ...s, authorisationRequestedBy: currentUser?._id ?? true }
+            : s,
+        ),
+      );
     } catch (error) {
       console.error("Error sending authorisation request emails:", error);
       showSnackbar(
@@ -1533,6 +1541,14 @@ const AsbestosRemovalJobDetails = () => {
             response?.recipients?.length || 0
           } report proofer user(s)`,
         "success",
+      );
+      // Update local state so button turns grey and shows "Re-send for Authorisation" without refresh
+      setClearances((prev) =>
+        prev.map((c) =>
+          c._id === clearance._id
+            ? { ...c, authorisationRequestedBy: currentUser?._id ?? true }
+            : c,
+        ),
       );
     } catch (error) {
       console.error("Error sending authorisation request emails:", error);
