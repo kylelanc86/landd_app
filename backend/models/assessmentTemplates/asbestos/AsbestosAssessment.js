@@ -51,7 +51,17 @@ const AssessmentItemSchema = new mongoose.Schema({
   }],
   recommendationActions: { type: String },
   readyForAnalysis: { type: Boolean, default: false },
-  
+
+  // Lead assessment item fields
+  paintColour: { type: String },
+  leadContent: { type: String },
+  referredLocations: [{
+    levelFloor: { type: String },
+    roomArea: { type: String },
+    surfaceDescription: { type: String },
+    condition: { type: String },
+  }],
+
   // Embedded Analysis Data for Fibre ID Analysis
   analysisData: {
     microscope: { type: String, default: "LD-PLM-1" },
@@ -96,6 +106,13 @@ const AssessmentItemSchema = new mongoose.Schema({
 
 // Pre-save hook to handle conditional validation for visually assessed items
 AssessmentItemSchema.pre('validate', function(next) {
+  // Lead assessment items (materialType used as sample type: Paint, Dust, Soil) – skip asbestos validation
+  const leadSampleTypes = ['paint', 'dust', 'soil'];
+  const materialLower = (this.materialType || '').toString().toLowerCase().trim();
+  if (leadSampleTypes.includes(materialLower)) {
+    return next();
+  }
+
   const isVisuallyAssessedNonAsbestos = 
     this.asbestosContent === "Visually Assessed as Non-asbestos" ||
     this.asbestosContent === "Visually Assessed as Non-Asbestos";
@@ -153,13 +170,16 @@ AssessmentItemSchema.pre('validate', function(next) {
 const AsbestosAssessmentSchema = new mongoose.Schema({
   projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true },
   assessorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  // Distinguishes standard asbestos assessments from residential asbestos assessments (separate job lists and flows)
+  // Distinguishes standard asbestos assessments from residential asbestos assessments and lead assessments (separate job lists and flows)
   jobType: {
     type: String,
-    enum: ['asbestos-assessment', 'residential-asbestos'],
+    enum: ['asbestos-assessment', 'residential-asbestos', 'lead-assessment'],
     default: 'asbestos-assessment',
   },
-  LAA: { type: String }, // Licensed Asbestos Assessor name
+  LAA: { type: String }, // Licensed Asbestos Assessor name (asbestos)
+  // Lead assessment fields
+  assessmentType: [{ type: String, enum: ['paint', 'dust', 'soil'] }], // Lead: paint, dust, soil (multi-select)
+  consultantId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Lead: consultant (active app user)
   state: { type: String, enum: ['ACT', 'NSW', 'Commonwealth'] }, // State (ACT, NSW or Commonwealth)
   secondaryHeader: { type: String }, // Optional secondary header beneath project site name on cover page
   intrusiveness: { type: String, enum: ['non-intrusive', 'intrusive'], default: 'non-intrusive' }, // Residential: Non-intrusive (default) or Intrusive – affects PDF report

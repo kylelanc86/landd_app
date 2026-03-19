@@ -39,6 +39,8 @@ router.get('/', async (req, res) => {
     const { jobType, list } = req.query;
     if (jobType === 'residential-asbestos') {
       filter.jobType = 'residential-asbestos';
+    } else if (jobType === 'lead-assessment') {
+      filter.jobType = 'lead-assessment';
     } else if (jobType === 'asbestos-assessment') {
       // Include docs with jobType 'asbestos-assessment' or missing (legacy)
       filter.$or = [
@@ -98,6 +100,8 @@ router.get('/', async (req, res) => {
             LAA: 1,
             state: 1,
             secondaryHeader: 1,
+            assessmentType: 1,
+            consultantId: 1,
             intrusiveness: 1,
             reportApprovedBy: 1,
             reportAuthorisedBy: 1,
@@ -175,34 +179,43 @@ router.post('/', async (req, res) => {
     if (!req.user || !req.user._id) {
       return res.status(401).json({ message: 'Not authenticated' });
     }
-    const { projectId, assessmentDate, LAA, state, secondaryHeader, jobType, intrusiveness } = req.body;
+    const { projectId, assessmentDate, LAA, state, secondaryHeader, jobType, intrusiveness, assessmentType, consultantId } = req.body;
     if (!projectId || !assessmentDate) {
       return res.status(400).json({ message: 'projectId and assessmentDate are required' });
     }
-    const validJobType = jobType === 'residential-asbestos' ? 'residential-asbestos' : 'asbestos-assessment';
+    const validJobType = jobType === 'residential-asbestos' ? 'residential-asbestos' : jobType === 'lead-assessment' ? 'lead-assessment' : 'asbestos-assessment';
     const validIntrusiveness = intrusiveness === 'intrusive' ? 'intrusive' : 'non-intrusive';
     const validState = state && ['ACT', 'NSW', 'Commonwealth'].includes(state) ? state : null;
+    const validAssessmentTypes = Array.isArray(assessmentType) ? assessmentType.filter((t) => ['paint', 'dust', 'soil'].includes(t)) : [];
 
-    // Legislation snapshot at job creation (state-specific from report template)
+    // Legislation snapshot at job creation (state-specific from report template) – skip for lead-assessment
     let legislation = [];
-    try {
-      const templateType = validJobType === 'residential-asbestos' ? 'residentialAsbestosAssessment' : 'asbestosAssessment';
-      legislation = await getLegislationForReportTemplate(templateType, validState || 'ACT');
-    } catch (err) {
-      console.error('Error fetching legislation for assessment:', err);
+    if (validJobType !== 'lead-assessment') {
+      try {
+        const templateType = validJobType === 'residential-asbestos' ? 'residentialAsbestosAssessment' : 'asbestosAssessment';
+        legislation = await getLegislationForReportTemplate(templateType, validState || 'ACT');
+      } catch (err) {
+        console.error('Error fetching legislation for assessment:', err);
+      }
     }
 
-    const job = new AsbestosAssessment({
+    const jobPayload = {
       projectId,
       assessorId: req.user._id,
       assessmentDate,
       jobType: validJobType,
-      LAA: LAA || null,
       state: validState,
       secondaryHeader: secondaryHeader || undefined,
-      intrusiveness: validIntrusiveness,
       legislation,
-    });
+    };
+    if (validJobType === 'lead-assessment') {
+      jobPayload.assessmentType = validAssessmentTypes;
+      jobPayload.consultantId = consultantId || null;
+    } else {
+      jobPayload.LAA = LAA || null;
+      jobPayload.intrusiveness = validIntrusiveness;
+    }
+    const job = new AsbestosAssessment(jobPayload);
     await job.save();
     const populatedJob = await AsbestosAssessment.findById(job._id)
       .populate({
@@ -233,7 +246,8 @@ router.get('/:id', async (req, res) => {
         }
       })
       .populate('assessorId')
-      .populate('analyst', 'firstName lastName email');
+      .populate('analyst', 'firstName lastName email')
+      .populate('consultantId', 'firstName lastName email');
     if (!job) return res.status(404).json({ message: 'Assessment job not found' });
     
     // Manually populate analysedBy for items (Mongoose doesn't support nested array population directly)
@@ -411,7 +425,9 @@ router.put('/:id', async (req, res) => {
       reportAuthorisedAt,
       archived,
       noSamplesCollected,
-      intrusiveness
+      intrusiveness,
+      assessmentType,
+      consultantId
     } = req.body;
     if (!projectId || !assessmentDate) {
       return res.status(400).json({ message: 'projectId and assessmentDate are required' });
@@ -492,6 +508,15 @@ router.put('/:id', async (req, res) => {
     }
     if (intrusiveness !== undefined && ['non-intrusive', 'intrusive'].includes(intrusiveness)) {
       updateData.intrusiveness = intrusiveness;
+    }
+    if (existingJob.jobType === 'lead-assessment') {
+      if (assessmentType !== undefined) {
+        const valid = Array.isArray(assessmentType) ? assessmentType.filter((t) => ['paint', 'dust', 'soil'].includes(t)) : [];
+        updateData.assessmentType = valid;
+      }
+      if (consultantId !== undefined) {
+        updateData.consultantId = consultantId || null;
+      }
     }
 
     updateData.$unset = { pdfBuffer: 1, pdfReadyAt: 1, pdfFilename: 1 };

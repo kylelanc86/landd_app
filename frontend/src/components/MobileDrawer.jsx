@@ -294,7 +294,7 @@ const MobileDrawer = ({ open, onClose }) => {
 
             {isFeatureEnabled("ADVANCED.SURVEYS") && (
               <MenuItem
-                title="Asbestos Assessment"
+                title="Assessments"
                 to="/surveys"
                 icon={<SearchIcon />}
               />

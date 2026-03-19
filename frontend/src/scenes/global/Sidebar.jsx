@@ -593,7 +593,7 @@ const Sidebar = () => {
 
           {isFeatureEnabled("ADVANCED.SURVEYS") && (
             <CollapsibleSection
-              title="Asbestos Assessment"
+              title="Assessments"
               to="/surveys"
               icon={<SearchIcon />}
             />

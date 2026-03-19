@@ -105,6 +105,12 @@ const ArchivedData = lazy(() => import("./scenes/admin/ArchivedData"));
 const LeadAssessment = lazy(
   () => import("./scenes/surveys/lead/LeadAssessment"),
 );
+const LeadAssessmentItems = lazy(
+  () => import("./scenes/surveys/lead/LeadAssessmentItems"),
+);
+const LeadAssessmentItemNew = lazy(
+  () => import("./scenes/surveys/lead/LeadAssessmentItemNew"),
+);
 
 // New survey page components
 const AsbestosAssessment = lazy(
@@ -614,18 +620,44 @@ function App() {
                                 )}
 
                                 {isFeatureEnabled("ADVANCED.SURVEYS") && (
-                                  <Route
-                                    path="/surveys/lead"
-                                    element={
-                                      <PermissionRoute
-                                        requiredPermissions={["asbestos.view"]}
-                                      >
-                                        <Suspense fallback={<LoadingSpinner />}>
-                                          <LeadAssessment />
-                                        </Suspense>
-                                      </PermissionRoute>
-                                    }
-                                  />
+                                  <>
+                                    <Route
+                                      path="/surveys/lead"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={["asbestos.view"]}
+                                        >
+                                          <Suspense fallback={<LoadingSpinner />}>
+                                            <LeadAssessment />
+                                          </Suspense>
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                    <Route
+                                      path="/surveys/lead/:id/items"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={["asbestos.view"]}
+                                        >
+                                          <Suspense fallback={<LoadingSpinner />}>
+                                            <LeadAssessmentItems />
+                                          </Suspense>
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                    <Route
+                                      path="/surveys/lead/:id/items/new"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={["asbestos.view"]}
+                                        >
+                                          <Suspense fallback={<LoadingSpinner />}>
+                                            <LeadAssessmentItemNew />
+                                          </Suspense>
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                  </>
                                 )}
                                 {isFeatureEnabled("ADVANCED.SURVEYS") && (
                                   <Route

@@ -471,6 +471,7 @@ export const asbestosAssessmentService = {
   getAsbestosAssessmentById: (id) => api.get(`/assessments/${id}`),
   createAsbestosAssessment: (data) => api.post('/assessments', data),
   updateAsbestosAssessment: (id, data) => api.put(`/assessments/${id}`, data),
+  addItem: (assessmentId, itemData) => api.post(`/assessments/${assessmentId}/items`, itemData),
   archiveAsbestosAssessment: (id) => api.patch(`/assessments/${id}/archive`),
   unlockAsbestosAssessment: (id) => api.patch(`/assessments/${id}/unlock`),
   sendForAuthorisation: (id) => api.post(`/assessments/${id}/send-for-authorisation`),
