@@ -55,11 +55,20 @@ const AssessmentItemSchema = new mongoose.Schema({
   // Lead assessment item fields
   paintColour: { type: String },
   leadContent: { type: String },
+  // Risk rating (1–3 or 1–4); product used for VERY LOW / LOW / MEDIUM / HIGH RISK
+  occupantRating: { type: Number },
+  locationRating: { type: Number },
+  roomUseRating: { type: Number },
+  conditionRating: { type: Number },
   referredLocations: [{
     levelFloor: { type: String },
     roomArea: { type: String },
     surfaceDescription: { type: String },
     condition: { type: String },
+    occupantRating: { type: Number },
+    locationRating: { type: Number },
+    roomUseRating: { type: Number },
+    conditionRating: { type: Number },
   }],
 
   // Embedded Analysis Data for Fibre ID Analysis
