@@ -173,12 +173,11 @@ const ClientSuppliedFibreIDAnalysis = () => {
         const savedData = sampleData.analysisData;
         console.log("Loading saved analysis data:", savedData);
 
-        // Check if this was saved as "no fibres detected" or no-asbestos result (accept both casings for legacy data)
+        // Restore "no fibres detected" only from explicit saved flag or legacy exact string (do not infer from "No Asbestos Detected" — that also applies when non-asbestos fibres are present)
         const wasNoFibreDetected =
+          savedData.noFibreDetected === true ||
           savedData.finalResult === "No fibres detected" ||
-          savedData.finalResult === "No Asbestos Detected" ||
-          savedData.finalResult === "No asbestos detected" ||
-          (savedData.fibres && savedData.fibres.length === 0);
+          savedData.finalResult === "No fibres Detected";
 
         setNoFibreDetected(wasNoFibreDetected);
 
@@ -595,6 +594,15 @@ const ClientSuppliedFibreIDAnalysis = () => {
         return;
       }
 
+      // Microscope is required when fibres are analysed (not "no fibres detected")
+      if (!noFibreDetected && (!microscope || !String(microscope).trim())) {
+        showSnackbar(
+          "Microscope is required. Please select a microscope before finalising.",
+          "warning"
+        );
+        return;
+      }
+
       // Ensure current sample analysis is saved first
       const analysisComplete = isAnalysisComplete();
 
@@ -614,6 +622,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
           traceAsbestos === "yes" ? traceAsbestosContent : null,
         traceCount: traceAsbestos === "yes" ? traceCount : null,
         comments: comments || null,
+        noFibreDetected,
         isAnalysed: analysisComplete,
         analysedAt: analysisDate,
       };
@@ -747,6 +756,15 @@ const ClientSuppliedFibreIDAnalysis = () => {
         return;
       }
 
+      // Microscope is required when fibres are analysed (not "no fibres detected")
+      if (!noFibreDetected && (!microscope || !String(microscope).trim())) {
+        showSnackbar(
+          "Microscope is required. Please select a microscope before saving.",
+          "warning"
+        );
+        return;
+      }
+
       // Check if analysis is complete (all fibres have results or no fibres detected)
       const analysisComplete = isAnalysisComplete();
 
@@ -766,6 +784,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
           traceAsbestos === "yes" ? traceAsbestosContent : null,
         traceCount: traceAsbestos === "yes" ? traceCount : null,
         comments: comments || null,
+        noFibreDetected,
         // Automatically mark as analysed when analysis is complete
         isAnalysed: analysisComplete,
         analysedAt: analysisComplete ? analysisDate : (sample?.analysedAt || null),
@@ -873,6 +892,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
           traceAsbestos === "yes" ? traceAsbestosContent : null,
         traceCount: traceAsbestos === "yes" ? traceCount : null,
         comments: comments || null,
+        noFibreDetected,
         isAnalysed: false,
         analysedAt: null,
       };

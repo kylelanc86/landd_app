@@ -658,6 +658,15 @@ const LDsuppliedAnalysisPage = () => {
         return;
       }
 
+      // Microscope is required when fibres are analysed (not "no fibres detected")
+      if (!noFibreDetected && (!microscope || !String(microscope).trim())) {
+        showSnackbar(
+          "Microscope is required. Please select a microscope before saving.",
+          "warning",
+        );
+        return;
+      }
+
       // Check if analysis is complete (all fibres have results or no fibres detected)
       const analysisComplete = isAnalysisComplete();
 
@@ -676,6 +685,7 @@ const LDsuppliedAnalysisPage = () => {
           traceAsbestos === "yes" ? traceAsbestosContent : null,
         traceCount: traceAsbestos === "yes" ? traceCount : null,
         comments: comments || null,
+        noFibreDetected,
         // Automatically mark as analysed when analysis is complete
         isAnalysed: analysisComplete,
         analysedAt: analysisComplete
@@ -794,6 +804,7 @@ const LDsuppliedAnalysisPage = () => {
           traceAsbestos === "yes" ? traceAsbestosContent : null,
         traceCount: traceAsbestos === "yes" ? traceCount : null,
         comments: comments || null,
+        noFibreDetected,
         isAnalysed: false,
         analysedAt: null,
       };
