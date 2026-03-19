@@ -100,6 +100,18 @@ const escapeHtml = (value = "") =>
     .replace(/'/g, "&#39;");
 
 /**
+ * Secondary headers support manual line breaks using "|" as a delimiter.
+ * Each segment is HTML-escaped; delimiters become <br />.
+ */
+const formatSecondaryHeaderHtml = (value = "") => {
+  const raw = String(value ?? "");
+  if (!raw.trim()) return "";
+  const parts = raw.split("|");
+  if (parts.length <= 1) return escapeHtml(raw);
+  return parts.map((p) => escapeHtml(String(p).trim())).join("<br />");
+};
+
+/**
  * Resolves template's selectedLegislation snapshot against current legislation from the DB,
  * so PDFs show the latest titles/text after legislation custom data fields are edited.
  * @param {Array} templateSelectedLegislation - Template's stored selectedLegislation array
@@ -360,7 +372,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
       .replace(/\[REPORT_TITLE\]/g, reportTitle)
       .replace(/\[SITE_ADDRESS\]/g, siteAddress)
-      .replace(/\[SECONDARY_HEADER\]/g, clearanceData.secondaryHeader || '')
+      .replace(/\[SECONDARY_HEADER\]/g, formatSecondaryHeaderHtml(clearanceData.secondaryHeader || ''))
       .replace(/\[JOB_REFERENCE\]/g, clearanceData.projectId?.projectID || 'Unknown')
       .replace(/\[CLEARANCE_DATE\]/g, formatClearanceDate(clearanceData.clearanceDate))
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
@@ -1816,7 +1828,7 @@ const generateLeadClearanceHTML = async (clearanceData, pdfId = 'unknown') => {
       <div class="cover-content">
         <h1>LEAD REMOVAL<br />CLEARANCE<br />CERTIFICATE</h1>
         <div class="address">${escapeHtml(siteAddress)}</div>
-        ${secondaryHeader ? `<div class="secondary-header">${escapeHtml(secondaryHeader)}</div>` : ''}
+        ${secondaryHeader ? `<div class="secondary-header">${formatSecondaryHeaderHtml(secondaryHeader)}</div>` : ''}
         <p><b>Job Reference</b><br />${escapeHtml(jobRef)}</p>
         <p><b>Clearance Date</b><br />${clearanceDateStr}</p>
       </div>
