@@ -48,6 +48,15 @@ const SurveysDashboard = () => {
       underDevelopment: false,
     },
     {
+      id: "lead-assessment",
+      title: "Lead Assessment",
+      description: "Access active lead paint, dust and soil assessments",
+      icon: <ScienceIcon />,
+      color: "#9c27b0",
+      onClick: () => navigate("/surveys/lead"),
+      underDevelopment: false,
+    },
+    {
       id: "commercial-asbestos",
       title: "Commercial Asbestos Surveys",
       description: "Access commercial asbestos survey records and reports",
@@ -65,15 +74,7 @@ const SurveysDashboard = () => {
       onClick: () => navigate("/surveys/hazmat"),
       underDevelopment: true,
     },
-    {
-      id: "lead-assessment",
-      title: "Lead Assessment",
-      description: "Access lead assessment surveys and reports",
-      icon: <ScienceIcon />,
-      color: "#9c27b0",
-      onClick: () => navigate("/surveys/lead"),
-      underDevelopment: false,
-    },
+
   ];
 
   return (

@@ -581,21 +581,19 @@ const Sidebar = () => {
 
           <SectionDivider />
 
-          {isFeatureEnabled("ADVANCED.ASBESTOS_REMOVAL") && (
-            <CollapsibleSection
-              title="Asbestos Removal"
-              to="/asbestos-removal"
-              icon={<ConstructionIcon />}
-            />
-          )}
-
-
-
           {isFeatureEnabled("ADVANCED.SURVEYS") && (
             <CollapsibleSection
               title="Assessments"
               to="/surveys"
               icon={<SearchIcon />}
+            />
+          )}
+
+          {isFeatureEnabled("ADVANCED.ASBESTOS_REMOVAL") && (
+            <CollapsibleSection
+              title="Asbestos Removal"
+              to="/asbestos-removal"
+              icon={<ConstructionIcon />}
             />
           )}
 

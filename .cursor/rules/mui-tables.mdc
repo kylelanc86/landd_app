@@ -1,0 +1,26 @@
+---
+description: MUI Table header should not change colour on hover
+globs: frontend/**/*.{jsx,tsx}
+alwaysApply: false
+---
+
+# MUI Table Headers
+
+When using MUI `<Table>` with `<TableHead>`, the header row must not turn grey on hover.
+
+**Do:** Add `sx={{ "&:hover": { backgroundColor: "transparent" } }}` to the `<TableRow>` inside `<TableHead>`.
+
+```jsx
+<TableHead>
+  <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
+    <TableCell>Column 1</TableCell>
+    ...
+  </TableRow>
+</TableHead>
+```
+
+If the header has a custom background (e.g. gradient), keep the same hover override so the background does not change on hover:
+
+```jsx
+<TableRow sx={{ background: "...", "&:hover": { backgroundColor: "transparent" } }}>
+```

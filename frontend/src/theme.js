@@ -354,7 +354,10 @@ export const themeSettings = (mode) => {
               color: "#FFFFFF",
               borderBottom: "none",
             },
-            "& .MuiDataGrid-columnHeader, & .MuiDataGrid-columnHeaderTitle, & .MuiDataGrid-sortIcon, & .MuiSvgIcon-root": {
+            "& .MuiDataGrid-columnHeader, & .MuiDataGrid-columnHeaderTitle, & .MuiDataGrid-sortIcon": {
+              color: "#FFFFFF",
+            },
+            "& .MuiDataGrid-columnHeaders .MuiSvgIcon-root": {
               color: "#FFFFFF",
             },
             "& .MuiDataGrid-columnHeaderTitle": {

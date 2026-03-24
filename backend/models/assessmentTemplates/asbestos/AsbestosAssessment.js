@@ -54,7 +54,11 @@ const AssessmentItemSchema = new mongoose.Schema({
 
   // Lead assessment item fields
   paintColour: { type: String },
+  /** Dust samples: small | medium | large (area in m²) */
+  leadSampleArea: { type: String },
   leadContent: { type: String },
+  leadConcentration: { type: String },
+  status: { type: String },
   // Risk rating (1–3 or 1–4); product used for VERY LOW / LOW / MEDIUM / HIGH RISK
   occupantRating: { type: Number },
   locationRating: { type: Number },
@@ -116,7 +120,7 @@ const AssessmentItemSchema = new mongoose.Schema({
 // Pre-save hook to handle conditional validation for visually assessed items
 AssessmentItemSchema.pre('validate', function(next) {
   // Lead assessment items (materialType used as sample type: Paint, Dust, Soil) – skip asbestos validation
-  const leadSampleTypes = ['paint', 'dust', 'soil'];
+  const leadSampleTypes = ['paint', 'paint-xrf', 'dust', 'soil'];
   const materialLower = (this.materialType || '').toString().toLowerCase().trim();
   if (leadSampleTypes.includes(materialLower)) {
     return next();
@@ -187,7 +191,7 @@ const AsbestosAssessmentSchema = new mongoose.Schema({
   },
   LAA: { type: String }, // Licensed Asbestos Assessor name (asbestos)
   // Lead assessment fields
-  assessmentType: [{ type: String, enum: ['paint', 'dust', 'soil'] }], // Lead: paint, dust, soil (multi-select)
+  assessmentType: [{ type: String, enum: ['paint', 'paint-xrf', 'dust', 'soil'] }], // Lead: paint, XRF paint, dust, soil (multi-select)
   consultantId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Lead: consultant (active app user)
   state: { type: String, enum: ['ACT', 'NSW', 'Commonwealth'] }, // State (ACT, NSW or Commonwealth)
   secondaryHeader: { type: String }, // Optional secondary header beneath project site name on cover page
@@ -208,6 +212,8 @@ const AsbestosAssessmentSchema = new mongoose.Schema({
   analyst: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Analyst for all samples in this assessment
   items: { type: [AssessmentItemSchema], default: [] },
   assessmentScope: [{ type: String }], // Array of scope items for the assessment
+  /** Lead jobs only: planned scope by sample type, e.g. { paint: [{ roomArea, locations }], dust: [...], ... } */
+  leadAssessmentScope: { type: mongoose.Schema.Types.Mixed },
   jobSpecificExclusions: { type: String }, // Job-specific exclusions/caveats for the assessment report
   discussionConclusions: { type: String }, // Discussion and conclusions text for the assessment report
   analysisCertificate: { type: Boolean, default: false },

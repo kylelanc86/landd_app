@@ -804,9 +804,13 @@ const AsbestosRemovalJobDetails = () => {
     }
   }, [pendingClearanceEdit, activeLAAs]);
 
+  const isShiftCompleteStatus = (status) =>
+    status === "shift_complete" || status === "complete";
+
   const getStatusColor = (status) => {
     switch (status) {
       case "shift_complete":
+      case "complete":
       case "analysis_complete":
         return theme.palette.success.main;
       case "sampling_complete":
@@ -897,7 +901,7 @@ const AsbestosRemovalJobDetails = () => {
   const allShiftsCompleteAndAuthorised =
     airMonitoringShifts.length > 0 &&
     airMonitoringShifts.every(
-      (shift) => shift.status === "shift_complete" && shift.reportApprovedBy,
+      (shift) => isShiftCompleteStatus(shift.status) && shift.reportApprovedBy,
     );
 
   // Check if all clearances are complete AND authorised
@@ -2173,7 +2177,7 @@ const AsbestosRemovalJobDetails = () => {
                             gap={1}
                             flexWrap="wrap"
                           >
-                            {shift.status !== "shift_complete" && (
+                            {!isShiftCompleteStatus(shift.status) && (
                               <IconButton
                                 size="small"
                                 onClick={(e) => {
@@ -2205,7 +2209,7 @@ const AsbestosRemovalJobDetails = () => {
                               fallback={null}
                             >
                               {(shift.status === "analysis_complete" ||
-                                shift.status === "shift_complete") && (
+                                isShiftCompleteStatus(shift.status)) && (
                                 <IconButton
                                   size="small"
                                   onClick={(e) => {
@@ -2258,7 +2262,7 @@ const AsbestosRemovalJobDetails = () => {
                               </>
                             )}
                             {(shift.status === "analysis_complete" ||
-                              shift.status === "shift_complete") && (
+                              isShiftCompleteStatus(shift.status)) && (
                               <>
                                 <Button
                                   variant="outlined"

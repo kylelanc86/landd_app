@@ -124,7 +124,10 @@ export async function generateLeadChainOfCustodyPDF({
     const rows = pageSamples.map((s) => [
       "",
       s.fullSampleID || "",
-      "Filter",
+      s.sampleType
+        ? String(s.sampleType).charAt(0).toUpperCase() +
+          String(s.sampleType).slice(1).toLowerCase()
+        : "Filter",
       shiftDate,
       "Lead",
     ]);
@@ -280,7 +283,7 @@ export async function generateLeadChainOfCustodyPDF({
       {
         table: {
           widths: [sampleTableWidth / 2, sampleTableWidth / 2],
-          heights: (rowIndex) => (rowIndex === 3 ? 44 : undefined),
+          heights: (rowIndex) => (rowIndex === 3 ? 34 : 22),
           body: [
             [
               {
@@ -288,16 +291,16 @@ export async function generateLeadChainOfCustodyPDF({
                   { text: "Samples sent by: ", bold: true },
                   { text: "L&D Consulting" },
                 ],
-                margin: [6, 6],
+                margin: [5, 4],
               },
-              { text: "Received by (lab):", bold: true, margin: [6, 6] },
+              { text: "Received by (lab):", bold: true, margin: [5, 4] },
             ],
             [
               {
                 text: [{ text: "Name: ", bold: true }, { text: confirmedByName }],
-                margin: [6, 6],
+                margin: [5, 4],
               },
-              { text: "Name: ", bold: true, margin: [6, 6] },
+              { text: "Name: ", bold: true, margin: [5, 4] },
             ],
             [
               {
@@ -305,9 +308,9 @@ export async function generateLeadChainOfCustodyPDF({
                   { text: "Date and Time: ", bold: true },
                   { text: confirmedAtStr },
                 ],
-                margin: [6, 6],
+                margin: [5, 4],
               },
-              { text: "Date & Time:", bold: true, margin: [6, 6] },
+              { text: "Date & Time:", bold: true, margin: [5, 4] },
             ],
             [
               signatureImage
@@ -317,24 +320,24 @@ export async function generateLeadChainOfCustodyPDF({
                         text: "Signature:",
                         bold: true,
                         width: 70,
-                        margin: [1, 1, 1, 1],
+                        margin: [1, 0, 1, 0],
                       },
-                      { image: "userSignature", width: 95, margin: [1, 1, 1, 1] },
+                      { image: "userSignature", width: 88, margin: [1, 0, 1, 0] },
                     ],
-                    margin: [1, 1, 1, 1],
+                    margin: [1, 0, 1, 0],
                   }
-                : { text: "Signature: ", bold: true, margin: [1, 1, 1, 1] },
-              { text: "Signature: ", bold: true, margin: [1, 1, 1, 1] },
+                : { text: "Signature: ", bold: true, margin: [1, 0, 1, 0] },
+              { text: "Signature: ", bold: true, margin: [1, 0, 1, 0] },
             ],
           ],
         },
         layout: {
           hLineWidth: () => 0.5,
           vLineWidth: () => 0.5,
-          paddingTop: (i) => (i === 3 ? 20 : 6),
-          paddingBottom: (i) => (i === 3 ? 6 : 6),
+          paddingTop: (i) => (i === 3 ? 10 : 3),
+          paddingBottom: () => 3,
         },
-        margin: [0, 0, tableRightMargin, 0],
+        margin: [0, 10, tableRightMargin, 0],
       },
     ];
   }

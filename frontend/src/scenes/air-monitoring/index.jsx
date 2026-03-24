@@ -156,7 +156,9 @@ const AirMonitoring = () => {
                 // Determine overall shift status
                 const allShiftsCompleted = shifts.every(
                   (shift) =>
-                    shift.status === "shift_complete" || shift.reportApprovedBy,
+                    shift.status === "shift_complete" ||
+                    shift.status === "complete" ||
+                    shift.reportApprovedBy,
                 );
                 const hasAnalysisComplete = shifts.some(
                   (shift) => shift.status === "analysis_complete",

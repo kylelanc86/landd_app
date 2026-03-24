@@ -69,6 +69,25 @@ const asbestosAssessmentService = {
     return response.data;
   },
 
+  // Update only assessment workflow status
+  updateStatus: async (assessmentId, status) => {
+    const response = await api.patch(`/assessments/${assessmentId}/status`, { status });
+    return response.data;
+  },
+
+  // Upload fibre/analysis report PDF (base64 data URL string)
+  uploadFibreAnalysisReport: async (assessmentId, reportData) => {
+    const response = await api.post(`/assessments/${assessmentId}/upload-fibre-analysis-report`, {
+      reportData,
+    });
+    return response.data;
+  },
+
+  deleteFibreAnalysisReport: async (assessmentId) => {
+    const response = await api.delete(`/assessments/${assessmentId}/fibre-analysis-report`);
+    return response.data;
+  },
+
   // Add photo to assessment item
   addPhotoToItem: async (assessmentId, itemId, photoData, includeInReport = true) => {
     const response = await api.post(

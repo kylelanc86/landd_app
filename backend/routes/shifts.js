@@ -308,7 +308,12 @@ router.patch('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports
       }
 
       // Update project's reports_present field if shift is completed
-      if (updatedShift.status === 'analysis_complete' || updatedShift.status === 'shift_complete' || updatedShift.reportApprovedBy) {
+      if (
+        updatedShift.status === 'analysis_complete' ||
+        updatedShift.status === 'shift_complete' ||
+        updatedShift.status === 'complete' ||
+        updatedShift.reportApprovedBy
+      ) {
         try {
           const populatedShift = await Shift.findById(updatedShift._id)
             .populate({
@@ -533,7 +538,14 @@ router.patch('/:id/reopen', auth, checkPermission(['admin.update']), async (req,
     }
 
     // Check if shift is in a state that can be reopened
-    if (!['analysis_complete', 'shift_complete', 'samples_submitted_to_lab'].includes(shift.status)) {
+    if (
+      ![
+        'analysis_complete',
+        'shift_complete',
+        'complete',
+        'samples_submitted_to_lab',
+      ].includes(shift.status)
+    ) {
       return res.status(400).json({
         message: `Cannot reopen shift with status: ${shift.status}`
       });
@@ -988,7 +1000,7 @@ router.post(
         return res.status(404).json({ message: 'Shift not found' });
       }
 
-      if (!['analysis_complete', 'shift_complete'].includes(shift.status)) {
+      if (!['analysis_complete', 'shift_complete', 'complete'].includes(shift.status)) {
         return res.status(400).json({
           message:
             'Shift must have analysis completed before sending for authorisation',

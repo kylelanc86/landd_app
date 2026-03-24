@@ -8,6 +8,10 @@ const LeadAirSample = require("../models/LeadAirSample");
 const auth = require("../middleware/auth");
 const checkPermission = require("../middleware/checkPermission");
 
+const notDeletedShiftFilter = {
+  $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
+};
+
 // Use asbestos permissions for lead removal (same role access)
 const permView = "asbestos.view";
 const permCreate = "asbestos.create";
@@ -214,10 +218,11 @@ router.get(
           .lean();
       }
 
-      // Lead monitoring shifts only (jobModel = LeadRemovalJob)
+      // Lead monitoring shifts only (jobModel = LeadRemovalJob); exclude soft-deleted
       const shiftDocs = await Shift.find({
         job: jobIdStr,
         jobModel: "LeadRemovalJob",
+        ...notDeletedShiftFilter,
       })
         .select("_id job date status jobModel reportApprovedBy reportIssueDate reportViewedAt authorisationRequestedBy")
         .lean();

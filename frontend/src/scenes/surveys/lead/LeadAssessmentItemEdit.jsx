@@ -106,7 +106,6 @@ const CONDITION_RATING_OPTIONS = [
   { value: 4, label: "Lead dust" },
 ];
 
-/** Condition rating value fixed for dust samples (Lead dust). */
 const LEAD_DUST_CONDITION_RATING = 4;
 
 const DUST_SAMPLE_AREA_OPTIONS = [
@@ -114,6 +113,16 @@ const DUST_SAMPLE_AREA_OPTIONS = [
   { value: "medium", label: "Medium – 0.0258 m²" },
   { value: "large", label: "Large – 0.09 m²" },
 ];
+
+function normalizeLeadSampleAreaFromStored(stored) {
+  if (stored == null || stored === "") return "";
+  const s = String(stored).toLowerCase().trim();
+  if (["small", "medium", "large"].includes(s)) return s;
+  if (s.includes("0.01")) return "small";
+  if (s.includes("0.0258")) return "medium";
+  if (s.includes("0.09")) return "large";
+  return "";
+}
 
 function getRiskLevelLabel(product) {
   if (product == null || product < 7) return "VERY LOW RISK";
@@ -132,11 +141,12 @@ const emptyReferredLocation = () => ({
   conditionRating: "",
 });
 
-const LeadAssessmentItemNew = () => {
-  const { id } = useParams();
+const LeadAssessmentItemEdit = () => {
+  const { id, itemId } = useParams();
   const navigate = useNavigate();
   const { showSnackbar } = useSnackbar();
   const [assessment, setAssessment] = useState(null);
+  const [item, setItem] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [submitError, setSubmitError] = useState(null);
@@ -163,6 +173,7 @@ const LeadAssessmentItemNew = () => {
   const [referredModalForm, setReferredModalForm] = useState(emptyReferredLocation());
   const [referredSurfaceInput, setReferredSurfaceInput] = useState("");
   const [showReferredLevelFloor, setShowReferredLevelFloor] = useState(false);
+  const [formReady, setFormReady] = useState(false);
   const [isDictating, setIsDictating] = useState(false);
   const [dictationTarget, setDictationTarget] = useState(null);
   const [dictationError, setDictationError] = useState("");
@@ -190,7 +201,7 @@ const LeadAssessmentItemNew = () => {
   useEffect(() => {
     let cancelled = false;
     const fetchAssessment = async () => {
-      if (!id) {
+      if (!id || !itemId) {
         setLoading(false);
         return;
       }
@@ -199,40 +210,22 @@ const LeadAssessmentItemNew = () => {
         const data = response?.data || response;
         if (cancelled) return;
         setAssessment(data);
+        const found = Array.isArray(data?.items) ? data.items.find((i) => i._id === itemId) : null;
+        setItem(found || null);
       } catch (err) {
-        if (!cancelled) setAssessment(null);
+        if (!cancelled) {
+          setAssessment(null);
+          setItem(null);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
     fetchAssessment();
     return () => { cancelled = true; };
-  }, [id]);
+  }, [id, itemId]);
 
-  const assessmentTypes = assessment?.assessmentType ?? [];
-  const sampleTypeOptions = SAMPLE_TYPE_OPTIONS.filter((opt) =>
-    assessmentTypes.map((t) => String(t).toLowerCase()).includes(opt.value),
-  );
-
-  // If assessment supports only one sample type, auto-select it
   useEffect(() => {
-    if (sampleTypeOptions.length === 1 && !sampleType) {
-      setSampleType(sampleTypeOptions[0].value);
-    }
-  }, [sampleTypeOptions, sampleType]);
-
-  const isDust = sampleType === "dust";
-  const isSoil = sampleType === "soil";
-
-  const surfaceDescriptionValuesRef = useRef(surfaceDescriptionValues);
-  surfaceDescriptionValuesRef.current = surfaceDescriptionValues;
-  const dustSurfaceDescriptionRef = useRef(dustSurfaceDescription);
-  dustSurfaceDescriptionRef.current = dustSurfaceDescription;
-  const prevSampleTypeRef = useRef("");
-
-  // Paint/soil: load custom surface description options. Dust uses free text only (no options).
-  useEffect(() => {
-    if (isDust) return;
     let cancelled = false;
     const fetchLeadSurfaceDescriptions = async () => {
       try {
@@ -249,7 +242,21 @@ const LeadAssessmentItemNew = () => {
     };
     fetchLeadSurfaceDescriptions();
     return () => { cancelled = true; };
-  }, [isDust]);
+  }, []);
+
+  const assessmentTypes = assessment?.assessmentType ?? [];
+  const sampleTypeOptions = SAMPLE_TYPE_OPTIONS.filter((opt) =>
+    assessmentTypes.map((t) => String(t).toLowerCase()).includes(opt.value),
+  );
+
+  const isDust = sampleType === "dust";
+  const isSoil = sampleType === "soil";
+
+  const surfaceDescriptionValuesRef = useRef(surfaceDescriptionValues);
+  surfaceDescriptionValuesRef.current = surfaceDescriptionValues;
+  const dustSurfaceDescriptionRef = useRef(dustSurfaceDescription);
+  dustSurfaceDescriptionRef.current = dustSurfaceDescription;
+  const prevSampleTypeRef = useRef("");
 
   // Dust: fixed condition; migrate surface fields when switching between dust and paint/soil.
   useEffect(() => {
@@ -267,9 +274,7 @@ const LeadAssessmentItemNew = () => {
       setConditionRating((p) => (p === String(LEAD_DUST_CONDITION_RATING) ? "" : p));
       if (prev === "dust") {
         const t = dustSurfaceDescriptionRef.current.trim();
-        setSurfaceDescriptionValues(
-          t ? t.split(",").map((s) => s.trim()).filter(Boolean) : [],
-        );
+        setSurfaceDescriptionValues(t ? t.split(",").map((s) => s.trim()).filter(Boolean) : []);
         setDustSurfaceDescription("");
         setSurfaceDescriptionInput("");
       }
@@ -352,6 +357,58 @@ const LeadAssessmentItemNew = () => {
       setDictationError("Failed to start dictation. Please try again.");
     }
   };
+
+  // Populate form when editing an existing item
+  useEffect(() => {
+    if (!item) {
+      setFormReady(false);
+      return;
+    }
+    const sr = (item.sampleReference || "").replace(/^LD-/i, "");
+    setSampleRef(sr);
+    const mt = (item.materialType || "").toLowerCase();
+    setSampleType(mt);
+    setPaintColour(item.paintColour || "");
+    setLeadSampleArea(normalizeLeadSampleAreaFromStored(item.leadSampleArea));
+    const hasLevel = Boolean((item.levelFloor || "").trim());
+    setShowLevelFloor(hasLevel);
+    setLevelFloor(item.levelFloor || "");
+    setRoomArea(item.roomArea || "");
+    if (mt === "dust") {
+      setDustSurfaceDescription(item.locationDescription || "");
+      setSurfaceDescriptionValues([]);
+      setSurfaceDescriptionInput("");
+      setSoilSampleLocation("");
+    } else if (mt === "soil") {
+      setSoilSampleLocation(item.locationDescription || "");
+      setSurfaceDescriptionValues([]);
+      setDustSurfaceDescription("");
+      setSurfaceDescriptionInput("");
+    } else {
+      setSurfaceDescriptionValues(
+        (item.locationDescription || "").split(",").map((s) => s.trim()).filter(Boolean),
+      );
+      setDustSurfaceDescription("");
+      setSoilSampleLocation("");
+      setSurfaceDescriptionInput("");
+    }
+    setOccupantRating(item.occupantRating != null && item.occupantRating !== "" ? String(item.occupantRating) : "");
+    setLocationRating(item.locationRating != null && item.locationRating !== "" ? String(item.locationRating) : "");
+    setRoomUseRating(item.roomUseRating != null && item.roomUseRating !== "" ? String(item.roomUseRating) : "");
+    setConditionRating(item.conditionRating != null && item.conditionRating !== "" ? String(item.conditionRating) : "");
+    setReferredLocations(
+      (item.referredLocations || []).map((r) => ({
+        levelFloor: r.levelFloor || "",
+        roomArea: r.roomArea || "",
+        surfaceDescription: r.surfaceDescription || "",
+        occupantRating: r.occupantRating != null && r.occupantRating !== "" ? String(r.occupantRating) : "",
+        locationRating: r.locationRating != null && r.locationRating !== "" ? String(r.locationRating) : "",
+        roomUseRating: r.roomUseRating != null && r.roomUseRating !== "" ? String(r.roomUseRating) : "",
+        conditionRating: r.conditionRating != null && r.conditionRating !== "" ? String(r.conditionRating) : "",
+      })),
+    );
+    setFormReady(true);
+  }, [item]);
 
   const openReferredModal = () => {
     const defaultSurface = isDust
@@ -480,13 +537,13 @@ const LeadAssessmentItemNew = () => {
         roomUseRating: sampleType === "soil" ? undefined : (roomUseRating !== "" ? Number(roomUseRating) : undefined),
         referredLocations: referred.length ? referred : undefined,
       };
-      await asbestosAssessmentService.addItem(id, itemPayload);
-      showSnackbar("Assessment item added.", "success");
+      await asbestosAssessmentService.updateItem(id, itemId, itemPayload);
+      showSnackbar("Assessment item updated.", "success");
       navigate(`/surveys/lead/${id}/items`);
     } catch (err) {
-      console.error("Error adding lead assessment item:", err);
+      console.error("Error updating lead assessment item:", err);
       setSubmitError(
-        err.response?.data?.message || err.message || "Failed to add item",
+        err.response?.data?.message || err.message || "Failed to update item",
       );
     } finally {
       setSubmitLoading(false);
@@ -519,6 +576,28 @@ const LeadAssessmentItemNew = () => {
     );
   }
 
+  if (!loading && assessment && !item) {
+    return (
+      <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
+        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(`/surveys/lead/${id}/items`)} sx={{ mb: 2 }}>
+          Back to Lead Assessment Items
+        </Button>
+        <Typography color="text.secondary">Assessment item not found.</Typography>
+      </Box>
+    );
+  }
+
+  if (item && !formReady) {
+    return (
+      <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <CircularProgress size={24} />
+          <Typography>Loading item…</Typography>
+        </Box>
+      </Box>
+    );
+  }
+
   const projectID = assessment?.projectId?.projectID ?? "";
   const projectName = assessment?.projectId?.name ?? "";
 
@@ -533,7 +612,7 @@ const LeadAssessmentItemNew = () => {
       </Button>
 
       <Typography variant="h4" component="h1" gutterBottom>
-        Add Lead Assessment Item
+        Edit Lead Assessment Item
       </Typography>
       <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
         {projectID}
@@ -641,36 +720,36 @@ const LeadAssessmentItemNew = () => {
         Sample Location
       </Typography>
       {isSoil ? (
-        <Grid container spacing={2}>
-          <Grid item xs={12}>
-            <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start", flexWrap: "wrap" }}>
-              <TextField
-                fullWidth
-                multiline
-                minRows={2}
-                label="Sample Location"
-                required
-                value={soilSampleLocation}
-                onChange={(e) => setSoilSampleLocation(e.target.value)}
-                helperText="Enter a custom sample location description"
-                sx={{ flex: 1, minWidth: { xs: "100%", sm: 320 } }}
-              />
-              <Button
-                size="small"
-                variant={isDictating && dictationTarget === "soilSampleLocation" ? "contained" : "outlined"}
-                color={isDictating && dictationTarget === "soilSampleLocation" ? "error" : "primary"}
-                startIcon={isDictating && dictationTarget === "soilSampleLocation" ? <StopIcon /> : <MicIcon />}
-                onClick={() => (
-                  isDictating && dictationTarget === "soilSampleLocation"
-                    ? stopDictation()
-                    : startDictation("soilSampleLocation")
-                )}
-              >
-                {isDictating && dictationTarget === "soilSampleLocation" ? "Stop Dictation" : "Dictate"}
-              </Button>
-            </Box>
-          </Grid>
+      <Grid container spacing={2}>
+        <Grid item xs={12}>
+          <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start", flexWrap: "wrap" }}>
+            <TextField
+              fullWidth
+              multiline
+              minRows={2}
+              label="Sample Location"
+              required
+              value={soilSampleLocation}
+              onChange={(e) => setSoilSampleLocation(e.target.value)}
+              helperText="Enter a custom sample location description"
+              sx={{ flex: 1, minWidth: { xs: "100%", sm: 320 } }}
+            />
+            <Button
+              size="small"
+              variant={isDictating && dictationTarget === "soilSampleLocation" ? "contained" : "outlined"}
+              color={isDictating && dictationTarget === "soilSampleLocation" ? "error" : "primary"}
+              startIcon={isDictating && dictationTarget === "soilSampleLocation" ? <StopIcon /> : <MicIcon />}
+              onClick={() => (
+                isDictating && dictationTarget === "soilSampleLocation"
+                  ? stopDictation()
+                  : startDictation("soilSampleLocation")
+              )}
+            >
+              {isDictating && dictationTarget === "soilSampleLocation" ? "Stop Dictation" : "Dictate"}
+            </Button>
+          </Box>
         </Grid>
+      </Grid>
       ) : (
       <Grid container spacing={2}>
         <Grid item xs={12}>
@@ -1138,7 +1217,7 @@ const LeadAssessmentItemNew = () => {
                       referredRiskLevelLabel === "HIGH RISK"
                         ? "error.light"
                         : referredRiskLevelLabel === "MEDIUM RISK"
-                          ? "warning.light"
+                          ? "yellow"
                           : referredRiskLevelLabel === "LOW RISK"
                             ? "info.light"
                             : "success.light",
@@ -1193,11 +1272,11 @@ const LeadAssessmentItemNew = () => {
             "&:hover": { backgroundColor: "#7b1fa2" },
           }}
         >
-          {submitLoading ? "Adding…" : "Add Item"}
+          {submitLoading ? "Saving…" : "Save changes"}
         </Button>
       </Box>
     </Box>
   );
 };
 
-export default LeadAssessmentItemNew;
+export default LeadAssessmentItemEdit;

@@ -65,7 +65,11 @@ router.get('/air-monitoring/:projectId', auth, checkPermission(['projects.view']
         ...notDeletedShiftFilter,
       });
       for (const shift of shifts) {
-        if (shift.status === 'analysis_complete' || shift.status === 'shift_complete') {
+        if (
+          shift.status === 'analysis_complete' ||
+          shift.status === 'shift_complete' ||
+          shift.status === 'complete'
+        ) {
           reports.push({
             id: shift._id,
             date: shift.date,

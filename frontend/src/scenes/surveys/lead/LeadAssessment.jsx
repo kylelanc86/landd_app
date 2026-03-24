@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Box,
   Typography,
   Button,
   Chip,
+  Stack,
   Table,
   TableBody,
   TableCell,
@@ -11,7 +12,6 @@ import {
   TableHead,
   TableRow,
   Paper,
-  CircularProgress,
   Alert,
   IconButton,
   Tooltip,
@@ -38,12 +38,17 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import DownloadingIcon from "@mui/icons-material/Downloading";
 import { tokens } from "../../../theme/tokens";
 import {
   projectService,
   asbestosAssessmentService,
   userService,
 } from "../../../services/api";
+import {
+  downloadAssessmentPDFByAssessmentId,
+  generateAssessmentPDFAsync,
+} from "../../../utils/templatePDFGenerator";
 import { getTodaySydney } from "../../../utils/dateUtils";
 import { useSnackbar } from "../../../context/SnackbarContext";
 import { useAuth } from "../../../context/AuthContext";
@@ -52,11 +57,21 @@ import { hasPermission } from "../../../config/permissions";
 
 const ASSESSMENT_TYPE_OPTIONS = [
   { value: "paint", label: "Paint", chipColor: "#1dc29b" },
+  { value: "paint-xrf", label: "Paint (XRF)", chipColor: "#1dc29b" },
   { value: "dust", label: "Dust", chipColor: "#c7183e" },
   { value: "soil", label: "Soil", chipColor: "#cfb43e" },
 ];
 
 const STATE_OPTIONS = ["ACT", "NSW", "Commonwealth"];
+
+/** Stored assessment PDF may be a data URL or raw base64. */
+function fibreAnalysisReportToPdfSrc(raw) {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  if (s.startsWith("data:")) return s;
+  return `data:application/pdf;base64,${s}`;
+}
 
 const LeadAssessment = () => {
   const navigate = useNavigate();
@@ -94,6 +109,16 @@ const LeadAssessment = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [jobToDelete, setJobToDelete] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [pdfWorkingJobId, setPdfWorkingJobId] = useState(null);
+  const [attachAnalysisDialogOpen, setAttachAnalysisDialogOpen] = useState(false);
+  const [attachAnalysisJob, setAttachAnalysisJob] = useState(null);
+  const [attachAnalysisItems, setAttachAnalysisItems] = useState([]);
+  const [attachLeadContentDrafts, setAttachLeadContentDrafts] = useState({});
+  const [attachAnalysisFile, setAttachAnalysisFile] = useState(null);
+  /** Full `fibreAnalysisReport` from GET assessment when the attach dialog opens. */
+  const [attachAnalysisFibreReport, setAttachAnalysisFibreReport] = useState(null);
+  const [attachAnalysisLoading, setAttachAnalysisLoading] = useState(false);
+  const [attachAnalysisSaving, setAttachAnalysisSaving] = useState(false);
 
   const fetchJobs = useCallback(async ({ force = false } = {}) => {
     setLoading(true);
@@ -196,6 +221,28 @@ const LeadAssessment = () => {
     fetchActiveUsers();
   }, [fetchActiveUsers]);
 
+  const attachReplacePreviewUrl = useMemo(() => {
+    if (!attachAnalysisFile) return null;
+    return URL.createObjectURL(attachAnalysisFile);
+  }, [attachAnalysisFile]);
+
+  useEffect(() => {
+    return () => {
+      if (attachReplacePreviewUrl) URL.revokeObjectURL(attachReplacePreviewUrl);
+    };
+  }, [attachReplacePreviewUrl]);
+
+  const attachAnalysisPdfSrc = useMemo(() => {
+    if (attachReplacePreviewUrl) return attachReplacePreviewUrl;
+    const raw = attachAnalysisFibreReport;
+    if (typeof raw === "string" && raw.trim()) return fibreAnalysisReportToPdfSrc(raw);
+    return null;
+  }, [attachReplacePreviewUrl, attachAnalysisFibreReport]);
+
+  const hasAttachDialogAnalysisReport = Boolean(
+    typeof attachAnalysisFibreReport === "string" && attachAnalysisFibreReport.trim(),
+  );
+
   const getStatusColor = (status) => {
     const s = (status || "").toLowerCase().replace(/\s+/g, "_").replace(/-/g, "_");
     switch (s) {
@@ -218,6 +265,42 @@ const LeadAssessment = () => {
       complete: "Complete",
     };
     return map[status] || status.split(/[_-]/).map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+  };
+
+  const isAnalysisAttachComplete = (job) => {
+    const status = String(job?.status || "").toLowerCase();
+    return status === "report-ready-for-review" || status === "complete";
+  };
+
+  const hasRetainedValidPdf = (job) =>
+    Boolean(
+      job?.pdfReadyAt ||
+        job?.pdfFilename ||
+        job?.originalData?.pdfReadyAt ||
+        job?.originalData?.pdfFilename,
+    );
+
+  const handleDownloadOrGenerateAssessmentReport = async (event, job) => {
+    event.stopPropagation();
+    if (!job?.id) return;
+    setPdfWorkingJobId(job.id);
+    try {
+      if (hasRetainedValidPdf(job)) {
+        const { filename } = await downloadAssessmentPDFByAssessmentId(job.id);
+        showSnackbar(`Downloaded: ${filename}`, "success");
+      } else {
+        const { filename } = await generateAssessmentPDFAsync(job.id, {
+          isResidential: false,
+        });
+        showSnackbar(`Downloaded: ${filename}`, "success");
+        await fetchJobs({ force: true });
+      }
+    } catch (err) {
+      console.error("Error generating/downloading assessment report:", err);
+      showSnackbar(err.message || "Failed to generate/download report", "error");
+    } finally {
+      setPdfWorkingJobId(null);
+    }
   };
 
   const handleCreateJob = () => {
@@ -403,6 +486,146 @@ const LeadAssessment = () => {
 
   const handleBackToSurveys = () => navigate("/surveys");
 
+  const getLeadContentUnit = (materialType) => {
+    const type = String(materialType || "").toLowerCase();
+    if (type === "paint" || type === "paint-xrf") return "%";
+    if (type === "dust") return "μg";
+    if (type === "soil") return "mg/kg";
+    return "";
+  };
+
+  const parseNumeric = (value) => {
+    if (value == null) return null;
+    const n = Number(String(value).trim().replace(/[^0-9.-]/g, ""));
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const getDerivedLeadStatus = (item, leadContentValue) => {
+    const type = String(item?.materialType || "").toLowerCase();
+    const content = parseNumeric(leadContentValue);
+    if (content == null) return "";
+    if (type === "paint" || type === "paint-xrf") return content > 0.1 ? "Lead paint" : "Lead-free";
+    if (type === "soil") {
+      const m = String(item?.paintColour || "").match(/\(([\d.]+)\s*mg\/kg\)/i);
+      const threshold = m ? Number(m[1]) : null;
+      if (!Number.isFinite(threshold)) return "";
+      return content >= threshold ? "Exceedance" : "No exceedance";
+    }
+    if (type === "dust") {
+      const areaRaw = String(item?.leadSampleArea || "").toLowerCase();
+      const area = areaRaw.includes("0.01")
+        ? 0.01
+        : areaRaw.includes("0.0258")
+          ? 0.0258
+          : areaRaw.includes("0.09")
+            ? 0.09
+            : Number(areaRaw.replace(/[^0-9.-]/g, ""));
+      if (!Number.isFinite(area) || area <= 0) return "";
+      const concentration = (content / 1000) / area; // mg/m2
+      const rating = Number(item?.locationRating);
+      const threshold = rating === 1 ? 1.08 : rating === 2 ? 0.43 : rating === 3 ? 0.11 : null;
+      if (!Number.isFinite(threshold)) return "";
+      return concentration >= threshold ? "Exceedance" : "No exceedence";
+    }
+    return "";
+  };
+
+  const closeAttachAnalysisDialog = () => {
+    setAttachAnalysisDialogOpen(false);
+    setAttachAnalysisFile(null);
+    setAttachAnalysisFibreReport(null);
+    setAttachAnalysisJob(null);
+    setAttachAnalysisItems([]);
+    setAttachLeadContentDrafts({});
+  };
+
+  const handleOpenAttachAnalysis = async (event, job) => {
+    event.stopPropagation();
+    setAttachAnalysisDialogOpen(true);
+    setAttachAnalysisJob(job);
+    setAttachAnalysisFile(null);
+    setAttachAnalysisFibreReport(null);
+    setAttachAnalysisLoading(true);
+    try {
+      const res = await asbestosAssessmentService.getAsbestosAssessmentById(job.id);
+      const full = res?.data || res || {};
+      const items = Array.isArray(full.items) ? full.items : [];
+      setAttachAnalysisItems(items);
+      const drafts = {};
+      items.forEach((item) => {
+        drafts[item._id] = item.leadContent ?? "";
+      });
+      setAttachLeadContentDrafts(drafts);
+      const report = full.fibreAnalysisReport;
+      setAttachAnalysisFibreReport(
+        typeof report === "string" && report.trim() ? report : null,
+      );
+    } catch (err) {
+      showSnackbar("Failed to load assessment items.", "error");
+      setAttachAnalysisDialogOpen(false);
+      setAttachAnalysisFibreReport(null);
+    } finally {
+      setAttachAnalysisLoading(false);
+    }
+  };
+
+  const handleSaveAttachAnalysis = async () => {
+    if (!attachAnalysisJob) return;
+    const uploadedNewAnalysisFile = !!attachAnalysisFile;
+    setAttachAnalysisSaving(true);
+    try {
+      let savedReportData = null;
+      if (attachAnalysisFile) {
+        savedReportData = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(attachAnalysisFile);
+        });
+        await asbestosAssessmentService.uploadFibreAnalysisReport(attachAnalysisJob.id, {
+          reportData: savedReportData,
+        });
+      }
+
+      for (const item of attachAnalysisItems) {
+        const nextValue = String(attachLeadContentDrafts[item._id] ?? "").trim();
+        if (nextValue === String(item.leadContent ?? "").trim()) continue;
+        await asbestosAssessmentService.updateItem(attachAnalysisJob.id, item._id, {
+          leadContent: nextValue || "",
+          status: getDerivedLeadStatus(item, nextValue),
+        });
+      }
+
+      if (uploadedNewAnalysisFile) {
+        const allEntered = attachAnalysisItems.every(
+          (item) => String(attachLeadContentDrafts[item._id] ?? item.leadContent ?? "").trim() !== "",
+        );
+        await asbestosAssessmentService.updateAsbestosAssessment(attachAnalysisJob.id, {
+          projectId:
+            attachAnalysisJob.originalData?.projectId?._id ||
+            attachAnalysisJob.originalData?.projectId,
+          assessmentDate:
+            attachAnalysisJob.originalData?.assessmentDate || attachAnalysisJob.surveyDate,
+          status: allEntered ? "report-ready-for-review" : "sample-analysis-complete",
+        });
+      }
+
+      await fetchJobs({ force: true });
+      closeAttachAnalysisDialog();
+      showSnackbar(
+        uploadedNewAnalysisFile
+          ? "Analysis and lead content saved."
+          : "Lead content saved.",
+        "success",
+      );
+    } catch (err) {
+      console.error("Error saving attach analysis:", err);
+      showSnackbar(err.response?.data?.message || "Failed to save analysis", "error");
+    } finally {
+      setAttachAnalysisSaving(false);
+    }
+  };
+
   return (
     <PermissionGate requiredPermissions={["asbestos.view"]}>
       <Container maxWidth="xl">
@@ -430,7 +653,7 @@ const LeadAssessment = () => {
             }}
           >
             <Typography variant="h4" component="h1" gutterBottom>
-              Lead Assessment
+              Lead Assessment Jobs
             </Typography>
             <Button
               variant="contained"
@@ -458,7 +681,14 @@ const LeadAssessment = () => {
                     <TableCell sx={{ fontWeight: "bold", maxWidth: "195px" }}>
                       Project Name
                     </TableCell>
-                    <TableCell sx={{ fontWeight: "bold", minWidth: "110px" }}>
+                    <TableCell
+                      sx={{
+                        fontWeight: "bold",
+                        width: "120px",
+                        minWidth: "120px",
+                        maxWidth: "120px",
+                      }}
+                    >
                       Date
                     </TableCell>
                     <TableCell sx={{ fontWeight: "bold", width: "180px" }}>
@@ -519,8 +749,14 @@ const LeadAssessment = () => {
                             )}
                           </Typography>
                         </TableCell>
-                        <TableCell>
-                          <Typography variant="body2">
+                        <TableCell
+                          sx={{
+                            width: "120px",
+                            minWidth: "120px",
+                            maxWidth: "120px",
+                          }}
+                        >
+                          <Typography variant="body2" >
                             {job.surveyDate
                               ? new Date(job.surveyDate).toLocaleDateString(
                                   "en-GB",
@@ -565,6 +801,59 @@ const LeadAssessment = () => {
                           />
                         </TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
+                          {!isAnalysisAttachComplete(job) && (
+                            <Tooltip title="Attach Analysis">
+                              <Button
+                                size="small"
+                                variant="contained"
+                                sx={{
+                                  mr: 1,
+                                  textTransform: "none",
+                                  backgroundColor: "#1976d2",
+                                  color: "#fff",
+                                  "&:hover": { backgroundColor: "#1565c0" },
+                                }}
+                                onClick={(e) => handleOpenAttachAnalysis(e, job)}
+                              >
+                                Attach Analysis
+                              </Button>
+                            </Tooltip>
+                          )}
+                          {(job.status === "report-ready-for-review" ||
+                            job.status === "complete") && (
+                            <Tooltip
+                              title={
+                                pdfWorkingJobId === job.id
+                                  ? "Generating report..."
+                                  : hasRetainedValidPdf(job)
+                                    ? "Download report"
+                                    : "Generate and download report"
+                              }
+                            >
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  color={hasRetainedValidPdf(job) ? "success" : "warning"}
+                                  onClick={(event) =>
+                                    handleDownloadOrGenerateAssessmentReport(event, job)
+                                  }
+                                  disabled={pdfWorkingJobId === job.id}
+                                  sx={{
+                                    mr: 1,
+                                    ...(pdfWorkingJobId === job.id && {
+                                      "@keyframes pdfSpin": {
+                                        "0%": { transform: "rotate(0deg)" },
+                                        "100%": { transform: "rotate(360deg)" },
+                                      },
+                                      animation: "pdfSpin 1s linear infinite",
+                                    }),
+                                  }}
+                                >
+                                  <DownloadingIcon />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          )}
                           <Tooltip title="Edit Assessment">
                             <IconButton
                               onClick={(e) => handleEditClick(e, job)}
@@ -991,6 +1280,133 @@ const LeadAssessment = () => {
               disabled={deleteLoading}
             >
               {deleteLoading ? "Deleting..." : "Delete Assessment"}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog
+          open={attachAnalysisDialogOpen}
+          onClose={() => {
+            if (!attachAnalysisSaving) closeAttachAnalysisDialog();
+          }}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>
+            {hasAttachDialogAnalysisReport || attachAnalysisFile
+              ? "View/Edit Analysis Content"
+              : "Attach Analysis / Lead Content"}
+          </DialogTitle>
+          <DialogContent>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2, mt: 0.5 }}>
+              {hasAttachDialogAnalysisReport || attachAnalysisFile
+                ? "Review the analysis PDF, replace it if needed, and update lead content values."
+                : "Upload the analysis PDF and update lead content values."}
+            </Typography>
+            {!attachAnalysisLoading &&
+              (attachAnalysisPdfSrc ? (
+                <Box
+                  sx={{
+                    mb: 2,
+                    border: 1,
+                    borderColor: "divider",
+                    borderRadius: 1,
+                    overflow: "hidden",
+                    bgcolor: "grey.100",
+                  }}
+                >
+                  <Box
+                    component="iframe"
+                    title="Analysis report preview"
+                    src={attachAnalysisPdfSrc}
+                    sx={{ width: "100%", height: 420, border: 0, display: "block" }}
+                  />
+                </Box>
+              ) : (
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  No analysis PDF is attached yet. Choose a PDF below.
+                </Typography>
+              ))}
+            <Stack direction="row" flexWrap="wrap" gap={1} sx={{ mb: 2 }} alignItems="center">
+              <Button variant="outlined" component="label" size="small" sx={{ textTransform: "none" }}>
+                {attachAnalysisFile
+                  ? `Replace: ${attachAnalysisFile.name}`
+                  : hasAttachDialogAnalysisReport
+                    ? "Replace file"
+                    : "Choose PDF file"}
+                <input
+                  type="file"
+                  hidden
+                  accept=".pdf,application/pdf"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) setAttachAnalysisFile(f);
+                    e.target.value = "";
+                  }}
+                />
+              </Button>
+              {attachAnalysisFile && (
+                <Button size="small" onClick={() => setAttachAnalysisFile(null)} sx={{ textTransform: "none" }}>
+                  Cancel replacement
+                </Button>
+              )}
+              {attachAnalysisPdfSrc && !attachAnalysisLoading && (
+                <Button
+                  size="small"
+                  component="a"
+                  href={attachAnalysisPdfSrc}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={{ textTransform: "none" }}
+                >
+                  Open in new tab
+                </Button>
+              )}
+            </Stack>
+            {attachAnalysisLoading ? (
+              <Typography variant="body2" color="text.secondary">Loading samples...</Typography>
+            ) : attachAnalysisItems.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">No samples found for this assessment.</Typography>
+            ) : (
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
+                {attachAnalysisItems.map((item) => (
+                  <Box key={item._id} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <Typography variant="body2" sx={{ minWidth: 64 }}>
+                      {item.sampleReference || "—"}
+                    </Typography>
+                    <TextField
+                      size="small"
+                      value={attachLeadContentDrafts[item._id] ?? ""}
+                      onChange={(e) =>
+                        setAttachLeadContentDrafts((prev) => ({
+                          ...prev,
+                          [item._id]: e.target.value,
+                        }))
+                      }
+                      sx={{ width: 130 }}
+                      InputProps={{
+                        endAdornment: (
+                          <InputAdornment position="end">
+                            {getLeadContentUnit(item.materialType)}
+                          </InputAdornment>
+                        ),
+                      }}
+                    />
+                  </Box>
+                ))}
+              </Box>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={closeAttachAnalysisDialog} disabled={attachAnalysisSaving}>
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              onClick={handleSaveAttachAnalysis}
+              disabled={attachAnalysisSaving || attachAnalysisLoading}
+            >
+              {attachAnalysisSaving ? "Saving..." : "Save"}
             </Button>
           </DialogActions>
         </Dialog>

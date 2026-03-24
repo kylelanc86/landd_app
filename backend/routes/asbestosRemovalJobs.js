@@ -963,7 +963,9 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
       
       if (shifts.length > 0) {
         const unauthorisedShifts = shifts.filter(
-          (shift) => shift.status !== "shift_complete" || !shift.reportApprovedBy
+          (shift) =>
+            !["shift_complete", "complete"].includes(shift.status) ||
+            !shift.reportApprovedBy
         );
         
         if (unauthorisedShifts.length > 0) {
@@ -1057,7 +1059,9 @@ router.patch("/:id/status", auth, checkPermission("asbestos.edit"), async (req, 
       
       if (shifts.length > 0) {
         const unauthorisedShifts = shifts.filter(
-          (shift) => shift.status !== "shift_complete" || !shift.reportApprovedBy
+          (shift) =>
+            !["shift_complete", "complete"].includes(shift.status) ||
+            !shift.reportApprovedBy
         );
         
         if (unauthorisedShifts.length > 0) {

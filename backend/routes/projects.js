@@ -1258,13 +1258,13 @@ router.get('/with-reports-or-jobs/ids', auth, checkPermission(['projects.view'])
       projectIdReasons.get(id).add(reason);
     };
 
-    // 1. Asbestos removal jobs with shifts that have reports (analysis_complete or shift_complete)
+    // 1. Asbestos removal jobs with shifts that have reports
     promises.push(
       (async () => {
         try {
           // First, get distinct job IDs from shifts with reports
-          const shiftsWithReports = await Shift.find({ 
-            status: { $in: ['analysis_complete', 'shift_complete'] } 
+          const shiftsWithReports = await Shift.find({
+            status: { $in: ['analysis_complete', 'shift_complete', 'complete'] }
           })
             .select('job')
             .lean();

@@ -186,7 +186,7 @@ router.post('/', async (req, res) => {
     const validJobType = jobType === 'residential-asbestos' ? 'residential-asbestos' : jobType === 'lead-assessment' ? 'lead-assessment' : 'asbestos-assessment';
     const validIntrusiveness = intrusiveness === 'intrusive' ? 'intrusive' : 'non-intrusive';
     const validState = state && ['ACT', 'NSW', 'Commonwealth'].includes(state) ? state : null;
-    const validAssessmentTypes = Array.isArray(assessmentType) ? assessmentType.filter((t) => ['paint', 'dust', 'soil'].includes(t)) : [];
+    const validAssessmentTypes = Array.isArray(assessmentType) ? assessmentType.filter((t) => ['paint', 'paint-xrf', 'dust', 'soil'].includes(t)) : [];
 
     // Legislation snapshot at job creation (state-specific from report template) – skip for lead-assessment
     let legislation = [];
@@ -394,7 +394,7 @@ router.get('/:id', async (req, res) => {
 // PUT /api/assessments/:id - update assessment job
 router.put('/:id', async (req, res) => {
   try {
-    const existingJob = await AsbestosAssessment.findById(req.params.id).select('jobType').lean();
+    const existingJob = await AsbestosAssessment.findById(req.params.id).select('jobType leadAssessmentScope').lean();
     if (!existingJob) return res.status(404).json({ message: 'Assessment job not found' });
 
     const { 
@@ -402,6 +402,7 @@ router.put('/:id', async (req, res) => {
       assessmentDate, 
       status, 
       assessmentScope,
+      leadAssessmentScope,
       samplesReceivedDate,
       submittedBy,
       samplesSubmittedById,
@@ -511,11 +512,40 @@ router.put('/:id', async (req, res) => {
     }
     if (existingJob.jobType === 'lead-assessment') {
       if (assessmentType !== undefined) {
-        const valid = Array.isArray(assessmentType) ? assessmentType.filter((t) => ['paint', 'dust', 'soil'].includes(t)) : [];
+        const valid = Array.isArray(assessmentType) ? assessmentType.filter((t) => ['paint', 'paint-xrf', 'dust', 'soil'].includes(t)) : [];
         updateData.assessmentType = valid;
       }
       if (consultantId !== undefined) {
         updateData.consultantId = consultantId || null;
+      }
+      if (leadAssessmentScope !== undefined) {
+        const allowedKeys = new Set(['paint', 'paint-xrf', 'dust', 'soil']);
+        const prevScope =
+          existingJob.leadAssessmentScope &&
+          typeof existingJob.leadAssessmentScope === 'object' &&
+          !Array.isArray(existingJob.leadAssessmentScope)
+            ? { ...existingJob.leadAssessmentScope }
+            : {};
+        if (leadAssessmentScope && typeof leadAssessmentScope === 'object' && !Array.isArray(leadAssessmentScope)) {
+          const cleaned = {};
+          for (const [k, v] of Object.entries(leadAssessmentScope)) {
+            if (!allowedKeys.has(k)) continue;
+            if (!Array.isArray(v)) {
+              cleaned[k] = [];
+              continue;
+            }
+            cleaned[k] = v
+              .filter((row) => row && typeof row === 'object')
+              .map((row) => ({
+                roomArea: typeof row.roomArea === 'string' ? row.roomArea.trim() : '',
+                locations: typeof row.locations === 'string' ? row.locations.trim() : '',
+              }))
+              .filter((row) => row.roomArea || row.locations);
+          }
+          updateData.leadAssessmentScope = { ...prevScope, ...cleaned };
+        } else {
+          updateData.leadAssessmentScope = prevScope;
+        }
       }
     }
 
@@ -1446,6 +1476,45 @@ router.post('/:id/upload-fibre-analysis-report', async (req, res) => {
   } catch (err) {
     console.error('Error uploading fibre analysis report:', err);
     res.status(400).json({ message: 'Failed to upload fibre analysis report', error: err.message });
+  }
+});
+
+// DELETE /api/assessments/:id/fibre-analysis-report - remove attached analysis PDF
+router.delete('/:id/fibre-analysis-report', async (req, res) => {
+  try {
+    const job = await AsbestosAssessment.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+
+    job.fibreAnalysisReport = undefined;
+    job.markModified('fibreAnalysisReport');
+    job.updatedAt = new Date();
+
+    if (
+      job.jobType === 'lead-assessment' &&
+      ['report-ready-for-review', 'complete', 'sample-analysis-complete'].includes(job.status)
+    ) {
+      job.status = 'samples-with-lab';
+    }
+
+    clearAssessmentPdfFields(job);
+    await job.save();
+
+    const populated = await AsbestosAssessment.findById(job._id)
+      .populate({
+        path: 'projectId',
+        select: 'projectID name client',
+        populate: {
+          path: 'client',
+          select: 'name contact1Name contact1Email address',
+        },
+      })
+      .populate('assessorId')
+      .populate('analyst', 'firstName lastName email')
+      .populate('consultantId', 'firstName lastName email');
+
+    res.json({ message: 'Fibre analysis report removed', job: populated });
+  } catch (err) {
+    res.status(400).json({ message: 'Failed to remove fibre analysis report', error: err.message });
   }
 });
 

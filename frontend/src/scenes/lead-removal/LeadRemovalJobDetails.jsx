@@ -1573,7 +1573,26 @@ const LeadRemovalJobDetails = () => {
       }
     } catch (error) {
       console.error(`Error deleting ${deleteType}:`, error);
-      showSnackbar(`Failed to delete ${deleteType}`, "error");
+      const apiMessage =
+        error?.response?.data?.message || error?.response?.data?.error;
+      if (
+        deleteType === "shift" &&
+        typeof apiMessage === "string" &&
+        apiMessage.toLowerCase().includes("already archived")
+      ) {
+        await fetchJobDetails({ excludeClearances: true });
+        showSnackbar(
+          "That shift was already removed; the list has been refreshed.",
+          "info",
+        );
+      } else {
+        showSnackbar(
+          apiMessage
+            ? `Failed to delete ${deleteType}: ${apiMessage}`
+            : `Failed to delete ${deleteType}`,
+          "error",
+        );
+      }
     } finally {
       setDeleteConfirmDialogOpen(false);
       setItemToDelete(null);

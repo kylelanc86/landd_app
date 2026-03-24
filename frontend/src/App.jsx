@@ -111,6 +111,9 @@ const LeadAssessmentItems = lazy(
 const LeadAssessmentItemNew = lazy(
   () => import("./scenes/surveys/lead/LeadAssessmentItemNew"),
 );
+const LeadAssessmentItemEdit = lazy(
+  () => import("./scenes/surveys/lead/LeadAssessmentItemEdit"),
+);
 
 // New survey page components
 const AsbestosAssessment = lazy(
@@ -653,6 +656,18 @@ function App() {
                                         >
                                           <Suspense fallback={<LoadingSpinner />}>
                                             <LeadAssessmentItemNew />
+                                          </Suspense>
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                    <Route
+                                      path="/surveys/lead/:id/items/:itemId/edit"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={["asbestos.view"]}
+                                        >
+                                          <Suspense fallback={<LoadingSpinner />}>
+                                            <LeadAssessmentItemEdit />
                                           </Suspense>
                                         </PermissionRoute>
                                       }

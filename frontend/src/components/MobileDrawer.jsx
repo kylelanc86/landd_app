@@ -284,6 +284,14 @@ const MobileDrawer = ({ open, onClose }) => {
               <Divider sx={{ width: "100%", borderColor: tokens.grey[300] }} />
             </Box>
 
+            {isFeatureEnabled("ADVANCED.SURVEYS") && (
+              <MenuItem
+                title="Assessments"
+                to="/surveys"
+                icon={<SearchIcon />}
+              />
+            )}
+            
             {isFeatureEnabled("ADVANCED.ASBESTOS_REMOVAL") && (
               <MenuItem
                 title="Asbestos Removal"
@@ -292,15 +300,7 @@ const MobileDrawer = ({ open, onClose }) => {
               />
             )}
 
-            {isFeatureEnabled("ADVANCED.SURVEYS") && (
-              <MenuItem
-                title="Assessments"
-                to="/surveys"
-                icon={<SearchIcon />}
-              />
-            )}
-
-            <MenuItem
+             <MenuItem
               title="Lead Removal"
               to="/lead-removal"
               icon={<DangerousIcon />}

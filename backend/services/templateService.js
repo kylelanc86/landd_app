@@ -334,15 +334,32 @@ const getTemplateByType = async (templateType) => {
         });
       } else if (templateType === "leadAssessment") {
         standardSections = {
-          introductionContent: "",
-          surveyFindingsContent: "",
-          discussionContent: "",
-          recommendedControlMeasuresContent: "",
-          signOffContent: "",
-          assessmentMethodologyContent: "",
-          riskAssessmentContent: "",
-          legislationContent: "",
-          assessmentLimitationsContent: "",
+          introductionTitle: "INTRODUCTION",
+          introductionContent:
+            "Following discussions with {CLIENT_NAME}, Lancaster and Dickenson Consulting (L & D) were contracted to undertake a lead assessment at {SITE_NAME}. {CONSULTANT_NAME} from L & D visited the site on {ASSESSMENT_DATE} to undertake the assessment.\n\nThis report covers the assessment of the following scope:\n{ASSESSMENT_SCOPE_BULLETS}",
+          surveyFindingsTitle: "SUMMARY OF LEAD FINDINGS",
+          surveyFindingsContent:
+            "The following sections summarise the sampling undertaken and observations made during the lead assessment at {SITE_NAME}. Detailed results are presented in Table 1 and in the laboratory certificate attached as Appendix A (where applicable).",
+          discussionTitle: "DISCUSSION AND CONCLUSIONS",
+          discussionContent:
+            "The sampling results and observations have been reviewed in the context of relevant guidance for lead hazards. Any exceedances or areas of concern are identified in Table 1 and should be addressed in line with the recommendations below and applicable regulations.",
+          recommendedControlMeasuresTitle: "RECOMMENDED CONTROL MEASURES",
+          recommendedControlMeasuresContent:
+            "Where lead-containing materials or elevated lead dust was identified, remedial measures and safe work practices should be implemented prior to disturbance. Specific actions should be proportionate to the risk and in accordance with the hierarchy of controls.",
+          signOffContent:
+            "Please do not hesitate to contact the undersigned should you have any queries regarding this report.\n\nFor and on behalf of Lancaster and Dickenson Consulting.\n\n{CONSULTANT_NAME}",
+          assessmentMethodologyTitle: "ASSESSMENT METHODOLOGY",
+          assessmentMethodologyContent:
+            "The assessment comprised visual inspection and collection of representative samples (where applicable) for laboratory analysis using NATA-accredited methods. Sample locations were selected based on accessibility, suspected lead coatings, or dust deposition areas as appropriate to the scope.",
+          riskAssessmentTitle: "RISK ASSESSMENT",
+          riskAssessmentContent:
+            "Risk has been considered with reference to sample results, surface condition, occupancy, and potential exposure or ingestion pathways. The risk ratings presented in Table 1 (where used) support prioritisation of remediation or ongoing management.",
+          legislationTitle: "LEGISLATION",
+          legislationContent: "{LEGISLATION}",
+          assessmentLimitationsTitle: "ASSESSMENT LIMITATIONS / CAVEATS",
+          assessmentLimitationsContent:
+            "This assessment was limited to the date of site attendance and the areas accessible at that time. Concealed materials were not assessed. Results relate only to sampled locations; non-sampled areas may still contain lead.",
+          signaturePlaceholder: "",
         };
         template = new ReportTemplate({
           templateType,
@@ -475,16 +492,32 @@ const replacePlaceholders = async (content, data) => {
   let userSignature = null;
   // ALWAYS use data.LAA for the name (not createdBy)
   let laaName = data.LAA || data.laaName || 'Unknown LAA'; // Default name
-  
+  if (data.jobType === 'lead-assessment' && data.consultantId && typeof data.consultantId === 'object') {
+    const cn = [data.consultantId.firstName, data.consultantId.lastName].filter(Boolean).join(' ').trim();
+    if (cn) laaName = cn;
+  }
+
   // Look up the user identified by data.LAA to get their licence information
   // data.LAA is a name string (e.g., "FirstName LastName")
   let userIdentifier = null;
-  
-  // PRIORITY 1: Use data.LAA for clearance certificates
-  if (data.LAA) {
+
+  // Lead assessment reports: sign-off / signature from consultant user record
+  if (data.jobType === 'lead-assessment' && data.consultantId) {
+    const c = data.consultantId;
+    if (typeof c === 'object' && c !== null && c._id) {
+      userIdentifier = String(c._id);
+      console.log('[TEMPLATE SERVICE] Using consultantId for lead assessment lookup:', userIdentifier);
+    } else if (typeof c === 'string' && /^[0-9a-fA-F]{24}$/.test(c)) {
+      userIdentifier = c;
+      console.log('[TEMPLATE SERVICE] Using consultantId string for lead assessment lookup:', userIdentifier);
+    }
+  }
+
+  // PRIORITY: Use data.LAA for clearance certificates (when not already using consultant)
+  if (!userIdentifier && data.LAA) {
     userIdentifier = data.LAA;
     console.log('[TEMPLATE SERVICE] Using data.LAA for lookup:', userIdentifier);
-  } else if (data.assessorId) {
+  } else if (!userIdentifier && data.assessorId) {
     // Fall back to assessorId for assessment reports
     userIdentifier = data.assessorId;
     
@@ -634,6 +667,26 @@ const replacePlaceholders = async (content, data) => {
     '{ASBESTOS_TYPE}': data.clearanceType?.toLowerCase() || 'non-friable',
     '{SITE_NAME}': data.projectId?.name || data.project?.name || data.siteName || 'Unknown Site',
     '[SITE_NAME]': data.projectId?.name || data.project?.name || data.siteName || 'Unknown Site',
+    '{CONSULTANT_NAME}': (() => {
+      const c = data.consultantId;
+      if (c && typeof c === 'object') {
+        const n = [c.firstName, c.lastName].filter(Boolean).join(' ').trim();
+        if (n) return n;
+      }
+      return (data.consultant && String(data.consultant).trim()) || 'Unknown Consultant';
+    })(),
+    '[CONSULTANT_NAME]': (() => {
+      const c = data.consultantId;
+      if (c && typeof c === 'object') {
+        const n = [c.firstName, c.lastName].filter(Boolean).join(' ').trim();
+        if (n) return n;
+      }
+      return (data.consultant && String(data.consultant).trim()) || 'Unknown Consultant';
+    })(),
+    '{NUMBER_OF_SAMPLES}': String(Array.isArray(data.items) ? data.items.length : 0),
+    '[NUMBER_OF_SAMPLES]': String(Array.isArray(data.items) ? data.items.length : 0),
+    '{NUMBER_OF_ISSUES}': String(Array.isArray(data.items) ? data.items.length : 0),
+    '[NUMBER_OF_ISSUES]': String(Array.isArray(data.items) ? data.items.length : 0),
     '{ASBESTOS_REMOVALIST}': data.asbestosRemovalist || 'Unknown Removalist',
     '{LAA_NAME}': laaName,
     '[LAA_NAME]': laaName,
@@ -798,6 +851,10 @@ const replacePlaceholders = async (content, data) => {
     '[AUTHOR_NAME]': data.assessorId?.firstName + ' ' + data.assessorId?.lastName || data.LAA || 'Unknown Author',
     '{ASSESSOR_NAME}': (() => {
       if (data.consultant) return data.consultant;
+      if (data.consultantId && typeof data.consultantId === 'object') {
+        const name = [data.consultantId.firstName, data.consultantId.lastName].filter(Boolean).join(' ').trim();
+        if (name) return name;
+      }
       if (data.assessorId && typeof data.assessorId === 'object') {
         const name = [data.assessorId.firstName, data.assessorId.lastName].filter(Boolean).join(' ').trim();
         if (name) return name;
@@ -807,6 +864,10 @@ const replacePlaceholders = async (content, data) => {
     })(),
     '[ASSESSOR_NAME]': (() => {
       if (data.consultant) return data.consultant;
+      if (data.consultantId && typeof data.consultantId === 'object') {
+        const name = [data.consultantId.firstName, data.consultantId.lastName].filter(Boolean).join(' ').trim();
+        if (name) return name;
+      }
       if (data.assessorId && typeof data.assessorId === 'object') {
         const name = [data.assessorId.firstName, data.assessorId.lastName].filter(Boolean).join(' ').trim();
         if (name) return name;
