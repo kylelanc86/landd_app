@@ -142,6 +142,8 @@ const AsbestosRemovalJobDetails = () => {
     useState({});
   const [shiftDialogOpen, setShiftDialogOpen] = useState(false);
   const [newShiftDate, setNewShiftDate] = useState("");
+  const [copyPreviousShiftSamples, setCopyPreviousShiftSamples] =
+    useState(false);
   const [editingShift, setEditingShift] = useState(null);
   const [shiftCreating, setShiftCreating] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
@@ -1159,6 +1161,7 @@ const AsbestosRemovalJobDetails = () => {
 
   const handleCreateAirMonitoringShift = () => {
     setNewShiftDate("");
+    setCopyPreviousShiftSamples(false);
     setShiftDialogOpen(true);
   };
 
@@ -1177,7 +1180,7 @@ const AsbestosRemovalJobDetails = () => {
     setNewShiftDate(getTodayInSydney());
   };
 
-  const getReferenceShiftForDate = (targetDate) => {
+  const getMostRecentShiftByDate = () => {
     if (!Array.isArray(airMonitoringShifts) || airMonitoringShifts.length === 0) {
       return null;
     }
@@ -1190,16 +1193,7 @@ const AsbestosRemovalJobDetails = () => {
       return airMonitoringShifts[0] || null;
     }
 
-    if (!targetDate) {
-      return datedShifts[0];
-    }
-
-    const selectedDateTimestamp = new Date(`${targetDate}T23:59:59`).getTime();
-    const previousShift = datedShifts.find(
-      (shift) => new Date(shift.date).getTime() <= selectedDateTimestamp,
-    );
-
-    return previousShift || datedShifts[0];
+    return datedShifts[0];
   };
 
   const extractSampleNumber = (sample) => {
@@ -1259,7 +1253,7 @@ const AsbestosRemovalJobDetails = () => {
     setShiftCreating(true);
     try {
       const referenceShift = duplicateFromPrevious
-        ? getReferenceShiftForDate(newShiftDate)
+        ? getMostRecentShiftByDate()
         : null;
       let copiedDescriptionOfWorks = "";
 
@@ -1744,6 +1738,7 @@ const AsbestosRemovalJobDetails = () => {
   const handleEditShift = (shift, event) => {
     event.stopPropagation();
     setEditingShift(shift);
+    setCopyPreviousShiftSamples(false);
     const shiftDate = shift.date
       ? new Date(shift.date).toISOString().split("T")[0]
       : "";
@@ -1771,6 +1766,7 @@ const AsbestosRemovalJobDetails = () => {
   const handleCloseShiftDialog = () => {
     setShiftDialogOpen(false);
     setNewShiftDate("");
+    setCopyPreviousShiftSamples(false);
     setEditingShift(null);
     setShiftCreating(false);
   };
@@ -3234,23 +3230,7 @@ const AsbestosRemovalJobDetails = () => {
               color: "white",
             }}
           >
-            <Tooltip>
-              <span>
-                <IconButton
-                  size="small"
-                  onClick={() =>
-                    handleShiftSubmit({ duplicateFromPrevious: true })
-                  }
-                  disabled={editingShift || !newShiftDate || shiftCreating}
-                  sx={{
-                    color: "white",
-                    "&.Mui-disabled": { color: "rgba(255, 255, 255, 0.45)" },
-                  }}
-                >
-                  <MonitorIcon sx={{ fontSize: 20 }} />
-                </IconButton>
-              </span>
-            </Tooltip>
+            <MonitorIcon sx={{ fontSize: 20 }} />
           </Box>
           <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
             {editingShift
@@ -3302,6 +3282,22 @@ const AsbestosRemovalJobDetails = () => {
               Today
             </Button>
           </Box>
+          {!editingShift && airMonitoringShifts.length > 0 && (
+            <Box sx={{ mt: 1 }}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={copyPreviousShiftSamples}
+                    onChange={(e) =>
+                      setCopyPreviousShiftSamples(e.target.checked)
+                    }
+                    disabled={shiftCreating}
+                  />
+                }
+                label="Copy previous shift samples"
+              />
+            </Box>
+          )}
         </DialogContent>
         <DialogActions
           sx={{
@@ -3314,7 +3310,15 @@ const AsbestosRemovalJobDetails = () => {
           }}
         >
           <Button
-            onClick={editingShift ? handleUpdateShiftDate : handleShiftSubmit}
+            onClick={() => {
+              if (editingShift) {
+                handleUpdateShiftDate();
+              } else {
+                handleShiftSubmit({
+                  duplicateFromPrevious: copyPreviousShiftSamples,
+                });
+              }
+            }}
             variant="contained"
             startIcon={
               shiftCreating ? (
