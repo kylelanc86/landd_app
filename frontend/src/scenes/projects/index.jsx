@@ -1428,7 +1428,7 @@ const Projects = ({ initialFilters = {} }) => {
   const getAccessibleStatuses = () => {
     if (isAdmin || isManager || can("projects.change_status")) {
       // Filter out restricted statuses for employee users
-      const restrictedStatuses = ["Cancelled"];
+      const restrictedStatuses = ["Cancelled", "Ready for invoicing"];
 
       // If user is employee (not admin or manager), filter out restricted statuses
       if (!isAdmin && !isManager) {
@@ -2144,7 +2144,7 @@ const Projects = ({ initialFilters = {} }) => {
                         marginRight: "8px",
                       }}
                     >
-                      All Reports
+                      All Projects
                     </span>
                     <Box
                       sx={{

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   Box,
   Typography,
@@ -15,10 +15,13 @@ import HomeIcon from "@mui/icons-material/Home";
 import ApartmentIcon from "@mui/icons-material/Apartment";
 import BusinessIcon from "@mui/icons-material/Business";
 import SecurityIcon from "@mui/icons-material/Security";
+import ScienceIcon from "@mui/icons-material/Science";
 import PermissionGate from "../../components/PermissionGate";
+import { usePermissions } from "../../hooks/usePermissions";
 
 const SurveysDashboard = () => {
   const navigate = useNavigate();
+  const { isSuperAdmin = false } = usePermissions();
   const theme = useTheme();
   const isTablet = useMediaQuery(theme.breakpoints.down("md"));
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -27,7 +30,8 @@ const SurveysDashboard = () => {
   );
   const isSimplifiedWidget = isMobile || isMobileLandscape;
 
-  const surveyModules = [
+  const surveyModules = useMemo(
+    () => [
     {
       id: "asbestos-assessment",
       title: "Asbestos Assessment",
@@ -47,6 +51,15 @@ const SurveysDashboard = () => {
       underDevelopment: false,
     },
     {
+      id: "lead-assessment",
+      title: "Lead Assessment",
+      description: "Access active lead paint, dust and soil assessments",
+      icon: <ScienceIcon />,
+      color: "#9c27b0",
+      onClick: () => navigate("/surveys/lead"),
+      underDevelopment: !isSuperAdmin,
+    },
+    {
       id: "commercial-asbestos",
       title: "Commercial Asbestos Surveys",
       description: "Access commercial asbestos survey records and reports",
@@ -64,7 +77,9 @@ const SurveysDashboard = () => {
       onClick: () => navigate("/surveys/hazmat"),
       underDevelopment: true,
     },
-  ];
+    ],
+    [isSuperAdmin, navigate]
+  );
 
   return (
     <PermissionGate requiredPermissions={["asbestos.view"]}>
@@ -98,7 +113,7 @@ const SurveysDashboard = () => {
                   sx={{
                     flex: 1,
                     minWidth: 0,
-                    minHeight: 160,
+                    minHeight: 128,
                     transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                     overflow: "hidden",
                     borderRadius: "12px",
@@ -151,7 +166,7 @@ const SurveysDashboard = () => {
                     disabled={module.underDevelopment}
                     sx={{
                       height: "100%",
-                      minHeight: 160,
+                      minHeight: 128,
                       display: "flex",
                       flexDirection: "column",
                       alignItems: "stretch",
@@ -164,7 +179,7 @@ const SurveysDashboard = () => {
                       component="div"
                       sx={{
                         height: "100%",
-                        minHeight: 160,
+                        minHeight: 128,
                         background: `linear-gradient(135deg, ${module.color}15 0%, ${module.color}08 100%)`,
                         display: "flex",
                         flexDirection: "column",
@@ -178,8 +193,8 @@ const SurveysDashboard = () => {
                     >
                       <Box
                         sx={{
-                          width: 48,
-                          height: 48,
+                          width: 40,
+                          height: 40,
                           borderRadius: "50%",
                           display: "flex",
                           alignItems: "center",
@@ -224,15 +239,15 @@ const SurveysDashboard = () => {
           ) : (
           <Grid container spacing={isMobile ? 2 : isTablet ? 3 : 4}>
             {surveyModules.map((module) => (
-              <Grid item xs={6} sm={3} md={3} lg={3} key={module.id}>
+              <Grid item xs={12} sm={4} md={4} lg={4} key={module.id}>
                 <Card
                   sx={{
                     height: "100%",
                     minHeight: isSimplifiedWidget
-                      ? "120px"
+                      ? "96px"
                       : isTablet
-                      ? "280px"
-                      : "320px",
+                      ? "224px"
+                      : "256px",
                     transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                     overflow: "hidden",
                     borderRadius: isSimplifiedWidget ? "12px" : "16px",
@@ -298,8 +313,8 @@ const SurveysDashboard = () => {
                     <Box
                       component="div"
                       sx={{
-                        height: isSimplifiedWidget ? "100%" : isTablet ? 140 : 180,
-                        minHeight: isSimplifiedWidget ? 120 : undefined,
+                        height: isSimplifiedWidget ? "100%" : isTablet ? 112 : 144,
+                        minHeight: isSimplifiedWidget ? 96 : undefined,
                         background: `linear-gradient(135deg, ${module.color}15 0%, ${module.color}08 100%)`,
                         borderBottom: isSimplifiedWidget
                           ? "none"

@@ -47,9 +47,17 @@ import {
   ArrowBack as ArrowBackIcon,
   Close as CloseIcon,
   Check as CheckIcon,
+  RotateRight as RotateRightIcon,
+  Hd as HdIcon,
+  Download as DownloadIcon,
 } from "@mui/icons-material";
 import leadClearanceService from "../../services/leadClearanceService";
-import { compressImage, needsCompression } from "../../utils/imageCompression";
+import {
+  compressImage,
+  needsCompression,
+  saveFileToDevice,
+} from "../../utils/imageCompression";
+import { rotateDataUrl90Cw } from "../../utils/rotateImageDataUrl";
 import leadRemovalJobService from "../../services/leadRemovalJobService";
 import PermissionGate from "../../components/PermissionGate";
 import { usePermissions } from "../../hooks/usePermissions";
@@ -96,11 +104,13 @@ const LeadClearanceItems = () => {
   const [editingDescriptionPhotoId, setEditingDescriptionPhotoId] = useState(null);
   const [fullSizePhotoDialogOpen, setFullSizePhotoDialogOpen] = useState(false);
   const [fullSizePhotoUrl, setFullSizePhotoUrl] = useState(null);
+  const [fullSizePhotoId, setFullSizePhotoId] = useState(null);
   const [photoFile, setPhotoFile] = useState(null);
   const [compressionStatus, setCompressionStatus] = useState(null);
   const [cameraDialogOpen, setCameraDialogOpen] = useState(false);
   const [stream, setStream] = useState(null);
   const [videoRef, setVideoRef] = useState(null);
+  const [rotatingPhotoId, setRotatingPhotoId] = useState(null);
 
   const [preWorksSamples, setPreWorksSamples] = useState([]);
   const [validationSamples, setValidationSamples] = useState([]);
@@ -387,7 +397,7 @@ const LeadClearanceItems = () => {
     }
   };
 
-  const handleAddPhotoToItem = async (photoData) => {
+  const handleAddPhotoToItem = async (photoData, fullResolutionData = null) => {
     if (!selectedItemForPhotos) return;
     try {
       await leadClearanceService.addPhotoToItem(
@@ -395,6 +405,7 @@ const LeadClearanceItems = () => {
         selectedItemForPhotos._id,
         photoData,
         true,
+        fullResolutionData,
       );
       const updatedItems = await leadClearanceService.getItems(clearanceId);
       const updatedItem = updatedItems.find(
@@ -420,9 +431,88 @@ const LeadClearanceItems = () => {
     }));
   };
 
-  const handleViewFullSizePhoto = (photoUrl) => {
-    setFullSizePhotoUrl(photoUrl);
+  const handleViewFullSizePhoto = (photo) => {
+    const url = typeof photo === "string" ? photo : photo?.data;
+    if (!url) return;
+    setFullSizePhotoUrl(url);
+    setFullSizePhotoId(typeof photo === "object" && photo?._id ? photo._id : null);
     setFullSizePhotoDialogOpen(true);
+  };
+
+  const handleDownloadPhoto = async (
+    photo,
+    fallbackLabel = "photo",
+    quality = "full",
+  ) => {
+    const photoData =
+      typeof photo === "string"
+        ? photo
+        : quality === "full"
+          ? photo?.fullResolutionData
+          : photo?.data;
+    if (!photoData) {
+      showSnackbar(
+        quality === "full"
+          ? "Full-resolution image is not available for this photo"
+          : "Compressed image is not available for this photo",
+        "error",
+      );
+      return;
+    }
+    try {
+      const mimeMatch = photoData.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/);
+      const mimeType = mimeMatch?.[1] || "image/jpeg";
+      const extensionMap = {
+        "image/jpeg": "jpg",
+        "image/jpg": "jpg",
+        "image/png": "png",
+        "image/webp": "webp",
+        "image/gif": "gif",
+      };
+      const extension = extensionMap[mimeType] || "jpg";
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const filename = `lead-clearance-${fallbackLabel}-${quality}-${timestamp}.${extension}`;
+      const response = await fetch(photoData);
+      const blob = await response.blob();
+      const file = new File([blob], filename, { type: mimeType });
+      await saveFileToDevice(file, filename);
+      showSnackbar("Photo downloaded", "success");
+    } catch (error) {
+      console.error("Error downloading photo:", error);
+      showSnackbar("Failed to download photo", "error");
+    }
+  };
+
+  const fullSizePhoto =
+    fullSizePhotoId && selectedItemForPhotos?.photographs
+      ? selectedItemForPhotos.photographs.find((p) => p._id === fullSizePhotoId)
+      : null;
+
+  const handleRotatePhoto90Cw = async (photo) => {
+    if (!photo?.data || rotatingPhotoId || !clearanceId || !selectedItemForPhotos) return;
+    setRotatingPhotoId(photo._id);
+    try {
+      const newData = await rotateDataUrl90Cw(photo.data, 0.92);
+      const payload = await leadClearanceService.updatePhotoContent(
+        clearanceId,
+        selectedItemForPhotos._id,
+        photo._id,
+        { photoData: newData },
+      );
+      if (payload?.item) setSelectedItemForPhotos(payload.item);
+      if (fullSizePhotoId === photo._id) {
+        const updated = payload.item?.photographs?.find(
+          (p) => String(p._id) === String(photo._id),
+        );
+        if (updated?.data) setFullSizePhotoUrl(updated.data);
+      }
+      showSnackbar("Photo rotated", "success");
+    } catch (err) {
+      console.error("Error rotating photo:", err);
+      showSnackbar("Failed to rotate photo", "error");
+    } finally {
+      setRotatingPhotoId(null);
+    }
   };
 
   const getCurrentPhotoState = (photoId) => {
@@ -516,6 +606,12 @@ const LeadClearanceItems = () => {
     setPhotoFile(file);
     setCompressionStatus({ type: "processing", message: "Processing image..." });
     try {
+      const fullResolutionData = await new Promise((resolve, reject) => {
+        const fullResReader = new FileReader();
+        fullResReader.onload = (e) => resolve(e.target.result);
+        fullResReader.onerror = reject;
+        fullResReader.readAsDataURL(file);
+      });
       if (needsCompression(file, 300)) {
         const compressed = await compressImage(file, {
           maxWidth: 1000,
@@ -523,12 +619,12 @@ const LeadClearanceItems = () => {
           quality: 0.75,
           maxSizeKB: 300,
         });
-        await handleAddPhotoToItem(compressed);
+        await handleAddPhotoToItem(compressed, fullResolutionData);
         setCompressionStatus({ type: "success", message: "Image added." });
       } else {
         const reader = new FileReader();
         reader.onload = async (e) => {
-          await handleAddPhotoToItem(e.target.result);
+          await handleAddPhotoToItem(e.target.result, fullResolutionData);
           setCompressionStatus({ type: "info", message: "Image added." });
         };
         reader.readAsDataURL(file);
@@ -546,6 +642,7 @@ const LeadClearanceItems = () => {
   const handleClosePhotoGallery = async () => {
     setPhotoGalleryDialogOpen(false);
     setSelectedItemForPhotos(null);
+    setRotatingPhotoId(null);
     setPhotoFile(null);
     setCompressionStatus(null);
     setLocalPhotoChanges({});
@@ -1383,7 +1480,7 @@ const LeadClearanceItems = () => {
                                   cursor: "pointer",
                                   "&:hover": { opacity: 0.9 },
                                 }}
-                                onClick={() => handleViewFullSizePhoto(photo.data)}
+                                onClick={() => handleViewFullSizePhoto(photo)}
                               >
                                 <img
                                   src={photo.data}
@@ -1427,6 +1524,72 @@ const LeadClearanceItems = () => {
                                     title={getCurrentPhotoState(photo._id) ? "Remove from report" : "Include in report"}
                                   />
                                 </Box>
+                                <IconButton
+                                  size="small"
+                                  sx={{
+                                    position: "absolute",
+                                    top: 48,
+                                    right: 8,
+                                    backgroundColor: "rgba(0, 0, 0, 0.6)",
+                                    color: "white",
+                                    "&:hover": { backgroundColor: "rgba(0, 0, 0, 0.85)" },
+                                    zIndex: 3,
+                                  }}
+                                  disabled={!!rotatingPhotoId || isPhotoMarkedForDeletion(photo._id)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRotatePhoto90Cw(photo);
+                                  }}
+                                  title="Rotate 90° clockwise"
+                                >
+                                  <RotateRightIcon sx={{ fontSize: "1.1rem" }} />
+                                </IconButton>
+                                <IconButton
+                                  size="small"
+                                  sx={{
+                                    position: "absolute",
+                                    top: 88,
+                                    right: 8,
+                                    backgroundColor: "rgba(0, 0, 0, 0.6)",
+                                    color: "white",
+                                    "&:hover": { backgroundColor: "rgba(0, 0, 0, 0.85)" },
+                                    zIndex: 3,
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDownloadPhoto(
+                                      photo,
+                                      `photo-${index + 1}`,
+                                      "full",
+                                    );
+                                  }}
+                                  title="Download full resolution"
+                                >
+                                  <HdIcon sx={{ fontSize: "1.1rem" }} />
+                                </IconButton>
+                                <IconButton
+                                  size="small"
+                                  sx={{
+                                    position: "absolute",
+                                    top: 128,
+                                    right: 8,
+                                    backgroundColor: "rgba(0, 0, 0, 0.6)",
+                                    color: "white",
+                                    "&:hover": { backgroundColor: "rgba(0, 0, 0, 0.85)" },
+                                    zIndex: 3,
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDownloadPhoto(
+                                      photo,
+                                      `photo-${index + 1}`,
+                                      "compressed",
+                                    );
+                                  }}
+                                  title="Download compressed"
+                                >
+                                  <DownloadIcon sx={{ fontSize: "1.1rem" }} />
+                                </IconButton>
                                 <IconButton
                                   size="small"
                                   sx={{
@@ -1538,26 +1701,106 @@ const LeadClearanceItems = () => {
         {/* Full Size Photo Dialog */}
         <Dialog
           open={fullSizePhotoDialogOpen}
-          onClose={() => setFullSizePhotoDialogOpen(false)}
+          onClose={() => {
+            setFullSizePhotoDialogOpen(false);
+            setFullSizePhotoId(null);
+          }}
           maxWidth="lg"
           fullWidth
           PaperProps={{ sx: { bgcolor: "rgba(0, 0, 0, 0.9)" } }}
         >
           <DialogContent sx={{ p: 0, position: "relative" }}>
             <IconButton
-              onClick={() => setFullSizePhotoDialogOpen(false)}
+              onClick={() => {
+                setFullSizePhotoDialogOpen(false);
+                setFullSizePhotoId(null);
+              }}
               sx={{
                 position: "absolute",
                 top: 10,
                 right: 10,
                 color: "white",
                 bgcolor: "rgba(0, 0, 0, 0.5)",
+                zIndex: 10,
                 "&:hover": { bgcolor: "rgba(0, 0, 0, 0.7)" },
               }}
             >
               <CloseIcon />
             </IconButton>
-            {fullSizePhotoUrl && (
+            {fullSizePhoto && (
+              <Box
+                sx={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  pt: 6,
+                  pb: 2,
+                  px: 2,
+                }}
+              >
+                <Box sx={{ display: "flex", gap: 1, mb: 2, flexWrap: "wrap" }}>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    startIcon={<RotateRightIcon />}
+                    disabled={!!rotatingPhotoId || !fullSizePhoto.data}
+                    onClick={() => handleRotatePhoto90Cw(fullSizePhoto)}
+                    sx={{
+                      bgcolor: "rgba(0, 0, 0, 0.65)",
+                      color: "white",
+                      border: "1px solid rgba(255,255,255,0.4)",
+                      "&:hover": { bgcolor: "rgba(0, 0, 0, 0.85)" },
+                    }}
+                  >
+                    Rotate 90°
+                  </Button>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    startIcon={<HdIcon />}
+                    disabled={!fullSizePhoto?.fullResolutionData}
+                    onClick={() =>
+                      handleDownloadPhoto(fullSizePhoto, "full-size", "full")
+                    }
+                    sx={{
+                      bgcolor: "rgba(0, 0, 0, 0.65)",
+                      color: "white",
+                      border: "1px solid rgba(255,255,255,0.4)",
+                      "&:hover": { bgcolor: "rgba(0, 0, 0, 0.85)" },
+                    }}
+                  >
+                    Download full
+                  </Button>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    startIcon={<DownloadIcon />}
+                    disabled={!fullSizePhoto?.data}
+                    onClick={() =>
+                      handleDownloadPhoto(
+                        fullSizePhoto,
+                        "full-size",
+                        "compressed",
+                      )
+                    }
+                    sx={{
+                      bgcolor: "rgba(0, 0, 0, 0.65)",
+                      color: "white",
+                      border: "1px solid rgba(255,255,255,0.4)",
+                      "&:hover": { bgcolor: "rgba(0, 0, 0, 0.85)" },
+                    }}
+                  >
+                    Download compressed
+                  </Button>
+                </Box>
+                <img
+                  src={fullSizePhotoUrl || fullSizePhoto.data}
+                  alt="Full size"
+                  style={{ maxWidth: "100%", maxHeight: "75vh", objectFit: "contain" }}
+                />
+              </Box>
+            )}
+            {fullSizePhotoUrl && !fullSizePhoto && (
               <img src={fullSizePhotoUrl} alt="Full size" style={{ width: "100%", display: "block" }} />
             )}
           </DialogContent>

@@ -8,8 +8,37 @@ const asbestosAssessmentService = {
   },
 
   // Get a single asbestos assessment by ID
-  getById: async (id) => {
-    const response = await api.get(`/assessments/${id}`);
+  // options.omitPhotoData: omit base64 from item/referred photos (lazy-load via getItemPhotosData / getReferredPhotosData)
+  // options.omitPlanFiles: omit site / appendix plan image payloads (counts preserved on assessment)
+  // options.omitFibreReport: omit analysis PDF string (hasFibreAnalysisReport boolean set)
+  // options.omitItems: items array empty (load items separately, e.g. per tab)
+  // options.itemsMaterialTypes: comma-separated materialType filter (e.g. "paint,dust")
+  getById: async (id, options = {}) => {
+    const params = {};
+    if (options.omitPhotoData) params.omitPhotoData = '1';
+    if (options.omitPlanFiles) params.omitPlanFiles = '1';
+    if (options.omitFibreReport) params.omitFibreReport = '1';
+    if (options.omitItems) params.omitItems = '1';
+    if (options.itemsMaterialTypes) {
+      params.itemsMaterialTypes = options.itemsMaterialTypes;
+    }
+    const response = await api.get(`/assessments/${id}`, { params });
+    return response.data;
+  },
+
+  /** Full image payloads for all photos on an assessment item (for lazy gallery load). */
+  getItemPhotosData: async (assessmentId, itemId) => {
+    const response = await api.get(
+      `/assessments/${assessmentId}/items/${itemId}/photos/data`
+    );
+    return response.data;
+  },
+
+  /** Full image payloads for photos on a referred location row. */
+  getReferredPhotosData: async (assessmentId, itemId, referredIndex) => {
+    const response = await api.get(
+      `/assessments/${assessmentId}/items/${itemId}/referred-locations/${referredIndex}/photos/data`
+    );
     return response.data;
   },
 
@@ -22,6 +51,12 @@ const asbestosAssessmentService = {
   // Update an asbestos assessment
   update: async (id, assessmentData) => {
     const response = await api.put(`/assessments/${id}`, assessmentData);
+    return response.data;
+  },
+
+  /** Reopen authorised assessment for editing from Project Reports (increments revision, clears sign-off). */
+  reviseReport: async (id) => {
+    const response = await api.patch(`/assessments/${id}/revise-report`);
     return response.data;
   },
 
@@ -69,11 +104,36 @@ const asbestosAssessmentService = {
     return response.data;
   },
 
+  // Update only assessment workflow status
+  updateStatus: async (assessmentId, status) => {
+    const response = await api.patch(`/assessments/${assessmentId}/status`, { status });
+    return response.data;
+  },
+
+  // Upload fibre/analysis report PDF (base64 data URL string)
+  uploadFibreAnalysisReport: async (assessmentId, reportData) => {
+    const response = await api.post(`/assessments/${assessmentId}/upload-fibre-analysis-report`, {
+      reportData,
+    });
+    return response.data;
+  },
+
+  deleteFibreAnalysisReport: async (assessmentId) => {
+    const response = await api.delete(`/assessments/${assessmentId}/fibre-analysis-report`);
+    return response.data;
+  },
+
   // Add photo to assessment item
-  addPhotoToItem: async (assessmentId, itemId, photoData, includeInReport = true) => {
+  addPhotoToItem: async (
+    assessmentId,
+    itemId,
+    photoData,
+    includeInReport = true,
+    fullResolutionData = null,
+  ) => {
     const response = await api.post(
       `/assessments/${assessmentId}/items/${itemId}/photos`,
-      { photoData, includeInReport }
+      { photoData, includeInReport, fullResolutionData }
     );
     return response.data;
   },
@@ -90,6 +150,15 @@ const asbestosAssessmentService = {
   togglePhotoInReport: async (assessmentId, itemId, photoId) => {
     const response = await api.patch(
       `/assessments/${assessmentId}/items/${itemId}/photos/${photoId}/toggle`
+    );
+    return response.data;
+  },
+
+  // Replace photo pixels and/or full arrows array (used after rotate)
+  updatePhotoContent: async (assessmentId, itemId, photoId, { photoData, arrows }) => {
+    const response = await api.patch(
+      `/assessments/${assessmentId}/items/${itemId}/photos/${photoId}`,
+      { photoData, arrows }
     );
     return response.data;
   },

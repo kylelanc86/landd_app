@@ -108,6 +108,7 @@ const leadClearanceSchema = new mongoose.Schema(
         photographs: [
           {
             data: { type: String, required: true },
+            fullResolutionData: { type: String, required: false },
             includeInReport: { type: Boolean, default: true },
             uploadedAt: { type: Date, default: Date.now },
             photoNumber: { type: Number },

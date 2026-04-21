@@ -337,6 +337,7 @@ const Clients = () => {
                 );
               }}
               title="View Invoices"
+              sx={{ color: "#045E1F" }}
             >
               <AttachMoneyIcon />
             </IconButton>
@@ -348,6 +349,7 @@ const Clients = () => {
                 );
               }}
               title="View Jobs"
+              sx={{ color: "#045E1F" }}
             >
               <WorkIcon />
             </IconButton>
@@ -360,6 +362,7 @@ const Clients = () => {
                 }}
                 title="Delete Client"
                 color="error"
+                sx={{ color: "error.main" }}
               >
                 <DeleteIcon />
               </IconButton>

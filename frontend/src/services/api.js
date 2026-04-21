@@ -471,8 +471,14 @@ export const asbestosAssessmentService = {
   getAsbestosAssessmentById: (id) => api.get(`/assessments/${id}`),
   createAsbestosAssessment: (data) => api.post('/assessments', data),
   updateAsbestosAssessment: (id, data) => api.put(`/assessments/${id}`, data),
+  addItem: (assessmentId, itemData) => api.post(`/assessments/${assessmentId}/items`, itemData),
+  updateItem: (assessmentId, itemId, itemData) =>
+    api.put(`/assessments/${assessmentId}/items/${itemId}`, itemData),
   archiveAsbestosAssessment: (id) => api.patch(`/assessments/${id}/archive`),
   unlockAsbestosAssessment: (id) => api.patch(`/assessments/${id}/unlock`),
+  /** Reopen a final-authorised assessment for editing (Project Reports → Revise). Requires asbestos.edit. */
+  reviseAsbestosAssessmentReport: (id) =>
+    api.patch(`/assessments/${id}/revise-report`),
   sendForAuthorisation: (id) => api.post(`/assessments/${id}/send-for-authorisation`),
   recordReportViewed: (id) => api.patch(`/assessments/${id}/report-viewed`),
   deleteAsbestosAssessment: (id) => api.delete(`/assessments/${id}`),

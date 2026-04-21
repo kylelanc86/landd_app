@@ -25,6 +25,15 @@ const clientSuppliedJobSchema = new mongoose.Schema({
     enum: ['client', 'ld'],
     default: 'client'
   },
+  // Optional link for L&D supplied rows derived from asbestos/residential assessments.
+  linkedAssessmentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'AsbestosAssessment'
+  },
+  linkedAssessmentJobType: {
+    type: String,
+    enum: ['asbestos-assessment', 'residential-asbestos', 'lead-assessment']
+  },
   analyst: {
     type: String,
     trim: true
@@ -46,6 +55,10 @@ const clientSuppliedJobSchema = new mongoose.Schema({
   },
   analysisDueDate: {
     type: Date
+  },
+  sampledBy: {
+    type: String,
+    trim: true
   },
   archived: {
     type: Boolean,

@@ -19,6 +19,7 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogContentText,
   DialogActions,
   TextField,
   FormControl,
@@ -43,6 +44,7 @@ import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
+  Download as DownloadIcon,
   ArrowBack as ArrowBackIcon,
   ArrowForward as ArrowForwardIcon,
   PhotoCamera as PhotoCameraIcon,
@@ -53,6 +55,7 @@ import {
   Map as MapIcon,
   ArrowUpward as ArrowUpwardIcon,
   ContentCopy as ContentCopyIcon,
+  RotateRight as RotateRightIcon,
 } from "@mui/icons-material";
 import MicIcon from "@mui/icons-material/Mic";
 import WarningIcon from "@mui/icons-material/Warning";
@@ -70,8 +73,13 @@ import customDataFieldGroupService from "../../../services/customDataFieldGroupS
 import {
   compressImage,
   needsCompression,
-  saveFileToDevice, // eslint-disable-line no-unused-vars -- used when save-to-device is re-enabled
+  saveFileToDevice,
 } from "../../../utils/imageCompression";
+import {
+  rotateArrowDegrees90Cw,
+  rotateDataUrl90Cw,
+  rotateNormalizedPoint90Cw,
+} from "../../../utils/rotateImageDataUrl";
 
 /** Default arrow overlay color (hex) and rotation (degrees, anticlockwise). */
 const DEFAULT_ARROW_COLOR = "#f44336";
@@ -205,6 +213,31 @@ const getDisplaySampleReference = (item, items) => {
   return isReferred
     ? `Refer to sample ${item.sampleReference}`
     : item.sampleReference || "N/A";
+};
+
+const getAssessmentItemTypeLabel = (item, items) => {
+  const asbestosContent = (item?.asbestosContent || "").trim();
+  if (
+    asbestosContent === "Visually Assessed as Asbestos" ||
+    asbestosContent === "Visually Assessed as Non-Asbestos" ||
+    asbestosContent === "Visually Assessed as Non-ACM"
+  ) {
+    return "Visually Assessed";
+  }
+
+  const ref = (item?.sampleReference || "").trim();
+  if (!ref) return "Sampled";
+
+  const firstIndexWithRef = (items || []).findIndex(
+    (i) => (i.sampleReference || "").trim() === ref,
+  );
+  const currentIndex = (items || []).findIndex((i) => i._id === item?._id);
+  const isReferred =
+    firstIndexWithRef !== -1 &&
+    currentIndex !== -1 &&
+    firstIndexWithRef !== currentIndex;
+
+  return isReferred ? "Referred" : "Sampled";
 };
 
 /**
@@ -454,6 +487,9 @@ const AssessmentItems = () => {
 
   const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
+  const [duplicateConfirmDialogOpen, setDuplicateConfirmDialogOpen] =
+    useState(false);
+  const [itemToDuplicate, setItemToDuplicate] = useState(null);
   const [showLevelFloor, setShowLevelFloor] = useState(false);
   const [selectedMaterialFromDropdown, setSelectedMaterialFromDropdown] =
     useState(false);
@@ -537,6 +573,8 @@ const AssessmentItems = () => {
   const [fullSizePhotoDialogOpen, setFullSizePhotoDialogOpen] = useState(false);
   const [fullSizePhotoUrl, setFullSizePhotoUrl] = useState(null);
   const [fullSizePhotoId, setFullSizePhotoId] = useState(null);
+  const [managePhotosDownloadTarget, setManagePhotosDownloadTarget] =
+    useState(null);
   const [fullSizeArrowMode, setFullSizeArrowMode] = useState(false);
   const [selectedArrowId, setSelectedArrowId] = useState(null);
   const [movingArrowId, setMovingArrowId] = useState(null);
@@ -548,6 +586,7 @@ const AssessmentItems = () => {
   // eslint-disable-next-line no-unused-vars
   const [photoFile, setPhotoFile] = useState(null);
   const [cameraDialogOpen, setCameraDialogOpen] = useState(false);
+  const [rotatingPhotoId, setRotatingPhotoId] = useState(null);
   const [stream, setStream] = useState(null);
   const [videoRef, setVideoRef] = useState(null);
   const videoContainerRef = useRef(null);
@@ -998,7 +1037,16 @@ const AssessmentItems = () => {
    * Duplicate an item: create a new item via API (with new _id; sample reference
    * cleared if source is a sampled item), then open the edit item modal for it.
    */
-  const handleDuplicate = async (item) => {
+  const handleDuplicate = (item) => {
+    if (isReportLocked) return;
+    setItemToDuplicate(item);
+    setDuplicateConfirmDialogOpen(true);
+  };
+
+  const confirmDuplicate = async () => {
+    if (!itemToDuplicate || isReportLocked) return;
+    const item = itemToDuplicate;
+
     if (isReportLocked) return;
 
     const isVisuallyAssessedItemCheck =
@@ -1094,7 +1142,15 @@ const AssessmentItems = () => {
     } catch (err) {
       console.error("Error duplicating item:", err);
       showSnackbar("Failed to duplicate item", "error");
+    } finally {
+      setDuplicateConfirmDialogOpen(false);
+      setItemToDuplicate(null);
     }
+  };
+
+  const cancelDuplicate = () => {
+    setDuplicateConfirmDialogOpen(false);
+    setItemToDuplicate(null);
   };
 
   const handleDelete = (item) => {
@@ -1803,6 +1859,7 @@ const AssessmentItems = () => {
 
   const handleClosePhotoGallery = async () => {
     setPhotoGalleryDialogOpen(false);
+    setManagePhotosDownloadTarget(null);
     setSelectedItemForPhotos(null);
     setPhotoPreview(null);
     setPhotoFile(null);
@@ -1812,6 +1869,7 @@ const AssessmentItems = () => {
     setLocalPhotoDescriptions({});
     setEditingDescriptionPhotoId(null);
     setEditingArrowPhotoId(null);
+    setRotatingPhotoId(null);
     await fetchData();
   };
 
@@ -1865,6 +1923,7 @@ const AssessmentItems = () => {
       setLastPinchDistance(null);
       setLastPanPoint(null);
       setPhotoGalleryDialogOpen(false); // Hide manage-photos modal so camera is on top
+      setManagePhotosDownloadTarget(null);
       setCameraDialogOpen(true);
     } catch (error) {
       console.error("Error accessing camera:", error);
@@ -2130,7 +2189,7 @@ const AssessmentItems = () => {
     }
   };
 
-  const handleAddPhotoToItem = async (photoData) => {
+  const handleAddPhotoToItem = async (photoData, fullResolutionData = null) => {
     if (isReportLocked || !selectedItemForPhotos) return;
     try {
       const response = await asbestosAssessmentService.addPhotoToItem(
@@ -2138,6 +2197,7 @@ const AssessmentItems = () => {
         selectedItemForPhotos._id,
         photoData,
         true,
+        fullResolutionData,
       );
       await asbestosAssessmentService.update(id, {
         projectId: assessment.projectId?._id || assessment.projectId,
@@ -2186,6 +2246,57 @@ const AssessmentItems = () => {
       firstArrow?.color || DEFAULT_ARROW_COLOR,
     );
     setFullSizePhotoDialogOpen(true);
+  };
+
+  const handleDownloadPhoto = async (
+    photo,
+    fallbackLabel = "photo",
+    quality = "full",
+  ) => {
+    const photoData =
+      typeof photo === "string"
+        ? photo
+        : quality === "full"
+          ? photo?.fullResolutionData
+          : photo?.data;
+    if (!photoData) {
+      showSnackbar(
+        quality === "full"
+          ? "Full-resolution image is not available for this photo"
+          : "Compressed image is not available for this photo",
+        "error",
+      );
+      return;
+    }
+    try {
+      const mimeMatch = photoData.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/);
+      const mimeType = mimeMatch?.[1] || "image/jpeg";
+      const extensionMap = {
+        "image/jpeg": "jpg",
+        "image/jpg": "jpg",
+        "image/png": "png",
+        "image/webp": "webp",
+        "image/gif": "gif",
+      };
+      const extension = extensionMap[mimeType] || "jpg";
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const filename = `assessment-${fallbackLabel}-${quality}-${timestamp}.${extension}`;
+      const response = await fetch(photoData);
+      const blob = await response.blob();
+      const file = new File([blob], filename, { type: mimeType });
+      await saveFileToDevice(file, filename);
+      showSnackbar("Photo downloaded", "success");
+    } catch (error) {
+      console.error("Error downloading photo:", error);
+      showSnackbar("Failed to download photo", "error");
+    }
+  };
+
+  const handleManagePhotosDownloadChoice = async (quality) => {
+    if (!managePhotosDownloadTarget) return;
+    const { photo, fileLabel } = managePhotosDownloadTarget;
+    setManagePhotosDownloadTarget(null);
+    await handleDownloadPhoto(photo, fileLabel, quality);
   };
 
   const fullSizePhoto =
@@ -2367,6 +2478,53 @@ const AssessmentItems = () => {
     });
   };
 
+  const handleRotatePhoto90Cw = async (photo) => {
+    if (
+      isReportLocked ||
+      !id ||
+      !selectedItemForPhotos ||
+      !photo?.data ||
+      rotatingPhotoId
+    ) {
+      return;
+    }
+    setRotatingPhotoId(photo._id);
+    try {
+      const newData = await rotateDataUrl90Cw(photo.data, 0.92);
+      const arrowList = getPhotoArrows(photo);
+      const newArrows = arrowList.map((arr) => {
+        const { x, y } = rotateNormalizedPoint90Cw(
+          arr.x ?? 0.5,
+          arr.y ?? 0.5,
+        );
+        return {
+          x: Math.max(0, Math.min(1, x)),
+          y: Math.max(0, Math.min(1, y)),
+          rotation: rotateArrowDegrees90Cw(
+            arr.rotation ?? DEFAULT_ARROW_ROTATION,
+          ),
+          color: arr.color || DEFAULT_ARROW_COLOR,
+          ...(arr._id ? { _id: arr._id } : {}),
+        };
+      });
+      const payload = await asbestosAssessmentService.updatePhotoContent(
+        id,
+        selectedItemForPhotos._id,
+        photo._id,
+        { photoData: newData, arrows: newArrows },
+      );
+      if (payload?.item) {
+        setSelectedItemForPhotos(payload.item);
+      }
+      showSnackbar("Photo rotated", "success");
+    } catch (err) {
+      console.error("Error rotating photo:", err);
+      showSnackbar("Failed to rotate photo", "error");
+    } finally {
+      setRotatingPhotoId(null);
+    }
+  };
+
   const hasUnsavedChanges = () => {
     return (
       Object.keys(localPhotoChanges).length > 0 ||
@@ -2508,6 +2666,12 @@ const AssessmentItems = () => {
       try {
         const originalSizeKB = Math.round(file.size / 1024);
         const shouldCompress = needsCompression(file, 300);
+        const fullResolutionData = await new Promise((resolve, reject) => {
+          const fullResReader = new FileReader();
+          fullResReader.onload = (e) => resolve(e.target.result);
+          fullResReader.onerror = reject;
+          fullResReader.readAsDataURL(file);
+        });
 
         if (shouldCompress) {
           setCompressionStatus({
@@ -2529,7 +2693,7 @@ const AssessmentItems = () => {
             ((originalSizeKB - compressedSizeKB) / originalSizeKB) * 100,
           );
 
-          await handleAddPhotoToItem(compressedImage);
+          await handleAddPhotoToItem(compressedImage, fullResolutionData);
 
           setCompressionStatus({
             type: "success",
@@ -2538,7 +2702,7 @@ const AssessmentItems = () => {
         } else {
           const reader = new FileReader();
           reader.onload = async (e) => {
-            await handleAddPhotoToItem(e.target.result);
+            await handleAddPhotoToItem(e.target.result, fullResolutionData);
             setCompressionStatus({
               type: "info",
               message: `No compression needed (${originalSizeKB}KB)`,
@@ -4274,6 +4438,116 @@ const AssessmentItems = () => {
           </form>
         </Dialog>
 
+        {/* Duplicate Confirmation Dialog */}
+        <Dialog
+          open={duplicateConfirmDialogOpen}
+          onClose={cancelDuplicate}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "primary.main",
+                color: "white",
+              }}
+            >
+              <ContentCopyIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Duplicate Item
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+            <Typography variant="body1" sx={{ color: "text.primary" }}>
+              Are you sure you want to duplicate this assessment item?
+            </Typography>
+            {itemToDuplicate && (
+              <Box sx={{ mt: 2, p: 2, bgcolor: "grey.50", borderRadius: 1 }}>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mb: 1 }}
+                >
+                  <strong>Room/Area:</strong>{" "}
+                  {itemToDuplicate.roomArea || "N/A"}
+                </Typography>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mb: 1 }}
+                >
+                  <strong>Location:</strong>{" "}
+                  {itemToDuplicate.locationDescription || "N/A"}
+                </Typography>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mb: 1 }}
+                >
+                  <strong>Material:</strong>{" "}
+                  {itemToDuplicate.materialType || "N/A"}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  <strong>Item Type:</strong>{" "}
+                  {getAssessmentItemTypeLabel(itemToDuplicate, items)}
+                </Typography>
+              </Box>
+            )}
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <Button
+              onClick={cancelDuplicate}
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmDuplicate}
+              variant="contained"
+              color="primary"
+              startIcon={<ContentCopyIcon />}
+              disabled={isReportLocked}
+              sx={{
+                minWidth: 140,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Duplicate Item
+            </Button>
+          </DialogActions>
+        </Dialog>
+
         {/* Delete Confirmation Dialog */}
         <Dialog
           open={deleteConfirmDialogOpen}
@@ -4847,6 +5121,31 @@ const AssessmentItems = () => {
                                     size="small"
                                     sx={{
                                       position: "absolute",
+                                      top: 48,
+                                      right: 8,
+                                      backgroundColor: "rgba(0, 0, 0, 0.6)",
+                                      color: "white",
+                                      "&:hover": {
+                                        backgroundColor: "rgba(0, 0, 0, 0.85)",
+                                      },
+                                      zIndex: 3,
+                                    }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setManagePhotosDownloadTarget({
+                                        photo,
+                                        fileLabel: `photo-${index + 1}`,
+                                      });
+                                    }}
+                                    title="Download photo"
+                                  >
+                                    <DownloadIcon sx={{ fontSize: "1.1rem" }} />
+                                  </IconButton>
+
+                                  <IconButton
+                                    size="small"
+                                    sx={{
+                                      position: "absolute",
                                       top: 8,
                                       right: 8,
                                       backgroundColor: isPhotoMarkedForDeletion(
@@ -5375,6 +5674,55 @@ const AssessmentItems = () => {
           </>
         )}
 
+        <Dialog
+          open={Boolean(managePhotosDownloadTarget)}
+          onClose={() => setManagePhotosDownloadTarget(null)}
+          maxWidth="xs"
+          fullWidth
+        >
+          <DialogTitle>Download photo</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              Choose which image version to save to your device.
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions
+            sx={{
+              flexDirection: "column",
+              alignItems: "stretch",
+              px: 3,
+              pb: 2,
+              gap: 1,
+            }}
+          >
+            <Button
+              variant="contained"
+              fullWidth
+              disabled={
+                !managePhotosDownloadTarget?.photo?.fullResolutionData
+              }
+              onClick={() => {
+                void handleManagePhotosDownloadChoice("full");
+              }}
+            >
+              Full resolution
+            </Button>
+            <Button
+              variant="outlined"
+              fullWidth
+              disabled={!managePhotosDownloadTarget?.photo?.data}
+              onClick={() => {
+                void handleManagePhotosDownloadChoice("compressed");
+              }}
+            >
+              Compressed
+            </Button>
+            <Button onClick={() => setManagePhotosDownloadTarget(null)}>
+              Cancel
+            </Button>
+          </DialogActions>
+        </Dialog>
+
         {/* Full Size Photo Dialog */}
         <Dialog
           open={fullSizePhotoDialogOpen}
@@ -5670,6 +6018,32 @@ const AssessmentItems = () => {
                       </Box>
                     );
                   })}
+                  <IconButton
+                    size="small"
+                    sx={{
+                      position: "absolute",
+                      bottom: 8,
+                      right: 8,
+                      backgroundColor: "rgba(0, 0, 0, 0.6)",
+                      color: "white",
+                      "&:hover": {
+                        backgroundColor: "rgba(0, 0, 0, 0.85)",
+                      },
+                      zIndex: 6,
+                    }}
+                    disabled={
+                      isReportLocked ||
+                      !!rotatingPhotoId ||
+                      !fullSizePhoto?.data
+                    }
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRotatePhoto90Cw(fullSizePhoto);
+                    }}
+                    title="Rotate 90° clockwise"
+                  >
+                    <RotateRightIcon sx={{ fontSize: "1.25rem" }} />
+                  </IconButton>
                 </Box>
               </Box>
             )}
@@ -5992,16 +6366,21 @@ const AssessmentItems = () => {
             >
               <TextField
                 fullWidth
-                value={stripAsbestosCountLineForDisplay(
-                  resolveAnalysisIncompleteForDisplay(
-                    (assessment?.discussionConclusions || "").trim() ||
-                      getDefaultDiscussionConclusions(
-                        assessment,
-                        isResidential,
-                      ),
-                    assessment,
-                  ),
-                )}
+                value={
+                  assessment?.discussionConclusions === undefined ||
+                  assessment?.discussionConclusions === null ||
+                  assessment?.discussionConclusions === ""
+                    ? stripAsbestosCountLineForDisplay(
+                        resolveAnalysisIncompleteForDisplay(
+                          getDefaultDiscussionConclusions(
+                            assessment,
+                            isResidential,
+                          ),
+                          assessment,
+                        ),
+                      )
+                    : assessment.discussionConclusions
+                }
                 onChange={(e) => {
                   setAssessment((prev) => ({
                     ...prev,

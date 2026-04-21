@@ -87,10 +87,16 @@ const leadClearanceService = {
     return response.data;
   },
 
-  addPhotoToItem: async (clearanceId, itemId, photoData, includeInReport = true) => {
+  addPhotoToItem: async (
+    clearanceId,
+    itemId,
+    photoData,
+    includeInReport = true,
+    fullResolutionData = null,
+  ) => {
     const response = await axios.post(
       `${API_BASE_URL}/${clearanceId}/items/${itemId}/photos`,
-      { photoData, includeInReport }
+      { photoData, includeInReport, fullResolutionData }
     );
     return response.data;
   },
@@ -105,6 +111,14 @@ const leadClearanceService = {
   togglePhotoInReport: async (clearanceId, itemId, photoId) => {
     const response = await axios.patch(
       `${API_BASE_URL}/${clearanceId}/items/${itemId}/photos/${photoId}/toggle`
+    );
+    return response.data;
+  },
+
+  updatePhotoContent: async (clearanceId, itemId, photoId, { photoData }) => {
+    const response = await axios.patch(
+      `${API_BASE_URL}/${clearanceId}/items/${itemId}/photos/${photoId}`,
+      { photoData }
     );
     return response.data;
   },

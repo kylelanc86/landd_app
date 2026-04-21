@@ -246,7 +246,9 @@ const SampleList = () => {
     samples.length === 0 &&
     jobShifts.length > 1 &&
     previousShift &&
-    ["analysis_complete", "shift_complete"].includes(previousShift.status) &&
+    ["analysis_complete", "shift_complete", "complete"].includes(
+      previousShift.status,
+    ) &&
     !isReportAuthorized;
 
   // Memoize validation function to avoid recreating it on every render
@@ -1616,6 +1618,7 @@ const SampleList = () => {
           "samples_submitted_to_lab",
           "analysis_complete",
           "shift_complete",
+          "complete",
         ].includes(shift?.status) && (
           <>
             <Button
@@ -1658,6 +1661,7 @@ const SampleList = () => {
           "samples_submitted_to_lab",
           "analysis_complete",
           "shift_complete",
+          "complete",
         ].includes(shift?.status) &&
           shift?.status === "sampling_complete" && (
             <Button

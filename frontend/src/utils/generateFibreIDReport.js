@@ -179,14 +179,16 @@ pdfMake.fonts = {
                           // For client-supplied: project contact name, then client contact1Name, then "-"
                           return assessment?.projectId?.projectContact?.name || assessment?.projectId?.client?.contact1Name || '-';
                         }
-                        return assessment?.projectId?.client?.contact1Name || 'Unknown Contact';
+                        // For L&D supplied: project contact name, then client contact1Name, then "-"
+                        return assessment?.projectId?.projectContact?.name || assessment?.projectId?.client?.contact1Name || '-';
                       })() } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: [ { text: 'Email: ', bold: true }, { text: (() => {
                         if (isClientSupplied) {
                           // For client-supplied: project contact email, then client invoiceEmail, then client contact1Email, then "-"
                           return assessment?.projectId?.projectContact?.email || assessment?.projectId?.client?.invoiceEmail || assessment?.projectId?.client?.contact1Email || '-';
                         }
-                        return assessment?.projectId?.client?.contact1Email || 'Unknown Email';
+                        // For L&D supplied: project contact email, then client invoiceEmail, then client contact1Email, then "-"
+                        return assessment?.projectId?.projectContact?.email || assessment?.projectId?.client?.invoiceEmail || assessment?.projectId?.client?.contact1Email || '-';
                       })() } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: [ { text: isClientSupplied ? 'Client reference: ' : 'Site Name: ', bold: true }, { text: assessment?.projectId?.name || (isClientSupplied ? '-' : 'Unknown Site Name') } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                     ]
@@ -244,23 +246,31 @@ pdfMake.fonts = {
                   },
                   {
                     stack: [
-                      { text: [ { text: 'Sampled by: ', bold: true }, { text: isClientSupplied ? 'Client' : (assessment?.LAA || (assessment?.assessorId?.firstName && assessment?.assessorId?.lastName ? `${assessment.assessorId.firstName} ${assessment.assessorId.lastName}` : 'LAA')) } ], style: 'tableContent', margin: [0, 0, 0, 2] },
+                      { text: [ { text: 'Sampled by: ', bold: true }, { text: assessment?.LAA || (assessment?.assessorId?.firstName && assessment?.assessorId?.lastName ? `${assessment.assessorId.firstName} ${assessment.assessorId.lastName}` : (isClientSupplied ? 'Client' : 'LAA')) } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: [ { text: 'Samples Received: ', bold: true }, { text: (() => {
-                        // For client supplied jobs, use sampleReceiptDate first
-                        if (isClientSupplied && assessment?.sampleReceiptDate) {
-                          const date = new Date(assessment.sampleReceiptDate);
-                          return !isNaN(date.getTime()) ? formatDate(assessment.sampleReceiptDate) : 'Date invalid';
+                        // Use explicitly captured sample-receipt dates first:
+                        // - assessment-linked L&D jobs: samplesReceivedDate from "Submit Samples to Lab"
+                        // - client-supplied jobs: sampleReceiptDate from the job form
+                        const preferredDate =
+                          assessment?.samplesReceivedDate ||
+                          assessment?.sampleReceiptDate ||
+                          null;
+
+                        if (preferredDate) {
+                          const date = new Date(preferredDate);
+                          return !isNaN(date.getTime()) ? formatDate(preferredDate) : 'Date invalid';
                         }
-                        // For regular jobs, use project dates
+
+                        // Legacy fallback for older records where sample receipt date was not captured.
                         if (assessment?.projectId?.d_Date) {
                           const date = new Date(assessment.projectId.d_Date);
                           return !isNaN(date.getTime()) ? formatDate(assessment.projectId.d_Date) : 'Date invalid';
                         } else if (assessment?.projectId?.createdAt) {
                           const date = new Date(assessment.projectId.createdAt);
                           return !isNaN(date.getTime()) ? formatDate(assessment.projectId.createdAt) : 'Date invalid';
-                        } else {
-                          return formatDate(new Date());
                         }
+
+                        return formatDate(new Date());
                       })() } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: ' ', style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: [ { text: 'Report Approved by: ', bold: true }, { text: reportApprovedBy || 'Report not approved', color: reportApprovedBy ? 'black' : 'red' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
@@ -405,11 +415,13 @@ pdfMake.fonts = {
           // Sample Analysis Table with fixed row heights
           // Build all rows first to calculate max lines per row
           (function() {
-            // Table column widths in percentage: ['16%', '16.8%', '11%', '17.2%', '10.8%', '12.75%', '15.45%']
+            // Table column widths in percentage: ['16%', '11%', '11%', '19%', '11%', '13%', '19%']
             // A4 page width: 595pt, margins: 40pt each side = 515pt usable width
             const usablePageWidth = 515; // A4 width (595pt) - left margin (40pt) - right margin (40pt)
-            const columnWidths = [0.16, 0.168, 0.11, 0.172, 0.108, 0.1275, 0.1545];
+            const columnWidths = [0.16, 0.11, 0.11, 0.19, 0.11, 0.13, 0.19];
             
+            const VERTICAL_CENTERING_ADJUSTMENT_PT = 2; // Move slightly upward for optical centering
+
             // Helper function to estimate how many lines text will wrap to
             // Based on column width, font size, and text length
             const estimateWrappedLines = (text, columnIndex) => {
@@ -417,8 +429,9 @@ pdfMake.fonts = {
                 return 1;
               }
               
-              // First check for explicit line breaks (\n\n)
-              const explicitLines = text.split('\n\n').length;
+              // Respect explicit line breaks, including blank spacer lines (e.g. "\n\n").
+              // Using "\n" preserves empty lines so multi-result cells get correct height.
+              const explicitLines = text.split('\n').length;
               
               // Estimate character width: for 8pt font, actual rendered width varies
               // Using 0.8pt as a conservative estimate to better detect wrapping
@@ -440,49 +453,33 @@ pdfMake.fonts = {
               // - Font rendering differences
               const charsPerLine = Math.floor(columnWidthPt / avgCharWidth * 0.8);
               
-              // Calculate wrapped lines by splitting text into words and fitting them
-              // This is more accurate than just dividing by charsPerLine
-              const words = text.split(/\s+/);
-              let currentLineLength = 0;
-              let wrappedLines = 1;
-              
-              words.forEach(word => {
-                const wordLength = word.length;
-                // If adding this word would exceed the line, start a new line
-                if (currentLineLength > 0 && currentLineLength + wordLength + 1 > charsPerLine) {
-                  wrappedLines++;
-                  currentLineLength = wordLength;
-                } else {
-                  currentLineLength += (currentLineLength > 0 ? 1 : 0) + wordLength; // +1 for space
+              // Calculate wrapped lines per explicit line. Empty explicit lines still count.
+              let wrappedLines = 0;
+              const explicitLineParts = text.split('\n');
+              explicitLineParts.forEach((part) => {
+                if (!part || !part.trim()) {
+                  wrappedLines += 1;
+                  return;
                 }
+                const words = part.split(/\s+/);
+                let currentLineLength = 0;
+                let partLines = 1;
+                words.forEach(word => {
+                  const wordLength = word.length;
+                  if (currentLineLength > 0 && currentLineLength + wordLength + 1 > charsPerLine) {
+                    partLines++;
+                    currentLineLength = wordLength;
+                  } else {
+                    currentLineLength += (currentLineLength > 0 ? 1 : 0) + wordLength;
+                  }
+                });
+                wrappedLines += partLines;
               });
               
               // Use the maximum of explicit lines or wrapped lines
               const totalLines = Math.max(explicitLines, wrappedLines, 1);
               
               return totalLines;
-            };
-            
-            // Helper function to calculate content height based on number of lines
-            const calculateContentHeight = (lines) => {
-              // Font size: 8pt, line height: ~1.2x = 9.6pt per line
-              // Add spacing between multiple lines
-              const lineHeight = 9.6;
-              const extraSpacing = (lines - 1) * 2; // Extra spacing between multiple lines
-              const height = (lines * lineHeight) + extraSpacing;
-              return height;
-            };
-            
-            // Helper function to calculate row height (includes padding)
-            const calculateRowHeight = (maxLines) => {
-              // Font size: 8pt, line height: ~1.2x = 9.6pt per line
-              // Padding: 8pt top + 8pt bottom = 16pt total (from layout functions)
-              // Add spacing between multiple lines
-              const lineHeight = 9.6;
-              const padding = 16; // 8pt top + 8pt bottom
-              const extraSpacing = (maxLines - 1) * 2;
-              const height = (maxLines * lineHeight) + padding + extraSpacing;
-              return height;
             };
             
             const tableRows = sortedSampleItems.map((item, index) => {
@@ -657,40 +654,29 @@ pdfMake.fonts = {
                   };
                 });
           
-          // Calculate max lines for each row and apply margins for vertical centering
+          // Calculate max lines for each row and apply margins for vertical centering.
+          // Use top offset only: symmetric top/bottom margins in pdfMake can expand row height
+          // and produce the "between top and center" look when adjacent cells wrap.
           const rowsWithMargins = tableRows.map((row, rowIndex) => {
             // Find the maximum number of lines in this row, estimating wrapping for each column
             const lineCounts = row.textValues.map((text, colIndex) => estimateWrappedLines(text, colIndex));
             const maxLines = Math.max(...lineCounts);
-            const rowHeight = calculateRowHeight(maxLines);
             
-            // Apply margins to all cells in this row for vertical centering
-            // pdfMake doesn't support valign, so we use margins to center content
+            // Apply a top margin offset to shorter cells (pdfMake has no valign for table cells).
             const cellsWithMargins = row.cells.map((cell, cellIndex) => {
               const cellLines = lineCounts[cellIndex];
-              const contentHeight = calculateContentHeight(cellLines);
-              
-              // Calculate margin needed to center: (rowHeight - contentHeight) / 2
-              // The rowHeight already includes padding, so we need to account for that
-              // The layout padding functions return 8 (which pdfMake treats as points)
-              // So padding is 8pt top + 8pt bottom = 16pt total
-              const paddingTop = 8; // From layout: paddingTop returns 8
-              const paddingBottom = 8; // From layout: paddingBottom returns 8
-              const availableHeight = rowHeight - paddingTop - paddingBottom;
-              const marginNeeded = (availableHeight - contentHeight) / 2;
-              
-              // Ensure margin is at least 0
-              const topMargin = Math.max(0, marginNeeded);
-              const bottomMargin = Math.max(0, marginNeeded);
+              const missingLines = Math.max(0, maxLines - cellLines);
+              // ~9.6pt line height + spacing/padding effects in this table.
+              // Using 5.5 keeps short cells visually centered beside multi-line results.
+              const topMargin = Math.max(0, (missingLines * 5.5) - VERTICAL_CENTERING_ADJUSTMENT_PT);
               
               // Apply margins directly to the cell
-              // pdfMake should support margins on table cells
               const cellWithMargins = {
                 text: cell.text,
                 fontSize: cell.fontSize || 8,
                 bold: cell.bold || false,
                 alignment: cell.alignment || 'left',
-                margin: [0, topMargin, 0, bottomMargin] // [left, top, right, bottom] in points
+                margin: [0, topMargin, 0, 0] // top-offset only to avoid changing computed row height
               };
               
               return cellWithMargins;
@@ -804,8 +790,10 @@ pdfMake.fonts = {
   // Build filename: ProjectID: Fibre ID Report - ProjectName (SampleDate).pdf
   const projectID = assessment?.projectId?.projectID || '';
   const projectNameRaw = assessment?.projectId?.name || '';
-  // Sanitize project name for filename (remove/replace unsafe characters)
-  const projectName = projectNameRaw.replace(/[^a-zA-Z0-9-_ ]/g, '').replace(/\s+/g, '_');
+  // Preserve common unit-complex naming by converting "/" to ", " in filenames.
+  const projectName = projectNameRaw
+    .replace(/\//g, ', ')
+    .replace(/[^a-zA-Z0-9,._\- ]/g, '');
   
   // Get sample date - try to use reportIssueDate first, then first sample's analysedAt, or current date
   let sampleDate = '';

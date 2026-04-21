@@ -602,7 +602,9 @@ export async function generateLeadMonitoringShiftReport({
     job?.projectId?.projectID ||
     job?.projectId?.projectId?.projectID ||
     "";
-  const projectName = (siteName || "").replace(/[^a-zA-Z0-9-_ ]/g, "").replace(/\s+/g, "_");
+  const projectName = (siteName || "")
+    .replace(/\//g, ", ")
+    .replace(/[^a-zA-Z0-9,._\- ]/g, "");
   const samplingDate = shift?.date ? formatDateForFilename(shift.date) : "";
   const filename = `Lead Air Monitoring Report_${projectID || "report"}${samplingDate ? `_${samplingDate}` : ""}.pdf`;
 

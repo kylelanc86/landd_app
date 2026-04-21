@@ -143,14 +143,15 @@ export const themeSettings = (mode) => {
               boxShadow: "0px 4px 8px rgba(0, 0, 0, 0.15)",
             },
           },
-          contained: {
+          // Use color-specific slots so `color="error"` / `secondary` etc. are not forced to brand green.
+          containedPrimary: {
             backgroundColor: tokens.primary[500],
             color: "#FFFFFF",
             "&:hover": {
               backgroundColor: tokens.primary[600],
             },
           },
-          outlined: {
+          outlinedPrimary: {
             borderColor: tokens.primary[500],
             color: tokens.primary[500],
             "&:hover": {
@@ -354,7 +355,10 @@ export const themeSettings = (mode) => {
               color: "#FFFFFF",
               borderBottom: "none",
             },
-            "& .MuiDataGrid-columnHeader, & .MuiDataGrid-columnHeaderTitle, & .MuiDataGrid-sortIcon, & .MuiSvgIcon-root": {
+            "& .MuiDataGrid-columnHeader, & .MuiDataGrid-columnHeaderTitle, & .MuiDataGrid-sortIcon": {
+              color: "#FFFFFF",
+            },
+            "& .MuiDataGrid-columnHeaders .MuiSvgIcon-root": {
               color: "#FFFFFF",
             },
             "& .MuiDataGrid-columnHeaderTitle": {

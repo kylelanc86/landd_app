@@ -930,9 +930,10 @@ const ClientSuppliedSamples = () => {
                                   "&:hover": { opacity: 0.9 },
                                 }}
                                 onClick={() => {
-                                  setCocClickedIndex(showSize ? null : index);
+                                  setCocFullScreenIndex(index);
+                                  setCocFullScreenOpen(true);
                                 }}
-                                title="Click to show file size"
+                                title="Click to view full size"
                               >
                                 <img
                                   src={item.data}
@@ -994,18 +995,6 @@ const ClientSuppliedSamples = () => {
                             >
                               <DeleteIcon fontSize="small" />
                             </IconButton>
-                            {isImage && (
-                              <Button
-                                variant="outlined"
-                                size="small"
-                                onClick={() => {
-                                  setCocFullScreenIndex(index);
-                                  setCocFullScreenOpen(true);
-                                }}
-                              >
-                                Full size
-                              </Button>
-                            )}
                           </Box>
                         </Box>
                       );
@@ -1187,16 +1176,25 @@ const ClientSuppliedSamples = () => {
                           variant="outlined"
                           size="small"
                           value={row.labReference}
-                          onChange={(e) =>
-                            handleRowChange(
-                              index,
-                              "labReference",
-                              e.target.value
-                            )
-                          }
+                          InputProps={{ readOnly: true }}
                           placeholder={`${job.projectId?.projectID}-Lab${
                             index + 1
                           }`}
+                          sx={(theme) => ({
+                            "& .MuiOutlinedInput-root": {
+                              backgroundColor:
+                                theme.palette.action.disabledBackground,
+                              cursor: "default",
+                            },
+                            "& .MuiOutlinedInput-notchedOutline": {
+                              borderColor: theme.palette.action.disabled,
+                            },
+                            "& .MuiInputBase-input": {
+                              color: theme.palette.text.secondary,
+                              cursor: "default",
+                              WebkitTextFillColor: theme.palette.text.secondary,
+                            },
+                          })}
                         />
                       </TableCell>
                       <TableCell>

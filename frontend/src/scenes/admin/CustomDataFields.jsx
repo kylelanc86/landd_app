@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useSnackbar } from "../../context/SnackbarContext";
 import {
   Box,
@@ -67,6 +67,8 @@ const CustomDataFields = () => {
   const [fibreIdSamplesDescriptions, setFibreIdSamplesDescriptions] = useState(
     [],
   );
+  const [leadSurfaceDescriptions, setLeadSurfaceDescriptions] = useState([]);
+  const hasAutoSeededLeadSurfaceRef = useRef(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [newItemText, setNewItemText] = useState("");
@@ -100,6 +102,7 @@ const CustomDataFields = () => {
         recommendationsData,
         glossaryData,
         fibreIdSamplesDescriptionsData,
+        leadSurfaceDescriptionsData,
       ] = await Promise.all([
         customDataFieldGroupService.getFieldsByType("asbestos_removalist"),
         customDataFieldGroupService.getFieldsByType("location_description"),
@@ -115,6 +118,7 @@ const CustomDataFields = () => {
         customDataFieldGroupService.getFieldsByType(
           "fibre_id_samples_description",
         ),
+        customDataFieldGroupService.getFieldsByType("lead_surface_description"),
       ]);
 
       setAsbestosRemovalists(asbestosData || []);
@@ -126,6 +130,7 @@ const CustomDataFields = () => {
       setRecommendations(recommendationsData || []);
       setGlossary(glossaryData || []);
       setFibreIdSamplesDescriptions(fibreIdSamplesDescriptionsData || []);
+      setLeadSurfaceDescriptions(leadSurfaceDescriptionsData || []);
       // Handle project statuses data which might be an object with activeStatuses and inactiveStatuses
       if (
         projectStatusesData &&
@@ -148,6 +153,106 @@ const CustomDataFields = () => {
   useEffect(() => {
     fetchAllData();
   }, [fetchAllData]);
+
+  // Default options for Lead Surface Description (alphabetical order)
+  const LEAD_SURFACE_DESCRIPTION_DEFAULTS = [
+    "Beams",
+    "Ceiling",
+    "Door",
+    "Door Frame",
+    "Downpipe",
+    "Eaves",
+    "Gutter",
+    "Handrail",
+    "Pipework",
+    "Radiators",
+    "Roof",
+    "Skirting board",
+    "Wall",
+    "Window frame",
+    "Window sill",
+  ];
+
+  const loadLeadSurfaceDescriptionDefaults = async () => {
+    setLoading(true);
+    try {
+      const groupType = "lead_surface_description";
+      let group;
+      try {
+        group = await customDataFieldGroupService.getGroupByType(groupType);
+      } catch (getError) {
+        if (
+          getError.response?.status === 404 ||
+          getError.response?.status === 400
+        ) {
+          group = await customDataFieldGroupService.createGroup({
+            name: "Lead Surface Description",
+            description: "Lead Surface Description custom data fields",
+            type: groupType,
+            fields: [],
+          });
+        } else {
+          throw getError;
+        }
+      }
+      const existingTexts = new Set(
+        (group.fields || []).map((f) => (f.text || "").trim()),
+      );
+      const toAdd = LEAD_SURFACE_DESCRIPTION_DEFAULTS.filter(
+        (text) => !existingTexts.has(text),
+      );
+      if (toAdd.length === 0) {
+        showSnackbar("Default options are already loaded", "info");
+        return;
+      }
+      const cleanedFields = (group.fields || []).map((field) => ({
+        _id: field._id,
+        text: field.text,
+        order: field.order,
+        isActive: field.isActive,
+      }));
+      const startOrder = cleanedFields.length;
+      toAdd.forEach((text, i) => {
+        cleanedFields.push({
+          text,
+          order: startOrder + i,
+          isActive: true,
+        });
+      });
+      await customDataFieldGroupService.updateGroup(group._id, {
+        name: group.name,
+        description: group.description,
+        fields: cleanedFields,
+      });
+      await fetchAllData();
+      showSnackbar(
+        `Added ${toAdd.length} default Lead Surface Description option(s)`,
+      );
+    } catch (error) {
+      console.error("Error loading Lead Surface Description defaults:", error);
+      showSnackbar(
+        error.response?.data?.message ||
+          error.message ||
+          "Failed to load default options",
+        "error",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Auto-seed Lead Surface Description with default options when the list is empty (once per session)
+  useEffect(() => {
+    if (
+      !loading &&
+      leadSurfaceDescriptions.length === 0 &&
+      !hasAutoSeededLeadSurfaceRef.current
+    ) {
+      hasAutoSeededLeadSurfaceRef.current = true;
+      loadLeadSurfaceDescriptionDefaults();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only auto-seed when loading/leadSurfaceDescriptions change
+  }, [loading, leadSurfaceDescriptions.length]);
 
   // Helper function to sort data alphabetically
   const sortDataAlphabetically = (data) => {
@@ -248,6 +353,12 @@ const CustomDataFields = () => {
             setter: setFibreIdSamplesDescriptions,
             title: "Fibre ID Samples Descriptions",
           };
+        case 7:
+          return {
+            data: leadSurfaceDescriptions,
+            setter: setLeadSurfaceDescriptions,
+            title: "Lead Surface Description",
+          };
         default:
           return { data: [], setter: () => {}, title: "" };
       }
@@ -310,6 +421,7 @@ const CustomDataFields = () => {
           "Materials Descriptions (non-ACM)",
           "Glossary",
           "Fibre ID Samples Descriptions",
+          "Lead Surface Description",
         ].includes(title)
       ) {
         // Get the current group
@@ -383,6 +495,8 @@ const CustomDataFields = () => {
         return "glossary";
       case "Fibre ID Samples Descriptions":
         return "fibre_id_samples_description";
+      case "Lead Surface Description":
+        return "lead_surface_description";
       default:
         return "asbestos_removalist";
     }
@@ -474,6 +588,7 @@ const CustomDataFields = () => {
             "Recommendations",
             "Glossary",
             "Fibre ID Samples Descriptions",
+            "Lead Surface Description",
           ].includes(title)
         ) {
           // Get the current group
@@ -639,6 +754,7 @@ const CustomDataFields = () => {
             "Recommendations",
             "Glossary",
             "Fibre ID Samples Descriptions",
+            "Lead Surface Description",
           ].includes(title)
         ) {
           try {
@@ -836,13 +952,13 @@ const CustomDataFields = () => {
         >
           <Typography variant="h6">{title}</Typography>
           <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={handleAddItem}
-            size="small"
-          >
-            Add {title}
-          </Button>
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleAddItem}
+              size="small"
+            >
+              Add {title}
+            </Button>
         </Box>
 
         {loading ? (
@@ -1329,7 +1445,18 @@ const CustomDataFields = () => {
             value={tabValue}
             onChange={handleTabChange}
             aria-label="custom data fields tabs"
-            sx={{ borderBottom: 1, borderColor: "divider" }}
+            sx={{
+              borderBottom: 1,
+              borderColor: "divider",
+              "& .MuiTabs-flexContainer": {
+                flexWrap: "wrap",
+                gap: 0,
+              },
+              "& .MuiTab-root": {
+                minWidth: "auto",
+                px: 2,
+              },
+            }}
           >
             <Tab label="Asbestos Removalists" />
             <Tab label="Item Descriptions" />
@@ -1338,6 +1465,7 @@ const CustomDataFields = () => {
             <Tab label="Recommendations" />
             <Tab label="Glossary" />
             <Tab label="Fibre ID Samples Descriptions" />
+            <Tab label="Lead Surface Description" />
           </Tabs>
 
           <TabPanel value={tabValue} index={0}>
@@ -1405,6 +1533,13 @@ const CustomDataFields = () => {
             {renderTabContent(
               fibreIdSamplesDescriptions,
               "Fibre ID Samples Descriptions",
+            )}
+          </TabPanel>
+
+          <TabPanel value={tabValue} index={7}>
+            {renderTabContent(
+              leadSurfaceDescriptions,
+              "Lead Surface Description",
             )}
           </TabPanel>
         </Paper>

@@ -334,15 +334,30 @@ const getTemplateByType = async (templateType) => {
         });
       } else if (templateType === "leadAssessment") {
         standardSections = {
-          introductionContent: "",
-          surveyFindingsContent: "",
-          discussionContent: "",
-          recommendedControlMeasuresContent: "",
-          signOffContent: "",
-          assessmentMethodologyContent: "",
-          riskAssessmentContent: "",
-          legislationContent: "",
-          assessmentLimitationsContent: "",
+          introductionTitle: "INTRODUCTION",
+          introductionContent:
+            "Following discussions with {CLIENT_NAME}, Lancaster and Dickenson Consulting (L & D) were contracted to undertake a lead assessment at {SITE_NAME}. {CONSULTANT_NAME} from L & D visited the site on {ASSESSMENT_DATE} to undertake the assessment.\n\nThis report covers the assessment of the following scope:\n{ASSESSMENT_SCOPE_BULLETS}",
+          discussionTitle: "DISCUSSION AND CONCLUSIONS",
+          discussionContent:
+            "The sampling results and observations have been reviewed in the context of relevant guidance for lead hazards. Any exceedances or areas of concern are identified in Table 1 and should be addressed in line with the recommendations below and applicable regulations.",
+          signOffContent:
+            "Please do not hesitate to contact the undersigned should you have any queries regarding this report.\n\nFor and on behalf of Lancaster and Dickenson Consulting.\n\n{CONSULTANT_NAME}",
+          backgroundContent: "",
+          regulatoryGuidanceContent: "{LEGISLATION}",
+          assessmentCriteriaLeadPaintContent: "",
+          assessmentCriteriaLeadDustContent: "",
+          assessmentCriteriaLeadSoilContent: "",
+          assessmentMethodologyLeadPaintContent: "",
+          assessmentMethodologyLeadDustContent: "",
+          assessmentMethodologyLeadSoilContent: "",
+          assessmentFindingsLeadPaintContent: "",
+          assessmentFindingsLeadDustContent: "",
+          assessmentFindingsLeadSoilContent: "",
+          riskAssessmentLeadPaintContent: "",
+          riskAssessmentLeadDustContent: "",
+          riskAssessmentLeadSoilContent: "",
+          statementOfLimitationsContent: "",
+          signaturePlaceholder: "",
         };
         template = new ReportTemplate({
           templateType,
@@ -468,23 +483,93 @@ const getTemplateByType = async (templateType) => {
  */
 const replacePlaceholders = async (content, data) => {
   if (!content) return '';
-  
+
+  const assessmentTypes = Array.isArray(data.assessmentType)
+    ? data.assessmentType.map((t) => String(t || '').trim().toLowerCase())
+    : [];
+  const hasPaint = assessmentTypes.includes('paint');
+  const hasPaintXrf = assessmentTypes.includes('paint-xrf');
+  const hasDust = assessmentTypes.includes('dust');
+  const hasSoil = assessmentTypes.includes('soil');
+  const lpAppendicesContent = (() => {
+    if (hasPaint && hasPaintXrf) {
+      return 'The Certificate of Analysis for physical paint samples is presented in Appendix A to this report. The tabulated XRF analysis results are presented in Appendix B';
+    }
+    if (hasPaintXrf) {
+      return 'The tabulated XRF analysis results are presented in Appendix A';
+    }
+    if (hasPaint) {
+      return 'The Certificate of Analysis is presented in Appendix A to this report.';
+    }
+    return '';
+  })();
+  const ldAppendicesContent = (() => {
+    if (!hasDust) return '';
+    if (hasPaintXrf && !hasPaint) {
+      return 'The Certificate of Analysis is presented in Appendix B to this report.';
+    }
+    return 'The Certificate of Analysis is presented in Appendix A to this report.';
+  })();
+  const lsAppendicesContent = (() => {
+    if (!hasSoil) return '';
+    if (hasPaintXrf && !hasPaint) {
+      return 'The Certificate of Analysis is presented in Appendix B to this report.';
+    }
+    return 'The Certificate of Analysis is presented in Appendix A to this report.';
+  })();
+
+  const leadScopeParts = [];
+  if (hasPaint || hasPaintXrf) leadScopeParts.push('paint');
+  if (assessmentTypes.includes('dust')) leadScopeParts.push('dusts');
+  if (assessmentTypes.includes('soil')) leadScopeParts.push('soils');
+  const leadScopePhrase = (() => {
+    if (leadScopeParts.length === 0) return '';
+    if (leadScopeParts.length === 1) return leadScopeParts[0];
+    if (leadScopeParts.length === 2) return `${leadScopeParts[0]} and ${leadScopeParts[1]}`;
+    return `${leadScopeParts.slice(0, -1).join(', ')} and ${leadScopeParts[leadScopeParts.length - 1]}`;
+  })();
+  const leadAssessmentPlanPlaceholder = (() => {
+    if (data.jobType !== 'lead-assessment') return '';
+    const hasAssessmentPlan = Array.isArray(data.leadAssessmentPlanAppendices)
+      && data.leadAssessmentPlanAppendices.some(
+        (p) => p && typeof p.sitePlanFile === 'string' && p.sitePlanFile.trim()
+      );
+    if (!hasAssessmentPlan) return '';
+    return 'A plan is also presented below which outlines the areas covered by this assessment.';
+  })();
+
   // Look up user's Asbestos Assessor licence number, state, and signature
   let laaLicenceNumber = 'AA00031'; // Default fallback
   let laaLicenceState = ''; // Default fallback
   let userSignature = null;
   // ALWAYS use data.LAA for the name (not createdBy)
   let laaName = data.LAA || data.laaName || 'Unknown LAA'; // Default name
-  
+  if (data.jobType === 'lead-assessment' && data.consultantId && typeof data.consultantId === 'object') {
+    const cn = [data.consultantId.firstName, data.consultantId.lastName].filter(Boolean).join(' ').trim();
+    if (cn) laaName = cn;
+  }
+
   // Look up the user identified by data.LAA to get their licence information
   // data.LAA is a name string (e.g., "FirstName LastName")
   let userIdentifier = null;
-  
-  // PRIORITY 1: Use data.LAA for clearance certificates
-  if (data.LAA) {
+
+  // Lead assessment reports: sign-off / signature from consultant user record
+  if (data.jobType === 'lead-assessment' && data.consultantId) {
+    const c = data.consultantId;
+    if (typeof c === 'object' && c !== null && c._id) {
+      userIdentifier = String(c._id);
+      console.log('[TEMPLATE SERVICE] Using consultantId for lead assessment lookup:', userIdentifier);
+    } else if (typeof c === 'string' && /^[0-9a-fA-F]{24}$/.test(c)) {
+      userIdentifier = c;
+      console.log('[TEMPLATE SERVICE] Using consultantId string for lead assessment lookup:', userIdentifier);
+    }
+  }
+
+  // PRIORITY: Use data.LAA for clearance certificates (when not already using consultant)
+  if (!userIdentifier && data.LAA) {
     userIdentifier = data.LAA;
     console.log('[TEMPLATE SERVICE] Using data.LAA for lookup:', userIdentifier);
-  } else if (data.assessorId) {
+  } else if (!userIdentifier && data.assessorId) {
     // Fall back to assessorId for assessment reports
     userIdentifier = data.assessorId;
     
@@ -634,13 +719,37 @@ const replacePlaceholders = async (content, data) => {
     '{ASBESTOS_TYPE}': data.clearanceType?.toLowerCase() || 'non-friable',
     '{SITE_NAME}': data.projectId?.name || data.project?.name || data.siteName || 'Unknown Site',
     '[SITE_NAME]': data.projectId?.name || data.project?.name || data.siteName || 'Unknown Site',
+    '{CONSULTANT_NAME}': (() => {
+      const c = data.consultantId;
+      if (c && typeof c === 'object') {
+        const n = [c.firstName, c.lastName].filter(Boolean).join(' ').trim();
+        if (n) return n;
+      }
+      return (data.consultant && String(data.consultant).trim()) || 'Unknown Consultant';
+    })(),
+    '[CONSULTANT_NAME]': (() => {
+      const c = data.consultantId;
+      if (c && typeof c === 'object') {
+        const n = [c.firstName, c.lastName].filter(Boolean).join(' ').trim();
+        if (n) return n;
+      }
+      return (data.consultant && String(data.consultant).trim()) || 'Unknown Consultant';
+    })(),
+    '{NUMBER_OF_SAMPLES}': String(Array.isArray(data.items) ? data.items.length : 0),
+    '[NUMBER_OF_SAMPLES]': String(Array.isArray(data.items) ? data.items.length : 0),
+    '{NUMBER_OF_ISSUES}': String(Array.isArray(data.items) ? data.items.length : 0),
+    '[NUMBER_OF_ISSUES]': String(Array.isArray(data.items) ? data.items.length : 0),
     '{ASBESTOS_REMOVALIST}': data.asbestosRemovalist || 'Unknown Removalist',
     '{LAA_NAME}': laaName,
     '[LAA_NAME]': laaName,
     '{LAA_LICENSE}': laaLicenceNumber,
     '[LAA_LICENCE]': laaLicenceNumber,
+    '{LAA_LICENCENUMBER}': laaLicenceNumber,
+    '[LAA_LICENCENUMBER]': laaLicenceNumber,
     '{LAA_LICENCE_STATE}': laaLicenceState,
     '[LAA_LICENCE_STATE]': laaLicenceState,
+    '{LAA_STATE}': laaLicenceState || data.jurisdiction || '',
+    '[LAA_STATE]': laaLicenceState || data.jurisdiction || '',
     '{ASSESSMENT_DATE}': data.assessmentDate
       ? new Date(data.assessmentDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
       : 'Unknown Date',
@@ -798,6 +907,10 @@ const replacePlaceholders = async (content, data) => {
     '[AUTHOR_NAME]': data.assessorId?.firstName + ' ' + data.assessorId?.lastName || data.LAA || 'Unknown Author',
     '{ASSESSOR_NAME}': (() => {
       if (data.consultant) return data.consultant;
+      if (data.consultantId && typeof data.consultantId === 'object') {
+        const name = [data.consultantId.firstName, data.consultantId.lastName].filter(Boolean).join(' ').trim();
+        if (name) return name;
+      }
       if (data.assessorId && typeof data.assessorId === 'object') {
         const name = [data.assessorId.firstName, data.assessorId.lastName].filter(Boolean).join(' ').trim();
         if (name) return name;
@@ -807,6 +920,10 @@ const replacePlaceholders = async (content, data) => {
     })(),
     '[ASSESSOR_NAME]': (() => {
       if (data.consultant) return data.consultant;
+      if (data.consultantId && typeof data.consultantId === 'object') {
+        const name = [data.consultantId.firstName, data.consultantId.lastName].filter(Boolean).join(' ').trim();
+        if (name) return name;
+      }
       if (data.assessorId && typeof data.assessorId === 'object') {
         const name = [data.assessorId.firstName, data.assessorId.lastName].filter(Boolean).join(' ').trim();
         if (name) return name;
@@ -893,7 +1010,17 @@ const replacePlaceholders = async (content, data) => {
         }
       }
       return '[BULLET]No legislation items selected';
-    })()
+    })(),
+    '{LP_APPENDICES}': lpAppendicesContent,
+    '[LP_APPENDICES]': lpAppendicesContent,
+    '{LD_APPENDICES}': ldAppendicesContent,
+    '[LD_APPENDICES]': ldAppendicesContent,
+    '{LS_APPENDICES}': lsAppendicesContent,
+    '[LS_APPENDICES]': lsAppendicesContent,
+    '{LEAD_SCOPE}': leadScopePhrase,
+    '[LEAD_SCOPE]': leadScopePhrase,
+    '{ASSESSMENT_PLAN}': leadAssessmentPlanPlaceholder,
+    '[ASSESSMENT_PLAN]': leadAssessmentPlanPlaceholder,
   };
 
   let result = content;
@@ -901,9 +1028,10 @@ const replacePlaceholders = async (content, data) => {
     result = result.replace(new RegExp(placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), value);
   });
 
-  // Convert [BR] to line breaks first
-  result = result.replace(/\[BR\]/g, '<br>');
-  result = result.replace(/\{BR\}/g, '<br>');
+  // Convert explicit break placeholders first.
+  // Requirement: after [BR], add a half-line space.
+  result = result.replace(/\[BR\]/g, '<br>[HALF_BR]');
+  result = result.replace(/\{BR\}/g, '<br>[HALF_BR]');
   
   // Convert natural line breaks to HTML
   result = result.replace(/\r?\n/g, '<br>');
@@ -960,9 +1088,9 @@ const replacePlaceholders = async (content, data) => {
   // Convert [UNDERLINE]text[/UNDERLINE] to underlined text
   result = result.replace(/\[UNDERLINE\](.*?)\[\/UNDERLINE\]/g, '<u>$1</u>');
   
-  // Remove HALF_BR placeholders - no longer needed
-  result = result.replace(/\[HALF_BR\]/g, '');
-  result = result.replace(/\{HALF_BR\}/g, '');
+  // Convert HALF_BR placeholders to half-line spacing blocks
+  result = result.replace(/\[HALF_BR\]/g, '<span style="display:block; height:0.5em;"></span>');
+  result = result.replace(/\{HALF_BR\}/g, '<span style="display:block; height:0.5em;"></span>');
 
   return result;
 };

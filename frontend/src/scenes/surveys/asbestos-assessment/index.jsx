@@ -1230,7 +1230,7 @@ const AsbestosAssessment = () => {
                   <TableCell
                     sx={{
                       fontWeight: "bold",
-                      maxWidth: "150px",
+                      minWidth: "180px",
                       display: "none", // Sample Analysis column hidden for now
                     }}
                   >
@@ -1239,7 +1239,8 @@ const AsbestosAssessment = () => {
                   <TableCell
                     sx={{
                       fontWeight: "bold",
-                      minWidth: "120px",
+                      minWidth: "270px",
+                      maxWidth: "270px",
                       display: { xs: "none", sm: "table-cell" },
                     }}
                   >

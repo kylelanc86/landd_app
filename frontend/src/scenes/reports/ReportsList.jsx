@@ -21,6 +21,7 @@ import {
   Edit as EditIcon,
   Description as DescriptionIcon,
   TableChart as TableChartIcon,
+  PhotoLibrary as PhotoLibraryIcon,
 } from "@mui/icons-material";
 import { format } from "date-fns";
 
@@ -32,10 +33,32 @@ const ReportsList = ({
   onDownload,
   onPrint,
   onRevise,
+  onViewImages,
   onViewCOC,
   onExportCSV,
   processingReport = { reportId: null, action: null },
 }) => {
+  const showReviseButton = (report) => {
+    if (!onRevise) return false;
+    const s = report.status;
+    const completeLike =
+      s === "complete" ||
+      s === "completed" ||
+      s === "Completed" ||
+      s === "shift_complete";
+    if (category === "asbestos-assessment" && report.type === "asbestos_assessment") {
+      const auth =
+        report.reportAuthorisedBy ?? report.data?.reportAuthorisedBy;
+      const hasAuth =
+        auth != null &&
+        (typeof auth !== "string" || String(auth).trim() !== "");
+      return (
+        completeLike || (s === "report-ready-for-review" && hasAuth)
+      );
+    }
+    return completeLike;
+  };
+
   const getCategoryTitle = () => {
     switch (category) {
       case "asbestos-assessment":
@@ -235,6 +258,24 @@ const ReportsList = ({
                         )}
                       </IconButton>
                     </Tooltip>
+                    {[
+                      "clearance",
+                      "asbestos_assessment",
+                      "lead_clearance",
+                      "lead_assessment",
+                      "residential_asbestos_assessment",
+                    ].includes(report.type) &&
+                      onViewImages && (
+                        <Tooltip title="View Report Images">
+                          <IconButton
+                            size="small"
+                            onClick={() => onViewImages(report)}
+                            color="primary"
+                          >
+                            <PhotoLibraryIcon />
+                          </IconButton>
+                        </Tooltip>
+                      )}
                     {/* CSV Export button for air monitoring reports */}
                     {report.type === "shift" && onExportCSV && (
                       <Tooltip title="Export to CSV">
@@ -275,12 +316,8 @@ const ReportsList = ({
                           </IconButton>
                         </Tooltip>
                       )}
-                    {/* Only show revise button for completed reports (include shift_complete for air mon shift reports) */}
-                    {(report.status === "complete" ||
-                      report.status === "completed" ||
-                      report.status === "Completed" ||
-                      report.status === "shift_complete") &&
-                      onRevise && (
+                    {/* Revise: completed-style statuses, or asbestos assessment that is still final-authorised while ready for review */}
+                    {showReviseButton(report) && (
                         <Button
                           size="small"
                           variant="outlined"

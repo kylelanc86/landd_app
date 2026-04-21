@@ -1,11 +1,14 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const AsbestosAssessment = require('../models/assessmentTemplates/asbestos/AsbestosAssessment');
+const ClientSuppliedJob = require('../models/ClientSuppliedJob');
 const User = require('../models/User');
 const { sendMail } = require('../services/mailer');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const { getLegislationForReportTemplate } = require('../services/templateService');
+const { buildContentDispositionAttachment } = require('../utils/contentDisposition');
 
 /** Assessment report PDF retention (days) – matches DocRaptor; after this, report is no longer offered for download. */
 const ASSESSMENT_PDF_RETENTION_DAYS = 7;
@@ -25,6 +28,64 @@ function clearAssessmentPdfFields(doc) {
   });
 }
 
+/** Strip base64 photo payloads from plain assessment items (for ?omitPhotoData=1). */
+function stripItemPhotoBinaryFromPlainItems(items) {
+  if (!Array.isArray(items)) return;
+  for (const item of items) {
+    if (Array.isArray(item.photographs)) {
+      item.photographs.forEach((p) => {
+        if (p && typeof p === 'object') {
+          delete p.data;
+          delete p.fullResolutionData;
+        }
+      });
+    }
+    if (Array.isArray(item.referredLocations)) {
+      for (const loc of item.referredLocations) {
+        if (Array.isArray(loc.photographs)) {
+          loc.photographs.forEach((p) => {
+            if (p && typeof p === 'object') {
+              delete p.data;
+              delete p.fullResolutionData;
+            }
+          });
+        }
+      }
+    }
+  }
+}
+
+/** Strip large plan image payloads; keep counts for UI badges. */
+function applyOmitPlanFilesToPlain(plain) {
+  if (!plain || typeof plain !== 'object') return;
+  plain.leadSitePlanAppendixFileCount = Array.isArray(plain.leadSitePlanAppendices)
+    ? plain.leadSitePlanAppendices.filter((p) => p && p.sitePlanFile).length
+    : 0;
+  plain.leadAssessmentPlanAppendixFileCount = Array.isArray(plain.leadAssessmentPlanAppendices)
+    ? plain.leadAssessmentPlanAppendices.filter((p) => p && p.sitePlanFile).length
+    : 0;
+  if (plain.sitePlanFile) delete plain.sitePlanFile;
+  if (Array.isArray(plain.leadSitePlanAppendices)) {
+    plain.leadSitePlanAppendices.forEach((p) => {
+      if (p && typeof p === 'object') delete p.sitePlanFile;
+    });
+  }
+  if (Array.isArray(plain.leadAssessmentPlanAppendices)) {
+    plain.leadAssessmentPlanAppendices.forEach((p) => {
+      if (p && typeof p === 'object') delete p.sitePlanFile;
+    });
+  }
+}
+
+/** Omit fibre PDF string; preserve whether one exists (for UI). */
+function applyOmitFibreReportToPlain(plain, jobDoc) {
+  if (!plain || typeof plain !== 'object') return;
+  const raw = jobDoc.fibreAnalysisReport;
+  plain.hasFibreAnalysisReport =
+    typeof raw === 'string' && raw.trim().length > 0;
+  delete plain.fibreAnalysisReport;
+}
+
 // Exclude soft-deleted assessments from list queries
 const notDeletedAssessmentFilter = {
   $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
@@ -33,20 +94,29 @@ const notDeletedAssessmentFilter = {
 // GET /api/assessments - list all assessment jobs (populate project and assessor); excludes archived and soft-deleted
 // Query param jobType: 'asbestos-assessment' | 'residential-asbestos' - when set, only jobs of that type are returned
 // Query param list=1 - return minimal fields for table display (no full items, photos, blobs); faster and smaller payload
+// Query param projectId (ObjectId) - restrict to assessments for that project (e.g. Project Reports active jobs)
 router.get('/', async (req, res) => {
   try {
-    const filter = { archived: { $ne: true }, ...notDeletedAssessmentFilter };
-    const { jobType, list } = req.query;
+    const filterClauses = [{ archived: { $ne: true } }, notDeletedAssessmentFilter];
+    const { jobType, list, projectId: projectIdQuery } = req.query;
+    if (projectIdQuery && mongoose.Types.ObjectId.isValid(String(projectIdQuery))) {
+      filterClauses.push({ projectId: new mongoose.Types.ObjectId(String(projectIdQuery)) });
+    }
     if (jobType === 'residential-asbestos') {
-      filter.jobType = 'residential-asbestos';
+      filterClauses.push({ jobType: 'residential-asbestos' });
+    } else if (jobType === 'lead-assessment') {
+      filterClauses.push({ jobType: 'lead-assessment' });
     } else if (jobType === 'asbestos-assessment') {
       // Include docs with jobType 'asbestos-assessment' or missing (legacy)
-      filter.$or = [
+      filterClauses.push({
+        $or: [
         { jobType: 'asbestos-assessment' },
         { jobType: { $exists: false } },
         { jobType: null },
-      ];
+        ],
+      });
     }
+    const filter = { $and: filterClauses };
 
     if (list === '1' || list === 'true') {
       // Minimal payload for table lists: lean aggregation with only fields needed for display and row actions
@@ -98,6 +168,8 @@ router.get('/', async (req, res) => {
             LAA: 1,
             state: 1,
             secondaryHeader: 1,
+            assessmentType: 1,
+            consultantId: 1,
             intrusiveness: 1,
             reportApprovedBy: 1,
             reportAuthorisedBy: 1,
@@ -175,34 +247,43 @@ router.post('/', async (req, res) => {
     if (!req.user || !req.user._id) {
       return res.status(401).json({ message: 'Not authenticated' });
     }
-    const { projectId, assessmentDate, LAA, state, secondaryHeader, jobType, intrusiveness } = req.body;
+    const { projectId, assessmentDate, LAA, state, secondaryHeader, jobType, intrusiveness, assessmentType, consultantId } = req.body;
     if (!projectId || !assessmentDate) {
       return res.status(400).json({ message: 'projectId and assessmentDate are required' });
     }
-    const validJobType = jobType === 'residential-asbestos' ? 'residential-asbestos' : 'asbestos-assessment';
+    const validJobType = jobType === 'residential-asbestos' ? 'residential-asbestos' : jobType === 'lead-assessment' ? 'lead-assessment' : 'asbestos-assessment';
     const validIntrusiveness = intrusiveness === 'intrusive' ? 'intrusive' : 'non-intrusive';
     const validState = state && ['ACT', 'NSW', 'Commonwealth'].includes(state) ? state : null;
+    const validAssessmentTypes = Array.isArray(assessmentType) ? assessmentType.filter((t) => ['paint', 'paint-xrf', 'dust', 'soil'].includes(t)) : [];
 
-    // Legislation snapshot at job creation (state-specific from report template)
+    // Legislation snapshot at job creation (state-specific from report template) – skip for lead-assessment
     let legislation = [];
-    try {
-      const templateType = validJobType === 'residential-asbestos' ? 'residentialAsbestosAssessment' : 'asbestosAssessment';
-      legislation = await getLegislationForReportTemplate(templateType, validState || 'ACT');
-    } catch (err) {
-      console.error('Error fetching legislation for assessment:', err);
+    if (validJobType !== 'lead-assessment') {
+      try {
+        const templateType = validJobType === 'residential-asbestos' ? 'residentialAsbestosAssessment' : 'asbestosAssessment';
+        legislation = await getLegislationForReportTemplate(templateType, validState || 'ACT');
+      } catch (err) {
+        console.error('Error fetching legislation for assessment:', err);
+      }
     }
 
-    const job = new AsbestosAssessment({
+    const jobPayload = {
       projectId,
       assessorId: req.user._id,
       assessmentDate,
       jobType: validJobType,
-      LAA: LAA || null,
       state: validState,
       secondaryHeader: secondaryHeader || undefined,
-      intrusiveness: validIntrusiveness,
       legislation,
-    });
+    };
+    if (validJobType === 'lead-assessment') {
+      jobPayload.assessmentType = validAssessmentTypes;
+      jobPayload.consultantId = consultantId || null;
+    } else {
+      jobPayload.LAA = LAA || null;
+      jobPayload.intrusiveness = validIntrusiveness;
+    }
+    const job = new AsbestosAssessment(jobPayload);
     await job.save();
     const populatedJob = await AsbestosAssessment.findById(job._id)
       .populate({
@@ -223,7 +304,33 @@ router.post('/', async (req, res) => {
 // GET /api/assessments/:id - get single assessment job (populate project and assessor)
 router.get('/:id', async (req, res) => {
   try {
-    const job = await AsbestosAssessment.findById(req.params.id)
+    const qTrue = (v) => v === '1' || v === 'true';
+    const omitPhotoData = qTrue(req.query.omitPhotoData);
+    const omitPlanFiles = qTrue(req.query.omitPlanFiles);
+    const omitFibreReport = qTrue(req.query.omitFibreReport);
+    const omitItems = qTrue(req.query.omitItems);
+    const itemsMaterialTypesRaw =
+      req.query.itemsMaterialTypes != null
+        ? String(req.query.itemsMaterialTypes).trim()
+        : '';
+
+    // Keep heavy plan/fibre blobs in the document when those flags are used so
+    // applyOmitPlanFilesToPlain / applyOmitFibreReportToPlain still compute counts/flags correctly.
+    const photoBlobExclusions =
+      omitPhotoData &&
+      ({
+        'items.photograph': 0,
+        'items.photographs.data': 0,
+        'items.photographs.fullResolutionData': 0,
+        'items.referredLocations.photographs.data': 0,
+      });
+
+    let jobQuery = AsbestosAssessment.findById(req.params.id);
+    if (photoBlobExclusions) {
+      jobQuery = jobQuery.select(photoBlobExclusions);
+    }
+
+    const job = await jobQuery
       .populate({
         path: "projectId",
         select: "projectID name client",
@@ -233,7 +340,8 @@ router.get('/:id', async (req, res) => {
         }
       })
       .populate('assessorId')
-      .populate('analyst', 'firstName lastName email');
+      .populate('analyst', 'firstName lastName email')
+      .populate('consultantId', 'firstName lastName email');
     if (!job) return res.status(404).json({ message: 'Assessment job not found' });
     
     // Manually populate analysedBy for items (Mongoose doesn't support nested array population directly)
@@ -370,8 +478,45 @@ router.get('/:id', async (req, res) => {
     //   console.log('About to send - fibreAnalysisReport is missing/null/undefined');
     // }
     // console.log('=== END PRE-RESPONSE DEBUG ===');
-    
-    res.json(job);
+
+    const needsPlainTransform =
+      omitPhotoData ||
+      omitPlanFiles ||
+      omitFibreReport ||
+      omitItems ||
+      itemsMaterialTypesRaw.length > 0;
+
+    if (!needsPlainTransform) {
+      return res.json(job);
+    }
+
+    const plain = job.toObject({ depopulate: false });
+
+    if (omitItems) {
+      plain.items = [];
+    } else if (itemsMaterialTypesRaw.length > 0) {
+      const typeSet = new Set(
+        itemsMaterialTypesRaw
+          .split(',')
+          .map((s) => s.trim().toLowerCase())
+          .filter(Boolean),
+      );
+      plain.items = (plain.items || []).filter((item) =>
+        typeSet.has(String(item.materialType || '').toLowerCase()),
+      );
+    }
+
+    if (omitPlanFiles) {
+      applyOmitPlanFilesToPlain(plain);
+    }
+    if (omitFibreReport) {
+      applyOmitFibreReportToPlain(plain, job);
+    }
+    if (omitPhotoData) {
+      stripItemPhotoBinaryFromPlainItems(plain.items);
+    }
+
+    return res.json(plain);
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch assessment job', error: err.message });
   }
@@ -380,7 +525,9 @@ router.get('/:id', async (req, res) => {
 // PUT /api/assessments/:id - update assessment job
 router.put('/:id', async (req, res) => {
   try {
-    const existingJob = await AsbestosAssessment.findById(req.params.id).select('jobType').lean();
+    const existingJob = await AsbestosAssessment.findById(req.params.id)
+      .select('jobType leadAssessmentScope leadDiscussionConclusionsByType')
+      .lean();
     if (!existingJob) return res.status(404).json({ message: 'Assessment job not found' });
 
     const { 
@@ -388,6 +535,8 @@ router.put('/:id', async (req, res) => {
       assessmentDate, 
       status, 
       assessmentScope,
+      leadAssessmentScope,
+      leadDiscussionConclusionsByType,
       samplesReceivedDate,
       submittedBy,
       samplesSubmittedById,
@@ -411,7 +560,11 @@ router.put('/:id', async (req, res) => {
       reportAuthorisedAt,
       archived,
       noSamplesCollected,
-      intrusiveness
+      intrusiveness,
+      assessmentType,
+      consultantId,
+      leadSitePlanAppendices,
+      leadAssessmentPlanAppendices
     } = req.body;
     if (!projectId || !assessmentDate) {
       return res.status(400).json({ message: 'projectId and assessmentDate are required' });
@@ -492,6 +645,112 @@ router.put('/:id', async (req, res) => {
     }
     if (intrusiveness !== undefined && ['non-intrusive', 'intrusive'].includes(intrusiveness)) {
       updateData.intrusiveness = intrusiveness;
+    }
+    if (existingJob.jobType === 'lead-assessment') {
+      if (assessmentType !== undefined) {
+        const valid = Array.isArray(assessmentType) ? assessmentType.filter((t) => ['paint', 'paint-xrf', 'dust', 'soil'].includes(t)) : [];
+        updateData.assessmentType = valid;
+      }
+      if (consultantId !== undefined) {
+        updateData.consultantId = consultantId || null;
+      }
+      if (leadAssessmentScope !== undefined) {
+        const allowedKeys = new Set(['paint', 'paint-xrf', 'dust', 'soil']);
+        const prevScope =
+          existingJob.leadAssessmentScope &&
+          typeof existingJob.leadAssessmentScope === 'object' &&
+          !Array.isArray(existingJob.leadAssessmentScope)
+            ? { ...existingJob.leadAssessmentScope }
+            : {};
+        if (leadAssessmentScope && typeof leadAssessmentScope === 'object' && !Array.isArray(leadAssessmentScope)) {
+          const cleaned = {};
+          for (const [k, v] of Object.entries(leadAssessmentScope)) {
+            if (!allowedKeys.has(k)) continue;
+            if (!Array.isArray(v)) {
+              cleaned[k] = [];
+              continue;
+            }
+            cleaned[k] = v
+              .filter((row) => row && typeof row === 'object')
+              .map((row) => ({
+                roomArea: typeof row.roomArea === 'string' ? row.roomArea.trim() : '',
+                locations: typeof row.locations === 'string' ? row.locations.trim() : '',
+              }))
+              .filter((row) => row.roomArea || row.locations);
+          }
+          updateData.leadAssessmentScope = { ...prevScope, ...cleaned };
+        } else {
+          updateData.leadAssessmentScope = prevScope;
+        }
+      }
+      if (leadDiscussionConclusionsByType !== undefined) {
+        const allowedKeys = new Set(['paint', 'dust', 'soil']);
+        const prevDiscussion =
+          existingJob.leadDiscussionConclusionsByType &&
+          typeof existingJob.leadDiscussionConclusionsByType === 'object' &&
+          !Array.isArray(existingJob.leadDiscussionConclusionsByType)
+            ? { ...existingJob.leadDiscussionConclusionsByType }
+            : {};
+        if (
+          leadDiscussionConclusionsByType &&
+          typeof leadDiscussionConclusionsByType === 'object' &&
+          !Array.isArray(leadDiscussionConclusionsByType)
+        ) {
+          const cleaned = {};
+          for (const [k, v] of Object.entries(leadDiscussionConclusionsByType)) {
+            if (!allowedKeys.has(k)) continue;
+            cleaned[k] = typeof v === 'string' ? v : '';
+          }
+          updateData.leadDiscussionConclusionsByType = { ...prevDiscussion, ...cleaned };
+        } else {
+          updateData.leadDiscussionConclusionsByType = prevDiscussion;
+        }
+      }
+
+      const sanitizeLeadPlanAppendixList = (raw) => {
+        if (!Array.isArray(raw)) return [];
+        return raw
+          .map((entry) => {
+            if (!entry || typeof entry !== 'object') return null;
+            const sitePlanFile =
+              typeof entry.sitePlanFile === 'string' && entry.sitePlanFile.trim()
+                ? entry.sitePlanFile.trim()
+                : null;
+            if (!sitePlanFile) return null;
+            const legend = Array.isArray(entry.sitePlanLegend)
+              ? entry.sitePlanLegend
+                  .filter((e) => e && e.color)
+                  .map((e) => ({
+                    color: String(e.color || '').trim(),
+                    description: typeof e.description === 'string' ? e.description.trim() : '',
+                  }))
+              : [];
+            return {
+              sitePlan: true,
+              sitePlanFile,
+              sitePlanSource: ['uploaded', 'drawn'].includes(entry.sitePlanSource)
+                ? entry.sitePlanSource
+                : 'drawn',
+              sitePlanLegend: legend,
+              sitePlanLegendTitle:
+                typeof entry.sitePlanLegendTitle === 'string' && entry.sitePlanLegendTitle.trim()
+                  ? entry.sitePlanLegendTitle.trim()
+                  : 'Key',
+              sitePlanFigureTitle:
+                typeof entry.sitePlanFigureTitle === 'string' && entry.sitePlanFigureTitle.trim()
+                  ? entry.sitePlanFigureTitle.trim()
+                  : null,
+            };
+          })
+          .filter(Boolean);
+      };
+
+      if (leadSitePlanAppendices !== undefined) {
+        updateData.leadSitePlanAppendices = sanitizeLeadPlanAppendixList(leadSitePlanAppendices);
+      }
+      if (leadAssessmentPlanAppendices !== undefined) {
+        updateData.leadAssessmentPlanAppendices = sanitizeLeadPlanAppendixList(leadAssessmentPlanAppendices);
+      }
     }
 
     updateData.$unset = { pdfBuffer: 1, pdfReadyAt: 1, pdfFilename: 1 };
@@ -782,6 +1041,49 @@ Please review and authorise the report at: ${jobUrl}
   }
 });
 
+// GET /api/assessments/:id/items/:itemId/photos/data — full image payloads for item photos (lazy load)
+router.get('/:id/items/:itemId/photos/data', async (req, res) => {
+  try {
+    const job = await AsbestosAssessment.findById(req.params.id).select('items');
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+    const item = job.items.id(req.params.itemId);
+    if (!item) return res.status(404).json({ message: 'Assessment item not found' });
+    const photographs = (item.photographs || []).map((p) => ({
+      _id: p._id,
+      data: p.data,
+      fullResolutionData: p.fullResolutionData,
+    }));
+    res.json({ photographs });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to fetch item photo data', error: err.message });
+  }
+});
+
+// GET /api/assessments/:id/items/:itemId/referred-locations/:referredIndex/photos/data
+router.get('/:id/items/:itemId/referred-locations/:referredIndex/photos/data', async (req, res) => {
+  try {
+    const referredIndex = parseInt(req.params.referredIndex, 10);
+    if (Number.isNaN(referredIndex) || referredIndex < 0) {
+      return res.status(400).json({ message: 'Invalid referred index' });
+    }
+    const job = await AsbestosAssessment.findById(req.params.id).select('items');
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+    const item = job.items.id(req.params.itemId);
+    if (!item) return res.status(404).json({ message: 'Assessment item not found' });
+    const referredLocations = item.referredLocations || [];
+    const loc = referredLocations[referredIndex];
+    if (!loc) return res.status(404).json({ message: 'Referred location not found' });
+    const photographs = (loc.photographs || []).map((p) => ({
+      _id: p._id,
+      data: p.data,
+      fullResolutionData: p.fullResolutionData,
+    }));
+    res.json({ photographs });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to fetch referred photo data', error: err.message });
+  }
+});
+
 // GET /api/assessments/:id/items - list items for a job (populate project and assessor)
 router.get('/:id/items', async (req, res) => {
   try {
@@ -936,6 +1238,55 @@ router.patch('/:id/unlock', auth, checkPermission(['admin.update']), async (req,
   }
 });
 
+// PATCH /api/assessments/:id/revise-report — from Project Reports: reopen authorised assessment for editing (non-admin path)
+router.patch('/:id/revise-report', auth, checkPermission('asbestos.edit'), async (req, res) => {
+  try {
+    const job = await AsbestosAssessment.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+
+    if (job.jobType === 'lead-assessment') {
+      return res.status(400).json({ message: 'Revise report is not supported for lead assessments' });
+    }
+
+    const authorised =
+      job.reportAuthorisedBy != null &&
+      String(job.reportAuthorisedBy).trim() !== '';
+    const eligibleStatus = ['report-ready-for-review', 'complete'].includes(job.status);
+    if (!eligibleStatus || !authorised) {
+      return res.status(400).json({
+        message:
+          'This assessment cannot be revised from Project Reports. It must be authorised (final sign-off) and in report-ready-for-review or complete status.',
+      });
+    }
+
+    job.revision = (typeof job.revision === 'number' ? job.revision : 0) + 1;
+    job.status = 'report-ready-for-review';
+    job.reportAuthorisedBy = undefined;
+    job.reportAuthorisedAt = undefined;
+    job.markModified('reportAuthorisedBy');
+    job.markModified('reportAuthorisedAt');
+    job.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
+    await job.save();
+
+    const populated = await AsbestosAssessment.findById(job._id)
+      .populate({
+        path: 'projectId',
+        select: 'projectID name client',
+        populate: { path: 'client', select: 'name contact1Name contact1Email address' },
+      })
+      .populate('assessorId');
+
+    res.json({
+      message:
+        'Assessment report revised for editing. Authorisation has been cleared; open the job from Surveys to edit and re-authorise when ready.',
+      job: populated,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message || 'Failed to revise assessment report' });
+  }
+});
+
 // PATCH /api/assessments/:id/ready-for-analysis - mark entire assessment as ready for analysis (DEPRECATED)
 router.patch('/:id/ready-for-analysis', async (req, res) => {
   try {
@@ -993,7 +1344,7 @@ router.delete('/:id/items/:itemId', async (req, res) => {
 // POST /api/assessments/:id/items/:itemId/photos - add photo to assessment item
 router.post('/:id/items/:itemId/photos', async (req, res) => {
   try {
-    const { photoData, includeInReport = true } = req.body;
+    const { photoData, fullResolutionData, includeInReport = true } = req.body;
 
     if (!photoData) {
       return res.status(400).json({ message: 'Photo data is required' });
@@ -1020,6 +1371,7 @@ router.post('/:id/items/:itemId/photos', async (req, res) => {
     // Add new photo
     item.photographs.push({
       data: photoData,
+      ...(fullResolutionData ? { fullResolutionData } : {}),
       includeInReport: includeInReport,
       uploadedAt: new Date(),
       photoNumber: actualPhotoNumber,
@@ -1032,6 +1384,57 @@ router.post('/:id/items/:itemId/photos', async (req, res) => {
     res.status(201).json(item);
   } catch (err) {
     console.error('Error adding photo to assessment item:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// PATCH /api/assessments/:id/items/:itemId/photos/:photoId - replace image data and/or arrows (e.g. after rotate)
+router.patch('/:id/items/:itemId/photos/:photoId', async (req, res) => {
+  try {
+    const { photoData, arrows } = req.body;
+
+    if (photoData === undefined && arrows === undefined) {
+      return res.status(400).json({ message: 'photoData and/or arrows is required' });
+    }
+
+    const job = await AsbestosAssessment.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+
+    const item = job.items.id(req.params.itemId);
+    if (!item) return res.status(404).json({ message: 'Assessment item not found' });
+
+    const photo = item.photographs.id(req.params.photoId);
+    if (!photo) {
+      return res.status(404).json({ message: 'Photo not found' });
+    }
+
+    if (photoData !== undefined && photoData !== null && String(photoData).trim() !== '') {
+      photo.data = photoData;
+    }
+
+    if (Array.isArray(arrows)) {
+      delete photo.arrow;
+      photo.arrows = arrows.map((a) => {
+        const sub = {
+          x: typeof a.x === 'number' ? a.x : 0.5,
+          y: typeof a.y === 'number' ? a.y : 0.5,
+          rotation: typeof a.rotation === 'number' ? a.rotation : -45,
+          color: a.color || '#f44336',
+        };
+        if (a._id) {
+          sub._id = a._id;
+        }
+        return sub;
+      });
+    }
+
+    item.updatedAt = new Date();
+    clearAssessmentPdfFields(job);
+    await job.save();
+
+    res.json({ message: 'Photo updated successfully', item });
+  } catch (err) {
+    console.error('Error updating assessment photo:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
@@ -1275,9 +1678,57 @@ router.delete('/:id', async (req, res) => {
     const job = await AsbestosAssessment.findById(req.params.id);
     if (!job) return res.status(404).json({ message: 'Assessment job not found' });
     if (job.deletedAt) return res.status(400).json({ message: 'Assessment is already archived' });
+
+    const now = new Date();
     job.deletedAt = new Date();
     await job.save();
-    res.json({ message: 'Assessment job archived' });
+
+    // Archive linked L&D supplied job row (if present).
+    // Preferred path is explicit linkage; fallback only when there is exactly one active LD row for the same project.
+    let archivedLinkedLdJobs = 0;
+    const explicitLinkResult = await ClientSuppliedJob.updateMany(
+      {
+        supplyType: 'ld',
+        linkedAssessmentId: job._id,
+        archived: { $ne: true },
+      },
+      {
+        $set: {
+          archived: true,
+          archivedAt: now,
+          updatedAt: now,
+        },
+      },
+    );
+    archivedLinkedLdJobs += explicitLinkResult.modifiedCount || 0;
+
+    if (archivedLinkedLdJobs === 0) {
+      const fallbackCandidates = await ClientSuppliedJob.find({
+        projectId: job.projectId,
+        supplyType: 'ld',
+        archived: { $ne: true },
+      }).select('_id');
+
+      // Guardrail: only auto-link/archive when there is one unambiguous candidate.
+      if (fallbackCandidates.length === 1) {
+        const fallbackId = fallbackCandidates[0]._id;
+        const fallbackResult = await ClientSuppliedJob.updateOne(
+          { _id: fallbackId },
+          {
+            $set: {
+              archived: true,
+              archivedAt: now,
+              updatedAt: now,
+              linkedAssessmentId: job._id,
+              linkedAssessmentJobType: job.jobType || 'asbestos-assessment',
+            },
+          },
+        );
+        archivedLinkedLdJobs += fallbackResult.modifiedCount || 0;
+      }
+    }
+
+    res.json({ message: 'Assessment job archived', archivedLinkedLdJobs });
   } catch (err) {
     res.status(400).json({ message: 'Failed to delete assessment job', error: err.message });
   }
@@ -1421,6 +1872,45 @@ router.post('/:id/upload-fibre-analysis-report', async (req, res) => {
   } catch (err) {
     console.error('Error uploading fibre analysis report:', err);
     res.status(400).json({ message: 'Failed to upload fibre analysis report', error: err.message });
+  }
+});
+
+// DELETE /api/assessments/:id/fibre-analysis-report - remove attached analysis PDF
+router.delete('/:id/fibre-analysis-report', async (req, res) => {
+  try {
+    const job = await AsbestosAssessment.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+
+    job.fibreAnalysisReport = undefined;
+    job.markModified('fibreAnalysisReport');
+    job.updatedAt = new Date();
+
+    if (
+      job.jobType === 'lead-assessment' &&
+      ['report-ready-for-review', 'complete', 'sample-analysis-complete'].includes(job.status)
+    ) {
+      job.status = 'samples-with-lab';
+    }
+
+    clearAssessmentPdfFields(job);
+    await job.save();
+
+    const populated = await AsbestosAssessment.findById(job._id)
+      .populate({
+        path: 'projectId',
+        select: 'projectID name client',
+        populate: {
+          path: 'client',
+          select: 'name contact1Name contact1Email address',
+        },
+      })
+      .populate('assessorId')
+      .populate('analyst', 'firstName lastName email')
+      .populate('consultantId', 'firstName lastName email');
+
+    res.json({ message: 'Fibre analysis report removed', job: populated });
+  } catch (err) {
+    res.status(400).json({ message: 'Failed to remove fibre analysis report', error: err.message });
   }
 });
 
@@ -1624,7 +2114,12 @@ router.get('/:id/chain-of-custody', async (req, res) => {
     console.log('PDF generated successfully, size:', pdfBuffer.length);
     
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${populatedAssessment.projectId?.projectID || 'Unknown'}: Chain of Custody - ${populatedAssessment.projectId?.name || 'Unknown'}.pdf"`);
+    res.setHeader(
+      'Content-Disposition',
+      buildContentDispositionAttachment(
+        `${populatedAssessment.projectId?.projectID || 'Unknown'}: Chain of Custody - ${populatedAssessment.projectId?.name || 'Unknown'}.pdf`
+      )
+    );
     res.send(pdfBuffer);
     
     console.log('=== CHAIN OF CUSTODY REQUEST END ===');

@@ -1,6 +1,7 @@
 import pdfMake from "pdfmake/build/pdfmake";
 import api from '../services/api';
 import { formatDateInSydney } from '../utils/dateUtils';
+import { uniqueShiftSampleSamplerLabels } from './airMonitoringSamplerDisplay';
 
 // Helper to format date as DD/MM/YYYY in Sydney timezone (for report authorisation, samples received, issue dates)
 function formatDate(dateStr) {
@@ -243,13 +244,20 @@ pdfMake.fonts = {
     });
   }
 
-  // Unique samplers
-  const uniqueSamplers = Array.from(new Set(samples.map(s => {
-    if (s.collectedBy && typeof s.collectedBy === 'object') {
-      return (s.collectedBy.firstName || '') + (s.collectedBy.lastName ? ' ' + s.collectedBy.lastName : '');
+  const shiftSampledByText = (() => {
+    if (isClientSupplied) return 'Client';
+    if (shift?.supervisor) {
+      const s = shift.supervisor;
+      return `${s.firstName || ''} ${s.lastName || ''}`.trim() || 'N/A';
     }
-    return s.collectedBy || '';
-  }).filter(Boolean)));
+    const labels = uniqueShiftSampleSamplerLabels(samples);
+    if (labels.length > 0) return labels.join(', ');
+    if (shift?.defaultSampler) {
+      const ds = shift.defaultSampler;
+      return `${ds.firstName || ''} ${ds.lastName || ''}`.trim() || 'N/A';
+    }
+    return 'N/A';
+  })();
 
   // Document definition
   const docDefinition = {
@@ -437,7 +445,7 @@ pdfMake.fonts = {
                   {
                     columns: [
                       {
-                        text: [ { text: 'Sampled by: ', bold: true }, { text: isClientSupplied ? 'Client' : (shift?.supervisor ? `${shift.supervisor.firstName} ${shift.supervisor.lastName}` : shift?.defaultSampler ? `${shift.defaultSampler.firstName} ${shift.defaultSampler.lastName}` : 'N/A') } ],
+                        text: [ { text: 'Sampled by: ', bold: true }, { text: shiftSampledByText } ],
                         style: 'tableContent',
                         margin: [0, 0, 0, 2],
                         width: '50%'
@@ -908,7 +916,9 @@ pdfMake.fonts = {
   // Build filename
   const projectID = job?.projectID || job?.projectId?.projectID || (sortedSamples[0]?.fullSampleID ? sortedSamples[0].fullSampleID.substring(0, 8) : '') || job?.jobID || job?.id || '';
   const projectNameRaw = project?.name || '';
-  const projectName = projectNameRaw.replace(/[^a-zA-Z0-9-_ ]/g, '').replace(/\s+/g, '_');
+  const projectName = projectNameRaw
+    .replace(/\//g, ', ')
+    .replace(/[^a-zA-Z0-9,._\- ]/g, '');
   const samplingDate = shift?.date ? formatDateForFilename(shift.date) : '';
   const reportType = isClientSupplied ? 'Fibre Count Report' : 'Air Monitoring Report';
   const filename = `${projectID}: ${reportType} - ${projectName}${samplingDate ? ` (${samplingDate})` : ''}.pdf`;

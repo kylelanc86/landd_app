@@ -142,6 +142,8 @@ const AsbestosRemovalJobDetails = () => {
     useState({});
   const [shiftDialogOpen, setShiftDialogOpen] = useState(false);
   const [newShiftDate, setNewShiftDate] = useState("");
+  const [copyPreviousShiftSamples, setCopyPreviousShiftSamples] =
+    useState(false);
   const [editingShift, setEditingShift] = useState(null);
   const [shiftCreating, setShiftCreating] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
@@ -804,9 +806,13 @@ const AsbestosRemovalJobDetails = () => {
     }
   }, [pendingClearanceEdit, activeLAAs]);
 
+  const isShiftCompleteStatus = (status) =>
+    status === "shift_complete" || status === "complete";
+
   const getStatusColor = (status) => {
     switch (status) {
       case "shift_complete":
+      case "complete":
       case "analysis_complete":
         return theme.palette.success.main;
       case "sampling_complete":
@@ -897,7 +903,7 @@ const AsbestosRemovalJobDetails = () => {
   const allShiftsCompleteAndAuthorised =
     airMonitoringShifts.length > 0 &&
     airMonitoringShifts.every(
-      (shift) => shift.status === "shift_complete" && shift.reportApprovedBy,
+      (shift) => isShiftCompleteStatus(shift.status) && shift.reportApprovedBy,
     );
 
   // Check if all clearances are complete AND authorised
@@ -1155,6 +1161,7 @@ const AsbestosRemovalJobDetails = () => {
 
   const handleCreateAirMonitoringShift = () => {
     setNewShiftDate("");
+    setCopyPreviousShiftSamples(false);
     setShiftDialogOpen(true);
   };
 
@@ -1173,9 +1180,104 @@ const AsbestosRemovalJobDetails = () => {
     setNewShiftDate(getTodayInSydney());
   };
 
-  const handleShiftSubmit = async () => {
+  const getMostRecentShiftByDate = () => {
+    if (!Array.isArray(airMonitoringShifts) || airMonitoringShifts.length === 0) {
+      return null;
+    }
+
+    const datedShifts = airMonitoringShifts
+      .filter((shift) => Boolean(shift?.date))
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    if (!datedShifts.length) {
+      return airMonitoringShifts[0] || null;
+    }
+
+    return datedShifts[0];
+  };
+
+  const extractSampleNumber = (sample) => {
+    const fromSampleNumber =
+      typeof sample?.sampleNumber === "string" ? sample.sampleNumber : "";
+    const sampleNumberMatch = fromSampleNumber.match(/^AM(\d+)$/i);
+    if (sampleNumberMatch) {
+      return Number.parseInt(sampleNumberMatch[1], 10) || 0;
+    }
+
+    const fromFullSampleId =
+      typeof sample?.fullSampleID === "string" ? sample.fullSampleID : "";
+    const fullSampleIdMatch = fromFullSampleId.match(/AM(\d+)$/i);
+    if (fullSampleIdMatch) {
+      return Number.parseInt(fullSampleIdMatch[1], 10) || 0;
+    }
+
+    return 0;
+  };
+
+  const getNextProjectSampleNumber = async (referenceSamples = []) => {
+    const projectLookupId = job?.projectId?.projectID;
+    let highestSampleNumber = 0;
+
+    try {
+      if (projectLookupId) {
+        const projectSamplesResponse =
+          await sampleService.getByProject(projectLookupId);
+        const projectSamples = Array.isArray(projectSamplesResponse?.data)
+          ? projectSamplesResponse.data
+          : [];
+
+        projectSamples.forEach((sample) => {
+          highestSampleNumber = Math.max(
+            highestSampleNumber,
+            extractSampleNumber(sample),
+          );
+        });
+      }
+    } catch (error) {
+      // Some environments return 404 for this endpoint; fallback to reference shift samples.
+    }
+
+    if (highestSampleNumber === 0 && Array.isArray(referenceSamples)) {
+      referenceSamples.forEach((sample) => {
+        highestSampleNumber = Math.max(
+          highestSampleNumber,
+          extractSampleNumber(sample),
+        );
+      });
+    }
+
+    return highestSampleNumber + 1;
+  };
+
+  const handleShiftSubmit = async ({ duplicateFromPrevious = false } = {}) => {
     setShiftCreating(true);
     try {
+      const referenceShift = duplicateFromPrevious
+        ? getMostRecentShiftByDate()
+        : null;
+      let copiedDescriptionOfWorks = "";
+
+      if (duplicateFromPrevious && referenceShift?._id) {
+        copiedDescriptionOfWorks =
+          typeof referenceShift.descriptionOfWorks === "string"
+            ? referenceShift.descriptionOfWorks
+            : "";
+
+        if (!copiedDescriptionOfWorks) {
+          try {
+            const referenceShiftResponse = await shiftService.getById(
+              referenceShift._id,
+            );
+            copiedDescriptionOfWorks =
+              typeof referenceShiftResponse?.data?.descriptionOfWorks === "string"
+                ? referenceShiftResponse.data.descriptionOfWorks
+                : "";
+          } catch (error) {
+            // If the previous shift details cannot be fetched, continue without copied description.
+          }
+        }
+      }
+
       // Create the new shift
       const shiftData = {
         job: jobId,
@@ -1187,10 +1289,53 @@ const AsbestosRemovalJobDetails = () => {
         endTime: "16:00",
         supervisor: currentUser._id,
         status: "ongoing",
-        descriptionOfWorks: "",
+        descriptionOfWorks: copiedDescriptionOfWorks,
       };
 
       const response = await shiftService.create(shiftData);
+      const createdShift = response?.data;
+      let duplicatedSamplesCount = 0;
+
+      if (duplicateFromPrevious && createdShift?._id) {
+        if (referenceShift?._id) {
+          const previousSamplesResponse = await sampleService.getByShift(
+            referenceShift._id,
+          );
+          const previousSamples = Array.isArray(previousSamplesResponse?.data)
+            ? previousSamplesResponse.data
+            : [];
+          const samplesToCopy = previousSamples.map((sample) => ({
+            type: sample?.type || "",
+            location: sample?.location || "",
+          }));
+
+          if (samplesToCopy.length > 0) {
+            const projectCode = job?.projectId?.projectID || "";
+            const nextSampleNumberStart =
+              await getNextProjectSampleNumber(previousSamples);
+
+            for (let i = 0; i < samplesToCopy.length; i += 1) {
+              const sampleTemplate = samplesToCopy[i];
+              const sampleNumber = `AM${nextSampleNumberStart + i}`;
+
+              await sampleService.create({
+                shift: createdShift._id,
+                job: jobId,
+                jobModel: "AsbestosRemovalJob",
+                sampleNumber,
+                fullSampleID: projectCode
+                  ? `${projectCode}-${sampleNumber}`
+                  : sampleNumber,
+                type: sampleTemplate.type || undefined,
+                location: sampleTemplate.location || undefined,
+                status: "pending",
+              });
+            }
+
+            duplicatedSamplesCount = samplesToCopy.length;
+          }
+        }
+      }
 
       // Add the new shift directly to state since backend isn't saving job/projectId fields
       if (response.data) {
@@ -1214,7 +1359,16 @@ const AsbestosRemovalJobDetails = () => {
 
       handleCloseShiftDialog();
 
-      showSnackbar("Air monitoring shift created successfully", "success");
+      if (duplicateFromPrevious) {
+        showSnackbar(
+          duplicatedSamplesCount > 0
+            ? `Air monitoring shift created with ${duplicatedSamplesCount} copied sample(s)`
+            : "Air monitoring shift created (no previous samples were copied)",
+          "success",
+        );
+      } else {
+        showSnackbar("Air monitoring shift created successfully", "success");
+      }
     } catch (error) {
       console.error("Error creating shift:", error);
       console.error("Error response:", error.response?.data);
@@ -1584,6 +1738,7 @@ const AsbestosRemovalJobDetails = () => {
   const handleEditShift = (shift, event) => {
     event.stopPropagation();
     setEditingShift(shift);
+    setCopyPreviousShiftSamples(false);
     const shiftDate = shift.date
       ? new Date(shift.date).toISOString().split("T")[0]
       : "";
@@ -1611,6 +1766,7 @@ const AsbestosRemovalJobDetails = () => {
   const handleCloseShiftDialog = () => {
     setShiftDialogOpen(false);
     setNewShiftDate("");
+    setCopyPreviousShiftSamples(false);
     setEditingShift(null);
     setShiftCreating(false);
   };
@@ -2173,7 +2329,7 @@ const AsbestosRemovalJobDetails = () => {
                             gap={1}
                             flexWrap="wrap"
                           >
-                            {shift.status !== "shift_complete" && (
+                            {!isShiftCompleteStatus(shift.status) && (
                               <IconButton
                                 size="small"
                                 onClick={(e) => {
@@ -2205,7 +2361,7 @@ const AsbestosRemovalJobDetails = () => {
                               fallback={null}
                             >
                               {(shift.status === "analysis_complete" ||
-                                shift.status === "shift_complete") && (
+                                isShiftCompleteStatus(shift.status)) && (
                                 <IconButton
                                   size="small"
                                   onClick={(e) => {
@@ -2258,7 +2414,7 @@ const AsbestosRemovalJobDetails = () => {
                               </>
                             )}
                             {(shift.status === "analysis_complete" ||
-                              shift.status === "shift_complete") && (
+                              isShiftCompleteStatus(shift.status)) && (
                               <>
                                 <Button
                                   variant="outlined"
@@ -3126,6 +3282,22 @@ const AsbestosRemovalJobDetails = () => {
               Today
             </Button>
           </Box>
+          {!editingShift && airMonitoringShifts.length > 0 && (
+            <Box sx={{ mt: 1 }}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={copyPreviousShiftSamples}
+                    onChange={(e) =>
+                      setCopyPreviousShiftSamples(e.target.checked)
+                    }
+                    disabled={shiftCreating}
+                  />
+                }
+                label="Copy previous shift samples"
+              />
+            </Box>
+          )}
         </DialogContent>
         <DialogActions
           sx={{
@@ -3138,7 +3310,15 @@ const AsbestosRemovalJobDetails = () => {
           }}
         >
           <Button
-            onClick={editingShift ? handleUpdateShiftDate : handleShiftSubmit}
+            onClick={() => {
+              if (editingShift) {
+                handleUpdateShiftDate();
+              } else {
+                handleShiftSubmit({
+                  duplicateFromPrevious: copyPreviousShiftSamples,
+                });
+              }
+            }}
             variant="contained"
             startIcon={
               shiftCreating ? (

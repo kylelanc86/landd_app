@@ -19,6 +19,10 @@ const AssessmentItemSchema = new mongoose.Schema({
       type: String, // Base64 image data
       required: true,
     },
+    fullResolutionData: {
+      type: String, // Original full-resolution base64 image data (download-only)
+      required: false,
+    },
     includeInReport: {
       type: Boolean,
       default: true, // By default, include photos in report
@@ -51,7 +55,37 @@ const AssessmentItemSchema = new mongoose.Schema({
   }],
   recommendationActions: { type: String },
   readyForAnalysis: { type: Boolean, default: false },
-  
+
+  // Lead assessment item fields
+  paintColour: { type: String },
+  /** Dust samples: small | medium | large (area in m²) */
+  leadSampleArea: { type: String },
+  leadContent: { type: String },
+  leadConcentration: { type: String },
+  status: { type: String },
+  // Risk rating (1–3 or 1–4); product used for VERY LOW / LOW / MEDIUM / HIGH RISK
+  occupantRating: { type: Number },
+  locationRating: { type: Number },
+  roomUseRating: { type: Number },
+  conditionRating: { type: Number },
+  referredLocations: [{
+    levelFloor: { type: String },
+    roomArea: { type: String },
+    surfaceDescription: { type: String },
+    recommendationActions: { type: String },
+    condition: { type: String },
+    occupantRating: { type: Number },
+    locationRating: { type: Number },
+    roomUseRating: { type: Number },
+    conditionRating: { type: Number },
+    photographs: [{
+      data: { type: String, required: true },
+      includeInReport: { type: Boolean, default: true },
+      uploadedAt: { type: Date, default: Date.now },
+      description: { type: String, required: false },
+    }],
+  }],
+
   // Embedded Analysis Data for Fibre ID Analysis
   analysisData: {
     microscope: { type: String, default: "LD-PLM-1" },
@@ -96,6 +130,13 @@ const AssessmentItemSchema = new mongoose.Schema({
 
 // Pre-save hook to handle conditional validation for visually assessed items
 AssessmentItemSchema.pre('validate', function(next) {
+  // Lead assessment items (materialType used as sample type: Paint, Dust, Soil) – skip asbestos validation
+  const leadSampleTypes = ['paint', 'paint-xrf', 'dust', 'soil'];
+  const materialLower = (this.materialType || '').toString().toLowerCase().trim();
+  if (leadSampleTypes.includes(materialLower)) {
+    return next();
+  }
+
   const isVisuallyAssessedNonAsbestos = 
     this.asbestosContent === "Visually Assessed as Non-asbestos" ||
     this.asbestosContent === "Visually Assessed as Non-Asbestos";
@@ -153,13 +194,16 @@ AssessmentItemSchema.pre('validate', function(next) {
 const AsbestosAssessmentSchema = new mongoose.Schema({
   projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true },
   assessorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  // Distinguishes standard asbestos assessments from residential asbestos assessments (separate job lists and flows)
+  // Distinguishes standard asbestos assessments from residential asbestos assessments and lead assessments (separate job lists and flows)
   jobType: {
     type: String,
-    enum: ['asbestos-assessment', 'residential-asbestos'],
+    enum: ['asbestos-assessment', 'residential-asbestos', 'lead-assessment'],
     default: 'asbestos-assessment',
   },
-  LAA: { type: String }, // Licensed Asbestos Assessor name
+  LAA: { type: String }, // Licensed Asbestos Assessor name (asbestos)
+  // Lead assessment fields
+  assessmentType: [{ type: String, enum: ['paint', 'paint-xrf', 'dust', 'soil'] }], // Lead: paint, XRF paint, dust, soil (multi-select)
+  consultantId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Lead: consultant (active app user)
   state: { type: String, enum: ['ACT', 'NSW', 'Commonwealth'] }, // State (ACT, NSW or Commonwealth)
   secondaryHeader: { type: String }, // Optional secondary header beneath project site name on cover page
   intrusiveness: { type: String, enum: ['non-intrusive', 'intrusive'], default: 'non-intrusive' }, // Residential: Non-intrusive (default) or Intrusive – affects PDF report
@@ -179,6 +223,10 @@ const AsbestosAssessmentSchema = new mongoose.Schema({
   analyst: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Analyst for all samples in this assessment
   items: { type: [AssessmentItemSchema], default: [] },
   assessmentScope: [{ type: String }], // Array of scope items for the assessment
+  /** Lead jobs only: planned scope by sample type, e.g. { paint: [{ roomArea, locations }], dust: [...], ... } */
+  leadAssessmentScope: { type: mongoose.Schema.Types.Mixed },
+  /** Lead assessments: per-type discussion text keyed by paint|dust|soil. */
+  leadDiscussionConclusionsByType: { type: mongoose.Schema.Types.Mixed },
   jobSpecificExclusions: { type: String }, // Job-specific exclusions/caveats for the assessment report
   discussionConclusions: { type: String }, // Discussion and conclusions text for the assessment report
   analysisCertificate: { type: Boolean, default: false },
@@ -205,6 +253,24 @@ const AsbestosAssessmentSchema = new mongoose.Schema({
   sitePlanFigureTitle: {
     type: String,
   },
+  /** Lead assessments: multiple appendix site plans (with optional sample markers baked into image). */
+  leadSitePlanAppendices: [{
+    sitePlan: { type: Boolean, default: true },
+    sitePlanFile: { type: String },
+    sitePlanSource: { type: String, enum: ['uploaded', 'drawn'] },
+    sitePlanLegend: [{ color: String, description: String }],
+    sitePlanLegendTitle: { type: String },
+    sitePlanFigureTitle: { type: String },
+  }],
+  /** Lead assessments: plans illustrating assessment areas (no map layer / sample tools in UI). */
+  leadAssessmentPlanAppendices: [{
+    sitePlan: { type: Boolean, default: true },
+    sitePlanFile: { type: String },
+    sitePlanSource: { type: String, enum: ['uploaded', 'drawn'] },
+    sitePlanLegend: [{ color: String, description: String }],
+    sitePlanLegendTitle: { type: String },
+    sitePlanFigureTitle: { type: String },
+  }],
   fibreAnalysisReport: { type: String }, // Base64 PDF data for fibre analysis report
   reportApprovedBy: { type: String }, // Fibre ID report approval (lab analyst)
   reportIssueDate: { type: Date }, // Date when report was issued/approved

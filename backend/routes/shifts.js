@@ -17,6 +17,7 @@ const {
 } = require("../services/asbestosRemovalJobSyncService");
 const { sendMail } = require("../services/mailer");
 const { formatDateSydney } = require("../utils/dateUtils");
+const { buildContentDispositionAttachment } = require('../utils/contentDisposition');
 
 // Exclude soft-deleted shifts from list queries (restorable from archived data page)
 const notDeletedShiftFilter = {
@@ -308,7 +309,12 @@ router.patch('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports
       }
 
       // Update project's reports_present field if shift is completed
-      if (updatedShift.status === 'analysis_complete' || updatedShift.status === 'shift_complete' || updatedShift.reportApprovedBy) {
+      if (
+        updatedShift.status === 'analysis_complete' ||
+        updatedShift.status === 'shift_complete' ||
+        updatedShift.status === 'complete' ||
+        updatedShift.reportApprovedBy
+      ) {
         try {
           const populatedShift = await Shift.findById(updatedShift._id)
             .populate({
@@ -533,7 +539,14 @@ router.patch('/:id/reopen', auth, checkPermission(['admin.update']), async (req,
     }
 
     // Check if shift is in a state that can be reopened
-    if (!['analysis_complete', 'shift_complete', 'samples_submitted_to_lab'].includes(shift.status)) {
+    if (
+      ![
+        'analysis_complete',
+        'shift_complete',
+        'complete',
+        'samples_submitted_to_lab',
+      ].includes(shift.status)
+    ) {
       return res.status(400).json({
         message: `Cannot reopen shift with status: ${shift.status}`
       });
@@ -723,7 +736,10 @@ router.get('/:id/analysis-report', auth, checkPermission(['jobs.view']), async (
     }
     const name = shift.analysisReportOriginalName || 'analysis-report.pdf';
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+    res.setHeader(
+      'Content-Disposition',
+      buildContentDispositionAttachment(name, { defaultFilename: 'analysis-report.pdf' })
+    );
     res.sendFile(path.resolve(fullPath));
   } catch (error) {
     console.error('Error downloading analysis report:', error);
@@ -957,7 +973,10 @@ router.get('/:id/chain-of-custody', auth, checkPermission(['jobs.view']), async 
     await browser.close();
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${projectID}: Chain of Custody - ${shiftDate}.pdf"`);
+    res.setHeader(
+      'Content-Disposition',
+      buildContentDispositionAttachment(`${projectID}: Chain of Custody - ${shiftDate}.pdf`)
+    );
     res.send(pdfBuffer);
   } catch (error) {
     console.error('Error generating Chain of Custody PDF:', error);
@@ -988,7 +1007,7 @@ router.post(
         return res.status(404).json({ message: 'Shift not found' });
       }
 
-      if (!['analysis_complete', 'shift_complete'].includes(shift.status)) {
+      if (!['analysis_complete', 'shift_complete', 'complete'].includes(shift.status)) {
         return res.status(400).json({
           message:
             'Shift must have analysis completed before sending for authorisation',

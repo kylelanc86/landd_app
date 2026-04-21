@@ -22,6 +22,10 @@ const invalidateStatusCache = () => {
   statusCache.timestamp = null;
 };
 
+/** Escape user input so it can be used safely inside RegExp (literal substring match). */
+const escapeRegex = (string) =>
+  String(string).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 // Helper function to get active and inactive statuses from custom data field groups (with caching)
 const getProjectStatuses = async (forceRefresh = false) => {
   try {
@@ -249,7 +253,7 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
         
         // Use MongoDB aggregation pipeline for efficient single-query search
         // This searches both project fields AND client names in one database operation
-        const searchRegex = new RegExp(search, 'i'); // Case-insensitive regex
+        const searchRegex = new RegExp(escapeRegex(search), 'i'); // Case-insensitive literal match
         
         // Collection names (Mongoose automatically pluralizes model names)
         // 'clients' and 'users' are the standard MongoDB collection names
@@ -1258,13 +1262,13 @@ router.get('/with-reports-or-jobs/ids', auth, checkPermission(['projects.view'])
       projectIdReasons.get(id).add(reason);
     };
 
-    // 1. Asbestos removal jobs with shifts that have reports (analysis_complete or shift_complete)
+    // 1. Asbestos removal jobs with shifts that have reports
     promises.push(
       (async () => {
         try {
           // First, get distinct job IDs from shifts with reports
-          const shiftsWithReports = await Shift.find({ 
-            status: { $in: ['analysis_complete', 'shift_complete'] } 
+          const shiftsWithReports = await Shift.find({
+            status: { $in: ['analysis_complete', 'shift_complete', 'complete'] }
           })
             .select('job')
             .lean();

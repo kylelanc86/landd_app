@@ -45,6 +45,7 @@ const EditSample = () => {
   const [pumpCalibrationsCache, setPumpCalibrationsCache] = useState(new Map());
   const [form, setForm] = useState({
     sampler: "",
+    samplerPickup: "",
     sampleNumber: "",
     type: "",
     location: "",
@@ -550,7 +551,18 @@ const EditSample = () => {
             ? parseFloat(sampleData.averageFlowrate).toFixed(1)
             : "",
           notes: sampleData.notes || "",
-          sampler: sampleData.collectedBy?._id || sampleData.collectedBy || "",
+          sampler:
+            sampleData.sampler?._id ||
+            sampleData.sampler ||
+            sampleData.collectedBy?._id ||
+            sampleData.collectedBy ||
+            "",
+          samplerPickup:
+            sampleData.collectedBy?._id ||
+            sampleData.collectedBy ||
+            sampleData.sampler?._id ||
+            sampleData.sampler ||
+            "",
           isFieldBlank: isFieldBlankSample,
           isNegAirExhaust: isNegAirSample,
           status: sampleData.status || "pending",
@@ -608,6 +620,18 @@ const EditSample = () => {
     if (collectionFields.includes(name)) {
       setCollectionFieldsEdited(true);
       setShowCollectionSection(true);
+    }
+
+    if (name === "sampler") {
+      setForm((prev) => ({
+        ...prev,
+        sampler: value,
+        samplerPickup:
+          !prev.samplerPickup || prev.samplerPickup === prev.sampler
+            ? value
+            : prev.samplerPickup,
+      }));
+      return;
     }
 
     if (name === "isFieldBlank") {
@@ -1005,6 +1029,9 @@ const EditSample = () => {
     if (!form.sampler) {
       errors.sampler = "Sampler is required";
     }
+    if (!form.samplerPickup) {
+      errors.samplerPickup = "Sampler (pick-up) is required";
+    }
 
     if (!form.sampleNumber) {
       errors.sampleNumber = "Sample number is required";
@@ -1156,7 +1183,7 @@ const EditSample = () => {
           : null,
         status: form.status || "pending",
         notes: form.notes || null,
-        collectedBy: form.sampler,
+        collectedBy: form.samplerPickup || form.sampler,
       };
 
       console.time(`${logLabel} update`);
@@ -1247,27 +1274,6 @@ const EditSample = () => {
           <Box sx={{ display: "flex", gap: 1.5, flexDirection: { xs: "column", sm: "row" }, alignItems: { sm: "flex-start" }, flexWrap: "wrap" }}>
             {!isSimplifiedSample && (
             <Box sx={{ display: "flex", gap: 1.5, flex: { xs: "none", sm: "1 1 0" }, minWidth: 0, flexWrap: { xs: "nowrap", sm: "wrap" }, "& > *": { flex: { xs: "1 1 0", sm: "1 1 140px" }, minWidth: 0 } }}>
-              <FormControl fullWidth size="small" required error={!!fieldErrors.sampler} sx={{ minWidth: 0 }}>
-                <InputLabel>Sampler</InputLabel>
-                <Select
-                  name="sampler"
-                  value={form.sampler}
-                  onChange={handleChange}
-                  label="Sampler"
-                  required
-                >
-                  {activeLAAs.map((assessor) => (
-                    <MenuItem key={assessor._id} value={assessor._id}>
-                      {assessor.firstName} {assessor.lastName}
-                    </MenuItem>
-                  ))}
-                </Select>
-                {fieldErrors.sampler && (
-                  <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
-                    {fieldErrors.sampler}
-                  </Typography>
-                )}
-              </FormControl>
               <TextField
                 size="small"
                 name="sampleNumber"
@@ -1501,6 +1507,33 @@ const EditSample = () => {
               >
                 Air-monitor Setup
               </Typography>
+              <FormControl
+                fullWidth
+                size="small"
+                required
+                error={!!fieldErrors.sampler}
+                sx={{ minWidth: 0, maxWidth: { sm: 420 }, mb: 2 }}
+              >
+                <InputLabel>Sampler</InputLabel>
+                <Select
+                  name="sampler"
+                  value={form.sampler}
+                  onChange={handleChange}
+                  label="Sampler"
+                  required
+                >
+                  {activeLAAs.map((assessor) => (
+                    <MenuItem key={assessor._id} value={assessor._id}>
+                      {assessor.firstName} {assessor.lastName}
+                    </MenuItem>
+                  ))}
+                </Select>
+                {fieldErrors.sampler && (
+                  <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
+                    {fieldErrors.sampler}
+                  </Typography>
+                )}
+              </FormControl>
               <Box sx={{ display: "flex", gap: 1, flexDirection: { xs: "column", sm: "row" }, flexWrap: "wrap", alignItems: { sm: "flex-start" } }}>
                 <Box sx={{ display: "flex", gap: 1, alignItems: "center", flex: { sm: "0 0 auto" } }}>
                   <FormControl required size="small" sx={{ minWidth: 100 }} error={!!fieldErrors.startTime}>
@@ -1615,6 +1648,33 @@ const EditSample = () => {
                   >
                     Air-monitor Pick-Up
                   </Typography>
+                  <FormControl
+                    fullWidth
+                    size="small"
+                    required
+                    error={!!fieldErrors.samplerPickup}
+                    sx={{ minWidth: 0, maxWidth: { sm: 420 }, mb: 2 }}
+                  >
+                    <InputLabel>Sampler (pick-up / collection)</InputLabel>
+                    <Select
+                      name="samplerPickup"
+                      value={form.samplerPickup || form.sampler || ""}
+                      onChange={handleChange}
+                      label="Sampler (pick-up / collection)"
+                      required
+                    >
+                      {activeLAAs.map((assessor) => (
+                        <MenuItem key={assessor._id} value={assessor._id}>
+                          {assessor.firstName} {assessor.lastName}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                    {fieldErrors.samplerPickup && (
+                      <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
+                        {fieldErrors.samplerPickup}
+                      </Typography>
+                    )}
+                  </FormControl>
                   <Box sx={{ display: "flex", gap: 1, flexDirection: { xs: "column", sm: "row" }, flexWrap: "wrap", alignItems: { sm: "flex-start" } }}>
                     <Box sx={{ display: "flex", gap: 1, alignItems: "center", flex: { sm: "0 0 auto" } }}>
                       <FormControl required size="small" sx={{ minWidth: 100 }} error={insufficientSampleTime || collectionTimeBeforeSetup || !!fieldErrors.endTime}>

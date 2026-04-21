@@ -19,6 +19,7 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogContentText,
   DialogActions,
   TextField,
   FormControl,
@@ -39,6 +40,7 @@ import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
+  Download as DownloadIcon,
   PhotoCamera as PhotoCameraIcon,
   Upload as UploadIcon,
   Description as DescriptionIcon,
@@ -48,6 +50,7 @@ import {
   Map as MapIcon,
   ArrowBack as ArrowBackIcon,
   ArrowUpward as ArrowUpwardIcon,
+  RotateRight as RotateRightIcon,
 } from "@mui/icons-material";
 import MicIcon from "@mui/icons-material/Mic";
 import { Checkbox, FormControlLabel } from "@mui/material";
@@ -60,8 +63,13 @@ import customDataFieldGroupService from "../../services/customDataFieldGroupServ
 import {
   compressImage,
   needsCompression,
-  saveFileToDevice, // eslint-disable-line no-unused-vars -- used when save-to-device is re-enabled
+  saveFileToDevice,
 } from "../../utils/imageCompression";
+import {
+  rotateArrowDegrees90Cw,
+  rotateDataUrl90Cw,
+  rotateNormalizedPoint90Cw,
+} from "../../utils/rotateImageDataUrl";
 import { formatDate } from "../../utils/dateUtils";
 
 const DEFAULT_ARROW_COLOR = "#f44336";
@@ -118,11 +126,14 @@ const ClearanceItems = () => {
   const [fullSizePhotoDialogOpen, setFullSizePhotoDialogOpen] = useState(false);
   const [fullSizePhotoUrl, setFullSizePhotoUrl] = useState(null);
   const [fullSizePhotoId, setFullSizePhotoId] = useState(null);
+  const [managePhotosDownloadTarget, setManagePhotosDownloadTarget] =
+    useState(null);
   const [fullSizeArrowMode, setFullSizeArrowMode] = useState(false);
   const [selectedArrowId, setSelectedArrowId] = useState(null);
   const [movingArrowId, setMovingArrowId] = useState(null);
   const [selectedArrowColor, setSelectedArrowColor] = useState(DEFAULT_ARROW_COLOR);
   const [compressionStatus, setCompressionStatus] = useState(null);
+  const [rotatingPhotoId, setRotatingPhotoId] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
   const [photoFile, setPhotoFile] = useState(null);
   const [airMonitoringReportsDialogOpen, setAirMonitoringReportsDialogOpen] =
@@ -975,6 +986,7 @@ const ClearanceItems = () => {
       setLastPinchDistance(null);
       setLastPanPoint(null);
       setPhotoGalleryDialogOpen(false); // Hide manage-photos modal so camera is on top
+      setManagePhotosDownloadTarget(null);
       setCameraDialogOpen(true);
     } catch (error) {
       console.error("Error accessing camera:", error);
@@ -1297,10 +1309,12 @@ const ClearanceItems = () => {
   // Close photo gallery
   const handleClosePhotoGallery = async () => {
     setPhotoGalleryDialogOpen(false);
+    setManagePhotosDownloadTarget(null);
     setSelectedItemForPhotos(null);
     setPhotoPreview(null);
     setPhotoFile(null);
     setCompressionStatus(null);
+    setRotatingPhotoId(null);
     setLocalPhotoChanges({});
     setPhotosToDelete(new Set());
     setLocalPhotoDescriptions({});
@@ -1398,7 +1412,7 @@ const ClearanceItems = () => {
   };
 
   // Add photo to existing item
-  const handleAddPhotoToItem = async (photoData) => {
+  const handleAddPhotoToItem = async (photoData, fullResolutionData = null) => {
     if (!selectedItemForPhotos) return;
 
     try {
@@ -1407,6 +1421,7 @@ const ClearanceItems = () => {
         selectedItemForPhotos._id,
         photoData,
         true, // includeInReport default to true
+        fullResolutionData,
       );
 
       // Update the selected item with the new photo data immediately
@@ -1456,6 +1471,58 @@ const ClearanceItems = () => {
     const firstArrow = typeof photo === "object" && getPhotoArrows(photo)[0];
     setSelectedArrowColor(firstArrow?.color || DEFAULT_ARROW_COLOR);
     setFullSizePhotoDialogOpen(true);
+  };
+
+  const handleDownloadPhoto = async (
+    photo,
+    fallbackLabel = "photo",
+    quality = "full",
+  ) => {
+    const photoData =
+      typeof photo === "string"
+        ? photo
+        : quality === "full"
+          ? photo?.fullResolutionData
+          : photo?.data;
+    if (!photoData) {
+      showSnackbar(
+        quality === "full"
+          ? "Full-resolution image is not available for this photo"
+          : "Compressed image is not available for this photo",
+        "error",
+      );
+      return;
+    }
+
+    try {
+      const mimeMatch = photoData.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/);
+      const mimeType = mimeMatch?.[1] || "image/jpeg";
+      const extensionMap = {
+        "image/jpeg": "jpg",
+        "image/jpg": "jpg",
+        "image/png": "png",
+        "image/webp": "webp",
+        "image/gif": "gif",
+      };
+      const extension = extensionMap[mimeType] || "jpg";
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const filename = `clearance-${fallbackLabel}-${quality}-${timestamp}.${extension}`;
+      const response = await fetch(photoData);
+      const blob = await response.blob();
+      const file = new File([blob], filename, { type: mimeType });
+      await saveFileToDevice(file, filename);
+      showSnackbar("Photo downloaded", "success");
+    } catch (error) {
+      console.error("Error downloading photo:", error);
+      showSnackbar("Failed to download photo", "error");
+    }
+  };
+
+  const handleManagePhotosDownloadChoice = async (quality) => {
+    if (!managePhotosDownloadTarget) return;
+    const { photo, fileLabel } = managePhotosDownloadTarget;
+    setManagePhotosDownloadTarget(null);
+    await handleDownloadPhoto(photo, fileLabel, quality);
   };
 
   const fullSizePhoto =
@@ -1628,6 +1695,50 @@ const ClearanceItems = () => {
     } catch (err) {
       console.error("Error clearing arrows:", err);
       showSnackbar("Failed to clear arrows", "error");
+    }
+  };
+
+  const handleRotatePhoto90Cw = async (photo) => {
+    if (
+      !photo?.data ||
+      rotatingPhotoId ||
+      !clearanceId ||
+      !selectedItemForPhotos
+    ) {
+      return;
+    }
+    setRotatingPhotoId(photo._id);
+    try {
+      const newData = await rotateDataUrl90Cw(photo.data, 0.92);
+      const arrowList = getPhotoArrows(photo);
+      const newArrows = arrowList.map((arr) => {
+        const { x, y } = rotateNormalizedPoint90Cw(
+          arr.x ?? 0.5,
+          arr.y ?? 0.5,
+        );
+        return {
+          x: Math.max(0, Math.min(1, x)),
+          y: Math.max(0, Math.min(1, y)),
+          rotation: rotateArrowDegrees90Cw(
+            arr.rotation ?? DEFAULT_ARROW_ROTATION,
+          ),
+          color: arr.color || DEFAULT_ARROW_COLOR,
+          ...(arr._id ? { _id: arr._id } : {}),
+        };
+      });
+      const payload = await asbestosClearanceService.updatePhotoContent(
+        clearanceId,
+        selectedItemForPhotos._id,
+        photo._id,
+        { photoData: newData, arrows: newArrows },
+      );
+      if (payload?.item) setSelectedItemForPhotos(payload.item);
+      showSnackbar("Photo rotated", "success");
+    } catch (err) {
+      console.error("Error rotating photo:", err);
+      showSnackbar("Failed to rotate photo", "error");
+    } finally {
+      setRotatingPhotoId(null);
     }
   };
 
@@ -1804,6 +1915,12 @@ const ClearanceItems = () => {
       try {
         const originalSizeKB = Math.round(file.size / 1024);
         const shouldCompress = needsCompression(file, 300);
+        const fullResolutionData = await new Promise((resolve, reject) => {
+          const fullResReader = new FileReader();
+          fullResReader.onload = (e) => resolve(e.target.result);
+          fullResReader.onerror = reject;
+          fullResReader.readAsDataURL(file);
+        });
 
         console.log(
           "[ClearanceItems] handlePhotoUploadForGallery - Compression check",
@@ -1860,7 +1977,7 @@ const ClearanceItems = () => {
             },
           );
           const addStartTime = performance.now();
-          await handleAddPhotoToItem(compressedImage);
+          await handleAddPhotoToItem(compressedImage, fullResolutionData);
           const addEndTime = performance.now();
           console.log(
             "[ClearanceItems] handlePhotoUploadForGallery - Photo added",
@@ -1893,7 +2010,7 @@ const ClearanceItems = () => {
               },
             );
             const addStartTime = performance.now();
-            await handleAddPhotoToItem(e.target.result);
+            await handleAddPhotoToItem(e.target.result, fullResolutionData);
             const addEndTime = performance.now();
             console.log(
               "[ClearanceItems] handlePhotoUploadForGallery - Photo added",
@@ -2333,6 +2450,10 @@ const ClearanceItems = () => {
     timestamp: new Date().toISOString(),
   });
 
+  const isFriableClearance =
+    clearance?.clearanceType === "Friable" ||
+    clearance?.clearanceType === "Friable (Non-Friable Conditions)";
+
   return (
     <PermissionGate requiredPermissions={["asbestos.view"]}>
       <Box m="20px" sx={{ position: "relative" }}>
@@ -2365,10 +2486,6 @@ const ClearanceItems = () => {
           </Box>
         )}
 
-        <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
-          Clearance Items
-        </Typography>
-
         {/* Breadcrumbs */}
         <Breadcrumbs sx={{ marginBottom: 3 }}>
           <Link
@@ -2395,6 +2512,10 @@ const ClearanceItems = () => {
             Job Details
           </Link>
         </Breadcrumbs>
+
+        <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
+          Clearance Items
+        </Typography>
 
         {/* Project Info */}
         <Typography         variant="h6"
@@ -2588,6 +2709,24 @@ const ClearanceItems = () => {
           >
             Job Specific Exclusions
           </Button>
+          {isFriableClearance && (
+            <Button
+              variant="contained"
+              onClick={() =>
+                navigate(`/clearances/${clearanceId}/enclosure-inspection`)
+              }
+              startIcon={<DescriptionIcon />}
+              sx={{
+                backgroundColor: "#2e7d32",
+                color: "white",
+                "&:hover": {
+                  backgroundColor: "#1b5e20",
+                },
+              }}
+            >
+              Enclosure Certificate
+            </Button>
+          )}
         </Box>
 
         <Card sx={{ mt: 3 }}>
@@ -2692,19 +2831,14 @@ const ClearanceItems = () => {
                               >
                                 <EditIcon />
                               </IconButton>
-                              <PermissionGate
-                                requiredPermissions={["admin.view"]}
-                                fallback={null}
+                              <IconButton
+                                onClick={() => handleDelete(item)}
+                                color="error"
+                                size="small"
+                                title="Delete"
                               >
-                                <IconButton
-                                  onClick={() => handleDelete(item)}
-                                  color="error"
-                                  size="small"
-                                  title="Delete (Admin Only)"
-                                >
-                                  <DeleteIcon />
-                                </IconButton>
-                              </PermissionGate>
+                                <DeleteIcon />
+                              </IconButton>
                             </Box>
                           </TableCell>
                         </TableRow>
@@ -2814,19 +2948,14 @@ const ClearanceItems = () => {
                             >
                               <EditIcon />
                             </IconButton>
-                            <PermissionGate
-                              requiredPermissions={["admin.view"]}
-                              fallback={null}
+                            <IconButton
+                              onClick={() => handleDelete(item)}
+                              color="error"
+                              size="small"
+                              title="Delete"
                             >
-                              <IconButton
-                                onClick={() => handleDelete(item)}
-                                color="error"
-                                size="small"
-                                title="Delete (Admin Only)"
-                              >
-                                <DeleteIcon />
-                              </IconButton>
-                            </PermissionGate>
+                              <DeleteIcon />
+                            </IconButton>
                           </Box>
                         </TableCell>
                       </TableRow>
@@ -4767,6 +4896,31 @@ const ClearanceItems = () => {
                               />
                             </Box>
 
+                            <IconButton
+                              size="small"
+                              sx={{
+                                position: "absolute",
+                                top: 48,
+                                right: 8,
+                                backgroundColor: "rgba(0, 0, 0, 0.6)",
+                                color: "white",
+                                "&:hover": {
+                                  backgroundColor: "rgba(0, 0, 0, 0.85)",
+                                },
+                                zIndex: 3,
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setManagePhotosDownloadTarget({
+                                  photo,
+                                  fileLabel: `photo-${index + 1}`,
+                                });
+                              }}
+                              title="Download photo"
+                            >
+                              <DownloadIcon sx={{ fontSize: "1.1rem" }} />
+                            </IconButton>
+
                             {/* Delete/Undo button */}
                             <IconButton
                               size="small"
@@ -4955,6 +5109,55 @@ const ClearanceItems = () => {
               }}
             >
               {hasUnsavedChanges() ? "Update" : "Done"}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog
+          open={Boolean(managePhotosDownloadTarget)}
+          onClose={() => setManagePhotosDownloadTarget(null)}
+          maxWidth="xs"
+          fullWidth
+        >
+          <DialogTitle>Download photo</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              Choose which image version to save to your device.
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions
+            sx={{
+              flexDirection: "column",
+              alignItems: "stretch",
+              px: 3,
+              pb: 2,
+              gap: 1,
+            }}
+          >
+            <Button
+              variant="contained"
+              fullWidth
+              disabled={
+                !managePhotosDownloadTarget?.photo?.fullResolutionData
+              }
+              onClick={() => {
+                void handleManagePhotosDownloadChoice("full");
+              }}
+            >
+              Full resolution
+            </Button>
+            <Button
+              variant="outlined"
+              fullWidth
+              disabled={!managePhotosDownloadTarget?.photo?.data}
+              onClick={() => {
+                void handleManagePhotosDownloadChoice("compressed");
+              }}
+            >
+              Compressed
+            </Button>
+            <Button onClick={() => setManagePhotosDownloadTarget(null)}>
+              Cancel
             </Button>
           </DialogActions>
         </Dialog>
@@ -5254,6 +5457,30 @@ const ClearanceItems = () => {
                       </Box>
                     );
                   })}
+                  <IconButton
+                    size="small"
+                    sx={{
+                      position: "absolute",
+                      bottom: 8,
+                      right: 8,
+                      backgroundColor: "rgba(0, 0, 0, 0.6)",
+                      color: "white",
+                      "&:hover": {
+                        backgroundColor: "rgba(0, 0, 0, 0.85)",
+                      },
+                      zIndex: 6,
+                    }}
+                    disabled={
+                      !!rotatingPhotoId || !fullSizePhoto?.data
+                    }
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRotatePhoto90Cw(fullSizePhoto);
+                    }}
+                    title="Rotate 90° clockwise"
+                  >
+                    <RotateRightIcon sx={{ fontSize: "1.25rem" }} />
+                  </IconButton>
                 </Box>
               </Box>
             )}
