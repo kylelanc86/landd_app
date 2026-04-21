@@ -88,6 +88,28 @@ const asbestosClearanceSchema = new mongoose.Schema(
     sitePlanFigureTitle: {
       type: String,
     },
+    /** When the friable enclosure inspection was performed (optional; used on enclosure certificate). */
+    enclosureInspectionDateTime: {
+      type: Date,
+      required: false,
+    },
+    /** Full name of the LAA who performed the enclosure inspection (enclosure certificate). */
+    enclosureInspectedBy: {
+      type: String,
+      required: false,
+    },
+    /** Narrative for the enclosure inspection certificate (body text under intro). */
+    enclosureDescription: {
+      type: String,
+      required: false,
+    },
+    /** Appendix photos for the enclosure inspection certificate (data URLs + optional caption). */
+    enclosurePhotos: [
+      {
+        data: { type: String, required: true },
+        description: { type: String, required: false },
+      },
+    ],
     jobSpecificExclusions: {
       type: String, // Job-specific exclusions text
     },
@@ -126,6 +148,10 @@ const asbestosClearanceSchema = new mongoose.Schema(
         data: {
           type: String, // Base64 image data
           required: true,
+        },
+        fullResolutionData: {
+          type: String, // Original full-resolution base64 image data (download-only)
+          required: false,
         },
         includeInReport: {
           type: Boolean,
@@ -234,6 +260,10 @@ const asbestosClearanceSchema = new mongoose.Schema(
     pdfFilename: { type: String, required: false },
     /** Path to merged PDF (main + appendices) on disk; when set, download streams this file (no fetch/merge). */
     mergedPdfPath: { type: String, required: false },
+    /** Persisted enclosure inspection certificate PDF (separate from main clearance report). */
+    enclosureCertificatePdfReadyAt: { type: Date, required: false },
+    enclosureCertificatePdfFilename: { type: String, required: false },
+    enclosureCertificateMergedPdfPath: { type: String, required: false },
     deletedAt: { type: Date, required: false, default: null },
   },
   {

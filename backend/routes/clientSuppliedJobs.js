@@ -7,6 +7,86 @@ const { sendMail } = require('../services/mailer');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 
+/** AsbestosAssessment collection name in Mongo (mongoose default plural, lowercased). */
+const ASBESTOS_ASSESSMENT_COLLECTION = 'asbestosassessments';
+
+/**
+ * Pipeline stages: populate project + client, then exclude LD jobs whose linked assessment is soft-deleted.
+ * Optional query includeLinkedDeletedAssessments=1|true skips the linked-deleted filter.
+ */
+function buildClientSuppliedJobListPipeline({ baseMatch, includeLinkedDeletedAssessments }) {
+  const pipeline = [
+    { $match: baseMatch },
+    { $sort: { createdAt: -1 } },
+    {
+      $lookup: {
+        from: 'projects',
+        localField: 'projectId',
+        foreignField: '_id',
+        as: 'projectIdArr',
+        pipeline: [{ $project: { projectID: 1, name: 1, client: 1, projectContact: 1, d_Date: 1, createdAt: 1 } }],
+      },
+    },
+    { $unwind: { path: '$projectIdArr', preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: 'clients',
+        localField: 'projectIdArr.client',
+        foreignField: '_id',
+        as: 'clientArr',
+        pipeline: [{ $project: { name: 1, contact1Name: 1, contact1Email: 1, address: 1, invoiceEmail: 1 } }],
+      },
+    },
+    {
+      $addFields: {
+        projectId: {
+          $cond: {
+            if: { $eq: [{ $ifNull: ['$projectIdArr', null] }, null] },
+            then: '$projectId',
+            else: {
+              _id: '$projectIdArr._id',
+              projectID: '$projectIdArr.projectID',
+              name: '$projectIdArr.name',
+              projectContact: '$projectIdArr.projectContact',
+              d_Date: '$projectIdArr.d_Date',
+              createdAt: '$projectIdArr.createdAt',
+              client: { $arrayElemAt: ['$clientArr', 0] },
+            },
+          },
+        },
+      },
+    },
+    { $project: { projectIdArr: 0, clientArr: 0 } },
+  ];
+
+  if (!includeLinkedDeletedAssessments) {
+    pipeline.push(
+      {
+        $lookup: {
+          from: ASBESTOS_ASSESSMENT_COLLECTION,
+          localField: 'linkedAssessmentId',
+          foreignField: '_id',
+          as: '_linkedAssessment',
+          pipeline: [{ $project: { deletedAt: 1 } }],
+        },
+      },
+      {
+        $match: {
+          $or: [
+            { linkedAssessmentId: { $exists: false } },
+            { linkedAssessmentId: null },
+            { _linkedAssessment: { $size: 0 } },
+            { '_linkedAssessment.0.deletedAt': { $in: [null, undefined] } },
+          ],
+        },
+      },
+      { $project: { _linkedAssessment: 0 } },
+    );
+  }
+
+  return pipeline;
+}
+
 // GET /api/client-supplied-jobs - get all client supplied jobs (excludes archived by default)
 // Query: supplyType=client | ld — when 'ld', return only L&D supplied (standalone) jobs; when 'client' or omitted, return only client supplied jobs
 router.get('/', auth, checkPermission('clientSup.view'), async (req, res) => {
@@ -14,11 +94,24 @@ router.get('/', auth, checkPermission('clientSup.view'), async (req, res) => {
     // Filter out archived jobs by default
     const filter = { archived: { $ne: true } };
     const supplyType = req.query.supplyType;
+    const includeLinkedDeletedAssessments =
+      req.query.includeLinkedDeletedAssessments === '1' ||
+      req.query.includeLinkedDeletedAssessments === 'true';
+
     if (supplyType === 'ld') {
       filter.supplyType = 'ld';
     } else {
       // client or omitted: exclude LD jobs so client supplied list is unchanged
       filter.supplyType = { $ne: 'ld' };
+    }
+
+    if (supplyType === 'ld') {
+      const pipeline = buildClientSuppliedJobListPipeline({
+        baseMatch: filter,
+        includeLinkedDeletedAssessments,
+      });
+      const jobs = await ClientSuppliedJob.aggregate(pipeline);
+      return res.json(jobs);
     }
 
     const jobs = await ClientSuppliedJob.find(filter)
@@ -31,7 +124,7 @@ router.get('/', auth, checkPermission('clientSup.view'), async (req, res) => {
         }
       })
       .sort({ createdAt: -1 });
-    
+
     res.json(jobs);
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch client supplied jobs', error: err.message });
@@ -42,19 +135,23 @@ router.get('/', auth, checkPermission('clientSup.view'), async (req, res) => {
 router.get('/by-project/:projectId', auth, checkPermission('clientSup.view'), async (req, res) => {
   try {
     const { projectId } = req.params;
+    const includeArchived = req.query.includeArchived === '1' || req.query.includeArchived === 'true';
+    const includeLinkedDeletedAssessments =
+      req.query.includeLinkedDeletedAssessments === '1' ||
+      req.query.includeLinkedDeletedAssessments === 'true';
     
     console.log('Fetching client supplied jobs by project:', projectId);
-    
-    const jobs = await ClientSuppliedJob.find({ projectId })
-      .populate({
-        path: 'projectId',
-        select: 'name projectID d_Date createdAt projectContact',
-        populate: {
-          path: 'client',
-          select: 'name contact1Name contact1Email address invoiceEmail'
-        }
-      })
-      .sort({ createdAt: -1 });
+
+    const filter = { projectId };
+    if (!includeArchived) {
+      filter.archived = { $ne: true };
+    }
+
+    const pipeline = buildClientSuppliedJobListPipeline({
+      baseMatch: filter,
+      includeLinkedDeletedAssessments,
+    });
+    const jobs = await ClientSuppliedJob.aggregate(pipeline);
     
     console.log(`Found ${jobs.length} client supplied jobs for project ${projectId}`);
     
@@ -98,7 +195,7 @@ router.get('/:id', auth, checkPermission('clientSup.view'), async (req, res) => 
 // POST /api/client-supplied-jobs - create new job
 router.post('/', auth, checkPermission('clientSup.create'), async (req, res) => {
   try {
-    const { projectId, jobType, sampleReceiptDate, sampleCount, turnaroundTime, analysisDueDate, supplyType } = req.body;
+    const { projectId, jobType, sampleReceiptDate, sampleCount, turnaroundTime, analysisDueDate, supplyType, sampledBy } = req.body;
     
     console.log('Creating client supplied job with data:', { projectId, jobType, sampleReceiptDate, sampleCount, turnaroundTime, analysisDueDate });
     
@@ -174,6 +271,11 @@ router.post('/', auth, checkPermission('clientSup.create'), async (req, res) => 
       if (!isNaN(dueDate.getTime())) {
         jobData.analysisDueDate = dueDate;
       }
+    }
+
+    // Add sampled-by value (used by standalone L&D supplied Fibre ID reports)
+    if (sampledBy !== undefined && sampledBy !== null && String(sampledBy).trim() !== '') {
+      jobData.sampledBy = String(sampledBy).trim();
     }
 
     // L&D supplied jobs (standalone, no asbestos/residential link)

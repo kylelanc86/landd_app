@@ -337,28 +337,26 @@ const getTemplateByType = async (templateType) => {
           introductionTitle: "INTRODUCTION",
           introductionContent:
             "Following discussions with {CLIENT_NAME}, Lancaster and Dickenson Consulting (L & D) were contracted to undertake a lead assessment at {SITE_NAME}. {CONSULTANT_NAME} from L & D visited the site on {ASSESSMENT_DATE} to undertake the assessment.\n\nThis report covers the assessment of the following scope:\n{ASSESSMENT_SCOPE_BULLETS}",
-          surveyFindingsTitle: "SUMMARY OF LEAD FINDINGS",
-          surveyFindingsContent:
-            "The following sections summarise the sampling undertaken and observations made during the lead assessment at {SITE_NAME}. Detailed results are presented in Table 1 and in the laboratory certificate attached as Appendix A (where applicable).",
           discussionTitle: "DISCUSSION AND CONCLUSIONS",
           discussionContent:
             "The sampling results and observations have been reviewed in the context of relevant guidance for lead hazards. Any exceedances or areas of concern are identified in Table 1 and should be addressed in line with the recommendations below and applicable regulations.",
-          recommendedControlMeasuresTitle: "RECOMMENDED CONTROL MEASURES",
-          recommendedControlMeasuresContent:
-            "Where lead-containing materials or elevated lead dust was identified, remedial measures and safe work practices should be implemented prior to disturbance. Specific actions should be proportionate to the risk and in accordance with the hierarchy of controls.",
           signOffContent:
             "Please do not hesitate to contact the undersigned should you have any queries regarding this report.\n\nFor and on behalf of Lancaster and Dickenson Consulting.\n\n{CONSULTANT_NAME}",
-          assessmentMethodologyTitle: "ASSESSMENT METHODOLOGY",
-          assessmentMethodologyContent:
-            "The assessment comprised visual inspection and collection of representative samples (where applicable) for laboratory analysis using NATA-accredited methods. Sample locations were selected based on accessibility, suspected lead coatings, or dust deposition areas as appropriate to the scope.",
-          riskAssessmentTitle: "RISK ASSESSMENT",
-          riskAssessmentContent:
-            "Risk has been considered with reference to sample results, surface condition, occupancy, and potential exposure or ingestion pathways. The risk ratings presented in Table 1 (where used) support prioritisation of remediation or ongoing management.",
-          legislationTitle: "LEGISLATION",
-          legislationContent: "{LEGISLATION}",
-          assessmentLimitationsTitle: "ASSESSMENT LIMITATIONS / CAVEATS",
-          assessmentLimitationsContent:
-            "This assessment was limited to the date of site attendance and the areas accessible at that time. Concealed materials were not assessed. Results relate only to sampled locations; non-sampled areas may still contain lead.",
+          backgroundContent: "",
+          regulatoryGuidanceContent: "{LEGISLATION}",
+          assessmentCriteriaLeadPaintContent: "",
+          assessmentCriteriaLeadDustContent: "",
+          assessmentCriteriaLeadSoilContent: "",
+          assessmentMethodologyLeadPaintContent: "",
+          assessmentMethodologyLeadDustContent: "",
+          assessmentMethodologyLeadSoilContent: "",
+          assessmentFindingsLeadPaintContent: "",
+          assessmentFindingsLeadDustContent: "",
+          assessmentFindingsLeadSoilContent: "",
+          riskAssessmentLeadPaintContent: "",
+          riskAssessmentLeadDustContent: "",
+          riskAssessmentLeadSoilContent: "",
+          statementOfLimitationsContent: "",
           signaturePlaceholder: "",
         };
         template = new ReportTemplate({
@@ -485,7 +483,61 @@ const getTemplateByType = async (templateType) => {
  */
 const replacePlaceholders = async (content, data) => {
   if (!content) return '';
-  
+
+  const assessmentTypes = Array.isArray(data.assessmentType)
+    ? data.assessmentType.map((t) => String(t || '').trim().toLowerCase())
+    : [];
+  const hasPaint = assessmentTypes.includes('paint');
+  const hasPaintXrf = assessmentTypes.includes('paint-xrf');
+  const hasDust = assessmentTypes.includes('dust');
+  const hasSoil = assessmentTypes.includes('soil');
+  const lpAppendicesContent = (() => {
+    if (hasPaint && hasPaintXrf) {
+      return 'The Certificate of Analysis for physical paint samples is presented in Appendix A to this report. The tabulated XRF analysis results are presented in Appendix B';
+    }
+    if (hasPaintXrf) {
+      return 'The tabulated XRF analysis results are presented in Appendix A';
+    }
+    if (hasPaint) {
+      return 'The Certificate of Analysis is presented in Appendix A to this report.';
+    }
+    return '';
+  })();
+  const ldAppendicesContent = (() => {
+    if (!hasDust) return '';
+    if (hasPaintXrf && !hasPaint) {
+      return 'The Certificate of Analysis is presented in Appendix B to this report.';
+    }
+    return 'The Certificate of Analysis is presented in Appendix A to this report.';
+  })();
+  const lsAppendicesContent = (() => {
+    if (!hasSoil) return '';
+    if (hasPaintXrf && !hasPaint) {
+      return 'The Certificate of Analysis is presented in Appendix B to this report.';
+    }
+    return 'The Certificate of Analysis is presented in Appendix A to this report.';
+  })();
+
+  const leadScopeParts = [];
+  if (hasPaint || hasPaintXrf) leadScopeParts.push('paint');
+  if (assessmentTypes.includes('dust')) leadScopeParts.push('dusts');
+  if (assessmentTypes.includes('soil')) leadScopeParts.push('soils');
+  const leadScopePhrase = (() => {
+    if (leadScopeParts.length === 0) return '';
+    if (leadScopeParts.length === 1) return leadScopeParts[0];
+    if (leadScopeParts.length === 2) return `${leadScopeParts[0]} and ${leadScopeParts[1]}`;
+    return `${leadScopeParts.slice(0, -1).join(', ')} and ${leadScopeParts[leadScopeParts.length - 1]}`;
+  })();
+  const leadAssessmentPlanPlaceholder = (() => {
+    if (data.jobType !== 'lead-assessment') return '';
+    const hasAssessmentPlan = Array.isArray(data.leadAssessmentPlanAppendices)
+      && data.leadAssessmentPlanAppendices.some(
+        (p) => p && typeof p.sitePlanFile === 'string' && p.sitePlanFile.trim()
+      );
+    if (!hasAssessmentPlan) return '';
+    return 'A plan is also presented below which outlines the areas covered by this assessment.';
+  })();
+
   // Look up user's Asbestos Assessor licence number, state, and signature
   let laaLicenceNumber = 'AA00031'; // Default fallback
   let laaLicenceState = ''; // Default fallback
@@ -692,8 +744,12 @@ const replacePlaceholders = async (content, data) => {
     '[LAA_NAME]': laaName,
     '{LAA_LICENSE}': laaLicenceNumber,
     '[LAA_LICENCE]': laaLicenceNumber,
+    '{LAA_LICENCENUMBER}': laaLicenceNumber,
+    '[LAA_LICENCENUMBER]': laaLicenceNumber,
     '{LAA_LICENCE_STATE}': laaLicenceState,
     '[LAA_LICENCE_STATE]': laaLicenceState,
+    '{LAA_STATE}': laaLicenceState || data.jurisdiction || '',
+    '[LAA_STATE]': laaLicenceState || data.jurisdiction || '',
     '{ASSESSMENT_DATE}': data.assessmentDate
       ? new Date(data.assessmentDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
       : 'Unknown Date',
@@ -954,7 +1010,17 @@ const replacePlaceholders = async (content, data) => {
         }
       }
       return '[BULLET]No legislation items selected';
-    })()
+    })(),
+    '{LP_APPENDICES}': lpAppendicesContent,
+    '[LP_APPENDICES]': lpAppendicesContent,
+    '{LD_APPENDICES}': ldAppendicesContent,
+    '[LD_APPENDICES]': ldAppendicesContent,
+    '{LS_APPENDICES}': lsAppendicesContent,
+    '[LS_APPENDICES]': lsAppendicesContent,
+    '{LEAD_SCOPE}': leadScopePhrase,
+    '[LEAD_SCOPE]': leadScopePhrase,
+    '{ASSESSMENT_PLAN}': leadAssessmentPlanPlaceholder,
+    '[ASSESSMENT_PLAN]': leadAssessmentPlanPlaceholder,
   };
 
   let result = content;
@@ -962,9 +1028,10 @@ const replacePlaceholders = async (content, data) => {
     result = result.replace(new RegExp(placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), value);
   });
 
-  // Convert [BR] to line breaks first
-  result = result.replace(/\[BR\]/g, '<br>');
-  result = result.replace(/\{BR\}/g, '<br>');
+  // Convert explicit break placeholders first.
+  // Requirement: after [BR], add a half-line space.
+  result = result.replace(/\[BR\]/g, '<br>[HALF_BR]');
+  result = result.replace(/\{BR\}/g, '<br>[HALF_BR]');
   
   // Convert natural line breaks to HTML
   result = result.replace(/\r?\n/g, '<br>');
@@ -1021,9 +1088,9 @@ const replacePlaceholders = async (content, data) => {
   // Convert [UNDERLINE]text[/UNDERLINE] to underlined text
   result = result.replace(/\[UNDERLINE\](.*?)\[\/UNDERLINE\]/g, '<u>$1</u>');
   
-  // Remove HALF_BR placeholders - no longer needed
-  result = result.replace(/\[HALF_BR\]/g, '');
-  result = result.replace(/\{HALF_BR\}/g, '');
+  // Convert HALF_BR placeholders to half-line spacing blocks
+  result = result.replace(/\[HALF_BR\]/g, '<span style="display:block; height:0.5em;"></span>');
+  result = result.replace(/\{HALF_BR\}/g, '<span style="display:block; height:0.5em;"></span>');
 
   return result;
 };

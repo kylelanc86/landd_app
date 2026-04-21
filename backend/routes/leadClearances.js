@@ -550,7 +550,7 @@ router.delete("/:id/items/:itemId", auth, checkPermission(permEdit), async (req,
 // Add photo to lead clearance item
 router.post("/:id/items/:itemId/photos", auth, checkPermission(permEdit), async (req, res) => {
   try {
-    const { photoData, includeInReport = true } = req.body;
+    const { photoData, fullResolutionData, includeInReport = true } = req.body;
 
     if (!photoData) {
       return res.status(400).json({ message: "Photo data is required" });
@@ -575,6 +575,7 @@ router.post("/:id/items/:itemId/photos", auth, checkPermission(permEdit), async 
 
     item.photographs.push({
       data: photoData,
+      ...(fullResolutionData ? { fullResolutionData } : {}),
       includeInReport,
       uploadedAt: new Date(),
       photoNumber: nextPhotoNumber,
@@ -587,6 +588,41 @@ router.post("/:id/items/:itemId/photos", auth, checkPermission(permEdit), async 
     res.status(201).json(item);
   } catch (error) {
     console.error("Error adding photo to lead clearance item:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Replace photo image data (e.g. after client-side rotate)
+router.patch("/:id/items/:itemId/photos/:photoId", auth, checkPermission(permEdit), async (req, res) => {
+  try {
+    const { photoData } = req.body;
+    if (photoData === undefined || photoData === null || String(photoData).trim() === "") {
+      return res.status(400).json({ message: "photoData is required" });
+    }
+
+    const clearance = await LeadClearance.findById(req.params.id);
+    if (!clearance) {
+      return res.status(404).json({ message: "Lead clearance not found" });
+    }
+
+    const item = clearance.items.id(req.params.itemId);
+    if (!item) {
+      return res.status(404).json({ message: "Clearance item not found" });
+    }
+
+    const photo = item.photographs.id(req.params.photoId);
+    if (!photo) {
+      return res.status(404).json({ message: "Photo not found" });
+    }
+
+    photo.data = photoData;
+    clearance.updatedBy = req.user.id;
+    clearClearancePdfFields(clearance);
+    await clearance.save();
+
+    res.json({ message: "Photo updated successfully", item });
+  } catch (error) {
+    console.error("Error updating lead clearance photo:", error);
     res.status(500).json({ message: "Server error" });
   }
 });

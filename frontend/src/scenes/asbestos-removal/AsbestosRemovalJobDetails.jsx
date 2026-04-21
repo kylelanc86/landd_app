@@ -1177,9 +1177,113 @@ const AsbestosRemovalJobDetails = () => {
     setNewShiftDate(getTodayInSydney());
   };
 
-  const handleShiftSubmit = async () => {
+  const getReferenceShiftForDate = (targetDate) => {
+    if (!Array.isArray(airMonitoringShifts) || airMonitoringShifts.length === 0) {
+      return null;
+    }
+
+    const datedShifts = airMonitoringShifts
+      .filter((shift) => Boolean(shift?.date))
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    if (!datedShifts.length) {
+      return airMonitoringShifts[0] || null;
+    }
+
+    if (!targetDate) {
+      return datedShifts[0];
+    }
+
+    const selectedDateTimestamp = new Date(`${targetDate}T23:59:59`).getTime();
+    const previousShift = datedShifts.find(
+      (shift) => new Date(shift.date).getTime() <= selectedDateTimestamp,
+    );
+
+    return previousShift || datedShifts[0];
+  };
+
+  const extractSampleNumber = (sample) => {
+    const fromSampleNumber =
+      typeof sample?.sampleNumber === "string" ? sample.sampleNumber : "";
+    const sampleNumberMatch = fromSampleNumber.match(/^AM(\d+)$/i);
+    if (sampleNumberMatch) {
+      return Number.parseInt(sampleNumberMatch[1], 10) || 0;
+    }
+
+    const fromFullSampleId =
+      typeof sample?.fullSampleID === "string" ? sample.fullSampleID : "";
+    const fullSampleIdMatch = fromFullSampleId.match(/AM(\d+)$/i);
+    if (fullSampleIdMatch) {
+      return Number.parseInt(fullSampleIdMatch[1], 10) || 0;
+    }
+
+    return 0;
+  };
+
+  const getNextProjectSampleNumber = async (referenceSamples = []) => {
+    const projectLookupId = job?.projectId?.projectID;
+    let highestSampleNumber = 0;
+
+    try {
+      if (projectLookupId) {
+        const projectSamplesResponse =
+          await sampleService.getByProject(projectLookupId);
+        const projectSamples = Array.isArray(projectSamplesResponse?.data)
+          ? projectSamplesResponse.data
+          : [];
+
+        projectSamples.forEach((sample) => {
+          highestSampleNumber = Math.max(
+            highestSampleNumber,
+            extractSampleNumber(sample),
+          );
+        });
+      }
+    } catch (error) {
+      // Some environments return 404 for this endpoint; fallback to reference shift samples.
+    }
+
+    if (highestSampleNumber === 0 && Array.isArray(referenceSamples)) {
+      referenceSamples.forEach((sample) => {
+        highestSampleNumber = Math.max(
+          highestSampleNumber,
+          extractSampleNumber(sample),
+        );
+      });
+    }
+
+    return highestSampleNumber + 1;
+  };
+
+  const handleShiftSubmit = async ({ duplicateFromPrevious = false } = {}) => {
     setShiftCreating(true);
     try {
+      const referenceShift = duplicateFromPrevious
+        ? getReferenceShiftForDate(newShiftDate)
+        : null;
+      let copiedDescriptionOfWorks = "";
+
+      if (duplicateFromPrevious && referenceShift?._id) {
+        copiedDescriptionOfWorks =
+          typeof referenceShift.descriptionOfWorks === "string"
+            ? referenceShift.descriptionOfWorks
+            : "";
+
+        if (!copiedDescriptionOfWorks) {
+          try {
+            const referenceShiftResponse = await shiftService.getById(
+              referenceShift._id,
+            );
+            copiedDescriptionOfWorks =
+              typeof referenceShiftResponse?.data?.descriptionOfWorks === "string"
+                ? referenceShiftResponse.data.descriptionOfWorks
+                : "";
+          } catch (error) {
+            // If the previous shift details cannot be fetched, continue without copied description.
+          }
+        }
+      }
+
       // Create the new shift
       const shiftData = {
         job: jobId,
@@ -1191,10 +1295,53 @@ const AsbestosRemovalJobDetails = () => {
         endTime: "16:00",
         supervisor: currentUser._id,
         status: "ongoing",
-        descriptionOfWorks: "",
+        descriptionOfWorks: copiedDescriptionOfWorks,
       };
 
       const response = await shiftService.create(shiftData);
+      const createdShift = response?.data;
+      let duplicatedSamplesCount = 0;
+
+      if (duplicateFromPrevious && createdShift?._id) {
+        if (referenceShift?._id) {
+          const previousSamplesResponse = await sampleService.getByShift(
+            referenceShift._id,
+          );
+          const previousSamples = Array.isArray(previousSamplesResponse?.data)
+            ? previousSamplesResponse.data
+            : [];
+          const samplesToCopy = previousSamples.map((sample) => ({
+            type: sample?.type || "",
+            location: sample?.location || "",
+          }));
+
+          if (samplesToCopy.length > 0) {
+            const projectCode = job?.projectId?.projectID || "";
+            const nextSampleNumberStart =
+              await getNextProjectSampleNumber(previousSamples);
+
+            for (let i = 0; i < samplesToCopy.length; i += 1) {
+              const sampleTemplate = samplesToCopy[i];
+              const sampleNumber = `AM${nextSampleNumberStart + i}`;
+
+              await sampleService.create({
+                shift: createdShift._id,
+                job: jobId,
+                jobModel: "AsbestosRemovalJob",
+                sampleNumber,
+                fullSampleID: projectCode
+                  ? `${projectCode}-${sampleNumber}`
+                  : sampleNumber,
+                type: sampleTemplate.type || undefined,
+                location: sampleTemplate.location || undefined,
+                status: "pending",
+              });
+            }
+
+            duplicatedSamplesCount = samplesToCopy.length;
+          }
+        }
+      }
 
       // Add the new shift directly to state since backend isn't saving job/projectId fields
       if (response.data) {
@@ -1218,7 +1365,16 @@ const AsbestosRemovalJobDetails = () => {
 
       handleCloseShiftDialog();
 
-      showSnackbar("Air monitoring shift created successfully", "success");
+      if (duplicateFromPrevious) {
+        showSnackbar(
+          duplicatedSamplesCount > 0
+            ? `Air monitoring shift created with ${duplicatedSamplesCount} copied sample(s)`
+            : "Air monitoring shift created (no previous samples were copied)",
+          "success",
+        );
+      } else {
+        showSnackbar("Air monitoring shift created successfully", "success");
+      }
     } catch (error) {
       console.error("Error creating shift:", error);
       console.error("Error response:", error.response?.data);
@@ -3078,7 +3234,23 @@ const AsbestosRemovalJobDetails = () => {
               color: "white",
             }}
           >
-            <MonitorIcon sx={{ fontSize: 20 }} />
+            <Tooltip>
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={() =>
+                    handleShiftSubmit({ duplicateFromPrevious: true })
+                  }
+                  disabled={editingShift || !newShiftDate || shiftCreating}
+                  sx={{
+                    color: "white",
+                    "&.Mui-disabled": { color: "rgba(255, 255, 255, 0.45)" },
+                  }}
+                >
+                  <MonitorIcon sx={{ fontSize: 20 }} />
+                </IconButton>
+              </span>
+            </Tooltip>
           </Box>
           <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
             {editingShift

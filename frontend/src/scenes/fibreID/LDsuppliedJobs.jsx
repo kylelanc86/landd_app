@@ -22,6 +22,7 @@ import {
   Autocomplete,
   TextField,
   InputAdornment,
+  MenuItem,
 } from "@mui/material";
 import {
   ArrowBack as ArrowBackIcon,
@@ -33,7 +34,10 @@ import {
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import { asbestosAssessmentService, clientSuppliedJobsService, projectService } from "../../services/api";
-import { formatLabReferenceForDisplay } from "../../utils/formatters";
+import {
+  formatLabReferenceForDisplay,
+  getProjectClientName,
+} from "../../utils/formatters";
 import { getTodayInSydney, formatDateInSydney } from "../../utils/dateUtils";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
@@ -42,6 +46,7 @@ import { format } from "date-fns";
 import { generateFibreIDReport } from "../../utils/generateFibreIDReport";
 import { useSnackbar } from "../../context/SnackbarContext";
 import { useAuth } from "../../context/AuthContext";
+import { useUserLists } from "../../context/UserListsContext";
 import { hasPermission } from "../../config/permissions";
 
 /** Add business days to a date, skipping weekends. */
@@ -60,6 +65,7 @@ const LDsuppliedJobs = () => {
   const navigate = useNavigate();
   const { showSnackbar } = useSnackbar();
   const { currentUser } = useAuth();
+  const { activeLAAs } = useUserLists();
   const [assessments, setAssessments] = useState([]);
   const [standaloneJobs, setStandaloneJobs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -77,6 +83,7 @@ const LDsuppliedJobs = () => {
   const [sampleReceiptDate, setSampleReceiptDate] = useState("");
   const [turnaroundTime, setTurnaroundTime] = useState("");
   const [analysisDueDate, setAnalysisDueDate] = useState(new Date());
+  const [sampledBy, setSampledBy] = useState("");
   const [showCustomTurnaround, setShowCustomTurnaround] = useState(false);
   const [creatingJob, setCreatingJob] = useState(false);
   const [sampleReceiptDateError, setSampleReceiptDateError] = useState(false);
@@ -140,17 +147,41 @@ const LDsuppliedJobs = () => {
   const hasSamplesSubmittedToLab = (assessment) =>
     !!assessment.samplesReceivedDate;
 
+  const isLdSuppliedAssessmentRow = (assessment) => {
+    const jt = assessment?.jobType;
+    return jt === "asbestos-assessment" || jt === "residential-asbestos";
+  };
+
   const fetchAsbestosAssessments = async () => {
     try {
       setLoading(true);
-      // Fetch all asbestos assessments
-      const response = await asbestosAssessmentService.getAsbestosAssessments({ list: 1 });
+      // Standard + residential asbestos assessments only (exclude lead-assessment rows).
+      const [standardRes, residentialRes] = await Promise.all([
+        asbestosAssessmentService.getAsbestosAssessments({
+          list: 1,
+          jobType: "asbestos-assessment",
+        }),
+        asbestosAssessmentService.getAsbestosAssessments({
+          list: 1,
+          jobType: "residential-asbestos",
+        }),
+      ]);
+
+      const standard = standardRes.data || [];
+      const residential = residentialRes.data || [];
+      const mergedById = new Map();
+      [...(Array.isArray(standard) ? standard : []), ...(Array.isArray(residential) ? residential : [])].forEach(
+        (a) => {
+          if (!a || !a._id) return;
+          mergedById.set(String(a._id), a);
+        },
+      );
+      const merged = Array.from(mergedById.values());
 
       // Show only L&D supplied assessments where sample submission was confirmed (samplesReceivedDate set)
-      const allAssessments = response.data || [];
-      const submittedOnly = Array.isArray(allAssessments)
-        ? allAssessments.filter(hasSamplesSubmittedToLab)
-        : [];
+      const submittedOnly = merged
+        .filter(isLdSuppliedAssessmentRow)
+        .filter(hasSamplesSubmittedToLab);
       setAssessments(submittedOnly);
     } catch (error) {
       console.error("Error fetching asbestos assessments:", error);
@@ -177,6 +208,10 @@ const LDsuppliedJobs = () => {
       showSnackbar("Please select a turnaround time", "error");
       return;
     }
+    if (!sampledBy.trim()) {
+      showSnackbar("Please select who sampled the materials", "error");
+      return;
+    }
     if (showCustomTurnaround && !analysisDueDate) {
       showSnackbar("Please select an analysis due date", "error");
       return;
@@ -189,6 +224,7 @@ const LDsuppliedJobs = () => {
         jobType: "Fibre ID",
         sampleReceiptDate: sampleReceiptDate.trim(),
         supplyType: "ld",
+        sampledBy: sampledBy.trim(),
       };
       const finalTurnaround = showCustomTurnaround ? "custom" : turnaroundTime;
       if (finalTurnaround) jobData.turnaroundTime = finalTurnaround;
@@ -204,6 +240,7 @@ const LDsuppliedJobs = () => {
       setSampleReceiptDate("");
       setTurnaroundTime("");
       setAnalysisDueDate(new Date());
+      setSampledBy("");
       setShowCustomTurnaround(false);
       showSnackbar("L&D supplied job created successfully.", "success");
     } catch (error) {
@@ -655,6 +692,7 @@ const LDsuppliedJobs = () => {
         status: fullJob.status,
         analysisDate: fullJob.analysisDate,
         sampleReceiptDate: fullJob.sampleReceiptDate,
+        LAA: fullJob.sampledBy || null,
         revision: fullJob.revision || 0,
       };
       await generateFibreIDReport({
@@ -876,6 +914,79 @@ const LDsuppliedJobs = () => {
     return "success.main"; // Not overdue - green (same as ClientSuppliedJobs)
   };
 
+  const getAssessmentDueDate = (assessment) => {
+    if (assessment.analysisDueDate) {
+      const due = new Date(assessment.analysisDueDate);
+      return isNaN(due.getTime()) ? null : due;
+    }
+    if (assessment.samplesReceivedDate && assessment.turnaroundTime) {
+      const receivedDate = new Date(assessment.samplesReceivedDate);
+      const dueDate = new Date(receivedDate);
+      if (assessment.turnaroundTime === "3 day") {
+        dueDate.setDate(receivedDate.getDate() + 3);
+      } else if (assessment.turnaroundTime === "24 hours") {
+        dueDate.setHours(receivedDate.getHours() + 24);
+      } else {
+        dueDate.setDate(receivedDate.getDate() + 3);
+      }
+      return dueDate;
+    }
+    if (assessment.samplesReceivedDate) {
+      const receivedDate = new Date(assessment.samplesReceivedDate);
+      const dueDate = new Date(receivedDate);
+      dueDate.setDate(receivedDate.getDate() + 3);
+      return dueDate;
+    }
+    return null;
+  };
+
+  const compareByDueDateWithCompleteLast = (
+    aDueDate,
+    aIsComplete,
+    bDueDate,
+    bIsComplete,
+  ) => {
+    if (aIsComplete !== bIsComplete) {
+      return aIsComplete ? 1 : -1;
+    }
+    if (!aDueDate && !bDueDate) return 0;
+    if (!aDueDate) return 1;
+    if (!bDueDate) return -1;
+    return aDueDate.getTime() - bDueDate.getTime();
+  };
+
+  const sortedAssessments = [...assessments].sort((a, b) => {
+    const aLabStatus = getLabSamplesStatus(a);
+    const bLabStatus = getLabSamplesStatus(b);
+    const aIsComplete = aLabStatus === "analysis-complete";
+    const bIsComplete = bLabStatus === "analysis-complete";
+    const aDueDate = getAssessmentDueDate(a);
+    const bDueDate = getAssessmentDueDate(b);
+    return compareByDueDateWithCompleteLast(
+      aDueDate,
+      aIsComplete,
+      bDueDate,
+      bIsComplete,
+    );
+  });
+
+  const sortedStandaloneJobs = [...standaloneJobs].sort((a, b) => {
+    const aStatus = (a.status || "").trim().toLowerCase();
+    const bStatus = (b.status || "").trim().toLowerCase();
+    const aIsComplete =
+      aStatus === "analysis complete" || aStatus === "analysis-complete";
+    const bIsComplete =
+      bStatus === "analysis complete" || bStatus === "analysis-complete";
+    const aDueDate = a.analysisDueDate ? new Date(a.analysisDueDate) : null;
+    const bDueDate = b.analysisDueDate ? new Date(b.analysisDueDate) : null;
+    return compareByDueDateWithCompleteLast(
+      aDueDate && !isNaN(aDueDate.getTime()) ? aDueDate : null,
+      aIsComplete,
+      bDueDate && !isNaN(bDueDate.getTime()) ? bDueDate : null,
+      bIsComplete,
+    );
+  });
+
   return (
     <Container maxWidth="xl">
       <Box sx={{ mt: 4, mb: 4 }}>
@@ -986,9 +1097,13 @@ const LDsuppliedJobs = () => {
                   </TableRow>
                 ) : (
                   <>
-                  {assessments.map((assessment) => {
+                  {sortedAssessments.map((assessment) => {
                     const sampleCount = getUniqueSampleCount(assessment);
                     const labStatus = getLabSamplesStatus(assessment);
+                    const isAnalysisComplete = labStatus === "analysis-complete";
+                    const projectClientName = getProjectClientName(
+                      assessment.projectId,
+                    );
                     return (
                       <TableRow
                         key={assessment._id}
@@ -1011,6 +1126,17 @@ const LDsuppliedJobs = () => {
                         <TableCell>
                           <Typography variant="body2" sx={{ fontWeight: "bold" }}>
                             {assessment.projectId?.name || "Unnamed Project"}
+                            {projectClientName && (
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                component="span"
+                                display="block"
+                                sx={{ fontWeight: 400 }}
+                              >
+                                Client: {projectClientName}
+                              </Typography>
+                            )}
                           </Typography>
                         </TableCell>
                         <TableCell>
@@ -1043,10 +1169,12 @@ const LDsuppliedJobs = () => {
                           <Typography
                             fontSize="0.8rem"                            
                             sx={{
-                              color: getAnalysisDueColor(assessment),
+                              color: isAnalysisComplete
+                                ? "text.secondary"
+                                : getAnalysisDueColor(assessment),
                             }}
                           >
-                            {getAnalysisDueTime(assessment)}
+                            {isAnalysisComplete ? "-" : getAnalysisDueTime(assessment)}
                           </Typography>
                         </TableCell>
                         <TableCell
@@ -1225,7 +1353,15 @@ const LDsuppliedJobs = () => {
                       </TableRow>
                     );
                   })}
-                  {standaloneJobs.map((job) => (
+                  {sortedStandaloneJobs.map((job) => {
+                    const projectClientName = getProjectClientName(job.projectId);
+                    const normalizedStatus = (job.status || "")
+                      .trim()
+                      .toLowerCase();
+                    const isAnalysisComplete =
+                      normalizedStatus === "analysis complete" ||
+                      normalizedStatus === "analysis-complete";
+                    return (
                     <TableRow
                       key={`job-${job._id}`}
                       hover
@@ -1240,6 +1376,16 @@ const LDsuppliedJobs = () => {
                       <TableCell>
                         <Typography variant="body2">
                           {job.projectId?.name || "Unnamed Project"}
+                          {projectClientName && (
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              component="span"
+                              display="block"
+                            >
+                              Client: {projectClientName}
+                            </Typography>
+                          )}
                         </Typography>
                       </TableCell>
                       <TableCell>
@@ -1276,14 +1422,16 @@ const LDsuppliedJobs = () => {
                           variant="body2"
                           fontWeight="bold"
                           sx={{
-                            color: !job.analysisDueDate
+                            color: isAnalysisComplete || !job.analysisDueDate
                               ? "text.secondary"
                               : new Date(job.analysisDueDate) < new Date()
                                 ? "error.main"
                                 : "success.main",
                           }}
                         >
-                          {getAnalysisDueText(job.analysisDueDate)}
+                          {isAnalysisComplete
+                            ? "-"
+                            : getAnalysisDueText(job.analysisDueDate)}
                         </Typography>
                       </TableCell>
                       <TableCell
@@ -1420,7 +1568,8 @@ const LDsuppliedJobs = () => {
                         </Box>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                   </>
                 )}
               </TableBody>
@@ -1518,6 +1667,7 @@ const LDsuppliedJobs = () => {
             setSampleReceiptDate("");
             setTurnaroundTime("");
             setAnalysisDueDate(new Date());
+            setSampledBy("");
             setShowCustomTurnaround(false);
           }}
           maxWidth="sm"
@@ -1554,6 +1704,26 @@ const LDsuppliedJobs = () => {
                       </li>
                     )}
                   />
+                  <TextField
+                    select
+                    fullWidth
+                    label="Sampled by (LAA)"
+                    value={sampledBy}
+                    onChange={(e) => setSampledBy(e.target.value)}
+                    required
+                  >
+                    <MenuItem value="">
+                      <em>Select an LAA</em>
+                    </MenuItem>
+                    {activeLAAs.map((assessor) => {
+                      const name = `${assessor.firstName} ${assessor.lastName}`;
+                      return (
+                        <MenuItem key={assessor._id} value={name}>
+                          {name}
+                        </MenuItem>
+                      );
+                    })}
+                  </TextField>
                   <TextField
                     fullWidth
                     label="Sample Receipt Date"
@@ -1653,6 +1823,7 @@ const LDsuppliedJobs = () => {
                 setSampleReceiptDate("");
                 setTurnaroundTime("");
                 setAnalysisDueDate(new Date());
+                setSampledBy("");
                 setShowCustomTurnaround(false);
               }}
               variant="outlined"
@@ -1663,7 +1834,7 @@ const LDsuppliedJobs = () => {
             <Button
               onClick={handleCreateJob}
               variant="contained"
-              disabled={!selectedProject || creatingJob || !projects?.length}
+              disabled={!selectedProject || !sampledBy.trim() || creatingJob || !projects?.length}
               startIcon={<AddIcon />}
               sx={{ minWidth: 120, borderRadius: 2, textTransform: "none", fontWeight: 500 }}
             >

@@ -19,6 +19,10 @@ const AssessmentItemSchema = new mongoose.Schema({
       type: String, // Base64 image data
       required: true,
     },
+    fullResolutionData: {
+      type: String, // Original full-resolution base64 image data (download-only)
+      required: false,
+    },
     includeInReport: {
       type: Boolean,
       default: true, // By default, include photos in report
@@ -68,11 +72,18 @@ const AssessmentItemSchema = new mongoose.Schema({
     levelFloor: { type: String },
     roomArea: { type: String },
     surfaceDescription: { type: String },
+    recommendationActions: { type: String },
     condition: { type: String },
     occupantRating: { type: Number },
     locationRating: { type: Number },
     roomUseRating: { type: Number },
     conditionRating: { type: Number },
+    photographs: [{
+      data: { type: String, required: true },
+      includeInReport: { type: Boolean, default: true },
+      uploadedAt: { type: Date, default: Date.now },
+      description: { type: String, required: false },
+    }],
   }],
 
   // Embedded Analysis Data for Fibre ID Analysis
@@ -214,6 +225,8 @@ const AsbestosAssessmentSchema = new mongoose.Schema({
   assessmentScope: [{ type: String }], // Array of scope items for the assessment
   /** Lead jobs only: planned scope by sample type, e.g. { paint: [{ roomArea, locations }], dust: [...], ... } */
   leadAssessmentScope: { type: mongoose.Schema.Types.Mixed },
+  /** Lead assessments: per-type discussion text keyed by paint|dust|soil. */
+  leadDiscussionConclusionsByType: { type: mongoose.Schema.Types.Mixed },
   jobSpecificExclusions: { type: String }, // Job-specific exclusions/caveats for the assessment report
   discussionConclusions: { type: String }, // Discussion and conclusions text for the assessment report
   analysisCertificate: { type: Boolean, default: false },
@@ -240,6 +253,24 @@ const AsbestosAssessmentSchema = new mongoose.Schema({
   sitePlanFigureTitle: {
     type: String,
   },
+  /** Lead assessments: multiple appendix site plans (with optional sample markers baked into image). */
+  leadSitePlanAppendices: [{
+    sitePlan: { type: Boolean, default: true },
+    sitePlanFile: { type: String },
+    sitePlanSource: { type: String, enum: ['uploaded', 'drawn'] },
+    sitePlanLegend: [{ color: String, description: String }],
+    sitePlanLegendTitle: { type: String },
+    sitePlanFigureTitle: { type: String },
+  }],
+  /** Lead assessments: plans illustrating assessment areas (no map layer / sample tools in UI). */
+  leadAssessmentPlanAppendices: [{
+    sitePlan: { type: Boolean, default: true },
+    sitePlanFile: { type: String },
+    sitePlanSource: { type: String, enum: ['uploaded', 'drawn'] },
+    sitePlanLegend: [{ color: String, description: String }],
+    sitePlanLegendTitle: { type: String },
+    sitePlanFigureTitle: { type: String },
+  }],
   fibreAnalysisReport: { type: String }, // Base64 PDF data for fibre analysis report
   reportApprovedBy: { type: String }, // Fibre ID report approval (lab analyst)
   reportIssueDate: { type: Date }, // Date when report was issued/approved

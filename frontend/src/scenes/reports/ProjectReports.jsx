@@ -27,9 +27,12 @@ import {
   TableRow,
   Paper,
   IconButton,
+  ImageList,
+  ImageListItem,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import DownloadIcon from "@mui/icons-material/Download";
+import HdIcon from "@mui/icons-material/Hd";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ArchiveIcon from "@mui/icons-material/Archive";
 import AssessmentIcon from "@mui/icons-material/Assessment";
@@ -45,6 +48,7 @@ import api, {
   sampleService,
   clientService,
   clientSuppliedJobsService,
+  asbestosAssessmentService,
 } from "../../services/api";
 import reportService from "../../services/reportService";
 import { generateShiftReport } from "../../utils/generateShiftReport";
@@ -53,6 +57,7 @@ import ProjectLogModalWrapper from "./ProjectLogModalWrapper";
 import { useProjectStatuses } from "../../context/ProjectStatusesContext";
 import { useAuth } from "../../context/AuthContext";
 import { getTodayInSydney } from "../../utils/dateUtils";
+import { saveFileToDevice } from "../../utils/imageCompression";
 
 const ProjectReports = () => {
   const { projectId } = useParams();
@@ -97,6 +102,12 @@ const ProjectReports = () => {
   const [cocDialogOpen, setCocDialogOpen] = useState(false);
   const [cocFullScreenOpen, setCocFullScreenOpen] = useState(false);
   const [selectedCOC, setSelectedCOC] = useState(null);
+  const [reportImagesDialog, setReportImagesDialog] = useState({
+    open: false,
+    loading: false,
+    report: null,
+    images: [],
+  });
 
   const { showSnackbar } = useSnackbar();
 
@@ -313,6 +324,49 @@ const ProjectReports = () => {
         });
       } catch (error) {
         console.error("Error fetching active client supplied jobs:", error);
+      }
+
+      // Open asbestos / residential assessment jobs (not yet final-authorised — same signal as “still in play” before Project Reports list)
+      try {
+        const [stdRes, resiRes] = await Promise.all([
+          asbestosAssessmentService.getAsbestosAssessments({
+            list: 1,
+            jobType: "asbestos-assessment",
+            projectId,
+          }),
+          asbestosAssessmentService.getAsbestosAssessments({
+            list: 1,
+            jobType: "residential-asbestos",
+            projectId,
+          }),
+        ]);
+        const stdJobs = Array.isArray(stdRes?.data) ? stdRes.data : [];
+        const resiJobs = Array.isArray(resiRes?.data) ? resiRes.data : [];
+        const openAssessments = [...stdJobs, ...resiJobs].filter((job) => {
+          const auth = job.reportAuthorisedBy;
+          const hasAuth =
+            auth != null && String(auth).trim() !== "";
+          return !hasAuth;
+        });
+        openAssessments.forEach((job) => {
+          const id = job._id || job.id;
+          const isResidential = job.jobType === "residential-asbestos";
+          activeJobsList.push({
+            id,
+            type: "asbestos-assessment-open",
+            name: isResidential
+              ? "Residential Asbestos Assessment"
+              : "Asbestos Assessment",
+            status: job.status || "in-progress",
+            jobType: job.jobType || "asbestos-assessment",
+            url: isResidential
+              ? `/surveys/residential-asbestos/${id}/items`
+              : `/surveys/asbestos-assessment/${id}/items`,
+            dates: job.assessmentDate ? [job.assessmentDate] : [],
+          });
+        });
+      } catch (error) {
+        console.error("Error fetching open assessment jobs:", error);
       }
 
       setActiveJobs(activeJobsList);
@@ -1355,6 +1409,182 @@ const ProjectReports = () => {
     }
   };
 
+  const normalizeDataUrl = (value) =>
+    typeof value === "string" && value.startsWith("data:image/") ? value : null;
+
+  const collectImagesFromItems = (items = []) => {
+    const images = [];
+    (items || []).forEach((item, itemIndex) => {
+      const itemLabel =
+        item?.locationDescription ||
+        item?.materialDescription ||
+        item?.roomArea ||
+        item?.sampleReference ||
+        `Item ${itemIndex + 1}`;
+      const photos = Array.isArray(item?.photographs) ? item.photographs : [];
+      photos.forEach((photo, photoIndex) => {
+        const data = normalizeDataUrl(photo?.data);
+        if (!data) return;
+        const fullResolutionData = normalizeDataUrl(photo?.fullResolutionData);
+        images.push({
+          id: photo?._id || `${itemIndex}-${photoIndex}`,
+          data,
+          fullResolutionData,
+          label: `${itemLabel} - Photo ${photoIndex + 1}`,
+        });
+      });
+      const legacyPhoto = normalizeDataUrl(item?.photograph);
+      if (legacyPhoto) {
+        images.push({
+          id: `${itemIndex}-legacy`,
+          data: legacyPhoto,
+          label: `${itemLabel} - Photo`,
+        });
+      }
+    });
+    return images;
+  };
+
+  const getReportImages = async (report) => {
+    const reportId = report?.id || report?.data?.id || report?.data?._id;
+    if (!reportId) return [];
+    if (report.type === "clearance") {
+      const { default: asbestosClearanceService } = await import(
+        "../../services/asbestosClearanceService"
+      );
+      const clearance = await asbestosClearanceService.getById(reportId);
+      return collectImagesFromItems(clearance?.items || []);
+    }
+    if (report.type === "asbestos_assessment") {
+      const { default: asbestosAssessmentService } = await import(
+        "../../services/asbestosAssessmentService"
+      );
+      const assessmentResponse = await asbestosAssessmentService.getById(reportId);
+      const assessment = assessmentResponse?.data || assessmentResponse;
+      return collectImagesFromItems(assessment?.items || []);
+    }
+    return collectImagesFromItems(report?.data?.items || []);
+  };
+
+  const buildImageFilename = (report, index, dataUrl) => {
+    const mimeMatch = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/);
+    const mimeType = mimeMatch?.[1] || "image/jpeg";
+    const extMap = {
+      "image/jpeg": "jpg",
+      "image/jpg": "jpg",
+      "image/png": "png",
+      "image/webp": "webp",
+      "image/gif": "gif",
+    };
+    const extension = extMap[mimeType] || "jpg";
+    const datePart = report?.date
+      ? new Date(report.date).toISOString().split("T")[0]
+      : "undated";
+    return `${report?.type || "report"}-${report?.id || "item"}-${datePart}-image-${index + 1}.${extension}`;
+  };
+
+  const downloadImageDataUrl = async (dataUrl, filename) => {
+    const response = await fetch(dataUrl);
+    const blob = await response.blob();
+    const file = new File([blob], filename, { type: blob.type || "image/jpeg" });
+    await saveFileToDevice(file, filename);
+  };
+
+  const handleOpenReportImages = async (report) => {
+    setReportImagesDialog({ open: true, loading: true, report, images: [] });
+    try {
+      const images = await getReportImages(report);
+      setReportImagesDialog({ open: true, loading: false, report, images });
+      if (!images.length) {
+        showSnackbar("No report images found", "info");
+      }
+    } catch (error) {
+      console.error("Error loading report images:", error);
+      setReportImagesDialog({
+        open: true,
+        loading: false,
+        report,
+        images: [],
+      });
+      showSnackbar("Failed to load report images", "error");
+    }
+  };
+
+  const handleDownloadSingleReportImage = async (
+    image,
+    index,
+    quality = "full",
+  ) => {
+    try {
+      const sourceData =
+        quality === "full" ? image.fullResolutionData : image.data;
+      if (!sourceData) {
+        showSnackbar(
+          quality === "full"
+            ? "Full-resolution image is not available for this photo"
+            : "Compressed image is not available for this photo",
+          "error",
+        );
+        return;
+      }
+      const filename = buildImageFilename(
+        reportImagesDialog.report,
+        index,
+        sourceData,
+      );
+      await downloadImageDataUrl(sourceData, filename);
+      showSnackbar(
+        quality === "full"
+          ? "Full-resolution image downloaded"
+          : "Compressed image downloaded",
+        "success",
+      );
+    } catch (error) {
+      console.error("Error downloading report image:", error);
+      showSnackbar("Failed to download image", "error");
+    }
+  };
+
+  const handleDownloadAllReportImages = async (quality = "full") => {
+    if (!reportImagesDialog.images.length) return;
+    try {
+      let downloaded = 0;
+      for (let i = 0; i < reportImagesDialog.images.length; i += 1) {
+        const image = reportImagesDialog.images[i];
+        const sourceData =
+          quality === "full" ? image.fullResolutionData : image.data;
+        if (!sourceData) continue;
+        const filename = buildImageFilename(
+          reportImagesDialog.report,
+          i,
+          sourceData,
+        );
+        // Sequential downloads avoid browser throttling.
+        // eslint-disable-next-line no-await-in-loop
+        await downloadImageDataUrl(sourceData, filename);
+        downloaded += 1;
+      }
+      if (downloaded === 0) {
+        showSnackbar(
+          quality === "full"
+            ? "No full-resolution images available to download"
+            : "No compressed images available to download",
+          "error",
+        );
+      } else {
+        showSnackbar(
+          quality === "full"
+            ? `Downloaded ${downloaded} full-resolution image(s)`
+            : `Downloaded ${downloaded} compressed image(s)`,
+          "success",
+        );
+      }
+    } catch (error) {
+      console.error("Error downloading all report images:", error);
+      showSnackbar("Failed to download all images", "error");
+    }
+  };
+
   const handleReviseReport = (report) => {
     // Show confirmation dialog
     setReviseDialog({
@@ -1510,6 +1740,24 @@ const ProjectReports = () => {
 
         // Reload reports to reflect the change
         loadReports();
+      } else if (report.type === "asbestos_assessment") {
+        const { asbestosAssessmentService } = await import("../../services/api");
+        const assessmentId =
+          report.id || report.data?.id || report.data?._id;
+        if (!assessmentId) {
+          showSnackbar("Could not determine assessment ID for revise.", "error");
+          return;
+        }
+        const res = await asbestosAssessmentService.reviseAsbestosAssessmentReport(
+          assessmentId,
+        );
+        showSnackbar(
+          res.data?.message ||
+            "Assessment report reset for editing. Open the job from Surveys (Asbestos or Residential Asbestos Assessment) to revise and re-authorise.",
+          "success",
+        );
+        loadReports();
+        loadActiveJobs();
       }
     } catch (error) {
       console.error("Error revising report:", error);
@@ -1545,7 +1793,15 @@ const ProjectReports = () => {
         chainOfCustody = jobResponse.data?.chainOfCustody;
       }
 
-      if (!chainOfCustody || !chainOfCustody.data) {
+      // Support both legacy single object and new array-based COC storage.
+      const cocItems = Array.isArray(chainOfCustody)
+        ? chainOfCustody
+        : chainOfCustody
+          ? [chainOfCustody]
+          : [];
+      const selectedItem = [...cocItems].reverse().find((item) => item?.data);
+
+      if (!selectedItem) {
         showSnackbar(
           "No Chain of Custody document available for this report",
           "info",
@@ -1553,7 +1809,7 @@ const ProjectReports = () => {
         return;
       }
 
-      setSelectedCOC(chainOfCustody);
+      setSelectedCOC(selectedItem);
       setCocDialogOpen(true);
     } catch (error) {
       console.error("Error loading COC:", error);
@@ -1855,6 +2111,8 @@ const ProjectReports = () => {
                     let jobTypeDisplay =
                       job.type === "asbestos-removal"
                         ? "Asbestos Removal"
+                        : job.type === "asbestos-assessment-open"
+                          ? job.name
                         : job.jobType || "Fibre ID";
 
                     if (
@@ -1883,6 +2141,7 @@ const ProjectReports = () => {
                           <Chip
                             label={formatJobStatus(job.status)}
                             color={
+                              job.type === "asbestos-assessment-open" ||
                               job.status === "in_progress" ||
                               job.status === "In Progress"
                                 ? "warning"
@@ -1940,6 +2199,7 @@ const ProjectReports = () => {
             error={error}
             category={selectedCategory}
             onDownload={handleDownloadReport}
+            onViewImages={handleOpenReportImages}
             onRevise={handleReviseReport}
             onViewCOC={handleViewCOC}
             onExportCSV={handleExportCSV}
@@ -1956,6 +2216,120 @@ const ProjectReports = () => {
           project={project}
         />
       )}
+
+      <Dialog
+        open={reportImagesDialog.open}
+        onClose={() =>
+          setReportImagesDialog({
+            open: false,
+            loading: false,
+            report: null,
+            images: [],
+          })
+        }
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          Report Images
+          {reportImagesDialog.report ? ` (${reportImagesDialog.report.description})` : ""}
+        </DialogTitle>
+        <DialogContent>
+          {reportImagesDialog.loading ? (
+            <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : reportImagesDialog.images.length === 0 ? (
+            <Typography color="text.secondary">No images found for this report.</Typography>
+          ) : (
+            <ImageList cols={3} gap={12}>
+              {reportImagesDialog.images.map((image, index) => (
+                <ImageListItem key={image.id || index}>
+                  <img
+                    src={image.data}
+                    alt={image.label || `Report image ${index + 1}`}
+                    loading="lazy"
+                    style={{ borderRadius: 8, maxHeight: 180, objectFit: "cover" }}
+                  />
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      mt: 0.5,
+                      gap: 1,
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                      title={image.label}
+                    >
+                      {image.label || `Image ${index + 1}`}
+                    </Typography>
+                    <Box sx={{ display: "flex", gap: 0.5 }}>
+                      <IconButton
+                        size="small"
+                        color="primary"
+                        onClick={() =>
+                          handleDownloadSingleReportImage(image, index, "full")
+                        }
+                        title="Download full resolution"
+                      >
+                        <HdIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        color="secondary"
+                        onClick={() =>
+                          handleDownloadSingleReportImage(
+                            image,
+                            index,
+                            "compressed",
+                          )
+                        }
+                        title="Download compressed"
+                      >
+                        <DownloadIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  </Box>
+                </ImageListItem>
+              ))}
+            </ImageList>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() =>
+              setReportImagesDialog({
+                open: false,
+                loading: false,
+                report: null,
+                images: [],
+              })
+            }
+          >
+            Close
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<HdIcon />}
+            disabled={!reportImagesDialog.images.some((img) => img.fullResolutionData)}
+            onClick={() => handleDownloadAllReportImages("full")}
+          >
+            Download All Full
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<DownloadIcon />}
+            disabled={!reportImagesDialog.images.some((img) => img.data)}
+            onClick={() => handleDownloadAllReportImages("compressed")}
+          >
+            Download All Compressed
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Revise Report Confirmation Dialog */}
       <Dialog
@@ -1977,6 +2351,9 @@ const ProjectReports = () => {
                 tableText = "the clearances table";
               } else if (reportType === "shift") {
                 tableText = "the asbestos removal jobs table";
+              } else if (reportType === "asbestos_assessment") {
+                tableText =
+                  "Surveys (Asbestos Assessment or Residential Asbestos Assessment)";
               }
 
               return `Proceeding will enable editing of the report in ${tableText} and will increase the report's revision count.`;

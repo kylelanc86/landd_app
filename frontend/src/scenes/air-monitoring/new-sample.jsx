@@ -68,6 +68,7 @@ const NewSample = () => {
     isFieldBlank: false,
     isNegAirExhaust: false,
     sampler: "",
+    samplerPickup: "",
     status: "pending",
   });
   const [projectID, setProjectID] = useState(null);
@@ -571,8 +572,13 @@ const NewSample = () => {
           samplerToSet =
             shiftData.defaultSampler._id || shiftData.defaultSampler;
           console.log("Using default sampler from shift:", samplerToSet);
-        } else if (samplesInShift.length > 0 && samplesInShift[0].collectedBy) {
-          samplerToSet = samplesInShift[0].collectedBy;
+        } else if (samplesInShift.length > 0) {
+          const first = samplesInShift[0];
+          samplerToSet =
+            first.sampler?._id ||
+            first.sampler ||
+            first.collectedBy?._id ||
+            first.collectedBy;
           console.log("Using sampler from first sample:", samplerToSet);
           // Update shift with default sampler in background (don't await)
           shiftService
@@ -588,6 +594,7 @@ const NewSample = () => {
           setForm((prev) => ({
             ...prev,
             sampler: samplerToSet,
+            samplerPickup: samplerToSet,
           }));
         }
 
@@ -758,6 +765,18 @@ const NewSample = () => {
         initialFlowrate: checked ? "" : prev.initialFlowrate,
         finalFlowrate: checked ? "" : prev.finalFlowrate,
         averageFlowrate: checked ? "" : prev.averageFlowrate,
+      }));
+      return;
+    }
+
+    if (name === "sampler") {
+      setForm((prev) => ({
+        ...prev,
+        sampler: value,
+        samplerPickup:
+          !prev.samplerPickup || prev.samplerPickup === prev.sampler
+            ? value
+            : prev.samplerPickup,
       }));
       return;
     }
@@ -1079,6 +1098,9 @@ const NewSample = () => {
     if (!form.sampler) {
       errors.sampler = "Sampler is required";
     }
+    if (!form.samplerPickup) {
+      errors.samplerPickup = "Sampler (pick-up) is required";
+    }
 
     if (!form.sampleNumber) {
       errors.sampleNumber = "Sample number is required";
@@ -1250,7 +1272,7 @@ const NewSample = () => {
         jobModel: shift.jobModel, // Add jobModel from shift
         fullSampleID: `${projectID}-${form.sampleNumber}`,
         sampler: form.sampler,
-        collectedBy: form.sampler,
+        collectedBy: form.samplerPickup || form.sampler,
         isFieldBlank: form.isFieldBlank || false, // Explicitly set boolean
         type: normalizedType, // Set type to "-" for field blanks, normalize otherwise
         location: normalizedLocation, // Clear "Field blank" location if not a field blank
@@ -1411,27 +1433,6 @@ const NewSample = () => {
           <Box sx={{ display: "flex", gap: 1.5, flexDirection: { xs: "column", sm: "row" }, alignItems: { sm: "flex-start" }, flexWrap: "wrap" }}>
             {!isSimplifiedSample && (
             <Box sx={{ display: "flex", gap: 1.5, flex: { xs: "none", sm: "1 1 0" }, minWidth: 0, flexWrap: { xs: "nowrap", sm: "wrap" }, "& > *": { flex: { xs: "1 1 0", sm: "1 1 140px" }, minWidth: 0 } }}>
-              <FormControl fullWidth size="small" required error={!!fieldErrors.sampler} sx={{ minWidth: 0 }}>
-                <InputLabel>Sampler</InputLabel>
-                <Select
-                  name="sampler"
-                  value={form.sampler}
-                  onChange={handleChange}
-                  label="Sampler"
-                  required
-                >
-                  {activeLAAs.map((assessor) => (
-                    <MenuItem key={assessor._id} value={assessor._id}>
-                      {assessor.firstName} {assessor.lastName}
-                    </MenuItem>
-                  ))}
-                </Select>
-                {fieldErrors.sampler && (
-                  <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
-                    {fieldErrors.sampler}
-                  </Typography>
-                )}
-              </FormControl>
               <TextField
                 size="small"
                 name="sampleNumber"
@@ -1667,6 +1668,33 @@ const NewSample = () => {
               >
                 Air-monitor Setup
               </Typography>
+              <FormControl
+                fullWidth
+                size="small"
+                required
+                error={!!fieldErrors.sampler}
+                sx={{ minWidth: 0, maxWidth: { sm: 420 }, mb: 2 }}
+              >
+                <InputLabel>Sampler</InputLabel>
+                <Select
+                  name="sampler"
+                  value={form.sampler}
+                  onChange={handleChange}
+                  label="Sampler"
+                  required
+                >
+                  {activeLAAs.map((assessor) => (
+                    <MenuItem key={assessor._id} value={assessor._id}>
+                      {assessor.firstName} {assessor.lastName}
+                    </MenuItem>
+                  ))}
+                </Select>
+                {fieldErrors.sampler && (
+                  <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
+                    {fieldErrors.sampler}
+                  </Typography>
+                )}
+              </FormControl>
               <Box sx={{ display: "flex", gap: 1, flexDirection: { xs: "column", sm: "row" }, flexWrap: "wrap", alignItems: { sm: "flex-start" } }}>
                 <Box sx={{ display: "flex", gap: 1, alignItems: "center", flex: { sm: "0 0 auto" } }}>
                   <FormControl
@@ -1792,6 +1820,33 @@ const NewSample = () => {
                   >
                     Air-monitor Pick-Up
                   </Typography>
+                  <FormControl
+                    fullWidth
+                    size="small"
+                    required
+                    error={!!fieldErrors.samplerPickup}
+                    sx={{ minWidth: 0, maxWidth: { sm: 420 }, mb: 2 }}
+                  >
+                    <InputLabel>Sampler (pick-up / collection)</InputLabel>
+                    <Select
+                      name="samplerPickup"
+                      value={form.samplerPickup || form.sampler || ""}
+                      onChange={handleChange}
+                      label="Sampler (pick-up / collection)"
+                      required
+                    >
+                      {activeLAAs.map((assessor) => (
+                        <MenuItem key={assessor._id} value={assessor._id}>
+                          {assessor.firstName} {assessor.lastName}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                    {fieldErrors.samplerPickup && (
+                      <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
+                        {fieldErrors.samplerPickup}
+                      </Typography>
+                    )}
+                  </FormControl>
                   <Box sx={{ display: "flex", gap: 1, flexDirection: { xs: "column", sm: "row" }, flexWrap: "wrap", alignItems: { sm: "flex-start" } }}>
                     <Box sx={{ display: "flex", gap: 1, alignItems: "center", flex: { sm: "0 0 auto" } }}>
                       <FormControl

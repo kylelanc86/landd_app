@@ -1,4 +1,6 @@
 const express = require("express");
+const fs = require("fs");
+const path = require("path");
 const router = express.Router();
 const AsbestosClearance = require("../models/clearanceTemplates/asbestos/AsbestosClearance");
 const auth = require("../middleware/auth");
@@ -14,6 +16,29 @@ const notDeletedClearanceFilter = {
   $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
 };
 
+function removeEnclosureCertificatePdfFileIfExists(mergedPdfPath) {
+  if (!mergedPdfPath || typeof mergedPdfPath !== "string") return;
+  const fullPath = path.join(__dirname, "..", "generated-pdfs", mergedPdfPath);
+  try {
+    if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+  } catch (err) {
+    console.warn("Could not delete enclosure certificate PDF file:", err.message);
+  }
+}
+
+/** Clear persisted enclosure certificate when inputs change (same idea as main clearance PDF). */
+function clearEnclosureCertificatePdfFields(clearance) {
+  removeEnclosureCertificatePdfFileIfExists(clearance.enclosureCertificateMergedPdfPath);
+  [
+    "enclosureCertificatePdfReadyAt",
+    "enclosureCertificatePdfFilename",
+    "enclosureCertificateMergedPdfPath",
+  ].forEach((field) => {
+    clearance[field] = undefined;
+    clearance.markModified(field);
+  });
+}
+
 /** Clear persisted PDF fields when clearance content changes so the UI shows Generate instead of Download. */
 function clearClearancePdfFields(clearance) {
   const pdfFields = ["pdfDownloadUrl", "pdfJobId", "pdfReadyAt", "pdfFilename"];
@@ -21,6 +46,7 @@ function clearClearancePdfFields(clearance) {
     clearance[field] = undefined;
     clearance.markModified(field);
   });
+  clearEnclosureCertificatePdfFields(clearance);
 }
 
 // Get all asbestos clearances with filtering and pagination
@@ -267,6 +293,10 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
       sitePlanLegend,
       sitePlanLegendTitle,
       sitePlanFigureTitle,
+      enclosureInspectionDateTime,
+      enclosureInspectedBy,
+      enclosureDescription,
+      enclosurePhotos,
       jobSpecificExclusions,
       notes,
       revision,
@@ -330,8 +360,39 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
     }
     if (sitePlanSource && ["uploaded", "drawn"].includes(sitePlanSource)) {
       clearance.sitePlanSource = sitePlanSource;
-    } else if (sitePlanSource === null) {
+    } else     if (sitePlanSource === null) {
       clearance.sitePlanSource = undefined; // Remove the field instead of setting to null
+    }
+    if (enclosureInspectionDateTime !== undefined) {
+      clearance.enclosureInspectionDateTime = enclosureInspectionDateTime
+        ? new Date(enclosureInspectionDateTime)
+        : null;
+    }
+    if (enclosureInspectedBy !== undefined) {
+      clearance.enclosureInspectedBy =
+        enclosureInspectedBy === null || enclosureInspectedBy === ""
+          ? null
+          : String(enclosureInspectedBy).trim() || null;
+    }
+    if (enclosureDescription !== undefined) {
+      clearance.enclosureDescription =
+        enclosureDescription === null || enclosureDescription === ""
+          ? ""
+          : String(enclosureDescription);
+    }
+    if (enclosurePhotos !== undefined) {
+      clearance.enclosurePhotos = Array.isArray(enclosurePhotos)
+        ? enclosurePhotos
+            .filter((p) => p && typeof p.data === "string" && p.data.trim())
+            .map((p) => ({
+              data: String(p.data).trim(),
+              description:
+                p.description != null && String(p.description).trim()
+                  ? String(p.description).trim()
+                  : undefined,
+            }))
+        : [];
+      clearance.markModified("enclosurePhotos");
     }
     clearance.jobSpecificExclusions = jobSpecificExclusions !== undefined ? jobSpecificExclusions : clearance.jobSpecificExclusions;
     clearance.notes = notes || clearance.notes;
@@ -916,7 +977,7 @@ router.delete("/:id/items/:itemId", auth, checkPermission("asbestos.edit"), asyn
 // Add photo to clearance item
 router.post("/:id/items/:itemId/photos", auth, checkPermission("asbestos.edit"), async (req, res) => {
   try {
-    const { photoData, includeInReport = true } = req.body;
+    const { photoData, fullResolutionData, includeInReport = true } = req.body;
 
     if (!photoData) {
       return res.status(400).json({ message: "Photo data is required" });
@@ -947,6 +1008,7 @@ router.post("/:id/items/:itemId/photos", auth, checkPermission("asbestos.edit"),
     // Add new photo
     item.photographs.push({
       data: photoData,
+      ...(fullResolutionData ? { fullResolutionData } : {}),
       includeInReport: includeInReport,
       uploadedAt: new Date(),
       photoNumber: actualPhotoNumber,
@@ -960,6 +1022,61 @@ router.post("/:id/items/:itemId/photos", auth, checkPermission("asbestos.edit"),
   } catch (error) {
     console.error("Error adding photo to clearance item:", error);
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Replace photo pixels and/or full arrows array (e.g. after rotate)
+router.patch("/:id/items/:itemId/photos/:photoId", auth, checkPermission("asbestos.edit"), async (req, res) => {
+  try {
+    const { photoData, arrows } = req.body;
+
+    if (photoData === undefined && arrows === undefined) {
+      return res.status(400).json({ message: "photoData and/or arrows is required" });
+    }
+
+    const clearance = await AsbestosClearance.findById(req.params.id);
+    if (!clearance) {
+      return res.status(404).json({ message: "Asbestos clearance not found" });
+    }
+
+    const item = clearance.items.id(req.params.itemId);
+    if (!item) {
+      return res.status(404).json({ message: "Clearance item not found" });
+    }
+
+    const photo = item.photographs.id(req.params.photoId);
+    if (!photo) {
+      return res.status(404).json({ message: "Photo not found" });
+    }
+
+    if (photoData !== undefined && photoData !== null && String(photoData).trim() !== "") {
+      photo.data = photoData;
+    }
+
+    if (Array.isArray(arrows)) {
+      delete photo.arrow;
+      photo.arrows = arrows.map((a) => {
+        const sub = {
+          x: typeof a.x === "number" ? a.x : 0.5,
+          y: typeof a.y === "number" ? a.y : 0.5,
+          rotation: typeof a.rotation === "number" ? a.rotation : -45,
+          color: a.color || "#f44336",
+        };
+        if (a._id) {
+          sub._id = a._id;
+        }
+        return sub;
+      });
+    }
+
+    clearance.updatedBy = req.user.id;
+    clearClearancePdfFields(clearance);
+    await clearance.save();
+
+    res.json({ message: "Photo updated successfully", item });
+  } catch (error) {
+    console.error("Error updating asbestos clearance photo:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 });
 

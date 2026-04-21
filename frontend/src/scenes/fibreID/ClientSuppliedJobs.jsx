@@ -43,7 +43,10 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { clientSuppliedJobsService, projectService } from "../../services/api";
 import { generateShiftReport } from "../../utils/generateShiftReport";
 import { generateFibreIDReport } from "../../utils/generateFibreIDReport";
-import { formatLabReferenceForDisplay } from "../../utils/formatters";
+import {
+  formatLabReferenceForDisplay,
+  getProjectClientName,
+} from "../../utils/formatters";
 import PDFLoadingOverlay from "../../components/PDFLoadingOverlay";
 import { useSnackbar } from "../../context/SnackbarContext";
 import { useAuth } from "../../context/AuthContext";
@@ -115,7 +118,7 @@ const ClientSuppliedJobs = () => {
   const [editShowCustomTurnaround, setEditShowCustomTurnaround] =
     useState(false);
   const [updatingDate, setUpdatingDate] = useState(false);
-  const [turnaroundTime, setTurnaroundTime] = useState("");
+  const [turnaroundTime, setTurnaroundTime] = useState("3 day");
   const [analysisDueDate, setAnalysisDueDate] = useState(new Date());
   const [showCustomTurnaround, setShowCustomTurnaround] = useState(false);
   const fileInputRef = useRef(null);
@@ -138,6 +141,23 @@ const ClientSuppliedJobs = () => {
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
   }, [jobs]);
+
+  // Recalculate create-dialog analysis due from sample receipt date when receipt or turnaround changes
+  useEffect(() => {
+    if (
+      !createDialogOpen ||
+      !sampleReceiptDate ||
+      sampleReceiptDate.trim() === ""
+    ) {
+      return;
+    }
+    if (turnaroundTime === "3 day" || turnaroundTime === "24 hours") {
+      const base = new Date(sampleReceiptDate);
+      if (isNaN(base.getTime())) return;
+      const businessDays = turnaroundTime === "3 day" ? 3 : 1;
+      setAnalysisDueDate(addBusinessDays(base, businessDays));
+    }
+  }, [createDialogOpen, sampleReceiptDate, turnaroundTime]);
 
   const fetchClientSuppliedJobs = async () => {
     try {
@@ -308,7 +328,7 @@ const ClientSuppliedJobs = () => {
       setSelectedJobType("");
       setSampleReceiptDate("");
       setSampleReceiptDateError(false);
-      setTurnaroundTime("");
+      setTurnaroundTime("3 day");
       setAnalysisDueDate(new Date());
       setShowCustomTurnaround(false);
     } catch (error) {
@@ -1253,7 +1273,9 @@ const ClientSuppliedJobs = () => {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredJobs.map((job) => (
+                  filteredJobs.map((job) => {
+                    const projectClientName = getProjectClientName(job.projectId);
+                    return (
                     <TableRow
                       key={job._id}
                       hover
@@ -1271,6 +1293,16 @@ const ClientSuppliedJobs = () => {
                       <TableCell>
                         <Typography variant="body2">
                           {job.projectId?.name || "Unnamed Project"}
+                          {projectClientName && (
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              component="span"
+                              display="block"
+                            >
+                              Client: {projectClientName}
+                            </Typography>
+                          )}
                         </Typography>
                       </TableCell>
                       <TableCell sx={{ width: "110px" }}>
@@ -1480,7 +1512,7 @@ const ClientSuppliedJobs = () => {
                               >
                                 {completingJobs[job._id]
                                   ? "Completing..."
-                                  : "Complete"}
+                                  : "Report sent"}
                               </Button>
                             )}
                           {job.status === "Completed" && (
@@ -1555,7 +1587,8 @@ const ClientSuppliedJobs = () => {
                         </Box>
                       </TableCell>
                     </TableRow>
-                  ))
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
@@ -1570,7 +1603,7 @@ const ClientSuppliedJobs = () => {
             setSelectedProject(null);
             setSelectedJobType("");
             setSampleReceiptDate("");
-            setTurnaroundTime("");
+            setTurnaroundTime("3 day");
             setAnalysisDueDate(new Date());
             setShowCustomTurnaround(false);
           }}
@@ -1752,8 +1785,22 @@ const ClientSuppliedJobs = () => {
                           turnaroundTime === "3 day" ? "contained" : "outlined"
                         }
                         onClick={() => {
-                          const now = new Date();
-                          const dueDate = addBusinessDays(now, 3);
+                          if (!sampleReceiptDate?.trim()) {
+                            showSnackbar(
+                              "Please enter the sample receipt date first",
+                              "error",
+                            );
+                            return;
+                          }
+                          const base = new Date(sampleReceiptDate);
+                          if (isNaN(base.getTime())) {
+                            showSnackbar(
+                              "Invalid sample receipt date",
+                              "error",
+                            );
+                            return;
+                          }
+                          const dueDate = addBusinessDays(base, 3);
                           setTurnaroundTime("3 day");
                           setAnalysisDueDate(dueDate);
                           setShowCustomTurnaround(false);
@@ -1787,8 +1834,22 @@ const ClientSuppliedJobs = () => {
                             : "outlined"
                         }
                         onClick={() => {
-                          const now = new Date();
-                          const dueDate = addBusinessDays(now, 1);
+                          if (!sampleReceiptDate?.trim()) {
+                            showSnackbar(
+                              "Please enter the sample receipt date first",
+                              "error",
+                            );
+                            return;
+                          }
+                          const base = new Date(sampleReceiptDate);
+                          if (isNaN(base.getTime())) {
+                            showSnackbar(
+                              "Invalid sample receipt date",
+                              "error",
+                            );
+                            return;
+                          }
+                          const dueDate = addBusinessDays(base, 1);
                           setTurnaroundTime("24 hours");
                           setAnalysisDueDate(dueDate);
                           setShowCustomTurnaround(false);
@@ -1908,7 +1969,7 @@ const ClientSuppliedJobs = () => {
                 setSelectedProject(null);
                 setSelectedJobType("");
                 setSampleReceiptDate("");
-                setTurnaroundTime("");
+                setTurnaroundTime("3 day");
                 setAnalysisDueDate(new Date());
                 setShowCustomTurnaround(false);
               }}

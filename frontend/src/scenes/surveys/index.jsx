@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   Box,
   Typography,
@@ -17,9 +17,11 @@ import BusinessIcon from "@mui/icons-material/Business";
 import SecurityIcon from "@mui/icons-material/Security";
 import ScienceIcon from "@mui/icons-material/Science";
 import PermissionGate from "../../components/PermissionGate";
+import { usePermissions } from "../../hooks/usePermissions";
 
 const SurveysDashboard = () => {
   const navigate = useNavigate();
+  const { isSuperAdmin = false } = usePermissions();
   const theme = useTheme();
   const isTablet = useMediaQuery(theme.breakpoints.down("md"));
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -28,7 +30,8 @@ const SurveysDashboard = () => {
   );
   const isSimplifiedWidget = isMobile || isMobileLandscape;
 
-  const surveyModules = [
+  const surveyModules = useMemo(
+    () => [
     {
       id: "asbestos-assessment",
       title: "Asbestos Assessment",
@@ -54,7 +57,7 @@ const SurveysDashboard = () => {
       icon: <ScienceIcon />,
       color: "#9c27b0",
       onClick: () => navigate("/surveys/lead"),
-      underDevelopment: false,
+      underDevelopment: !isSuperAdmin,
     },
     {
       id: "commercial-asbestos",
@@ -74,8 +77,9 @@ const SurveysDashboard = () => {
       onClick: () => navigate("/surveys/hazmat"),
       underDevelopment: true,
     },
-
-  ];
+    ],
+    [isSuperAdmin, navigate]
+  );
 
   return (
     <PermissionGate requiredPermissions={["asbestos.view"]}>

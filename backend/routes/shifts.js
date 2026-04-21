@@ -17,6 +17,7 @@ const {
 } = require("../services/asbestosRemovalJobSyncService");
 const { sendMail } = require("../services/mailer");
 const { formatDateSydney } = require("../utils/dateUtils");
+const { buildContentDispositionAttachment } = require('../utils/contentDisposition');
 
 // Exclude soft-deleted shifts from list queries (restorable from archived data page)
 const notDeletedShiftFilter = {
@@ -735,7 +736,10 @@ router.get('/:id/analysis-report', auth, checkPermission(['jobs.view']), async (
     }
     const name = shift.analysisReportOriginalName || 'analysis-report.pdf';
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+    res.setHeader(
+      'Content-Disposition',
+      buildContentDispositionAttachment(name, { defaultFilename: 'analysis-report.pdf' })
+    );
     res.sendFile(path.resolve(fullPath));
   } catch (error) {
     console.error('Error downloading analysis report:', error);
@@ -969,7 +973,10 @@ router.get('/:id/chain-of-custody', auth, checkPermission(['jobs.view']), async 
     await browser.close();
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${projectID}: Chain of Custody - ${shiftDate}.pdf"`);
+    res.setHeader(
+      'Content-Disposition',
+      buildContentDispositionAttachment(`${projectID}: Chain of Custody - ${shiftDate}.pdf`)
+    );
     res.send(pdfBuffer);
   } catch (error) {
     console.error('Error generating Chain of Custody PDF:', error);

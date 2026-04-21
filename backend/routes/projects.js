@@ -22,6 +22,10 @@ const invalidateStatusCache = () => {
   statusCache.timestamp = null;
 };
 
+/** Escape user input so it can be used safely inside RegExp (literal substring match). */
+const escapeRegex = (string) =>
+  String(string).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 // Helper function to get active and inactive statuses from custom data field groups (with caching)
 const getProjectStatuses = async (forceRefresh = false) => {
   try {
@@ -249,7 +253,7 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
         
         // Use MongoDB aggregation pipeline for efficient single-query search
         // This searches both project fields AND client names in one database operation
-        const searchRegex = new RegExp(search, 'i'); // Case-insensitive regex
+        const searchRegex = new RegExp(escapeRegex(search), 'i'); // Case-insensitive literal match
         
         // Collection names (Mongoose automatically pluralizes model names)
         // 'clients' and 'users' are the standard MongoDB collection names

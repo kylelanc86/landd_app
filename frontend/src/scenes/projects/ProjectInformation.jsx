@@ -465,7 +465,7 @@ const ProjectInformation = () => {
         : [];
 
       // Filter out restricted statuses for employee users
-      const restrictedStatuses = ["Cancelled"];
+      const restrictedStatuses = ["Cancelled", "Ready for invoicing"];
 
       // If user is employee (not admin or manager), filter out restricted statuses
       if (!isAdmin && !isManager) {
@@ -533,7 +533,7 @@ const ProjectInformation = () => {
         : [];
 
       // Filter out restricted statuses for employee users
-      const restrictedStatuses = ["Cancelled"];
+      const restrictedStatuses = ["Cancelled", "Ready for invoicing"];
 
       // If user is employee (not admin or manager), filter out restricted statuses
       if (!isAdmin && !isManager) {

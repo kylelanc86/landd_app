@@ -39,6 +39,10 @@ const leadClearanceItemsSchema = new mongoose.Schema(
           type: String,
           required: true,
         },
+        fullResolutionData: {
+          type: String,
+          required: false,
+        },
         includeInReport: {
           type: Boolean,
           default: true,

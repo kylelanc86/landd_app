@@ -69,7 +69,8 @@ export const generateAssessmentPDF = async (assessmentData) => {
       
       // Generate filename
       const projectId = assessmentData.projectId?.projectID || assessmentData.jobReference || 'Unknown';
-      const siteName = assessmentData.projectId?.name || assessmentData.siteName || 'Unknown';
+      const siteNameRaw = assessmentData.projectId?.name || assessmentData.siteName || 'Unknown';
+      const siteName = siteNameRaw.replace(/\//g, ', ');
       const assessmentDate = assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB').replace(/\//g, '-') : 'Unknown';
       const fileName = `${projectId}: Asbestos Assessment Report - ${siteName} (${assessmentDate}).pdf`;
       
@@ -209,6 +210,55 @@ export async function downloadClearancePDFByClearanceId(clearanceId, options = {
   const blob = await res.blob();
   const contentDisposition = res.headers.get('Content-Disposition');
   let filename = `clearance_${clearanceId}.pdf`;
+  if (contentDisposition) {
+    const m = contentDisposition.match(/filename="(.+)"/);
+    if (m) filename = m[1];
+  }
+  const blobUrl = window.URL.createObjectURL(blob);
+  try {
+    if (openInNewTab) {
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+    setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
+  } catch (e) {
+    window.URL.revokeObjectURL(blobUrl);
+    throw e;
+  }
+  return { filename };
+}
+
+/**
+ * Download enclosure inspection certificate by asbestos clearance ID (persisted file; no regeneration).
+ * @param {string} clearanceId - Asbestos clearance _id
+ * @param {Object} options - { openInNewTab?: boolean }
+ * @returns {Promise<{ filename: string }>}
+ */
+export async function downloadEnclosureCertificateByClearanceId(clearanceId, options = {}) {
+  const { openInNewTab = false } = options;
+  const url = `${API_BASE}/pdf-docraptor-v2/download-enclosure-certificate/${clearanceId}`;
+  const res = await fetch(url, { headers: getAuthHeaders() });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(res.status === 404 ? 'No PDF available. Generate the PDF first.' : `Download failed: ${res.status} - ${errText}`);
+  }
+  const blob = await res.blob();
+  const contentDisposition = res.headers.get('Content-Disposition');
+  let filename = `enclosure_certificate_${clearanceId}.pdf`;
   if (contentDisposition) {
     const m = contentDisposition.match(/filename="(.+)"/);
     if (m) filename = m[1];

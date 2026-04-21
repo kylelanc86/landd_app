@@ -1,4 +1,12 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+  startTransition,
+} from "react";
+import { createPortal } from "react-dom";
 import {
   Box,
   Typography,
@@ -27,66 +35,100 @@ import {
   Alert,
   Tabs,
   Tab,
+  Card,
+  CardContent,
+  Grid,
+  Checkbox,
+  useTheme,
+  useMediaQuery,
 } from "@mui/material";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import AddIcon from "@mui/icons-material/Add";
-import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
 import ListAltIcon from "@mui/icons-material/ListAlt";
+import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
+import UploadIcon from "@mui/icons-material/Upload";
+import RotateRightIcon from "@mui/icons-material/RotateRight";
+import DownloadIcon from "@mui/icons-material/Download";
+import MapIcon from "@mui/icons-material/Map";
+import MicIcon from "@mui/icons-material/Mic";
+import StopIcon from "@mui/icons-material/Stop";
 import asbestosAssessmentService from "../../../services/asbestosAssessmentService";
+import LeadAssessmentPlanEditorDialog from "../../../components/LeadAssessmentPlanEditorDialog";
 import { useSnackbar } from "../../../context/SnackbarContext";
 import { useAuth } from "../../../context/AuthContext";
 import { generateLeadChainOfCustodyPDF } from "../../../utils/generateLeadChainOfCustodyPDF";
+import {
+  compressImage,
+  needsCompression,
+  saveFileToDevice,
+} from "../../../utils/imageCompression";
+import {
+  rotateArrowDegrees90Cw,
+  rotateDataUrl90Cw,
+  rotateNormalizedPoint90Cw,
+} from "../../../utils/rotateImageDataUrl";
+import LeadAssessmentLeadSamplesTable from "./LeadAssessmentLeadSamplesTable";
+import {
+  TABLE_FONT_SIZE,
+  PAINT_SAMPLE_TABLE_COLUMN_WIDTHS,
+  DUST_SAMPLE_TABLE_COLUMN_WIDTHS,
+  SOIL_SAMPLE_TABLE_COLUMN_WIDTHS,
+  getLeadPaintStatus,
+  getSoilStatus,
+  getDustExceedanceStatus,
+} from "./leadAssessmentItemsTableUtils";
 
-function getRiskLevelLabel(product) {
-  if (product == null || product < 7) return "VERY LOW RISK";
-  if (product <= 18) return "LOW RISK";
-  if (product <= 35) return "MEDIUM RISK";
-  return "HIGH RISK";
+const DEFAULT_PHOTO_ARROW_ROTATION = -45;
+const DEFAULT_PHOTO_ARROW_COLOR = "#f44336";
+
+function getLeadAssessmentPhotoArrows(photo) {
+  if (!photo) return [];
+  if (photo.arrows && photo.arrows.length > 0) return photo.arrows;
+  const leg = photo.arrow;
+  if (leg && typeof leg === "object" && (leg.x != null || leg.y != null))
+    return [leg];
+  return [];
 }
 
-function getItemRisk(item) {
-  const o = item.occupantRating;
-  const l = item.locationRating;
-  const u = item.roomUseRating;
-  const c = item.conditionRating;
-  if (o == null || o === "" || l == null || l === "" || u == null || u === "" || c == null || c === "") return null;
-  const product = Number(o) * Number(l) * Number(u) * Number(c);
-  return { product, label: getRiskLevelLabel(product) };
+function getPhotoKey(photo, index) {
+  return String(photo?._id || photo?.id || `referred-${index}`);
 }
 
-function riskChipDisplayLabel(label) {
-  return String(label || "").replace(/\s+RISK$/i, "").trim() || "—";
+/** MongoDB ObjectId string — photo arrow API only works with persisted item photos. */
+function isMongoPhotoId(id) {
+  return typeof id === "string" && /^[a-f\d]{24}$/i.test(id);
 }
 
-function getRiskBadgeSx(riskLabel) {
-  return {
-    px: 1.5,
-    py: 0.75,
-    borderRadius: 1,
-    display: "inline-block",
-    fontWeight: 600,
-    bgcolor:
-      riskLabel === "HIGH RISK"
-        ? "error.light"
-        : riskLabel === "MEDIUM RISK"
-          ? "yellow"
-          : riskLabel === "LOW RISK"
-            ? "info.light"
-            : "success.light",
-    color:
-      riskLabel === "HIGH RISK"
-        ? "error.contrastText"
-        : riskLabel === "MEDIUM RISK"
-          ? "grey.900"
-          : riskLabel === "LOW RISK"
-            ? "info.contrastText"
-            : "success.contrastText",
-  };
+function mergePhotoBlobFields(photos, blobList) {
+  const blobById = new Map((blobList || []).map((b) => [String(b._id), b]));
+  return (photos || []).map((p) => {
+    const b = blobById.get(String(p._id));
+    if (!b) return p;
+    return { ...p, data: b.data, fullResolutionData: b.fullResolutionData };
+  });
 }
+
+/** Arrow SVG viewBox 24×24; tip at (12,2). Returns tip position 0–1 for rotation (degrees). */
+function getLeadPhotoArrowTipOffset(rotationDeg) {
+  const r = ((rotationDeg ?? 0) * Math.PI) / 180;
+  const tipX = (12 + 10 * Math.sin(r)) / 24;
+  const tipY = (12 - 10 * Math.cos(r)) / 24;
+  return { x: tipX, y: tipY };
+}
+
+const LEAD_PHOTO_ARROW_COLORS = [
+  { name: "Yellow", hex: "#ffeb3b" },
+  { name: "Red", hex: "#f44336" },
+  { name: "White", hex: "#ffffff" },
+  { name: "Black", hex: "#212121" },
+  { name: "Orange", hex: "#ff9800" },
+  { name: "Green", hex: "#4caf50" },
+];
 
 const SAMPLE_TYPES = [
   { key: "paint", label: "Paint samples" },
@@ -112,39 +154,6 @@ function sampleTypesForAssessment(assessment) {
   const lower = raw.map((t) => String(t).toLowerCase());
   return SAMPLE_TYPES.filter((opt) => lower.includes(opt.key));
 }
-
-// Column widths as percentages by sample type table.
-// Adjust these values to customize each table layout independently.
-const PAINT_SAMPLE_TABLE_COLUMN_WIDTHS = {
-  sampleReference: "14%",
-  paintColour: "12%",
-  leadContent: "12%",
-  status: "10%",
-  description: "30%",
-  risk: "12%",
-  actions: "10%",
-};
-
-const DUST_SAMPLE_TABLE_COLUMN_WIDTHS = {
-  sampleReference: "14%",
-  description: "26%",
-  leadContent: "12%",
-  leadConcentration: "14%",
-  status: "12%",
-  risk: "8%",
-  actions: "10%",
-};
-
-const SOIL_SAMPLE_TABLE_COLUMN_WIDTHS = {
-  sampleReference: "14%",
-  paintColour: "12%",
-  description: "27%",
-  leadContent: "12%",
-  status: "16%",
-  actions: "13%",
-};
-
-const TABLE_FONT_SIZE = "0.8rem";
 
 const TURNAROUND_OPTIONS = [
   { value: "standard", label: "Standard (7 day)", days: 7 },
@@ -219,6 +228,13 @@ function leadScopeModalSectionHeading(label) {
     .trim();
 }
 
+function leadDiscussionTypeKey(sampleTypeKey) {
+  const key = String(sampleTypeKey || "").toLowerCase();
+  if (key === "dust") return "dust";
+  if (key === "soil") return "soil";
+  return "paint";
+}
+
 /** Build editable draft for Scope modal from persisted `leadAssessmentScope`. */
 function buildLeadScopeDraftFromAssessment(assessment, visibleTypes) {
   const stored = assessment?.leadAssessmentScope;
@@ -261,99 +277,12 @@ function sanitizeLeadScopeForSave(draft) {
   return out;
 }
 
-function parseLeadPercent(value) {
-  if (value == null) return null;
-  const text = String(value).trim();
-  if (!text) return null;
-  const numeric = Number(text.replace(/[^0-9.-]/g, ""));
-  return Number.isFinite(numeric) ? numeric : null;
-}
-
-function getLeadPaintStatus(leadContent) {
-  const pct = parseLeadPercent(leadContent);
-  if (pct == null) return null;
-  if (pct > 0.1) return { label: "Lead paint", isLeadPaint: true };
-  return { label: "Lead-free", isLeadPaint: false };
-}
-
-function parseSoilAssessmentCriteriaThreshold(assessmentCriteria) {
-  if (!assessmentCriteria) return null;
-  const match = String(assessmentCriteria).match(/\(([\d.]+)\s*mg\/kg\)/i);
-  if (!match) return null;
-  const value = Number(match[1]);
-  return Number.isFinite(value) ? value : null;
-}
-
-function getSoilStatus(leadContent, assessmentCriteria) {
-  const contentValue = parseLeadPercent(leadContent);
-  const threshold = parseSoilAssessmentCriteriaThreshold(assessmentCriteria);
-  if (contentValue == null || threshold == null) return null;
-  const exceeds = contentValue >= threshold;
-  return {
-    exceeds,
-    label: exceeds ? "Exceedance" : "No exceedance",
-  };
-}
-
-function getSampleAreaM2(sampleArea) {
-  if (sampleArea == null || sampleArea === "") return null;
-  const s = String(sampleArea).toLowerCase().trim();
-  if (s === "small" || s.includes("0.01")) return 0.01;
-  if (s === "medium" || s.includes("0.0258")) return 0.0258;
-  if (s === "large" || s.includes("0.09")) return 0.09;
-  const numeric = Number(s.replace(/[^0-9.-]/g, ""));
-  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
-}
-
-function formatDustLeadConcentrationMgM2(leadContentUg, sampleArea) {
-  const mgPerM2 = calculateDustLeadConcentrationMgM2(leadContentUg, sampleArea);
-  if (mgPerM2 == null) return "—";
-  return `${mgPerM2.toFixed(4)} mg/m²`;
-}
-
-function calculateDustLeadConcentrationMgM2(leadContentUg, sampleArea) {
-  const ug = parseLeadPercent(leadContentUg);
-  const areaM2 = getSampleAreaM2(sampleArea);
-  if (ug == null || areaM2 == null || areaM2 <= 0) return null;
-  return (ug / 1000) / areaM2;
-}
-
-function getDustExceedanceStatus(locationRating, leadContentUg, sampleArea) {
-  const concentration = calculateDustLeadConcentrationMgM2(leadContentUg, sampleArea);
-  if (concentration == null) return null;
-
-  const rating = Number(locationRating);
-  const thresholdByRating = {
-    1: 1.08, // High-level/inaccessible surface
-    2: 0.43, // Low contact surface
-    3: 0.11, // High contact surface
-  };
-  const threshold = thresholdByRating[rating];
-  if (threshold == null) return null;
-
-  const exceeds = concentration >= threshold;
-  return {
-    exceeds,
-    label: exceeds ? "Exceedance" : "No exceedence",
-  };
-}
-
 function getLeadContentUnit(materialType) {
   const type = String(materialType || "").toLowerCase();
   if (type === "paint" || type === "paint-xrf") return "%";
   if (type === "dust") return "μg";
   if (type === "soil") return "mg/kg";
   return "";
-}
-
-/** When level/floor is set, show "{level} - {roomArea}"; otherwise room/area only. */
-function formatRoomAreaWithLevel(levelFloor, roomArea) {
-  const level = (levelFloor || "").trim();
-  const room = (roomArea || "").trim();
-  if (level && room) return `${level} - ${room}`;
-  if (level) return level;
-  if (room) return room;
-  return "—";
 }
 
 const LeadAssessmentItems = () => {
@@ -381,37 +310,102 @@ const LeadAssessmentItems = () => {
   const [scopeModalOpen, setScopeModalOpen] = useState(false);
   const [leadScopeDraft, setLeadScopeDraft] = useState(null);
   const [savingLeadScope, setSavingLeadScope] = useState(false);
+  const [leadSitePlansDialogOpen, setLeadSitePlansDialogOpen] = useState(false);
+  const [leadAssessmentPlansDialogOpen, setLeadAssessmentPlansDialogOpen] =
+    useState(false);
+
+  const theme = useTheme();
+  const isPortrait = useMediaQuery("(orientation: portrait)");
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const isMobileLandscape = useMediaQuery(
+    "(orientation: landscape) and (max-width: 950px)",
+  );
+
+  const [photoGalleryDialogOpen, setPhotoGalleryDialogOpen] = useState(false);
+  const [selectedItemForPhotos, setSelectedItemForPhotos] = useState(null);
+  const [selectedReferredPhotoRow, setSelectedReferredPhotoRow] = useState(null);
+  const [galleryPhotosLoading, setGalleryPhotosLoading] = useState(false);
+  const [galleryPhotosError, setGalleryPhotosError] = useState(null);
+  const [localPhotoChanges, setLocalPhotoChanges] = useState({});
+  const [photosToDelete, setPhotosToDelete] = useState(new Set());
+  const [localPhotoDescriptions, setLocalPhotoDescriptions] = useState({});
+  const [editingDescriptionPhotoId, setEditingDescriptionPhotoId] =
+    useState(null);
+  const [fullSizePhotoDialogOpen, setFullSizePhotoDialogOpen] =
+    useState(false);
+  const [fullSizePhotoUrl, setFullSizePhotoUrl] = useState(null);
+  const [fullSizePhotoId, setFullSizePhotoId] = useState(null);
+  const [managePhotosDownloadTarget, setManagePhotosDownloadTarget] =
+    useState(null);
+  const [compressionStatus, setCompressionStatus] = useState(null);
+  const [cameraDialogOpen, setCameraDialogOpen] = useState(false);
+  const [stream, setStream] = useState(null);
+  const [videoRef, setVideoRef] = useState(null);
+  const [rotatingPhotoId, setRotatingPhotoId] = useState(null);
+  const [fullSizeArrowMode, setFullSizeArrowMode] = useState(false);
+  const [selectedArrowId, setSelectedArrowId] = useState(null);
+  const [movingArrowId, setMovingArrowId] = useState(null);
+  const [selectedArrowColor, setSelectedArrowColor] = useState(
+    DEFAULT_PHOTO_ARROW_COLOR,
+  );
+  const [leadDiscussionDrafts, setLeadDiscussionDrafts] = useState({
+    paint: "",
+    dust: "",
+    soil: "",
+  });
+  const [savingLeadDiscussionType, setSavingLeadDiscussionType] = useState(null);
+  const [isDictatingDiscussion, setIsDictatingDiscussion] = useState(false);
+  const [dictationDiscussionType, setDictationDiscussionType] = useState(null);
+  const [dictationDiscussionError, setDictationDiscussionError] = useState("");
+  const discussionRecognitionRef = useRef(null);
 
   const applyAssessmentPayload = useCallback((data) => {
-    setAssessment(data);
-    setItems(Array.isArray(data?.items) ? data.items : []);
+    startTransition(() => {
+      setAssessment(data);
+      setItems(Array.isArray(data?.items) ? data.items : []);
+    });
   }, []);
 
+  const leadAssessmentLiteGetOpts = useMemo(
+    () => ({
+      omitPhotoData: true,
+      omitPlanFiles: true,
+      omitFibreReport: true,
+    }),
+    [],
+  );
+
+  /** One request: all items + assessment fields, but no photo/plan/PDF blobs (those load on demand). */
   const fetchAssessment = useCallback(async () => {
     if (!id) return;
     try {
-      const response = await asbestosAssessmentService.getById(id);
-      const data = response?.data || response;
-      applyAssessmentPayload(data);
+      const data = await asbestosAssessmentService.getById(id, {
+        ...leadAssessmentLiteGetOpts,
+      });
+      const job = data?.data ?? data;
+      applyAssessmentPayload(job);
     } catch (err) {
       setAssessment(null);
       setItems([]);
     } finally {
       setLoading(false);
     }
-  }, [id, applyAssessmentPayload]);
+  }, [id, leadAssessmentLiteGetOpts, applyAssessmentPayload]);
 
   /** Refresh assessment/items without toggling loading (tab focus, after delete). */
   const refetchAssessmentQuiet = useCallback(async () => {
-    if (!id) return;
+    if (!id) return null;
     try {
-      const response = await asbestosAssessmentService.getById(id);
-      const data = response?.data || response;
-      applyAssessmentPayload(data);
+      const data = await asbestosAssessmentService.getById(id, {
+        ...leadAssessmentLiteGetOpts,
+      });
+      const job = data?.data ?? data;
+      applyAssessmentPayload(job);
+      return job;
     } catch {
-      /* keep existing state */
+      return null;
     }
-  }, [id, applyAssessmentPayload]);
+  }, [id, leadAssessmentLiteGetOpts, applyAssessmentPayload]);
 
   useEffect(() => {
     if (!id) {
@@ -433,6 +427,89 @@ const LeadAssessmentItems = () => {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [id, refetchAssessmentQuiet]);
 
+  const hydrateLeadPlanAppendicesForEditor = useCallback(async () => {
+    if (!id) return;
+    try {
+      const data = await asbestosAssessmentService.getById(id, {
+        omitPhotoData: true,
+        omitFibreReport: true,
+        omitItems: true,
+      });
+      const job = data?.data ?? data;
+      setAssessment((prev) =>
+        prev ? { ...prev, ...job, items: prev.items } : job,
+      );
+    } catch (e) {
+      showSnackbar(
+        e.response?.data?.message || e.message || "Failed to load plan images",
+        "error",
+      );
+    }
+  }, [id, showSnackbar]);
+
+  useEffect(() => {
+    if (!photoGalleryDialogOpen || !id || !selectedItemForPhotos) return;
+    const photos = selectedItemForPhotos.photographs || [];
+    if (photos.length === 0) return;
+    const needsBlob = photos.some(
+      (p) => p && !p.data && isMongoPhotoId(p._id),
+    );
+    if (!needsBlob) {
+      setGalleryPhotosLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setGalleryPhotosLoading(true);
+      setGalleryPhotosError(null);
+      try {
+        let blobList;
+        if (selectedReferredPhotoRow) {
+          const { itemId, referredIndex } = selectedReferredPhotoRow;
+          const res = await asbestosAssessmentService.getReferredPhotosData(
+            id,
+            itemId,
+            referredIndex,
+          );
+          blobList = res?.photographs;
+        } else {
+          const res = await asbestosAssessmentService.getItemPhotosData(
+            id,
+            selectedItemForPhotos._id,
+          );
+          blobList = res?.photographs;
+        }
+        if (cancelled) return;
+        setSelectedItemForPhotos((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            photographs: mergePhotoBlobFields(prev.photographs, blobList),
+          };
+        });
+      } catch (e) {
+        if (!cancelled) {
+          setGalleryPhotosError(
+            e.response?.data?.message ||
+              e.message ||
+              "Failed to load photos",
+          );
+        }
+      } finally {
+        if (!cancelled) setGalleryPhotosLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    photoGalleryDialogOpen,
+    id,
+    selectedItemForPhotos,
+    selectedReferredPhotoRow,
+  ]);
+
   useEffect(() => {
     if (location.state?.openAttachAnalysis) {
       setAnalysisDialogOpen(true);
@@ -441,12 +518,162 @@ const LeadAssessmentItems = () => {
   }, [location.pathname, location.state, navigate]);
 
   useEffect(() => {
+    if (!analysisDialogOpen || !id || !assessment) return;
+    if (assessment.fibreAnalysisReport) return;
+    if (assessment.hasFibreAnalysisReport !== true) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await asbestosAssessmentService.getById(id, {
+          omitPhotoData: true,
+          omitPlanFiles: true,
+          omitItems: true,
+        });
+        const job = data?.data ?? data;
+        if (cancelled) return;
+        setAssessment((prev) =>
+          prev
+            ? {
+                ...prev,
+                fibreAnalysisReport: job.fibreAnalysisReport,
+                hasFibreAnalysisReport: job.hasFibreAnalysisReport,
+              }
+            : prev,
+        );
+      } catch {
+        /* no-op */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [analysisDialogOpen, id, assessment]);
+
+  useEffect(() => {
     const nextDrafts = {};
     items.forEach((item) => {
       nextDrafts[item._id] = item.leadContent ?? "";
     });
     setLeadContentDrafts(nextDrafts);
   }, [items]);
+
+  useEffect(() => {
+    const stored = assessment?.leadDiscussionConclusionsByType;
+    const source = stored && typeof stored === "object" ? stored : {};
+    setLeadDiscussionDrafts({
+      paint: String(source.paint || ""),
+      dust: String(source.dust || ""),
+      soil: String(source.soil || ""),
+    });
+  }, [assessment?.leadDiscussionConclusionsByType]);
+
+  useEffect(() => () => {
+    if (discussionRecognitionRef.current) {
+      try {
+        discussionRecognitionRef.current.stop();
+      } catch {
+        /* no-op */
+      }
+    }
+  }, []);
+
+  const stopDiscussionDictation = useCallback(() => {
+    if (discussionRecognitionRef.current) {
+      try {
+        discussionRecognitionRef.current.stop();
+      } catch {
+        /* no-op */
+      }
+      discussionRecognitionRef.current = null;
+    }
+    setIsDictatingDiscussion(false);
+    setDictationDiscussionType(null);
+  }, []);
+
+  const startDiscussionDictation = useCallback((typeKey) => {
+    if (isDictatingDiscussion) stopDiscussionDictation();
+    if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) {
+      setDictationDiscussionError("Speech recognition is not supported in this browser.");
+      return;
+    }
+    try {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "en-AU";
+      recognition.onstart = () => {
+        setIsDictatingDiscussion(true);
+        setDictationDiscussionType(typeKey);
+        setDictationDiscussionError("");
+      };
+      recognition.onresult = (event) => {
+        let finalTranscript = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
+        }
+        if (!finalTranscript) return;
+        setLeadDiscussionDrafts((prev) => {
+          const current = prev[typeKey] || "";
+          const isFirstWord = !current || current.trim().length === 0;
+          const normalized = isFirstWord
+            ? finalTranscript.charAt(0).toUpperCase() + finalTranscript.slice(1)
+            : finalTranscript;
+          return {
+            ...prev,
+            [typeKey]: `${current}${current ? " " : ""}${normalized}`.trim(),
+          };
+        });
+      };
+      recognition.onerror = (event) => {
+        setDictationDiscussionError(`Dictation error: ${event.error}`);
+        setIsDictatingDiscussion(false);
+        setDictationDiscussionType(null);
+        discussionRecognitionRef.current = null;
+      };
+      recognition.onend = () => {
+        setIsDictatingDiscussion(false);
+        setDictationDiscussionType(null);
+        discussionRecognitionRef.current = null;
+      };
+      discussionRecognitionRef.current = recognition;
+      recognition.start();
+    } catch {
+      setDictationDiscussionError("Failed to start dictation. Please try again.");
+    }
+  }, [isDictatingDiscussion, stopDiscussionDictation]);
+
+  const handleLeadDiscussionChange = useCallback((typeKey, value) => {
+    setLeadDiscussionDrafts((prev) => ({ ...prev, [typeKey]: value }));
+  }, []);
+
+  const handleSaveLeadDiscussionByType = useCallback(async (typeKey) => {
+    if (!id || !assessment) return;
+    const discussionKey = leadDiscussionTypeKey(typeKey);
+    const current = String(assessment?.leadDiscussionConclusionsByType?.[discussionKey] || "");
+    const next = String(leadDiscussionDrafts[discussionKey] || "");
+    if (next.trim() === current.trim()) return;
+    const merged = {
+      ...(assessment?.leadDiscussionConclusionsByType || {}),
+      [discussionKey]: next,
+    };
+    try {
+      setSavingLeadDiscussionType(discussionKey);
+      await asbestosAssessmentService.update(id, {
+        projectId: assessment?.projectId?._id || assessment?.projectId,
+        assessmentDate: assessment?.assessmentDate,
+        status: assessment?.status,
+        leadDiscussionConclusionsByType: merged,
+      });
+      setAssessment((prev) => (prev ? { ...prev, leadDiscussionConclusionsByType: merged } : prev));
+      showSnackbar("Discussion/Conclusion saved.", "success");
+    } catch (err) {
+      showSnackbar(err.response?.data?.message || err.message || "Failed to save discussion/conclusion", "error");
+    } finally {
+      setSavingLeadDiscussionType(null);
+    }
+  }, [id, assessment, leadDiscussionDrafts, showSnackbar]);
 
   const handleDeleteClick = (item) => {
     setItemToDelete(item);
@@ -778,9 +1005,10 @@ const LeadAssessmentItems = () => {
   }, [assessment?.status]);
 
   const hasAttachedAnalysisReport = useMemo(() => {
+    if (assessment?.hasFibreAnalysisReport === true) return true;
     const raw = assessment?.fibreAnalysisReport;
     return typeof raw === "string" && raw.trim().length > 0;
-  }, [assessment?.fibreAnalysisReport]);
+  }, [assessment?.fibreAnalysisReport, assessment?.hasFibreAnalysisReport]);
 
   const replacePreviewUrl = useMemo(() => {
     if (!analysisFile) return null;
@@ -795,8 +1023,731 @@ const LeadAssessmentItems = () => {
 
   const analysisPdfSrc = useMemo(() => {
     if (replacePreviewUrl) return replacePreviewUrl;
-    return hasAttachedAnalysisReport ? fibreAnalysisReportToPdfSrc(assessment.fibreAnalysisReport) : null;
-  }, [replacePreviewUrl, hasAttachedAnalysisReport, assessment?.fibreAnalysisReport]);
+    const raw = assessment?.fibreAnalysisReport;
+    if (typeof raw === "string" && raw.trim()) {
+      return fibreAnalysisReportToPdfSrc(raw);
+    }
+    return null;
+  }, [replacePreviewUrl, assessment?.fibreAnalysisReport]);
+
+  const leadAssessmentPhotosLocked =
+    String(assessment?.status || "").toLowerCase() === "complete";
+
+  const leadSitePlanAppendixCount = useMemo(() => {
+    if (typeof assessment?.leadSitePlanAppendixFileCount === "number") {
+      return assessment.leadSitePlanAppendixFileCount;
+    }
+    const arr = assessment?.leadSitePlanAppendices;
+    if (!Array.isArray(arr)) return 0;
+    return arr.filter((p) => p && p.sitePlanFile).length;
+  }, [
+    assessment?.leadSitePlanAppendixFileCount,
+    assessment?.leadSitePlanAppendices,
+  ]);
+
+  const leadAssessmentPlanAppendixCount = useMemo(() => {
+    if (typeof assessment?.leadAssessmentPlanAppendixFileCount === "number") {
+      return assessment.leadAssessmentPlanAppendixFileCount;
+    }
+    const arr = assessment?.leadAssessmentPlanAppendices;
+    if (!Array.isArray(arr)) return 0;
+    return arr.filter((p) => p && p.sitePlanFile).length;
+  }, [
+    assessment?.leadAssessmentPlanAppendixFileCount,
+    assessment?.leadAssessmentPlanAppendices,
+  ]);
+
+  const handleLeadPlansSaved = useCallback(
+    ({ field, plans } = {}) => {
+      if (!field || !Array.isArray(plans)) return;
+      setAssessment((prev) => (prev ? { ...prev, [field]: plans } : prev));
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (cameraDialogOpen && stream && videoRef) {
+      videoRef.srcObject = stream;
+    }
+  }, [cameraDialogOpen, stream, videoRef]);
+
+  useEffect(() => {
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [stream]);
+
+  const generateDefaultLeadPhotoDescription = (item) => {
+    const loc = (item.locationDescription || "sample location").toLowerCase();
+    const room = (item.roomArea || "unknown room/area").toLowerCase();
+    return `Photograph of ${loc} in ${room}`;
+  };
+
+  const handleAddPhotoToItem = async (photoData, fullResolutionData = null) => {
+    if (!selectedItemForPhotos || !id || leadAssessmentPhotosLocked) return;
+    if (selectedReferredPhotoRow) {
+      const currentPhotos = Array.isArray(selectedItemForPhotos.photographs)
+        ? selectedItemForPhotos.photographs
+        : [];
+      const nextPhotos = [
+        ...currentPhotos,
+        {
+          _id: `referred-${Date.now()}`,
+          data: photoData,
+          fullResolutionData: fullResolutionData || undefined,
+          includeInReport: true,
+        },
+      ];
+      await persistReferredPhotos(nextPhotos);
+      return;
+    }
+    try {
+      const newItem = await asbestosAssessmentService.addPhotoToItem(
+        id,
+        selectedItemForPhotos._id,
+        photoData,
+        true,
+        fullResolutionData,
+      );
+      if (newItem?._id) setSelectedItemForPhotos(newItem);
+      setCompressionStatus(null);
+      await refetchAssessmentQuiet();
+      showSnackbar("Photo added successfully", "success");
+    } catch (err) {
+      showSnackbar("Failed to add photo", "error");
+    }
+  };
+
+  const handleDeletePhotoFromItem = (itemId, photoId) => {
+    setPhotosToDelete((prev) => new Set([...prev, photoId]));
+  };
+
+  const getCurrentLeadPhotoState = (photoId) => {
+    const localChange = localPhotoChanges[photoId];
+    if (localChange !== undefined) return localChange;
+    const photo = selectedItemForPhotos?.photographs?.find(
+      (p, idx) => getPhotoKey(p, idx) === String(photoId),
+    );
+    return photo?.includeInReport ?? true;
+  };
+
+  const handleTogglePhotoInReport = (itemId, photoId) => {
+    setLocalPhotoChanges((prev) => ({
+      ...prev,
+      [photoId]: !getCurrentLeadPhotoState(photoId),
+    }));
+  };
+
+  const getCurrentLeadPhotoDescription = (photoId, item) => {
+    if (localPhotoDescriptions[photoId] !== undefined) {
+      return localPhotoDescriptions[photoId];
+    }
+    const photo = selectedItemForPhotos?.photographs?.find(
+      (p, idx) => getPhotoKey(p, idx) === String(photoId),
+    );
+    if (photo?.description) return photo.description;
+    return generateDefaultLeadPhotoDescription(item);
+  };
+
+  const handleLeadPhotoDescriptionChange = (photoId, newDescription) => {
+    setLocalPhotoDescriptions((prev) => ({
+      ...prev,
+      [photoId]: newDescription,
+    }));
+  };
+
+  const isLeadPhotoMarkedForDeletion = (photoId) => photosToDelete.has(photoId);
+
+  const hasLeadPhotoUnsavedChanges = () =>
+    Object.keys(localPhotoChanges).length > 0 ||
+    photosToDelete.size > 0 ||
+    Object.keys(localPhotoDescriptions).length > 0;
+
+  const saveLeadPhotoChanges = async () => {
+    if (!selectedItemForPhotos || !id || leadAssessmentPhotosLocked) return;
+    if (selectedReferredPhotoRow) {
+      try {
+        const current = Array.isArray(selectedItemForPhotos.photographs)
+          ? selectedItemForPhotos.photographs
+          : [];
+        const nextPhotos = current
+          .filter((photo, idx) => {
+            const photoId = getPhotoKey(photo, idx);
+            return !photosToDelete.has(photoId);
+          })
+          .map((photo, idx) => {
+            const photoId = getPhotoKey(photo, idx);
+            return {
+              ...photo,
+              includeInReport:
+                localPhotoChanges[photoId] !== undefined
+                  ? localPhotoChanges[photoId]
+                  : photo.includeInReport ?? true,
+              description:
+                localPhotoDescriptions[photoId] !== undefined
+                  ? localPhotoDescriptions[photoId]
+                  : photo.description,
+            };
+          });
+        await persistReferredPhotos(nextPhotos);
+        setLocalPhotoChanges({});
+        setPhotosToDelete(new Set());
+        setLocalPhotoDescriptions({});
+        return;
+      } catch (err) {
+        showSnackbar("Failed to save photo changes", "error");
+        return;
+      }
+    }
+    try {
+      const togglePromises = [];
+      const descriptionPromises = [];
+      Object.entries(localPhotoChanges).forEach(([photoId, includeInReport]) => {
+        const photo = selectedItemForPhotos?.photographs?.find(
+          (p) => p._id === photoId,
+        );
+        if (photo && photo.includeInReport !== includeInReport) {
+          togglePromises.push(
+            asbestosAssessmentService.togglePhotoInReport(
+              id,
+              selectedItemForPhotos._id,
+              photoId,
+            ),
+          );
+        }
+      });
+      Object.entries(localPhotoDescriptions).forEach(([photoId, description]) => {
+        descriptionPromises.push(
+          asbestosAssessmentService.updatePhotoDescription(
+            id,
+            selectedItemForPhotos._id,
+            photoId,
+            description,
+          ),
+        );
+      });
+      await Promise.allSettled(togglePromises);
+      await Promise.allSettled(descriptionPromises);
+      for (const photoId of photosToDelete) {
+        try {
+          await asbestosAssessmentService.deletePhotoFromItem(
+            id,
+            selectedItemForPhotos._id,
+            photoId,
+          );
+        } catch (e) {
+          console.error("Error deleting photo:", e);
+        }
+      }
+      showSnackbar("Photo changes saved successfully", "success");
+      setLocalPhotoChanges({});
+      setPhotosToDelete(new Set());
+      setLocalPhotoDescriptions({});
+      const doc = await refetchAssessmentQuiet();
+      const list = Array.isArray(doc?.items) ? doc.items : [];
+      const updatedItem = list.find(
+        (i) => String(i._id) === String(selectedItemForPhotos._id),
+      );
+      if (updatedItem) {
+        try {
+          const { photographs: blobs } =
+            await asbestosAssessmentService.getItemPhotosData(id, updatedItem._id);
+          setSelectedItemForPhotos({
+            ...updatedItem,
+            photographs: mergePhotoBlobFields(updatedItem.photographs, blobs),
+          });
+        } catch {
+          setSelectedItemForPhotos(updatedItem);
+        }
+      }
+    } catch (err) {
+      showSnackbar("Failed to save photo changes", "error");
+    }
+  };
+
+  const handleLeadPhotoUploadForGallery = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file || leadAssessmentPhotosLocked) return;
+    setCompressionStatus({
+      type: "processing",
+      message: "Processing image...",
+    });
+    try {
+      const fullResolutionData = await new Promise((resolve, reject) => {
+        const fullResReader = new FileReader();
+        fullResReader.onload = (e) => resolve(e.target.result);
+        fullResReader.onerror = reject;
+        fullResReader.readAsDataURL(file);
+      });
+      if (needsCompression(file, 300)) {
+        const compressed = await compressImage(file, {
+          maxWidth: 1000,
+          maxHeight: 1000,
+          quality: 0.75,
+          maxSizeKB: 300,
+        });
+        await handleAddPhotoToItem(compressed, fullResolutionData);
+        setCompressionStatus({ type: "success", message: "Image added." });
+      } else {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          await handleAddPhotoToItem(e.target.result, fullResolutionData);
+          setCompressionStatus({ type: "info", message: "Image added." });
+        };
+        reader.readAsDataURL(file);
+      }
+    } catch (err) {
+      setCompressionStatus({
+        type: "error",
+        message: "Failed to process image",
+      });
+    }
+  };
+
+  const handleOpenLeadPhotoGallery = (item) => {
+    setGalleryPhotosError(null);
+    setSelectedItemForPhotos(item);
+    setPhotoGalleryDialogOpen(true);
+  };
+
+  const handleOpenReferredPhotoDialog = (row) => {
+    if (!row?.item?._id || row?.referredIndex == null) return;
+    setGalleryPhotosError(null);
+    setSelectedReferredPhotoRow({
+      itemId: row.item._id,
+      referredIndex: row.referredIndex,
+    });
+    setSelectedItemForPhotos({
+      ...row.item,
+      locationDescription: row.referred?.surfaceDescription || row.item.locationDescription,
+      roomArea: row.referred?.roomArea || row.item.roomArea,
+      sampleReference: row.item.sampleReference || "—",
+      photographs: Array.isArray(row.referred?.photographs)
+        ? row.referred.photographs.map((photo, index) => ({
+            _id: photo?._id || `referred-${row.referredIndex}-${index}`,
+            ...photo,
+          }))
+        : [],
+    });
+    setPhotoGalleryDialogOpen(true);
+  };
+
+  const selectedReferredPhotoData = useMemo(() => {
+    if (!selectedReferredPhotoRow?.itemId || selectedReferredPhotoRow.referredIndex == null) return null;
+    const item = items.find((x) => String(x._id) === String(selectedReferredPhotoRow.itemId));
+    if (!item) return null;
+    const referredLocations = Array.isArray(item.referredLocations) ? item.referredLocations : [];
+    const referred = referredLocations[selectedReferredPhotoRow.referredIndex];
+    if (!referred) return null;
+    return { item, referred, referredLocations };
+  }, [items, selectedReferredPhotoRow]);
+
+  const persistReferredPhotos = async (nextPhotos) => {
+    if (!id || !selectedReferredPhotoData?.item?._id) return;
+    const { item, referredLocations } = selectedReferredPhotoData;
+    const nextLocations = referredLocations.map((loc, idx) =>
+      idx === selectedReferredPhotoRow.referredIndex
+        ? {
+            ...loc,
+            photographs: (nextPhotos || []).map((photo) => ({
+              data: photo?.data,
+              fullResolutionData: photo?.fullResolutionData,
+              includeInReport: photo?.includeInReport ?? true,
+              description: photo?.description,
+            })),
+          }
+        : loc,
+    );
+    try {
+      await asbestosAssessmentService.updateItem(id, item._id, {
+        referredLocations: nextLocations,
+      });
+      const refreshedReferred = nextLocations[selectedReferredPhotoRow.referredIndex];
+      setSelectedItemForPhotos((prev) => ({
+        ...(prev || item),
+        locationDescription: refreshedReferred?.surfaceDescription || prev?.locationDescription,
+        roomArea: refreshedReferred?.roomArea || prev?.roomArea,
+        photographs: Array.isArray(refreshedReferred?.photographs)
+          ? refreshedReferred.photographs.map((photo, index) => ({
+              _id: photo?._id || `referred-${selectedReferredPhotoRow.referredIndex}-${index}`,
+              ...photo,
+            }))
+          : [],
+      }));
+      await refetchAssessmentQuiet();
+      showSnackbar("Referred location photos saved.", "success");
+    } catch (err) {
+      showSnackbar(err.response?.data?.message || err.message || "Failed to save referred location photos", "error");
+    }
+  };
+
+  const handleCloseLeadPhotoGallery = async () => {
+    setPhotoGalleryDialogOpen(false);
+    setManagePhotosDownloadTarget(null);
+    setSelectedItemForPhotos(null);
+    setSelectedReferredPhotoRow(null);
+    setGalleryPhotosLoading(false);
+    setGalleryPhotosError(null);
+    setRotatingPhotoId(null);
+    setCompressionStatus(null);
+    setLocalPhotoChanges({});
+    setPhotosToDelete(new Set());
+    setLocalPhotoDescriptions({});
+    setEditingDescriptionPhotoId(null);
+    setFullSizeArrowMode(false);
+    setSelectedArrowId(null);
+    setMovingArrowId(null);
+    await refetchAssessmentQuiet();
+  };
+
+  const handleTakeLeadPhoto = async () => {
+    if (leadAssessmentPhotosLocked) return;
+    if (!navigator.mediaDevices?.getUserMedia) {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.capture = "environment";
+      input.onchange = (event) => {
+        const f = event.target.files?.[0];
+        if (f) handleLeadPhotoUploadForGallery({ target: { files: [f] } });
+      };
+      input.click();
+      return;
+    }
+    try {
+      document.documentElement.requestFullscreen?.().catch(() => {});
+      let mediaStream;
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: "environment",
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
+      } catch {
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        });
+      }
+      setStream(mediaStream);
+      setPhotoGalleryDialogOpen(false);
+      setManagePhotosDownloadTarget(null);
+      setCameraDialogOpen(true);
+    } catch (error) {
+      showSnackbar(
+        "Failed to access camera. Use upload instead or check permissions.",
+        "error",
+      );
+    }
+  };
+
+  const handleCloseLeadCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      setStream(null);
+    }
+    setCameraDialogOpen(false);
+    setPhotoGalleryDialogOpen(true);
+    document.exitFullscreen?.().catch(() => {});
+  };
+
+  const handleCaptureLeadPhoto = async () => {
+    if (!videoRef?.videoWidth) {
+      handleCloseLeadCamera();
+      return;
+    }
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    canvas.width = videoRef.videoWidth;
+    canvas.height = videoRef.videoHeight;
+    ctx.drawImage(videoRef, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(
+      async (blob) => {
+        if (blob) {
+          const file = new File([blob], "camera-photo.jpg", {
+            type: "image/jpeg",
+          });
+          await handleLeadPhotoUploadForGallery({
+            target: { files: [file] },
+          });
+        }
+        handleCloseLeadCamera();
+      },
+      "image/jpeg",
+      0.92,
+    );
+  };
+
+  const handleViewLeadFullSizePhoto = (photo) => {
+    const url = typeof photo === "string" ? photo : photo?.data;
+    if (!url) return;
+    setFullSizePhotoUrl(url);
+    setFullSizePhotoId(
+      typeof photo === "object" && photo?._id ? photo._id : null,
+    );
+    setFullSizeArrowMode(false);
+    setSelectedArrowId(null);
+    setMovingArrowId(null);
+    setFullSizePhotoDialogOpen(true);
+  };
+
+  const handleDownloadLeadPhoto = async (
+    photo,
+    fallbackLabel = "photo",
+    quality = "full",
+  ) => {
+    const photoData =
+      typeof photo === "string"
+        ? photo
+        : quality === "full"
+          ? photo?.fullResolutionData
+          : photo?.data;
+    if (!photoData) {
+      showSnackbar(
+        quality === "full"
+          ? "Full-resolution image is not available for this photo"
+          : "Compressed image is not available for this photo",
+        "error",
+      );
+      return;
+    }
+    try {
+      const mimeMatch = photoData.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/);
+      const mimeType = mimeMatch?.[1] || "image/jpeg";
+      const extensionMap = {
+        "image/jpeg": "jpg",
+        "image/jpg": "jpg",
+        "image/png": "png",
+        "image/webp": "webp",
+        "image/gif": "gif",
+      };
+      const extension = extensionMap[mimeType] || "jpg";
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const filename = `lead-assessment-${fallbackLabel}-${quality}-${timestamp}.${extension}`;
+      const response = await fetch(photoData);
+      const blob = await response.blob();
+      const file = new File([blob], filename, { type: mimeType });
+      await saveFileToDevice(file, filename);
+      showSnackbar("Photo downloaded", "success");
+    } catch (error) {
+      console.error("Error downloading lead photo:", error);
+      showSnackbar("Failed to download photo", "error");
+    }
+  };
+
+  const handleManagePhotosDownloadChoice = async (quality) => {
+    if (!managePhotosDownloadTarget) return;
+    const { photo, fileLabel } = managePhotosDownloadTarget;
+    setManagePhotosDownloadTarget(null);
+    await handleDownloadLeadPhoto(photo, fileLabel, quality);
+  };
+
+  const fullSizeLeadPhoto =
+    fullSizePhotoId && selectedItemForPhotos?.photographs
+      ? selectedItemForPhotos.photographs.find((p) => p._id === fullSizePhotoId)
+      : null;
+
+  const leadItemPhotoArrowsAvailable =
+    !selectedReferredPhotoRow &&
+    !leadAssessmentPhotosLocked &&
+    selectedItemForPhotos?._id &&
+    fullSizePhotoId &&
+    isMongoPhotoId(fullSizePhotoId);
+
+  const handleAddLeadPhotoArrow = async (photoId, arrow) => {
+    if (!leadItemPhotoArrowsAvailable || !id || !selectedItemForPhotos?._id)
+      return;
+    try {
+      const response = await asbestosAssessmentService.addPhotoArrow(
+        id,
+        selectedItemForPhotos._id,
+        photoId,
+        {
+          x: arrow.x ?? 0.5,
+          y: arrow.y ?? 0.5,
+          rotation: arrow.rotation ?? DEFAULT_PHOTO_ARROW_ROTATION,
+          color: arrow.color ?? DEFAULT_PHOTO_ARROW_COLOR,
+        },
+      );
+      if (response?.item) setSelectedItemForPhotos(response.item);
+      setFullSizeArrowMode(false);
+      setMovingArrowId(null);
+      showSnackbar("Arrow added", "success");
+    } catch (err) {
+      console.error("Error adding arrow:", err);
+      showSnackbar("Failed to add arrow", "error");
+    }
+  };
+
+  const handleUpdateLeadPhotoArrow = async (photoId, arrowId, updates) => {
+    if (!leadItemPhotoArrowsAvailable || !id || !selectedItemForPhotos?._id)
+      return;
+    try {
+      const response = await asbestosAssessmentService.updatePhotoArrow(
+        id,
+        selectedItemForPhotos._id,
+        photoId,
+        arrowId,
+        updates,
+      );
+      if (response?.item) setSelectedItemForPhotos(response.item);
+      setMovingArrowId(null);
+      setFullSizeArrowMode(false);
+      if (updates.x != null || updates.y != null) {
+        showSnackbar("Arrow updated", "success");
+      }
+    } catch (err) {
+      console.error("Error updating arrow:", err);
+      showSnackbar("Failed to update arrow", "error");
+    }
+  };
+
+  const handleDeleteLeadPhotoArrow = async (photoId, arrowId) => {
+    if (!leadItemPhotoArrowsAvailable || !id || !selectedItemForPhotos?._id)
+      return;
+    try {
+      const response = await asbestosAssessmentService.deletePhotoArrow(
+        id,
+        selectedItemForPhotos._id,
+        photoId,
+        arrowId,
+      );
+      if (response?.item) setSelectedItemForPhotos(response.item);
+      if (selectedArrowId === arrowId) setSelectedArrowId(null);
+      setFullSizeArrowMode(false);
+      setMovingArrowId(null);
+      showSnackbar("Arrow removed", "success");
+    } catch (err) {
+      console.error("Error deleting arrow:", err);
+      showSnackbar("Failed to remove arrow", "error");
+    }
+  };
+
+  const handleClearAllLeadArrows = async (photoId) => {
+    if (!leadItemPhotoArrowsAvailable || !id || !selectedItemForPhotos?._id)
+      return;
+    try {
+      const response = await asbestosAssessmentService.updatePhotoArrowLegacy(
+        id,
+        selectedItemForPhotos._id,
+        photoId,
+        null,
+      );
+      if (response?.item) setSelectedItemForPhotos(response.item);
+      setSelectedArrowId(null);
+      setFullSizeArrowMode(false);
+      setMovingArrowId(null);
+      showSnackbar("Arrows cleared", "success");
+    } catch (err) {
+      console.error("Error clearing arrows:", err);
+      showSnackbar("Failed to clear arrows", "error");
+    }
+  };
+
+  const handleFullSizeLeadPhotoClickForArrow = (e) => {
+    if (
+      !fullSizePhotoId ||
+      !fullSizeLeadPhoto ||
+      !leadItemPhotoArrowsAvailable
+    )
+      return;
+    const img = e.currentTarget;
+    const rect = img.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    const clampedX = Math.max(0, Math.min(1, x));
+    const clampedY = Math.max(0, Math.min(1, y));
+    if (movingArrowId) {
+      handleUpdateLeadPhotoArrow(fullSizePhotoId, movingArrowId, {
+        x: clampedX,
+        y: clampedY,
+      });
+      return;
+    }
+    if (fullSizeArrowMode) {
+      handleAddLeadPhotoArrow(fullSizePhotoId, {
+        x: clampedX,
+        y: clampedY,
+        rotation: DEFAULT_PHOTO_ARROW_ROTATION,
+        color: selectedArrowColor,
+      });
+    }
+  };
+
+  const handleRotateLeadPhoto90Cw = async (photo) => {
+    if (
+      !photo?.data ||
+      rotatingPhotoId ||
+      !id ||
+      !selectedItemForPhotos ||
+      leadAssessmentPhotosLocked ||
+      selectedReferredPhotoRow ||
+      !isMongoPhotoId(photo._id)
+    ) {
+      return;
+    }
+    setRotatingPhotoId(photo._id);
+    try {
+      const newData = await rotateDataUrl90Cw(photo.data, 0.92);
+      const arrowList = getLeadAssessmentPhotoArrows(photo);
+      const newArrows = arrowList.map((arr) => {
+        const { x, y } = rotateNormalizedPoint90Cw(
+          arr.x ?? 0.5,
+          arr.y ?? 0.5,
+        );
+        return {
+          x: Math.max(0, Math.min(1, x)),
+          y: Math.max(0, Math.min(1, y)),
+          rotation: rotateArrowDegrees90Cw(
+            arr.rotation ?? DEFAULT_PHOTO_ARROW_ROTATION,
+          ),
+          color: arr.color || DEFAULT_PHOTO_ARROW_COLOR,
+          ...(arr._id ? { _id: arr._id } : {}),
+        };
+      });
+      await asbestosAssessmentService.updatePhotoContent(
+        id,
+        selectedItemForPhotos._id,
+        photo._id,
+        { photoData: newData, arrows: newArrows },
+      );
+      const doc = await refetchAssessmentQuiet();
+      const list = Array.isArray(doc?.items) ? doc.items : [];
+      const updatedItem = list.find(
+        (i) => String(i._id) === String(selectedItemForPhotos._id),
+      );
+      if (updatedItem) {
+        try {
+          const { photographs: blobs } =
+            await asbestosAssessmentService.getItemPhotosData(id, updatedItem._id);
+          const merged = {
+            ...updatedItem,
+            photographs: mergePhotoBlobFields(updatedItem.photographs, blobs),
+          };
+          setSelectedItemForPhotos(merged);
+          if (fullSizePhotoId === photo._id) {
+            const p = merged.photographs?.find(
+              (x) => String(x._id) === String(photo._id),
+            );
+            if (p?.data) setFullSizePhotoUrl(p.data);
+          }
+        } catch {
+          setSelectedItemForPhotos(updatedItem);
+        }
+      }
+      showSnackbar("Photo rotated", "success");
+    } catch (err) {
+      console.error(err);
+      showSnackbar("Failed to rotate photo", "error");
+    } finally {
+      setRotatingPhotoId(null);
+    }
+  };
 
   const showAddAssessmentItem = !loading && assessment?.jobType === "lead-assessment";
 
@@ -923,6 +1874,36 @@ const LeadAssessmentItems = () => {
           >
             Scope
           </Button>
+          <Button
+            variant="outlined"
+            color="secondary"
+            startIcon={<MapIcon />}
+            onClick={async () => {
+              await hydrateLeadPlanAppendicesForEditor();
+              setLeadSitePlansDialogOpen(true);
+            }}
+            disabled={leadAssessmentPhotosLocked}
+            sx={{ textTransform: "none" }}
+            title="Site plan figures for the report appendix (multiple tabs). Pin tool marks sample locations."
+          >
+            Site plan
+            {leadSitePlanAppendixCount > 0 ? ` (${leadSitePlanAppendixCount})` : ""}
+          </Button>
+          <Button
+            variant="outlined"
+            color="secondary"
+            startIcon={<MapIcon />}
+            onClick={async () => {
+              await hydrateLeadPlanAppendicesForEditor();
+              setLeadAssessmentPlansDialogOpen(true);
+            }}
+            disabled={leadAssessmentPhotosLocked}
+            sx={{ textTransform: "none" }}
+            title="Plans illustrating assessment areas — draw or add images only (no map layer)."
+          >
+            Assessment plan
+            {leadAssessmentPlanAppendixCount > 0 ? ` (${leadAssessmentPlanAppendixCount})` : ""}
+          </Button>
         </Stack>
       )}
 
@@ -1042,380 +2023,97 @@ const LeadAssessmentItems = () => {
                 id={`lead-items-panel-${typeKey}`}
                 aria-labelledby={`lead-items-tab-${typeKey}`}
               >
-                <TableContainer
-                  component={Paper}
-                  variant="outlined"
-                  sx={{
-                    boxShadow: "none",
-                    border: 0,
-                    borderRadius: 0,
-                  }}
-                >
-                  <Table
-                    size="small"
-                    stickyHeader
-                    sx={{
-                      "& .MuiTableCell-root": {
-                        fontSize: TABLE_FONT_SIZE,
-                      },
-                    }}
-                  >
-                    <TableHead>
-                      <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
-                        <TableCell sx={{ fontWeight: "bold", width: columnWidths.sampleReference, fontSize: TABLE_FONT_SIZE }}>Sample reference</TableCell>
-                        {!isDustTable && (
-                          <TableCell sx={{ fontWeight: "bold", width: columnWidths.paintColour, fontSize: TABLE_FONT_SIZE }}>
-                            {isSoilTable ? "Assessment Criteria" : "Paint colour"}
-                          </TableCell>
-                        )}
-                        <TableCell sx={{ fontWeight: "bold", width: columnWidths.description, fontSize: TABLE_FONT_SIZE }}>Description</TableCell>
-                        {isPaintTable && (
-                          <>
-                            <TableCell sx={{ fontWeight: "bold", width: columnWidths.leadContent, fontSize: TABLE_FONT_SIZE }}>Lead content</TableCell>
-                            <TableCell sx={{ fontWeight: "bold", width: columnWidths.status, fontSize: TABLE_FONT_SIZE }}>Status</TableCell>
-                          </>
-                        )}
-                        {isDustTable && (
-                          <>
-                            <TableCell sx={{ fontWeight: "bold", width: columnWidths.leadContent, fontSize: TABLE_FONT_SIZE }}>Lead content</TableCell>
-                            <TableCell sx={{ fontWeight: "bold", width: columnWidths.leadConcentration, fontSize: TABLE_FONT_SIZE }}>Concentration <br></br> (mg/m²)</TableCell>
-                            <TableCell sx={{ fontWeight: "bold", width: columnWidths.status, fontSize: TABLE_FONT_SIZE }}>Status</TableCell>
-                          </>
-                        )}
-                        {isSoilTable && (
-                          <>
-                            <TableCell sx={{ fontWeight: "bold", width: columnWidths.leadContent, fontSize: TABLE_FONT_SIZE }}>Lead content</TableCell>
-                            <TableCell sx={{ fontWeight: "bold", width: columnWidths.status, fontSize: TABLE_FONT_SIZE }}>Status</TableCell>
-                          </>
-                        )}
-                        {!isSoilTable && (
-                          <TableCell sx={{ fontWeight: "bold", width: columnWidths.risk, fontSize: TABLE_FONT_SIZE }}>Risk</TableCell>
-                        )}
-                        <TableCell sx={{ fontWeight: "bold", width: columnWidths.actions, fontSize: TABLE_FONT_SIZE }}>Actions</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {typeRows.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={isPaintTable || isDustTable ? 7 : 6} align="center" sx={{ color: "text.secondary", py: 2 }}>
-                            No samples in assessment.
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        typeRows.map((row) => {
-                          const isReferred = row.kind === "referred";
-                          const current = isReferred ? row.referred : row.item;
-                          const effectiveLeadContent = isReferred
-                            ? row.item?.leadContent
-                            : leadContentDrafts[row.item._id] ?? row.item?.leadContent;
-                          const risk = getItemRisk(current);
-                          const leadStatus = getLeadPaintStatus(effectiveLeadContent);
-                          const isLeadContentDirty = String(leadContentDrafts[row.item._id] ?? "") !== String(row.item.leadContent ?? "");
-                          const dustStatus = isDustTable
-                            ? getDustExceedanceStatus(
-                                current?.locationRating,
-                                leadContentDrafts[row.item._id] ?? row.item.leadContent,
-                                row.item.leadSampleArea,
-                              )
-                            : null;
-                          const soilStatus = isSoilTable
-                            ? getSoilStatus(
-                                leadContentDrafts[row.item._id] ?? row.item.leadContent,
-                                row.item.paintColour,
-                              )
-                            : null;
-                          const rowKey = isReferred
-                            ? `${row.item._id}-ref-${row.referredIndex}`
-                            : row.item._id;
-                          return (
-                            <TableRow key={rowKey} hover>
-                              <TableCell>
-                                {isReferred
-                                  ? `Refer to ${row.item.sampleReference ?? "—"}`
-                                  : row.item.sampleReference ?? "—"}
-                              </TableCell>
-                              {!isDustTable && <TableCell>{row.item.paintColour ?? "—"}</TableCell>}
-                              <TableCell>
-                                {isSoilTable ? (
-                                  <Typography component="span" sx={{ lineHeight: 1.2, fontSize: TABLE_FONT_SIZE }}>
-                                    {isReferred ? current?.surfaceDescription ?? "—" : row.item.locationDescription ?? "—"}
-                                  </Typography>
-                                ) : (
-                                  <Box sx={{ display: "flex", flexDirection: "column", gap: 0.25 }}>
-                                    <Typography component="span" sx={{ lineHeight: 1.2, fontSize: TABLE_FONT_SIZE }}>
-                                      {formatRoomAreaWithLevel(current?.levelFloor, current?.roomArea)}
-                                    </Typography>
-                                    <Typography component="span" sx={{ lineHeight: 1.2, fontSize: TABLE_FONT_SIZE }}>
-                                      {isReferred ? current?.surfaceDescription ?? "—" : row.item.locationDescription ?? "—"}
-                                    </Typography>
-                                  </Box>
-                                )}
-                              </TableCell>
-                              {isDustTable && (
-                                <>
-                                  <TableCell>
-                                    {isReferred ? (
-                                      row.item.leadContent ?? "—"
-                                    ) : (
-                                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                                        <TextField
-                                          size="small"
-                                          value={leadContentDrafts[row.item._id] ?? ""}
-                                          autoComplete="off"
-                                          onChange={(e) => handleLeadContentChange(row.item._id, e.target.value)}
-                                          InputProps={{
-                                            endAdornment: (
-                                              <InputAdornment
-                                                position="end"
-                                                sx={{
-                                                  ml: 0.25,
-                                                  "& .MuiTypography-root": {
-                                                    fontSize: "0.8rem",
-                                                    lineHeight: 1,
-                                                  },
-                                                }}
-                                              >
-                                                μg
-                                              </InputAdornment>
-                                            ),
-                                          }}
-                                          inputProps={{ style: { fontSize: TABLE_FONT_SIZE, padding: "6px 8px" } }}
-                                          sx={{ width: 80 }}
-                                        />
-                                        {isLeadContentDirty && (
-                                          <>
-                                            <IconButton
-                                              size="small"
-                                              color="success"
-                                              aria-label="Save lead content"
-                                              onClick={() => handleLeadContentSave(row.item)}
-                                            >
-                                              <CheckIcon fontSize="small" />
-                                            </IconButton>
-                                            <IconButton
-                                              size="small"
-                                              color="inherit"
-                                              aria-label="Cancel lead content"
-                                              onClick={() => handleLeadContentCancel(row.item)}
-                                            >
-                                              <CloseIcon fontSize="small" />
-                                            </IconButton>
-                                          </>
-                                        )}
-                                      </Box>
-                                    )}
-                                  </TableCell>
-                                  <TableCell>
-                                    {formatDustLeadConcentrationMgM2(
-                                      leadContentDrafts[row.item._id] ?? row.item.leadContent,
-                                      row.item.leadSampleArea,
-                                    )}
-                                  </TableCell>
-                                  <TableCell>
-                                    {!dustStatus ? "—" : (
-                                      <Box
-                                        sx={{
-                                          px: 1.25,
-                                          py: 0.5,
-                                          borderRadius: 1,
-                                          display: "inline-block",
-                                          bgcolor: dustStatus.exceeds ? "error.main" : "success.main",
-                                          color: dustStatus.exceeds ? "error.contrastText" : "success.contrastText",
-                                          fontWeight: 600,
-                                          fontSize: TABLE_FONT_SIZE,
-                                        }}
-                                      >
-                                        {dustStatus.label}
-                                      </Box>
-                                    )}
-                                  </TableCell>
-                                </>
-                              )}
-                              {isPaintTable && (
-                                <>
-                                  <TableCell>
-                                    {isReferred ? (
-                                      row.item.leadContent ?? "—"
-                                    ) : (
-                                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                                        <TextField
-                                          size="small"
-                                          value={leadContentDrafts[row.item._id] ?? ""}
-                                          onChange={(e) => handleLeadContentChange(row.item._id, e.target.value)}
-                                          InputProps={{
-                                            endAdornment: <InputAdornment position="end">%</InputAdornment>,
-                                          }}
-                                          inputProps={{ style: { fontSize: TABLE_FONT_SIZE, padding: "6px 8px" } }}
-                                          sx={{ width: 75 }}
-                                        />
-                                        {isLeadContentDirty && (
-                                          <>
-                                            <IconButton
-                                              size="small"
-                                              color="success"
-                                              aria-label="Save lead content"
-                                              onClick={() => handleLeadContentSave(row.item)}
-                                            >
-                                              <CheckIcon fontSize="small" />
-                                            </IconButton>
-                                            <IconButton
-                                              size="small"
-                                              color="inherit"
-                                              aria-label="Cancel lead content"
-                                              onClick={() => handleLeadContentCancel(row.item)}
-                                            >
-                                              <CloseIcon fontSize="small" />
-                                            </IconButton>
-                                          </>
-                                        )}
-                                      </Box>
-                                    )}
-                                  </TableCell>
-                                  <TableCell>
-                                    {leadStatus == null ? (
-                                      "—"
-                                    ) : leadStatus.isLeadPaint ? (
-                                      <Box
-                                        sx={{
-                                          px: 1.25,
-                                          py: 0.5,
-                                          borderRadius: 1,
-                                          display: "inline-block",
-                                          bgcolor: "error.main",
-                                          color: "error.contrastText",
-                                          fontWeight: 600,
-                                          fontSize: TABLE_FONT_SIZE,
-                                        }}
-                                      >
-                                        {leadStatus.label}
-                                      </Box>
-                                    ) : (
-                                      leadStatus.label
-                                    )}
-                                  </TableCell>
-                                </>
-                              )}
-                              {isSoilTable && (
-                                <>
-                                  <TableCell>
-                                    {isReferred ? (
-                                      row.item.leadContent ?? "—"
-                                    ) : (
-                                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                                        <TextField
-                                          size="small"
-                                          value={leadContentDrafts[row.item._id] ?? ""}
-                                          onChange={(e) => handleLeadContentChange(row.item._id, e.target.value)}
-                                          InputProps={{
-                                            endAdornment: (
-                                              <InputAdornment
-                                                position="end"
-                                                sx={{
-                                                  ml: 0.25,
-                                                  "& .MuiTypography-root": {
-                                                    fontSize: "0.8rem",
-                                                    lineHeight: 1,
-                                                  },
-                                                }}
-                                              >
-                                                mg/kg
-                                              </InputAdornment>
-                                            ),
-                                          }}
-                                          inputProps={{ style: { fontSize: TABLE_FONT_SIZE, padding: "6px 8px" } }}
-                                          sx={{ width: 124 }}
-                                        />
-                                        {isLeadContentDirty && (
-                                          <>
-                                            <IconButton
-                                              size="small"
-                                              color="success"
-                                              aria-label="Save lead content"
-                                              onClick={() => handleLeadContentSave(row.item)}
-                                            >
-                                              <CheckIcon fontSize="small" />
-                                            </IconButton>
-                                            <IconButton
-                                              size="small"
-                                              color="inherit"
-                                              aria-label="Cancel lead content"
-                                              onClick={() => handleLeadContentCancel(row.item)}
-                                            >
-                                              <CloseIcon fontSize="small" />
-                                            </IconButton>
-                                          </>
-                                        )}
-                                      </Box>
-                                    )}
-                                  </TableCell>
-                                  <TableCell>
-                                    {!soilStatus ? "—" : (
-                                      <Box
-                                        sx={{
-                                          px: 1.25,
-                                          py: 0.5,
-                                          borderRadius: 1,
-                                          display: "inline-block",
-                                          bgcolor: soilStatus.exceeds ? "error.main" : "success.main",
-                                          color: soilStatus.exceeds ? "error.contrastText" : "success.contrastText",
-                                          fontWeight: 600,
-                                          fontSize: TABLE_FONT_SIZE,
-                                        }}
-                                      >
-                                        {soilStatus.label}
-                                      </Box>
-                                    )}
-                                  </TableCell>
-                                </>
-                              )}
-                              {!isSoilTable && (
-                                <TableCell>
-                                  {((isPaintTable && leadStatus && !leadStatus.isLeadPaint) ||
-                                    (isDustTable && dustStatus && !dustStatus.exceeds)) ? (
-                                    "None"
-                                  ) : risk ? (
-                                    <Box sx={{ ...getRiskBadgeSx(risk.label), fontSize: TABLE_FONT_SIZE }}>
-                                      {riskChipDisplayLabel(risk.label)}
-                                    </Box>
-                                  ) : (
-                                    "—"
-                                  )}
-                                </TableCell>
-                              )}
-                              <TableCell>
-                                {isReferred ? (
-                                  "—"
-                                ) : (
-                                  <>
-                                    <IconButton
-                                      size="small"
-                                      aria-label="Edit item"
-                                      onClick={() => navigate(`/surveys/lead/${id}/items/${row.item._id}/edit`)}
-                                    >
-                                      <EditIcon />
-                                    </IconButton>
-                                    <IconButton
-                                      size="small"
-                                      color="error"
-                                      aria-label="Delete item"
-                                      onClick={() => handleDeleteClick(row.item)}
-                                    >
-                                      <DeleteIcon />
-                                    </IconButton>
-                                  </>
-                                )}
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })
-                      )}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
+                <LeadAssessmentLeadSamplesTable
+                  typeKey={typeKey}
+                  typeRows={typeRows}
+                  isPaintTable={isPaintTable}
+                  isDustTable={isDustTable}
+                  isSoilTable={isSoilTable}
+                  columnWidths={columnWidths}
+                  leadContentDrafts={leadContentDrafts}
+                  leadAssessmentPhotosLocked={leadAssessmentPhotosLocked}
+                  assessmentId={id}
+                  onLeadContentChange={handleLeadContentChange}
+                  onLeadContentSave={handleLeadContentSave}
+                  onLeadContentCancel={handleLeadContentCancel}
+                  onOpenLeadPhotoGallery={handleOpenLeadPhotoGallery}
+                  onOpenReferredPhotoDialog={handleOpenReferredPhotoDialog}
+                  onDeleteItem={handleDeleteClick}
+                />
               </Box>
             );
           })}
             </Box>
+          </Box>
+          <Box sx={{ mt: 2, bgcolor: "background.default" }}>
+            <Paper variant="outlined" sx={{ px: 1.5, pb: 1.5, pt: 1.25 }}>
+              <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
+                Discussion/Conclusion
+              </Typography>
+              <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start", flexWrap: "wrap" }}>
+                <TextField
+                  fullWidth
+                  multiline
+                  minRows={3}
+                  value={leadDiscussionDrafts[leadDiscussionTypeKey(activeSampleTab)] || ""}
+                  onChange={(e) =>
+                    handleLeadDiscussionChange(
+                      leadDiscussionTypeKey(activeSampleTab),
+                      e.target.value,
+                    )
+                  }
+                  placeholder="Enter discussion/conclusion for this assessment type"
+                  sx={{ flex: 1, minWidth: { xs: "100%", sm: 320 } }}
+                />
+                <Button
+                  size="small"
+                  variant={
+                    isDictatingDiscussion &&
+                    dictationDiscussionType === leadDiscussionTypeKey(activeSampleTab)
+                      ? "contained"
+                      : "outlined"
+                  }
+                  color={
+                    isDictatingDiscussion &&
+                    dictationDiscussionType === leadDiscussionTypeKey(activeSampleTab)
+                      ? "error"
+                      : "primary"
+                  }
+                  startIcon={
+                    isDictatingDiscussion &&
+                    dictationDiscussionType === leadDiscussionTypeKey(activeSampleTab)
+                      ? <StopIcon />
+                      : <MicIcon />
+                  }
+                  onClick={() => (
+                    isDictatingDiscussion &&
+                    dictationDiscussionType === leadDiscussionTypeKey(activeSampleTab)
+                      ? stopDiscussionDictation()
+                      : startDiscussionDictation(leadDiscussionTypeKey(activeSampleTab))
+                  )}
+                >
+                  {isDictatingDiscussion &&
+                  dictationDiscussionType === leadDiscussionTypeKey(activeSampleTab)
+                    ? "Stop Dictation"
+                    : "Dictate"}
+                </Button>
+                <Button
+                  size="small"
+                  variant="contained"
+                  onClick={() => handleSaveLeadDiscussionByType(activeSampleTab)}
+                  disabled={savingLeadDiscussionType === leadDiscussionTypeKey(activeSampleTab)}
+                >
+                  {savingLeadDiscussionType === leadDiscussionTypeKey(activeSampleTab)
+                    ? "Saving..."
+                    : "Save"}
+                </Button>
+              </Box>
+              {dictationDiscussionError && (
+                <Alert severity="warning" sx={{ mt: 1 }}>
+                  {dictationDiscussionError}
+                </Alert>
+              )}
+            </Paper>
           </Box>
         </Box>
       )}
@@ -1537,6 +2235,31 @@ const LeadAssessmentItems = () => {
         </DialogActions>
       </Dialog>
 
+      <LeadAssessmentPlanEditorDialog
+        open={leadSitePlansDialogOpen}
+        onClose={() => setLeadSitePlansDialogOpen(false)}
+        kind="site"
+        assessmentId={id}
+        assessment={assessment}
+        items={items}
+        leadContentDrafts={leadContentDrafts}
+        readOnly={leadAssessmentPhotosLocked}
+        showSnackbar={showSnackbar}
+        onSaved={handleLeadPlansSaved}
+      />
+      <LeadAssessmentPlanEditorDialog
+        open={leadAssessmentPlansDialogOpen}
+        onClose={() => setLeadAssessmentPlansDialogOpen(false)}
+        kind="assessment"
+        assessmentId={id}
+        assessment={assessment}
+        items={items}
+        leadContentDrafts={leadContentDrafts}
+        readOnly={leadAssessmentPhotosLocked}
+        showSnackbar={showSnackbar}
+        onSaved={handleLeadPlansSaved}
+      />
+
       <Dialog open={samplingCompleteDialogOpen} onClose={() => setSamplingCompleteDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Complete Sampling</DialogTitle>
         <DialogContent>
@@ -1599,7 +2322,23 @@ const LeadAssessmentItems = () => {
               ? "Review the analysis PDF, replace or remove it, and update lead content values as needed."
               : "Upload the analysis PDF and update lead content values."}
           </Typography>
-          {analysisPdfSrc ? (
+          {hasAttachedAnalysisReport && !analysisFile && !analysisPdfSrc ? (
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 1.5,
+                py: 4,
+                mb: 2,
+              }}
+            >
+              <CircularProgress size={28} />
+              <Typography variant="body2" color="text.secondary">
+                Loading PDF preview…
+              </Typography>
+            </Box>
+          ) : analysisPdfSrc ? (
             <Box
               sx={{
                 mb: 2,
@@ -1721,6 +2460,1179 @@ const LeadAssessmentItems = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Dialog
+        open={photoGalleryDialogOpen}
+        onClose={handleCloseLeadPhotoGallery}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: { borderRadius: 3, boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)" },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            pb: 2,
+            px: 3,
+            pt: 3,
+            border: "none",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "secondary.main",
+                color: "white",
+              }}
+            >
+              <PhotoCameraIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Manage Photos
+            </Typography>
+          </Box>
+          {isMobileLandscape && selectedItemForPhotos && !selectedReferredPhotoRow && (
+            <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+              <Button
+                variant="outlined"
+                startIcon={<PhotoCameraIcon />}
+                onClick={handleTakeLeadPhoto}
+                size="small"
+                disabled={leadAssessmentPhotosLocked}
+              >
+                Take Photo
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={<UploadIcon />}
+                component="label"
+                size="small"
+                disabled={leadAssessmentPhotosLocked}
+              >
+                Upload Photo
+                <input
+                  type="file"
+                  hidden
+                  accept="image/*"
+                  onChange={handleLeadPhotoUploadForGallery}
+                  disabled={leadAssessmentPhotosLocked}
+                />
+              </Button>
+            </Box>
+          )}
+          <IconButton onClick={handleCloseLeadPhotoGallery}>
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 3, pb: 3, border: "none" }}>
+          {selectedItemForPhotos && (
+            <>
+              {galleryPhotosError && (
+                <Alert severity="error" sx={{ mb: 2 }}>
+                  {galleryPhotosError}
+                </Alert>
+              )}
+              {galleryPhotosLoading && (
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1.5,
+                    mb: 2,
+                  }}
+                >
+                  <CircularProgress size={22} />
+                  <Typography variant="body2" color="text.secondary">
+                    Loading images…
+                  </Typography>
+                </Box>
+              )}
+              {isPortrait && isMobile ? (
+                <Box
+                  sx={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    py: 4,
+                    px: 2,
+                    textAlign: "center",
+                  }}
+                >
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    <Typography variant="h6" sx={{ mb: 1, fontWeight: 600 }}>
+                      Please rotate your device to landscape mode
+                    </Typography>
+                    <Typography variant="body2" component="div">
+                      The manage photos form is best viewed in landscape
+                      orientation.
+                    </Typography>
+                  </Alert>
+                </Box>
+              ) : (
+                <>
+                  <Box
+                    sx={{
+                      mb: 3,
+                      ...(isMobileLandscape && {
+                        display: "flex",
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                        gap: 1,
+                      }),
+                    }}
+                  >
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mb: isMobileLandscape ? 0 : 1 }}
+                    >
+                      <strong>Location:</strong>{" "}
+                      {selectedItemForPhotos.locationDescription}
+                    </Typography>
+                    {isMobileLandscape && (
+                      <Typography variant="body2" color="text.secondary">
+                        |
+                      </Typography>
+                    )}
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mb: isMobileLandscape ? 0 : 1 }}
+                    >
+                      <strong>Room/Area:</strong>{" "}
+                      {selectedItemForPhotos.roomArea}
+                    </Typography>
+                    {isMobileLandscape && (
+                      <Typography variant="body2" color="text.secondary">
+                        |
+                      </Typography>
+                    )}
+                    <Typography variant="body2" color="text.secondary">
+                      <strong>Sample ref:</strong>{" "}
+                      {selectedItemForPhotos.sampleReference || "—"}
+                    </Typography>
+                  </Box>
+
+                  {!isMobileLandscape && (
+                    <Box
+                      sx={{
+                        mb: 3,
+                        p: 2,
+                        bgcolor: "grey.50",
+                        borderRadius: 2,
+                      }}
+                    >
+                      <Typography
+                        variant="subtitle1"
+                        sx={{ mb: 2, fontWeight: 600 }}
+                      >
+                        Add New Photo
+                      </Typography>
+                      <Box sx={{ display: "flex", gap: 1 }}>
+                        <Button
+                          variant="outlined"
+                          startIcon={<PhotoCameraIcon />}
+                          onClick={handleTakeLeadPhoto}
+                          size="small"
+                          disabled={leadAssessmentPhotosLocked}
+                        >
+                          Take Photo
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          startIcon={<UploadIcon />}
+                          component="label"
+                          size="small"
+                          disabled={leadAssessmentPhotosLocked}
+                        >
+                          Upload Photo
+                          <input
+                            type="file"
+                            hidden
+                            accept="image/*"
+                            onChange={handleLeadPhotoUploadForGallery}
+                            disabled={leadAssessmentPhotosLocked}
+                          />
+                        </Button>
+                      </Box>
+                      {compressionStatus && (
+                        <Alert
+                          severity={
+                            compressionStatus.type === "error"
+                              ? "error"
+                              : "info"
+                          }
+                          sx={{ mt: 2 }}
+                        >
+                          {compressionStatus.message}
+                        </Alert>
+                      )}
+                    </Box>
+                  )}
+
+                  <Typography
+                    variant="subtitle1"
+                    sx={{ mb: 2, fontWeight: 600 }}
+                  >
+                    Photos (
+                    {selectedItemForPhotos.photographs?.length || 0})
+                  </Typography>
+                  {selectedReferredPhotoRow ? (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: "block", mb: 2 }}
+                    >
+                      Arrow overlays apply to main sample photos only. Referred
+                      location photos are edited here without arrows.
+                    </Typography>
+                  ) : (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: "block", mb: 2 }}
+                    >
+                      Open a photo to full view, then use{" "}
+                      <strong>Add arrow</strong> to place overlays (same as
+                      asbestos assessments).
+                    </Typography>
+                  )}
+
+                  {!selectedItemForPhotos.photographs?.length ? (
+                    <Box sx={{ textAlign: "center", py: 4 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        No photos yet. Add your first photo above.
+                      </Typography>
+                    </Box>
+                  ) : (
+                    <Grid container spacing={2}>
+                      {selectedItemForPhotos.photographs.map((photo, index) => {
+                        const photoKey = getPhotoKey(photo, index);
+                        return (
+                        <Grid item xs={12} sm={6} md={4} key={photoKey}>
+                          <Card
+                            sx={{
+                              position: "relative",
+                              height: "100%",
+                              border: getCurrentLeadPhotoState(photoKey)
+                                ? "3px solid #4caf50"
+                                : "3px solid transparent",
+                              borderRadius: 2,
+                              opacity: isLeadPhotoMarkedForDeletion(photoKey)
+                                ? 0.5
+                                : 1,
+                              filter: isLeadPhotoMarkedForDeletion(photoKey)
+                                ? "grayscale(50%)"
+                                : "none",
+                            }}
+                          >
+                            <Box
+                              sx={{
+                                position: "relative",
+                                paddingTop: "75%",
+                                cursor: "pointer",
+                                "&:hover": { opacity: 0.9 },
+                              }}
+                              onClick={() =>
+                                photo.data &&
+                                handleViewLeadFullSizePhoto(photo)
+                              }
+                            >
+                              {photo.data ? (
+                                <img
+                                  src={photo.data}
+                                  alt={`${index + 1}`}
+                                  style={{
+                                    position: "absolute",
+                                    top: 0,
+                                    left: 0,
+                                    width: "100%",
+                                    height: "100%",
+                                    objectFit: "cover",
+                                  }}
+                                />
+                              ) : galleryPhotosLoading ? (
+                                <Box
+                                  sx={{
+                                    position: "absolute",
+                                    top: 0,
+                                    left: 0,
+                                    width: "100%",
+                                    height: "100%",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    bgcolor: "grey.200",
+                                  }}
+                                >
+                                  <CircularProgress size={40} />
+                                </Box>
+                              ) : (
+                                <Box
+                                  sx={{
+                                    position: "absolute",
+                                    top: 0,
+                                    left: 0,
+                                    width: "100%",
+                                    height: "100%",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    bgcolor: "grey.200",
+                                    p: 1,
+                                  }}
+                                >
+                                  <Typography
+                                    variant="caption"
+                                    color="text.secondary"
+                                    align="center"
+                                  >
+                                    Image unavailable
+                                  </Typography>
+                                </Box>
+                              )}
+                              {!selectedReferredPhotoRow &&
+                                isMongoPhotoId(photo._id) &&
+                                getLeadAssessmentPhotoArrows(photo).map(
+                                  (arr, arrIdx) => {
+                                    const arrowColor =
+                                      arr.color || DEFAULT_PHOTO_ARROW_COLOR;
+                                    const rot =
+                                      arr.rotation ??
+                                      DEFAULT_PHOTO_ARROW_ROTATION;
+                                    const tipOff =
+                                      getLeadPhotoArrowTipOffset(rot);
+                                    return (
+                                      <Box
+                                        key={
+                                          arr._id || `thumb-arrow-${arrIdx}`
+                                        }
+                                        sx={{
+                                          position: "absolute",
+                                          left: `${(arr.x ?? 0.5) * 100}%`,
+                                          top: `${(arr.y ?? 0.5) * 100}%`,
+                                          transform: `translate(${-tipOff.x * 100}%, ${-tipOff.y * 100}%)`,
+                                          zIndex: 2,
+                                          pointerEvents: "none",
+                                          display: "flex",
+                                          flexDirection: "column",
+                                          alignItems: "center",
+                                        }}
+                                      >
+                                        <Box
+                                          sx={{
+                                            transform: `rotate(${rot}deg)`,
+                                          }}
+                                        >
+                                          <svg
+                                            width="40"
+                                            height="40"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            xmlns="http://www.w3.org/2000/svg"
+                                          >
+                                            <line
+                                              x1="12"
+                                              y1="22"
+                                              x2="12"
+                                              y2="10"
+                                              stroke="rgba(0,0,0,0.5)"
+                                              strokeWidth="2.5"
+                                              strokeLinecap="round"
+                                            />
+                                            <line
+                                              x1="12"
+                                              y1="22"
+                                              x2="12"
+                                              y2="10"
+                                              stroke={arrowColor}
+                                              strokeWidth="2"
+                                              strokeLinecap="round"
+                                            />
+                                            <path
+                                              d="M12 2 L8 10 L16 10 Z"
+                                              fill="rgba(0,0,0,0.4)"
+                                              stroke="rgba(0,0,0,0.6)"
+                                              strokeWidth="1"
+                                              strokeLinejoin="round"
+                                            />
+                                            <path
+                                              d="M12 2 L8 10 L16 10 Z"
+                                              fill={arrowColor}
+                                              stroke={arrowColor}
+                                              strokeWidth="0.5"
+                                              strokeLinejoin="round"
+                                            />
+                                          </svg>
+                                        </Box>
+                                      </Box>
+                                    );
+                                  },
+                                )}
+                              {isLeadPhotoMarkedForDeletion(photoKey) && (
+                                <Box
+                                  sx={{
+                                    position: "absolute",
+                                    inset: 0,
+                                    backgroundColor: "rgba(244, 67, 54, 0.3)",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    zIndex: 2,
+                                  }}
+                                >
+                                  <Typography
+                                    variant="h6"
+                                    sx={{
+                                      color: "white",
+                                      fontWeight: "bold",
+                                      textShadow: "2px 2px 4px rgba(0,0,0,0.8)",
+                                    }}
+                                  >
+                                    Marked for Deletion
+                                  </Typography>
+                                </Box>
+                              )}
+                              <Box
+                                sx={{
+                                  position: "absolute",
+                                  top: 8,
+                                  left: 8,
+                                  backgroundColor: "rgba(0, 0, 0, 0.6)",
+                                  borderRadius: 1,
+                                  padding: 0.5,
+                                  zIndex: 3,
+                                }}
+                              >
+                                <Checkbox
+                                  checked={getCurrentLeadPhotoState(photoKey)}
+                                  size="small"
+                                  disabled={leadAssessmentPhotosLocked}
+                                  sx={{
+                                    color: "white",
+                                    "&.Mui-checked": { color: "#4caf50" },
+                                  }}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    handleTogglePhotoInReport(
+                                      selectedItemForPhotos._id,
+                                      photoKey,
+                                    );
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  title={
+                                    getCurrentLeadPhotoState(photoKey)
+                                      ? "Remove from report"
+                                      : "Include in report"
+                                  }
+                                />
+                              </Box>
+                              <IconButton
+                                size="small"
+                                sx={{
+                                  position: "absolute",
+                                  top: 48,
+                                  right: 8,
+                                  backgroundColor: "rgba(0, 0, 0, 0.6)",
+                                  color: "white",
+                                  "&:hover": {
+                                    backgroundColor: "rgba(0, 0, 0, 0.85)",
+                                  },
+                                  zIndex: 3,
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setManagePhotosDownloadTarget({
+                                    photo,
+                                    fileLabel: `photo-${index + 1}`,
+                                  });
+                                }}
+                                title="Download photo"
+                              >
+                                <DownloadIcon sx={{ fontSize: "1.1rem" }} />
+                              </IconButton>
+                              <IconButton
+                                size="small"
+                                sx={{
+                                  position: "absolute",
+                                  top: 8,
+                                  right: 8,
+                                  backgroundColor: isLeadPhotoMarkedForDeletion(
+                                    photoKey,
+                                  )
+                                    ? "rgba(76, 175, 80, 0.8)"
+                                    : "rgba(0, 0, 0, 0.6)",
+                                  color: "white",
+                                  "&:hover": {
+                                    backgroundColor:
+                                      isLeadPhotoMarkedForDeletion(photoKey)
+                                        ? "rgba(76, 175, 80, 1)"
+                                        : "rgba(0, 0, 0, 0.8)",
+                                  },
+                                  zIndex: 3,
+                                }}
+                                disabled={leadAssessmentPhotosLocked}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (isLeadPhotoMarkedForDeletion(photoKey)) {
+                                    setPhotosToDelete((prev) => {
+                                      const next = new Set(prev);
+                                      next.delete(photoKey);
+                                      return next;
+                                    });
+                                  } else {
+                                    handleDeletePhotoFromItem(
+                                      selectedItemForPhotos._id,
+                                      photoKey,
+                                    );
+                                  }
+                                }}
+                                title={
+                                  isLeadPhotoMarkedForDeletion(photoKey)
+                                    ? "Undo Deletion"
+                                    : "Remove Photo"
+                                }
+                              >
+                                {isLeadPhotoMarkedForDeletion(photoKey) ? (
+                                  <CheckIcon fontSize="small" />
+                                ) : (
+                                  <CloseIcon fontSize="small" />
+                                )}
+                              </IconButton>
+                            </Box>
+                            <CardContent sx={{ py: 1 }}>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ fontWeight: 500 }}
+                              >
+                                Photo {index + 1}
+                              </Typography>
+                              {editingDescriptionPhotoId === photoKey ? (
+                                <TextField
+                                  fullWidth
+                                  size="small"
+                                  value={getCurrentLeadPhotoDescription(
+                                    photoKey,
+                                    selectedItemForPhotos,
+                                  )}
+                                  onChange={(e) =>
+                                    handleLeadPhotoDescriptionChange(
+                                      photoKey,
+                                      e.target.value,
+                                    )
+                                  }
+                                  onBlur={() =>
+                                    setEditingDescriptionPhotoId(null)
+                                  }
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" && !e.shiftKey) {
+                                      e.preventDefault();
+                                      setEditingDescriptionPhotoId(null);
+                                    }
+                                    if (e.key === "Escape") {
+                                      setEditingDescriptionPhotoId(null);
+                                      setLocalPhotoDescriptions((prev) => {
+                                        const next = { ...prev };
+                                        delete next[photoKey];
+                                        return next;
+                                      });
+                                    }
+                                  }}
+                                  autoFocus
+                                  multiline
+                                  maxRows={3}
+                                  variant="outlined"
+                                  placeholder="Enter photo description..."
+                                  sx={{
+                                    "& .MuiOutlinedInput-root": {
+                                      fontSize: "0.75rem",
+                                    },
+                                  }}
+                                />
+                              ) : (
+                                <Box
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (!leadAssessmentPhotosLocked) {
+                                      setEditingDescriptionPhotoId(photoKey);
+                                    }
+                                  }}
+                                  sx={{
+                                    cursor: leadAssessmentPhotosLocked
+                                      ? "default"
+                                      : "pointer",
+                                    p: 1,
+                                    borderRadius: 1,
+                                    backgroundColor: "grey.50",
+                                    "&:hover": {
+                                      backgroundColor: leadAssessmentPhotosLocked
+                                        ? "grey.50"
+                                        : "grey.100",
+                                    },
+                                  }}
+                                >
+                                  <Typography
+                                    variant="caption"
+                                    color="text.secondary"
+                                    sx={{
+                                      display: "block",
+                                      wordBreak: "break-word",
+                                      fontStyle:
+                                        photo.description ||
+                                        localPhotoDescriptions[photoKey]
+                                          ? "normal"
+                                          : "italic",
+                                    }}
+                                  >
+                                    {getCurrentLeadPhotoDescription(
+                                      photoKey,
+                                      selectedItemForPhotos,
+                                    )}
+                                  </Typography>
+                                  {!leadAssessmentPhotosLocked && (
+                                    <Typography
+                                      variant="caption"
+                                      color="text.disabled"
+                                      sx={{
+                                        fontSize: "0.65rem",
+                                        mt: 0.5,
+                                        display: "block",
+                                      }}
+                                    >
+                                      Click to edit
+                                    </Typography>
+                                  )}
+                                </Box>
+                              )}
+                            </CardContent>
+                          </Card>
+                        </Grid>
+                        );
+                      })}
+                    </Grid>
+                  )}
+                </>
+              )}
+            </>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+          <Button
+            onClick={async () => {
+              if (hasLeadPhotoUnsavedChanges()) await saveLeadPhotoChanges();
+              await handleCloseLeadPhotoGallery();
+            }}
+            variant="contained"
+            sx={{
+              minWidth: 100,
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+              backgroundColor: hasLeadPhotoUnsavedChanges()
+                ? "#ff9800"
+                : "primary.main",
+              "&:hover": {
+                backgroundColor: hasLeadPhotoUnsavedChanges()
+                  ? "#f57c00"
+                  : "primary.dark",
+              },
+            }}
+          >
+            {hasLeadPhotoUnsavedChanges() ? "Update" : "Done"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(managePhotosDownloadTarget)}
+        onClose={() => setManagePhotosDownloadTarget(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Download photo</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Choose which image version to save to your device.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions
+          sx={{
+            flexDirection: "column",
+            alignItems: "stretch",
+            px: 3,
+            pb: 2,
+            gap: 1,
+          }}
+        >
+          <Button
+            variant="contained"
+            fullWidth
+            disabled={
+              !managePhotosDownloadTarget?.photo?.fullResolutionData
+            }
+            onClick={() => {
+              void handleManagePhotosDownloadChoice("full");
+            }}
+          >
+            Full resolution
+          </Button>
+          <Button
+            variant="outlined"
+            fullWidth
+            disabled={!managePhotosDownloadTarget?.photo?.data}
+            onClick={() => {
+              void handleManagePhotosDownloadChoice("compressed");
+            }}
+          >
+            Compressed
+          </Button>
+          <Button onClick={() => setManagePhotosDownloadTarget(null)}>
+            Cancel
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={fullSizePhotoDialogOpen}
+        onClose={() => {
+          setFullSizePhotoDialogOpen(false);
+          setFullSizePhotoId(null);
+          setFullSizePhotoUrl(null);
+          setFullSizeArrowMode(false);
+          setSelectedArrowId(null);
+          setMovingArrowId(null);
+        }}
+        maxWidth="lg"
+        fullWidth
+        PaperProps={{ sx: { bgcolor: "rgba(0, 0, 0, 0.9)" } }}
+      >
+        <DialogContent sx={{ p: 0, position: "relative" }}>
+          <IconButton
+            onClick={() => {
+              setFullSizePhotoDialogOpen(false);
+              setFullSizePhotoId(null);
+              setFullSizePhotoUrl(null);
+              setFullSizeArrowMode(false);
+              setSelectedArrowId(null);
+              setMovingArrowId(null);
+            }}
+            sx={{
+              position: "absolute",
+              top: 10,
+              right: 10,
+              color: "white",
+              bgcolor: "rgba(0, 0, 0, 0.5)",
+              zIndex: 10,
+              "&:hover": { bgcolor: "rgba(0, 0, 0, 0.7)" },
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
+          {fullSizeLeadPhoto && (
+            <Box
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                pt: 6,
+                pb: 2,
+                px: 2,
+              }}
+            >
+              {leadItemPhotoArrowsAvailable && (
+                <Box sx={{ display: "flex", gap: 1, mb: 2, flexWrap: "wrap" }}>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      startIcon={<ArrowUpwardIcon />}
+                      onClick={() => {
+                        setFullSizeArrowMode((prev) => !prev);
+                        setMovingArrowId(null);
+                      }}
+                      sx={{
+                        bgcolor: fullSizeArrowMode
+                          ? "primary.main"
+                          : "rgba(0, 0, 0, 0.65)",
+                        color: "white",
+                        border: "1px solid rgba(255,255,255,0.4)",
+                        "&:hover": {
+                          bgcolor: fullSizeArrowMode
+                            ? "primary.dark"
+                            : "rgba(0, 0, 0, 0.85)",
+                          borderColor: "rgba(255,255,255,0.6)",
+                        },
+                      }}
+                    >
+                      Add arrow
+                    </Button>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      disabled={
+                        !selectedArrowId || selectedArrowId === "legacy"
+                      }
+                      startIcon={<ArrowUpwardIcon />}
+                      onClick={() => {
+                        setMovingArrowId(selectedArrowId);
+                        setFullSizeArrowMode(false);
+                      }}
+                      sx={{
+                        bgcolor: movingArrowId
+                          ? "primary.main"
+                          : "rgba(0, 0, 0, 0.5)",
+                        color: "white",
+                        "&:hover":
+                          selectedArrowId && selectedArrowId !== "legacy"
+                            ? { bgcolor: "primary.dark" }
+                            : {},
+                      }}
+                    >
+                      Move selected
+                    </Button>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      disabled={!selectedArrowId}
+                      startIcon={<CloseIcon />}
+                      onClick={() => {
+                        if (selectedArrowId) {
+                          if (selectedArrowId === "legacy") {
+                            handleClearAllLeadArrows(fullSizePhotoId);
+                          } else {
+                            handleDeleteLeadPhotoArrow(
+                              fullSizePhotoId,
+                              selectedArrowId,
+                            );
+                          }
+                          setSelectedArrowId(null);
+                        }
+                      }}
+                      sx={{
+                        bgcolor: "rgba(244, 67, 54, 0.9)",
+                        color: "white",
+                        "&:hover": { bgcolor: "rgba(244, 67, 54, 1)" },
+                      }}
+                    >
+                      Delete selected
+                    </Button>
+                    <Typography
+                      component="span"
+                      sx={{
+                        color: "rgba(255,255,255,0.9)",
+                        fontSize: "0.85rem",
+                        alignSelf: "center",
+                        ml: 1,
+                      }}
+                    >
+                      Arrow color:
+                    </Typography>
+                    {LEAD_PHOTO_ARROW_COLORS.map(({ name, hex }) => (
+                      <Box
+                        key={hex}
+                        onClick={() => {
+                          setSelectedArrowColor(hex);
+                          if (
+                            selectedArrowId &&
+                            selectedArrowId !== "legacy"
+                          ) {
+                            handleUpdateLeadPhotoArrow(
+                              fullSizePhotoId,
+                              selectedArrowId,
+                              { color: hex },
+                            );
+                          }
+                        }}
+                        sx={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: "50%",
+                          bgcolor: hex,
+                          border:
+                            selectedArrowColor === hex
+                              ? "3px solid #2196f3"
+                              : "2px solid black",
+                          cursor: "pointer",
+                          flexShrink: 0,
+                          "&:hover": {
+                            borderColor:
+                              selectedArrowColor === hex
+                                ? "#2196f3"
+                                : "rgba(255,255,255,0.8)",
+                            transform: "scale(1.1)",
+                          },
+                          transition: "border-color 0.15s, transform 0.15s",
+                        }}
+                        title={name}
+                      />
+                    ))}
+                </Box>
+              )}
+              {(fullSizeArrowMode || movingArrowId) &&
+                leadItemPhotoArrowsAvailable && (
+                  <Typography
+                    variant="body2"
+                    sx={{ color: "rgba(255, 255, 255, 0.9)", mb: 1 }}
+                  >
+                    {movingArrowId
+                      ? "Click on the photo to move the selected arrow"
+                      : "Click on the photo to place a new arrow"}
+                  </Typography>
+                )}
+              <Box
+                sx={{
+                  position: "relative",
+                  display: "inline-flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
+                <img
+                  src={fullSizePhotoUrl || fullSizeLeadPhoto.data}
+                  alt="Full size"
+                  style={{
+                    maxWidth: "100%",
+                    maxHeight: "75vh",
+                    objectFit: "contain",
+                    cursor:
+                      leadItemPhotoArrowsAvailable &&
+                      (fullSizeArrowMode || movingArrowId)
+                        ? "crosshair"
+                        : "default",
+                  }}
+                  onClick={handleFullSizeLeadPhotoClickForArrow}
+                />
+                {leadItemPhotoArrowsAvailable &&
+                  getLeadAssessmentPhotoArrows(fullSizeLeadPhoto).map(
+                    (arr, arrIdx) => {
+                      const arrowColor =
+                        arr.color || DEFAULT_PHOTO_ARROW_COLOR;
+                      const isSelected = selectedArrowId === arr._id;
+                      const rot =
+                        arr.rotation ?? DEFAULT_PHOTO_ARROW_ROTATION;
+                      const tipOff = getLeadPhotoArrowTipOffset(rot);
+                      return (
+                        <Box
+                          key={arr._id || `fs-arrow-${arrIdx}`}
+                          sx={{
+                            position: "absolute",
+                            left: `${(arr.x ?? 0.5) * 100}%`,
+                            top: `${(arr.y ?? 0.5) * 100}%`,
+                            transform: `translate(${-tipOff.x * 100}%, ${-tipOff.y * 100}%)`,
+                            pointerEvents: "auto",
+                            cursor: "pointer",
+                            outline: isSelected ? "3px solid white" : "none",
+                            outlineOffset: 2,
+                            borderRadius: 1,
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedArrowId(arr._id || "legacy");
+                            setSelectedArrowColor(
+                              arr.color || DEFAULT_PHOTO_ARROW_COLOR,
+                            );
+                          }}
+                        >
+                          <Box sx={{ transform: `rotate(${rot}deg)` }}>
+                            <svg
+                              width="56"
+                              height="56"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              xmlns="http://www.w3.org/2000/svg"
+                              style={{ pointerEvents: "none" }}
+                            >
+                              <line
+                                x1="12"
+                                y1="22"
+                                x2="12"
+                                y2="10"
+                                stroke="rgba(0,0,0,0.5)"
+                                strokeWidth="2.5"
+                                strokeLinecap="round"
+                              />
+                              <line
+                                x1="12"
+                                y1="22"
+                                x2="12"
+                                y2="10"
+                                stroke={arrowColor}
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                              />
+                              <path
+                                d="M12 2 L8 10 L16 10 Z"
+                                fill="rgba(0,0,0,0.4)"
+                                stroke="rgba(0,0,0,0.6)"
+                                strokeWidth="1"
+                                strokeLinejoin="round"
+                              />
+                              <path
+                                d="M12 2 L8 10 L16 10 Z"
+                                fill={arrowColor}
+                                stroke={arrowColor}
+                                strokeWidth="0.5"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </Box>
+                        </Box>
+                      );
+                    },
+                  )}
+                <IconButton
+                  size="small"
+                  sx={{
+                    position: "absolute",
+                    bottom: 8,
+                    right: 8,
+                    backgroundColor: "rgba(0, 0, 0, 0.6)",
+                    color: "white",
+                    "&:hover": {
+                      backgroundColor: "rgba(0, 0, 0, 0.85)",
+                    },
+                    zIndex: 6,
+                  }}
+                  disabled={
+                    leadAssessmentPhotosLocked ||
+                    !!rotatingPhotoId ||
+                    !fullSizeLeadPhoto.data
+                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRotateLeadPhoto90Cw(fullSizeLeadPhoto);
+                  }}
+                  title="Rotate 90° clockwise"
+                >
+                  <RotateRightIcon sx={{ fontSize: "1.25rem" }} />
+                </IconButton>
+              </Box>
+            </Box>
+          )}
+          {fullSizePhotoUrl && !fullSizeLeadPhoto && (
+            <img
+              src={fullSizePhotoUrl}
+              alt="Full size"
+              style={{ width: "100%", display: "block" }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      
+
+      {cameraDialogOpen &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <Box
+            sx={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 9999,
+              height: "100dvh",
+              maxHeight: "-webkit-fill-available",
+              backgroundColor: "#000",
+              paddingTop: "env(safe-area-inset-top)",
+              paddingBottom: "env(safe-area-inset-bottom)",
+              paddingLeft: "env(safe-area-inset-left)",
+              paddingRight: "env(safe-area-inset-right)",
+              overflow: "hidden",
+            }}
+          >
+            <Box sx={{ position: "absolute", inset: 0, overflow: "hidden" }}>
+              {stream ? (
+                <video
+                  ref={(ref) => {
+                    setVideoRef(ref);
+                    if (ref && stream) ref.srcObject = stream;
+                  }}
+                  autoPlay
+                  playsInline
+                  muted
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                  }}
+                />
+              ) : (
+                <Box
+                  sx={{
+                    position: "absolute",
+                    inset: 0,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 2,
+                    color: "white",
+                  }}
+                >
+                  <CircularProgress color="inherit" />
+                  <Typography variant="body1">Starting camera...</Typography>
+                </Box>
+              )}
+            </Box>
+            <Box
+              sx={{
+                position: "absolute",
+                right: "env(safe-area-inset-right)",
+                top: "50%",
+                transform: "translateY(-50%)",
+                display: "flex",
+                flexDirection: "column",
+                gap: 1.5,
+                padding: 1,
+              }}
+            >
+              <Button
+                onClick={handleCloseLeadCamera}
+                variant="outlined"
+                size="medium"
+                sx={{
+                  borderRadius: 2,
+                  textTransform: "none",
+                  fontWeight: 500,
+                  bgcolor: "rgba(0,0,0,0.4)",
+                  color: "white",
+                  borderColor: "rgba(255,255,255,0.6)",
+                  "&:hover": {
+                    bgcolor: "rgba(0,0,0,0.6)",
+                    borderColor: "rgba(255,255,255,0.9)",
+                  },
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCaptureLeadPhoto}
+                variant="contained"
+                color="primary"
+                size="medium"
+                startIcon={<PhotoCameraIcon />}
+                disabled={!stream}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: "none",
+                  fontWeight: 500,
+                }}
+              >
+                Capture
+              </Button>
+            </Box>
+          </Box>,
+          document.body,
+        )}
 
       <Dialog open={deleteDialogOpen} onClose={handleDeleteCancel}>
         <DialogTitle>Delete assessment item</DialogTitle>

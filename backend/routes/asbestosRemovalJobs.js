@@ -18,6 +18,7 @@ const notDeletedClearanceFilter = {
 };
 const checkPermission = require("../middleware/checkPermission");
 const { formatDateSydney } = require("../utils/dateUtils");
+const { buildContentDispositionAttachment } = require("../utils/contentDisposition");
 
 const escapeCsvCell = (value) => {
   if (value === null || value === undefined) return "";
@@ -518,7 +519,10 @@ router.get(
       const filename = `${project?.projectID || "shift"}_${shift?.name || "shift"}_${formatDate(shift?.date).replace(/\//g, "")}.csv`;
 
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
-      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader(
+        "Content-Disposition",
+        buildContentDispositionAttachment(filename, { defaultFilename: "export.csv" })
+      );
       res.send("\uFEFF" + csvContent);
     } catch (error) {
       console.error("Error exporting shift CSV:", error);
@@ -650,7 +654,10 @@ router.get(
       const filename = `${project?.projectID || "clearance"}_clearance_${formatDate(clearance?.clearanceDate).replace(/\//g, "")}.csv`;
 
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
-      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader(
+        "Content-Disposition",
+        buildContentDispositionAttachment(filename, { defaultFilename: "export.csv" })
+      );
       res.send("\uFEFF" + csvContent);
     } catch (error) {
       console.error("Error exporting clearance CSV:", error);

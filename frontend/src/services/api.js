@@ -476,6 +476,9 @@ export const asbestosAssessmentService = {
     api.put(`/assessments/${assessmentId}/items/${itemId}`, itemData),
   archiveAsbestosAssessment: (id) => api.patch(`/assessments/${id}/archive`),
   unlockAsbestosAssessment: (id) => api.patch(`/assessments/${id}/unlock`),
+  /** Reopen a final-authorised assessment for editing (Project Reports → Revise). Requires asbestos.edit. */
+  reviseAsbestosAssessmentReport: (id) =>
+    api.patch(`/assessments/${id}/revise-report`),
   sendForAuthorisation: (id) => api.post(`/assessments/${id}/send-for-authorisation`),
   recordReportViewed: (id) => api.patch(`/assessments/${id}/report-viewed`),
   deleteAsbestosAssessment: (id) => api.delete(`/assessments/${id}`),

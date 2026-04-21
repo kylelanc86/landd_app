@@ -51,20 +51,26 @@ const TAB_LABELS = {
 // Template sections for Lead Assessment
 const leadAssessmentSections = [
   { key: "introductionContent", label: "Introduction" },
-  { key: "surveyFindingsContent", label: "Summary of Lead Findings" },
+  { key: "assessmentFindingsLeadPaintContent", label: "Assessment Findings - Lead Paint" },
+  { key: "assessmentFindingsLeadDustContent", label: "Assessment Findings - Lead Dust" },
+  { key: "assessmentFindingsLeadSoilContent", label: "Assessment Findings - Lead Soil" },
   { key: "discussionContent", label: "Discussion & Conclusions" },
-  {
-    key: "recommendedControlMeasuresContent",
-    label: "Recommended Control Measures",
-  },
   { key: "signOffContent", label: "Sign-off" },
-  { key: "assessmentMethodologyContent", label: "Assessment Methodology" },
-  { key: "riskAssessmentContent", label: "Risk Assessment" },
-  { key: "legislationContent", label: "Legislation" },
+  { key: "backgroundContent", label: "Background" },
   {
-    key: "assessmentLimitationsContent",
-    label: "Assessment Limitations/Caveats",
+    key: "regulatoryGuidanceContent",
+    label: "Regulatory Guidance, Regulations And Codes Of Practice",
   },
+  { key: "assessmentCriteriaLeadPaintContent", label: "Assessment Criteria - Lead Paint" },
+  { key: "assessmentCriteriaLeadDustContent", label: "Assessment Criteria - Lead Dust" },
+  { key: "assessmentCriteriaLeadSoilContent", label: "Assessment Criteria - Lead Soil" },
+  { key: "assessmentMethodologyLeadPaintContent", label: "Assessment Methodology - Lead Paint" },
+  { key: "assessmentMethodologyLeadDustContent", label: "Assessment Methodology - Lead Dust" },
+  { key: "assessmentMethodologyLeadSoilContent", label: "Assessment Methodology - Lead Soil" },
+  { key: "riskAssessmentLeadPaintContent", label: "Risk Assessment - Lead Paint" },
+  { key: "riskAssessmentLeadDustContent", label: "Risk Assessment - Lead Dust" },
+  { key: "riskAssessmentLeadSoilContent", label: "Risk Assessment - Lead in Soil" },
+  { key: "statementOfLimitationsContent", label: "Statement of Limitations" },
 ];
 
 // Template sections for Lead Clearance (required sections for lead clearance report template)
@@ -272,6 +278,26 @@ const LeadAssessmentReportTemplates = () => {
       name: "LEAD_SAMPLING?",
       description:
         "Optional (lead clearances only): ' and sampling to assess for elevated lead dust' when the clearance has dust or soil samples; otherwise nothing",
+    },
+    {
+      name: "LEAD_SCOPE",
+      description:
+        "Lead assessment: scope phrase from job assessment types — e.g. paint, dusts, soils, or combined (paint and dusts; paint, dusts and soils). Paint and paint (XRF) count as paint.",
+    },
+    {
+      name: "LP_APPENDICES",
+      description:
+        "Lead paint appendices text (paint / paint-XRF / both), generated from the assessment types.",
+    },
+    {
+      name: "LD_APPENDICES",
+      description:
+        "Lead dust appendices text, generated from assessment types.",
+    },
+    {
+      name: "LS_APPENDICES",
+      description:
+        "Lead soil appendices text, generated from assessment types.",
     },
   ];
 

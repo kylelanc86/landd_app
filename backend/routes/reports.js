@@ -20,7 +20,17 @@ const notDeletedClearanceFilter = {
   $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
 };
 
-// Get Asbestos Assessment Reports
+function isAsbestosOrResidentialSurveyAssessment(doc) {
+  const jt = doc.jobType || 'asbestos-assessment';
+  return jt === 'asbestos-assessment' || jt === 'residential-asbestos';
+}
+
+function hasFinalAuthorisation(doc) {
+  const v = doc.reportAuthorisedBy;
+  return v != null && String(v).trim() !== '';
+}
+
+// Get Asbestos Assessment Reports (final-authorised jobs only — in-progress work is surfaced under Project Reports active jobs)
 router.get('/asbestos-assessment/:projectId', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
     const assessments = await AsbestosAssessment.find({
@@ -31,6 +41,7 @@ router.get('/asbestos-assessment/:projectId', auth, checkPermission(['projects.v
       .populate('assessorId');
 
     const reports = assessments
+      .filter((a) => isAsbestosOrResidentialSurveyAssessment(a) && hasFinalAuthorisation(a))
       .map(assessment => ({
         id: assessment._id,
         date: assessment.assessmentDate || assessment.createdAt,
@@ -38,6 +49,9 @@ router.get('/asbestos-assessment/:projectId', auth, checkPermission(['projects.v
         reference: assessment.projectId.projectID,
         description: assessment.description || 'Asbestos Assessment Report',
         status: assessment.status,
+        jobType: assessment.jobType || 'asbestos-assessment',
+        reportAuthorisedBy: assessment.reportAuthorisedBy || null,
+        revision: assessment.revision || 0,
         assessorName: assessment.assessorId ? `${assessment.assessorId.firstName} ${assessment.assessorId.lastName}` : 'Unknown'
       }));
 

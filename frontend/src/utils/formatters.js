@@ -155,3 +155,22 @@ export const compareLabReference = (a, b) => {
   const numB = parseLabReferenceNumber(refB);
   return numA - numB;
 };
+
+/**
+ * Resolves displayable client name from a project (matches asbestos assessment list behaviour).
+ * @param {{ client?: string | { name?: string } } | null | undefined} project
+ * @returns {string | null}
+ */
+export const getProjectClientName = (project) => {
+  if (!project || typeof project !== "object") return null;
+  const c = project.client;
+  if (typeof c === "string") {
+    const t = c.trim();
+    return t || null;
+  }
+  if (c && typeof c === "object" && typeof c.name === "string") {
+    const t = c.name.trim();
+    return t || null;
+  }
+  return null;
+};

@@ -368,7 +368,7 @@
     </style>
   </head>
   <body>
-    <div class="page">
+    <div class="page[INSPECTION_PAGE_VARIANT_CLASS]">
       <div class="header">
         <img class="logo" src="[LOGO_PATH]" alt="Company Logo" />
         <div class="company-details">
@@ -385,25 +385,13 @@
         </div>
         [INSPECTION_DETAILS_CONTENT]
 
-        <div class="table-container">
-          <div class="table-title">Table 1: Asbestos Removal Items</div>
-          <table class="clearance-table">
-            <thead>
-              <tr>
-                [CLEARANCE_ITEMS_HEADERS]
-              </tr>
-            </thead>
-            <tbody>
-              [CLEARANCE_ITEMS_TABLE]
-            </tbody>
-          </table>
-        </div>
+        [ASBESTOS_REMOVAL_ITEMS_HTML]
 
         <div class="section-header">[INSPECTION_EXCLUSIONS_TITLE]</div>
         [INSPECTION_EXCLUSIONS_CONTENT]
 
         <div class="section-header">[CLEARANCE_CERTIFICATION_TITLE]</div>
-        [CLEARANCE_CERTIFICATION_CONTENT] [SIGN_OFF_CONTENT]
+        [CLEARANCE_CERTIFICATION_CONTENT][PRE_SIGNOFF_SECTIONS][SIGN_OFF_CONTENT]
       </div>
       <div class="footer has-page-number">
         <div class="footer-border-line"></div>

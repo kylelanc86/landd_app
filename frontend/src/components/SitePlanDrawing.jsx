@@ -3,6 +3,7 @@ import React, {
   useRef,
   useEffect,
   useCallback,
+  useMemo,
   forwardRef,
   useImperativeHandle,
 } from "react";
@@ -41,9 +42,26 @@ import {
   Refresh as RefreshIcon,
   Add as AddIcon,
   CallMade as ArrowIcon,
+  Place as PlaceIcon,
 } from "@mui/icons-material";
 import loadGoogleMapsApi from "../utils/loadGoogleMapsApi";
+import { LEAD_SAMPLE_MARKER_COLORS } from "../utils/leadSampleMarkerMeta";
 import GoogleMapsDialog from "./GoogleMapsDialog";
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  const radius = Math.min(Math.max(0, r), w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + w - radius, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+  ctx.lineTo(x + w, y + h - radius);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+  ctx.lineTo(x + radius, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
 
 // A4 landscape aspect ratio (297mm x 210mm) - matches the site plan page in the PDF report
 const A4_LANDSCAPE_ASPECT_RATIO = 297 / 210;
@@ -75,6 +93,14 @@ const applyOpacitySettings = (item, transparent) => {
 
   if (item.type === "line" || item.type === "pen" || item.type === "arrow") {
     return { ...item, strokeOpacity };
+  }
+
+  if (item.type === "sample_marker") {
+    return {
+      ...item,
+      fillOpacity: transparent ? TRANSPARENT_DRAW_OPACITY : DEFAULT_DRAW_OPACITY,
+      strokeOpacity,
+    };
   }
 
   return { ...item };
@@ -121,6 +147,9 @@ const legendArraysEqual = (a = [], b = []) => {
   return true;
 };
 
+const colorsEqual = (a, b) =>
+  String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+
 const REMINDER_CLOSE =
   "You haven't added any items to the site plan key. Click OK to add key items, or Cancel to close anyway.";
 const REMINDER_SAVE =
@@ -134,6 +163,19 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
     existingLegend = [],
     existingLegendTitle = "Key",
     existingFigureTitle = "Asbestos Removal Site Plan",
+    /** Optional default description for newly auto-generated key entries. */
+    defaultLegendDescription = "",
+    /** Hide Google Map layer controls (e.g. lead assessment area plans). */
+    hideMapSection = false,
+    /** Add tool to place sample reference markers on the canvas (lead assessment site plans). */
+    enableSampleMarkers = false,
+    /**
+     * Preferred: { value, isPositive, statusKnown } per sample (for red / green / grey boxes).
+     * If empty, falls back to `sampleReferences` (all treated as status unknown).
+     */
+    sampleMarkerOptions = null,
+    /** @deprecated use sampleMarkerOptions when possible */
+    sampleReferences = [],
   },
   ref
 ) {
@@ -177,8 +219,56 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
   const [legendDialogOpen, setLegendDialogOpen] = useState(false);
   const [legendDraftEntries, setLegendDraftEntries] = useState([]);
   const [legendDraftTitle, setLegendDraftTitle] = useState("Key");
+  const [selectedSampleRef, setSelectedSampleRef] = useState("");
   const renderForExportRef = useRef(false);
   const activePointerIdRef = useRef(null);
+
+  const resolvedSampleMarkerOptions = useMemo(() => {
+    if (Array.isArray(sampleMarkerOptions) && sampleMarkerOptions.length > 0) {
+      return sampleMarkerOptions
+        .map((o) => ({
+          value: String(o?.value || "").trim(),
+          isPositive: !!o?.isPositive,
+          statusKnown: !!o?.statusKnown,
+        }))
+        .filter((o) => o.value);
+    }
+    const refs = Array.isArray(sampleReferences) ? sampleReferences : [];
+    return refs
+      .filter((r) => r && String(r).trim())
+      .map((r) => ({
+        value: String(r).trim(),
+        isPositive: false,
+        statusKnown: false,
+      }));
+  }, [sampleMarkerOptions, sampleReferences]);
+
+  const usedSampleRefsOnCanvas = useMemo(() => {
+    const u = new Set();
+    drawnItems.forEach((it) => {
+      if (it.type === "sample_marker" && it.sampleReference) {
+        u.add(String(it.sampleReference).trim());
+      }
+    });
+    return u;
+  }, [drawnItems]);
+
+  const availableSampleMarkerOptions = useMemo(
+    () =>
+      resolvedSampleMarkerOptions.filter(
+        (o) => o.value && !usedSampleRefsOnCanvas.has(o.value),
+      ),
+    [resolvedSampleMarkerOptions, usedSampleRefsOnCanvas],
+  );
+
+  useEffect(() => {
+    if (
+      selectedSampleRef &&
+      usedSampleRefsOnCanvas.has(String(selectedSampleRef).trim())
+    ) {
+      setSelectedSampleRef("");
+    }
+  }, [usedSampleRefsOnCanvas, selectedSampleRef]);
 
   useImperativeHandle(
     ref,
@@ -278,11 +368,48 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
       return;
     }
 
+    const semanticMarkerEntries = [];
+    const hasPositiveMarker = drawnItems.some(
+      (item) =>
+        item?.type === "sample_marker" &&
+        (item.markerIsPositive === true ||
+          colorsEqual(item.fillColor, LEAD_SAMPLE_MARKER_COLORS.positive)),
+    );
+    const hasNegativeMarker = drawnItems.some(
+      (item) =>
+        item?.type === "sample_marker" &&
+        (item.markerStatusKnown === true
+          ? item.markerIsPositive === false
+          : colorsEqual(item.fillColor, LEAD_SAMPLE_MARKER_COLORS.negative)),
+    );
+
+    if (hasPositiveMarker) {
+      semanticMarkerEntries.push({
+        id: "lead-marker-positive",
+        color: LEAD_SAMPLE_MARKER_COLORS.positive,
+        description: "Lead paint / Exceedance",
+      });
+    }
+    if (hasNegativeMarker) {
+      semanticMarkerEntries.push({
+        id: "lead-marker-negative",
+        color: LEAD_SAMPLE_MARKER_COLORS.negative,
+        description: "Lead-free / Non-exceedance",
+      });
+    }
+
     const seenColors = new Map();
     const registerColor = (rawColor) => {
       if (!rawColor) return;
       const colorValue = String(rawColor).trim();
       if (!colorValue) return;
+      // Sample marker semantics own red/green key entries; avoid duplicate generic red/green items.
+      if (
+        colorsEqual(colorValue, LEAD_SAMPLE_MARKER_COLORS.positive) ||
+        colorsEqual(colorValue, LEAD_SAMPLE_MARKER_COLORS.negative)
+      ) {
+        return;
+      }
       const key = colorValue.toLowerCase();
       if (!seenColors.has(key)) {
         seenColors.set(key, colorValue);
@@ -290,6 +417,11 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
     };
 
     drawnItems.forEach((item) => {
+      if (!item) return;
+      // Arrows should never drive key colours.
+      if (item.type === "arrow") return;
+      // Sample marker colours are represented by semantic entries above.
+      if (item.type === "sample_marker") return;
       registerColor(item.color);
       if (
         (item.type === "circle" || item.type === "rectangle") &&
@@ -299,7 +431,7 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
       }
     });
 
-    if (seenColors.size === 0) {
+    if (seenColors.size === 0 && semanticMarkerEntries.length === 0) {
       return;
     }
 
@@ -312,19 +444,24 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
           { description: entry.description || "", id: entry.id },
         ]),
       );
-      const nextEntries = orderedColors.map((colorValue) => {
+      const colorEntries = orderedColors.map((colorValue) => {
         const lower = colorValue.toLowerCase();
         const previous = prevMap.get(lower);
         return {
           id: previous?.id || lower,
           color: colorValue,
-          description: previous?.description || "",
+          description:
+            previous?.description ||
+            (typeof defaultLegendDescription === "string"
+              ? defaultLegendDescription
+              : ""),
         };
       });
+      const nextEntries = [...semanticMarkerEntries, ...colorEntries];
 
       return legendArraysEqual(nextEntries, prev) ? prev : nextEntries;
     });
-  }, [drawnItems]);
+  }, [defaultLegendDescription, drawnItems]);
 
   // Initialize Google Maps when showGoogleMaps changes
   useEffect(() => {
@@ -520,8 +657,9 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
   };
 
   const startDrawing = (e) => {
-    setIsDrawing(true);
     const canvas = canvasRef.current;
+    if (!canvas) return;
+
     const rect = canvas.getBoundingClientRect();
 
     // Calculate proper coordinates accounting for canvas scaling, zoom, and pan
@@ -536,6 +674,56 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
     // Store starting coordinates for shape tools
     canvas.startX = x;
     canvas.startY = y;
+
+    // Sample markers: handle before setIsDrawing — avoids pen tool capturing the click while ref is selected
+    if (enableSampleMarkers && currentTool === "sample_marker") {
+      const refVal = String(selectedSampleRef || "").trim();
+      if (!refVal) return;
+      if (usedSampleRefsOnCanvas.has(refVal)) return;
+
+      const meta =
+        resolvedSampleMarkerOptions.find((o) => o.value === refVal) || {
+          value: refVal,
+          isPositive: false,
+          statusKnown: false,
+        };
+      const fillColor = !meta.statusKnown
+        ? LEAD_SAMPLE_MARKER_COLORS.unknown
+        : meta.isPositive
+          ? LEAD_SAMPLE_MARKER_COLORS.positive
+          : LEAD_SAMPLE_MARKER_COLORS.negative;
+
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      const labelFont = "bold 12px Arial";
+      ctx.font = labelFont;
+      const tw = ctx.measureText(refVal).width;
+      const padX = 10;
+      const padY = 6;
+      const boxW = Math.max(Math.ceil(tw + padX * 2), 44);
+      const boxH = Math.ceil(14 + padY * 2);
+
+      const newItem = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        type: "sample_marker",
+        x,
+        y,
+        width: boxW,
+        height: boxH,
+        sampleReference: refVal,
+        fillColor,
+        labelColor: "#ffffff",
+        strokeColor: "#ffffff",
+        color: fillColor,
+        markerStatusKnown: meta.statusKnown,
+        markerIsPositive: meta.isPositive,
+      };
+      addDrawnItem(newItem);
+      setSelectedItem(newItem);
+      setSelectedSampleRef("");
+      return;
+    }
+
+    setIsDrawing(true);
 
     if (currentTool === "pen") {
       // Initialize pen drawing path
@@ -994,6 +1182,10 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
         updatedItem.x += deltaX;
         updatedItem.y += deltaY;
         break;
+      case "sample_marker":
+        updatedItem.x += deltaX;
+        updatedItem.y += deltaY;
+        break;
       default:
         break;
     }
@@ -1396,6 +1588,49 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
           );
         }
         break;
+      case "sample_marker": {
+        const label = String(item.sampleReference || "").trim() || "?";
+        const fillOp = item.fillOpacity ?? 1;
+        const strokeOp = item.strokeOpacity ?? 1;
+        if (item.width && item.height) {
+          const w = item.width;
+          const h = item.height;
+          const left = item.x - w / 2;
+          const top = item.y - h / 2;
+          ctx.globalAlpha = fillOp;
+          ctx.fillStyle =
+            item.fillColor || LEAD_SAMPLE_MARKER_COLORS.unknown;
+          roundRectPath(ctx, left, top, w, h, 4);
+          ctx.fill();
+          ctx.globalAlpha = strokeOp;
+          ctx.strokeStyle = item.strokeColor || "#ffffff";
+          ctx.lineWidth = 2;
+          roundRectPath(ctx, left, top, w, h, 4);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = item.labelColor || "#ffffff";
+          ctx.font = "bold 12px Arial";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(label, item.x, item.y);
+        } else {
+          const r = item.radius || 20;
+          ctx.globalAlpha = 1;
+          ctx.beginPath();
+          ctx.arc(item.x, item.y, r, 0, 2 * Math.PI);
+          ctx.fillStyle = item.color || "#1976d2";
+          ctx.fill();
+          ctx.strokeStyle = "#ffffff";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.fillStyle = "#ffffff";
+          ctx.font = "bold 11px Arial";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(label, item.x, item.y);
+        }
+        break;
+      }
       default:
         break;
     }
@@ -1530,6 +1765,8 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
           },
         );
         break;
+      case "sample_marker":
+        break;
       default:
         break;
     }
@@ -1621,6 +1858,21 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
           y >= item.y &&
           y <= item.y + item.height
         );
+      case "sample_marker": {
+        if (item.width && item.height) {
+          const left = item.x - item.width / 2;
+          const top = item.y - item.height / 2;
+          return (
+            x >= left &&
+            x <= left + item.width &&
+            y >= top &&
+            y <= top + item.height
+          );
+        }
+        const r = item.radius || 20;
+        const d = Math.sqrt(Math.pow(x - item.x, 2) + Math.pow(y - item.y, 2));
+        return d <= r + 4;
+      }
       default:
         return false;
     }
@@ -2108,6 +2360,9 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
     { id: "rectangle", icon: <SquareIcon />, label: "Rectangle" },
     { id: "line", icon: <LineIcon />, label: "Line" },
     { id: "arrow", icon: <ArrowIcon />, label: "Arrow" },
+    ...(enableSampleMarkers
+      ? [{ id: "sample_marker", icon: <PlaceIcon />, label: "Sample location" }]
+      : []),
     { id: "text", icon: <TextIcon />, label: "Text" },
   ];
 
@@ -2237,104 +2492,112 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
               </Box>
             )}
 
-            {/* Action Buttons */}
+            {enableSampleMarkers && (
+              <Box>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  Sample location
+                </Typography>
+
+                <FormControl size="small" fullWidth>
+                  <Select
+                    labelId="site-plan-sample-ref-label"
+                    value={selectedSampleRef || ""}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setSelectedSampleRef(v);
+                      if (v) setCurrentTool("sample_marker");
+                    }}
+                    displayEmpty
+                  >
+                    <MenuItem value="">
+                      <em>Select…</em>
+                    </MenuItem>
+                    {availableSampleMarkerOptions.map((opt) => (
+                      <MenuItem key={opt.value} value={opt.value}>
+                        {opt.value}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                {resolvedSampleMarkerOptions.length === 0 && (
+                  <Typography variant="caption" color="warning.main" display="block" sx={{ mt: 1 }}>
+                    No sampled items with references yet — add assessment items with sample references
+                    first.
+                  </Typography>
+                )}
+              </Box>
+            )}
+
+            {/* Canvas controls */}
             <Box>
               <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Actions
+                Canvas Controls
               </Typography>
-              <Box display="flex" gap={1} flexWrap="wrap">
+              <Box display="flex" alignItems="center" gap={0.5} flexWrap="nowrap">
                 <Tooltip title="Undo">
-                  <Button
-                    onClick={undo}
-                    disabled={historyIndex <= 0}
-                    startIcon={<UndoIcon />}
-                    size="small"
-                    variant="outlined"
-                    sx={{ flex: 1, minWidth: 60 }}
-                  >
-                    Undo
-                  </Button>
+                  <Box component="span" sx={{ display: "inline-flex" }}>
+                    <IconButton onClick={undo} size="small" disabled={historyIndex <= 0}>
+                      <UndoIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
                 </Tooltip>
                 <Tooltip title="Redo">
-                  <Button
-                    onClick={redo}
-                    disabled={historyIndex >= history.length - 1}
-                    startIcon={<RedoIcon />}
-                    size="small"
-                    variant="outlined"
-                    sx={{ flex: 1, minWidth: 60 }}
-                  >
-                    Redo
-                  </Button>
+                  <Box component="span" sx={{ display: "inline-flex" }}>
+                    <IconButton onClick={redo} size="small" disabled={historyIndex >= history.length - 1}>
+                      <RedoIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
                 </Tooltip>
                 <Tooltip title="Delete Selected">
-                  <Button
-                    onClick={deleteSelectedItem}
-                    disabled={!selectedItem}
-                    color="error"
-                    startIcon={<DeleteIcon />}
-                    size="small"
-                    variant="outlined"
-                    sx={{ flex: 1, minWidth: 60 }}
-                  >
-                    Delete
-                  </Button>
-                </Tooltip>
-              </Box>
-            </Box>
-
-            {/* Zoom Controls */}
-            <Box>
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Zoom
-              </Typography>
-              <Box display="flex" alignItems="center" gap={1}>
-                <Tooltip title="Zoom Out">
-                  <IconButton
-                    onClick={() => setZoom(Math.max(1, zoom - 0.25))}
-                    size="small"
-                    disabled={zoom <= 1}
-                  >
-                    <ZoomOutIcon />
-                  </IconButton>
-                </Tooltip>
-                <Typography
-                  variant="body2"
-                  sx={{ textAlign: "center", minWidth: 50 }}
-                >
-                  {Math.round(zoom * 100)}%
-                </Typography>
-                <Tooltip title="Zoom In">
-                  <IconButton
-                    onClick={() => setZoom(Math.min(3, zoom + 0.25))}
-                    size="small"
-                    disabled={zoom >= 3}
-                  >
-                    <ZoomInIcon />
-                  </IconButton>
-                </Tooltip>
-                <Box sx={{ ml: 2 }}>
-                  <Tooltip title="Reset View">
+                  <Box component="span" sx={{ display: "inline-flex" }}>
                     <IconButton
-                      onClick={() => {
-                        setZoom(1); // Reset to 100%
-                        setPanOffset({ x: 0, y: 0 });
-                      }}
+                      onClick={deleteSelectedItem}
                       size="small"
+                      disabled={!selectedItem}
+                      color="error"
                     >
-                      <RefreshIcon />
+                      <DeleteIcon fontSize="small" />
                     </IconButton>
-                  </Tooltip>
-                </Box>
+                  </Box>
+                </Tooltip>
+                <Tooltip title="Zoom Out">
+                  <Box component="span" sx={{ display: "inline-flex" }}>
+                    <IconButton
+                      onClick={() => setZoom(Math.max(1, zoom - 0.25))}
+                      size="small"
+                      disabled={zoom <= 1}
+                    >
+                      <ZoomOutIcon />
+                    </IconButton>
+                  </Box>
+                </Tooltip>
+                <Tooltip title="Zoom In">
+                  <Box component="span" sx={{ display: "inline-flex" }}>
+                    <IconButton
+                      onClick={() => setZoom(Math.min(3, zoom + 0.25))}
+                      size="small"
+                      disabled={zoom >= 3}
+                    >
+                      <ZoomInIcon />
+                    </IconButton>
+                  </Box>
+                </Tooltip>
+                <Tooltip title="Reset View">
+                  <IconButton
+                    onClick={() => {
+                      setZoom(1); // Reset to 100%
+                      setPanOffset({ x: 0, y: 0 });
+                    }}
+                    size="small"
+                  >
+                    <RefreshIcon />
+                  </IconButton>
+                </Tooltip>
               </Box>
             </Box>
 
-            {/* Image Section */}
-            <Box>
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Image
-              </Typography>
-              <Box display="flex" flexDirection="column" gap={1}>
+            <Box display="flex" flexDirection="column" gap={1}>
+              <Box display="flex" gap={1}>
                 <Button
                   variant="outlined"
                   component="label"
@@ -2342,7 +2605,7 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
                   size="small"
                   fullWidth
                 >
-                  Add Image Layer
+                  Add Image
                   <input
                     type="file"
                     accept="image/*"
@@ -2350,72 +2613,62 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
                     onChange={handleImageUpload}
                   />
                 </Button>
-                {selectedItem?.type === "image" && (
+                {!hideMapSection && (
                   <Button
-                    variant="outlined"
-                    onClick={deleteSelectedItem}
-                    size="small"
-                    color="error"
-                    fullWidth
-                    startIcon={<DeleteIcon />}
-                  >
-                    Delete Image
-                  </Button>
-                )}
-              </Box>
-            </Box>
-
-            {/* Map Section */}
-            <Box>
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Map
-              </Typography>
-              <Box display="flex" flexDirection="column" gap={1}>
-                <Button
-                  variant={
-                    hasMapBackground || showGoogleMaps
-                      ? "contained"
-                      : "outlined"
-                  }
-                  onClick={() => {
-                    if (hasMapBackground) {
-                      // If map is captured, open dialog to change it
-                      setShowGoogleMapsDialog(true);
-                    } else if (showGoogleMaps) {
-                      // Hide the map
-                      setShowGoogleMaps(false);
-                    } else {
-                      // Open dialog with canvas viewport dimensions
-                      setShowGoogleMapsDialog(true);
+                    variant={
+                      hasMapBackground || showGoogleMaps
+                        ? "contained"
+                        : "outlined"
                     }
-                  }}
-                  size="small"
-                  fullWidth
-                >
-                  {hasMapBackground ? "Change Map Layer" : "Add Map Layer"}
-                </Button>
-                {hasMapBackground && (
-                  <Button
-                    variant="outlined"
                     onClick={() => {
-                      const canvas = canvasRef.current;
-                      if (canvas) {
-                        canvas.backgroundImage = null;
+                      if (hasMapBackground) {
+                        setShowGoogleMapsDialog(true);
+                      } else if (showGoogleMaps) {
+                        setShowGoogleMaps(false);
+                      } else {
+                        setShowGoogleMapsDialog(true);
                       }
-                      setHasMapBackground(false);
-                      setShowGoogleMaps(false);
-                      setMapLoaded(false);
-                      redrawCanvas();
                     }}
                     size="small"
-                    color="error"
                     fullWidth
-                    startIcon={<DeleteIcon />}
                   >
-                    Remove Map
+                    {hasMapBackground ? "Change Map" : "Add Map"}
                   </Button>
                 )}
               </Box>
+              {selectedItem?.type === "image" && (
+                <Button
+                  variant="outlined"
+                  onClick={deleteSelectedItem}
+                  size="small"
+                  color="error"
+                  fullWidth
+                  startIcon={<DeleteIcon />}
+                >
+                  Delete Image
+                </Button>
+              )}
+              {!hideMapSection && hasMapBackground && (
+                <Button
+                  variant="outlined"
+                  onClick={() => {
+                    const canvas = canvasRef.current;
+                    if (canvas) {
+                      canvas.backgroundImage = null;
+                    }
+                    setHasMapBackground(false);
+                    setShowGoogleMaps(false);
+                    setMapLoaded(false);
+                    redrawCanvas();
+                  }}
+                  size="small"
+                  color="error"
+                  fullWidth
+                  startIcon={<DeleteIcon />}
+                >
+                  Remove Map
+                </Button>
+              )}
             </Box>
 
             {/* Action Buttons - Bottom of Toolbar */}
@@ -2663,20 +2916,42 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
                     gap: 1.5,
                   }}
                 >
-                  <input
-                    type="color"
-                    value={entry.color}
-                    onChange={(e) =>
-                      handleLegendColorChange(entry.id, e.target.value)
-                    }
-                    style={{
-                      width: 40,
-                      height: 40,
-                      border: "1px solid rgba(55, 65, 81, 0.4)",
-                      borderRadius: 4,
-                      cursor: "pointer",
-                    }}
-                  />
+                  {entry.id === "lead-marker-positive" ||
+                  entry.id === "lead-marker-negative" ? (
+                    <Box
+                      sx={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: "4px",
+                        border: "1px solid rgba(55, 65, 81, 0.4)",
+                        backgroundColor: entry.color,
+                        color: "#fff",
+                        fontSize: "0.5rem",
+                        fontWeight: 700,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        letterSpacing: 0.2,
+                      }}
+                    >
+                      LD-XX
+                    </Box>
+                  ) : (
+                    <input
+                      type="color"
+                      value={entry.color}
+                      onChange={(e) =>
+                        handleLegendColorChange(entry.id, e.target.value)
+                      }
+                      style={{
+                        width: 40,
+                        height: 40,
+                        border: "1px solid rgba(55, 65, 81, 0.4)",
+                        borderRadius: 4,
+                        cursor: "pointer",
+                      }}
+                    />
+                  )}
                   <Box>
                     <Typography variant="caption" color="text.secondary">
                       Colour
@@ -2743,14 +3018,15 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
         </DialogActions>
       </Dialog>
 
-      {/* Google Maps Dialog - Sized to match canvas viewport */}
-      <GoogleMapsDialog
-        open={showGoogleMapsDialog}
-        onClose={() => setShowGoogleMapsDialog(false)}
-        onSelectMap={handleMapSelection}
-        canvasWidth={canvasSize.width}
-        canvasHeight={canvasSize.height}
-      />
+      {!hideMapSection && (
+        <GoogleMapsDialog
+          open={showGoogleMapsDialog}
+          onClose={() => setShowGoogleMapsDialog(false)}
+          onSelectMap={handleMapSelection}
+          canvasWidth={canvasSize.width}
+          canvasHeight={canvasSize.height}
+        />
+      )}
     </>
   );
 });
