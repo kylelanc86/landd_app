@@ -1,9 +1,20 @@
 const nodemailer = require('nodemailer');
 
+const getEmailConfig = () => ({
+  host: process.env.EMAIL_HOST || process.env.SMTP_HOST,
+  port: process.env.EMAIL_PORT || process.env.SMTP_PORT,
+  secure: process.env.EMAIL_SECURE ?? process.env.SMTP_SECURE,
+  user: process.env.EMAIL_USER || process.env.SMTP_USER,
+  pass: process.env.EMAIL_PASS || process.env.SMTP_PASS,
+  from: process.env.EMAIL_FROM || process.env.SMTP_FROM || process.env.EMAIL_USER || process.env.SMTP_USER,
+  fromName: process.env.EMAIL_FROM_NAME || process.env.SMTP_FROM_NAME || 'L&D APP ADMIN'
+});
+
 // Validate email configuration
 const validateEmailConfig = () => {
-  const required = ['EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_USER', 'EMAIL_PASS'];
-  const missing = required.filter(key => !process.env[key]);
+  const emailConfig = getEmailConfig();
+  const required = ['host', 'port', 'user', 'pass', 'from'];
+  const missing = required.filter((key) => !emailConfig[key]);
   
   if (missing.length > 0) {
     throw new Error(`Missing required email configuration: ${missing.join(', ')}`);
@@ -11,24 +22,26 @@ const validateEmailConfig = () => {
   
   // Debug: Log email configuration (mask password)
   console.log('Email configuration loaded:');
-  console.log('  HOST:', process.env.EMAIL_HOST);
-  console.log('  PORT:', process.env.EMAIL_PORT);
-  console.log('  SECURE:', process.env.EMAIL_SECURE);
-  console.log('  USER:', process.env.EMAIL_USER);
-  console.log('  PASS:', process.env.EMAIL_PASS ? `${process.env.EMAIL_PASS.substring(0, 4)}...${process.env.EMAIL_PASS.substring(process.env.EMAIL_PASS.length - 4)}` : 'NOT SET');
+  console.log('  HOST:', emailConfig.host);
+  console.log('  PORT:', emailConfig.port);
+  console.log('  SECURE:', emailConfig.secure);
+  console.log('  USER:', emailConfig.user);
+  console.log('  FROM:', `${emailConfig.fromName} <${emailConfig.from}>`);
+  console.log('  PASS:', emailConfig.pass ? `${emailConfig.pass.substring(0, 4)}...${emailConfig.pass.substring(emailConfig.pass.length - 4)}` : 'NOT SET');
 };
 
 // Create transporter
 const createTransporter = () => {
   validateEmailConfig();
+  const emailConfig = getEmailConfig();
   
   const config = {
-    host: process.env.EMAIL_HOST,
-    port: parseInt(process.env.EMAIL_PORT),
-    secure: process.env.EMAIL_SECURE === 'true',
+    host: emailConfig.host,
+    port: parseInt(emailConfig.port, 10),
+    secure: emailConfig.secure === 'true',
     auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
+      user: emailConfig.user,
+      pass: emailConfig.pass,
     },
     // Add additional debugging
     debug: true,
@@ -51,6 +64,7 @@ async function sendMail({ to, subject, text, html }) {
   console.log('Attempting to send email to:', to);
   
   const transporter = createTransporter();
+  const emailConfig = getEmailConfig();
   
   try {
     // Test connection first
@@ -59,7 +73,7 @@ async function sendMail({ to, subject, text, html }) {
     console.log('SMTP connection verified successfully');
     
     const info = await transporter.sendMail({
-      from: "L&D APP ADMIN", // Custom name
+      from: `${emailConfig.fromName} <${emailConfig.from}>`,
       to,
       subject,
       text,
