@@ -118,8 +118,11 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
+// Base64 clearance photos send compressed + full-resolution data in one JSON body;
+// 10mb is too small for typical phone camera originals after base64 encoding.
+const jsonBodyLimit = process.env.JSON_BODY_LIMIT || '50mb';
+app.use(express.json({ limit: jsonBodyLimit }));
+app.use(express.urlencoded({ limit: jsonBodyLimit, extended: true }));
 
 // Root route
 app.get('/', (req, res) => {

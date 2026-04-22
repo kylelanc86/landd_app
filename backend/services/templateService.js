@@ -227,7 +227,7 @@ const getTemplateByType = async (templateType) => {
           inspectionDetailsContent: "Following discussions with {CLIENT_NAME}, Lancaster and Dickenson Consulting (L & D) were contracted to undertake a visual clearance inspection {AIR_MONITORING_REFERENCE} following the removal of {ASBESTOS_TYPE} asbestos from {SITE_NAME} (herein referred to as 'the Site').\n\nAsbestos removal works were undertaken by {ASBESTOS_REMOVALIST}. {LAA_NAME} (ACT Licensed Asbestos Assessor - {LAA_LICENSE}) from L&D visited the Site at {INSPECTION_TIME} on {INSPECTION_DATE}.\n\nTable 1 below outlines the ACM that formed part of the inspection. {APPENDIX_REFERENCES}",
           
           inspectionExclusionsTitle: "INSPECTION EXCLUSIONS",
-          inspectionExclusionsContent: "The following areas were excluded from this clearance inspection:\n\n• Areas not specified in the asbestos removal plan\n• Areas that were not accessible during the inspection\n• Areas outside the designated asbestos removal zone\n• Any areas that were not part of the original asbestos removal scope\n\n{JOB_SPECIFIC_EXCLUSIONS}",
+          inspectionExclusionsContent: "The following areas were excluded from this clearance inspection:\n\n• Areas not specified in the asbestos removal plan\n• Areas that were not accessible during the inspection\n• Areas outside the designated asbestos removal zone\n• Any areas that were not part of the original asbestos removal scope\n{JOB_SPECIFIC_EXCLUSIONS}",
           
           clearanceCertificationTitle: "CLEARANCE CERTIFICATION",
           clearanceCertificationContent: "An inspection of the asbestos removal area and the surrounding areas (including access and egress pathways) was undertaken on {INSPECTION_DATE}. The LAA found no visible asbestos residue from asbestos removal work in the asbestos removal area, or in the vicinity of the area, where the asbestos removal works were carried out.\n\n{AIR_MONITORING_RESULTS}\n\nThe LAA considers that the asbestos removal area does not pose a risk to health and safety from exposure to asbestos and may be re-occupied.",
@@ -260,7 +260,7 @@ const getTemplateByType = async (templateType) => {
           inspectionDetailsContent: "Following discussions with {CLIENT_NAME}, Lancaster and Dickenson Consulting (L & D) were contracted to undertake a visual clearance inspection {AIR_MONITORING_REFERENCE} following the removal of {ASBESTOS_TYPE} asbestos from {SITE_NAME} (herein referred to as 'the Site').\n\nAsbestos removal works were undertaken by {ASBESTOS_REMOVALIST}. {LAA_NAME} (ACT Licensed Asbestos Assessor - {LAA_LICENSE}) from L&D visited the Site at {INSPECTION_TIME} on {INSPECTION_DATE}.\n\nTable 1 below outlines the ACM that formed part of the inspection. {APPENDIX_REFERENCES}",
           
           inspectionExclusionsTitle: "INSPECTION EXCLUSIONS",
-          inspectionExclusionsContent: "The following areas were excluded from this clearance inspection:\n\n• Areas not specified in the asbestos removal plan\n• Areas that were not accessible during the inspection\n• Areas outside the designated asbestos removal zone\n• Any areas that were not part of the original asbestos removal scope\n\n{JOB_SPECIFIC_EXCLUSIONS}",
+          inspectionExclusionsContent: "The following areas were excluded from this clearance inspection:\n\n• Areas not specified in the asbestos removal plan\n• Areas that were not accessible during the inspection\n• Areas outside the designated asbestos removal zone\n• Any areas that were not part of the original asbestos removal scope\n{JOB_SPECIFIC_EXCLUSIONS}",
           
           clearanceCertificationTitle: "CLEARANCE CERTIFICATION",
           clearanceCertificationContent: "An inspection of the asbestos removal area and the surrounding areas (including access and egress pathways) was undertaken on {INSPECTION_DATE}. The LAA found no visible asbestos residue from asbestos removal work in the asbestos removal area, or in the vicinity of the area, where the asbestos removal works were carried out.\n\n{AIR_MONITORING_RESULTS}\n\nThe LAA considers that the asbestos removal area does not pose a risk to health and safety from exposure to asbestos and may be re-occupied.",
@@ -293,7 +293,7 @@ const getTemplateByType = async (templateType) => {
           inspectionDetailsContent: "Following discussions with {CLIENT_NAME}, Lancaster and Dickenson Consulting (L & D) were contracted to undertake a visual clearance inspection {AIR_MONITORING_REFERENCE} following the removal of {ASBESTOS_TYPE} asbestos from the vehicle/equipment (herein referred to as 'the Vehicle/Equipment').\n\nAsbestos removal works were undertaken by {ASBESTOS_REMOVALIST}. {LAA_NAME} (ACT Licensed Asbestos Assessor - {LAA_LICENSE}) from L&D conducted the inspection at {INSPECTION_TIME} on {INSPECTION_DATE}.\n\nTable 1 below outlines the ACM that formed part of the inspection. {APPENDIX_REFERENCES}",
           
           inspectionExclusionsTitle: "INSPECTION EXCLUSIONS",
-          inspectionExclusionsContent: "The following areas were excluded from this clearance inspection:\n\n• Areas of the vehicle/equipment not accessible during the inspection\n• Areas where access was restricted for safety reasons\n• Areas outside the designated asbestos removal zone\n• Any areas that were not part of the original asbestos removal scope\n\n{JOB_SPECIFIC_EXCLUSIONS}",
+          inspectionExclusionsContent: "The following areas were excluded from this clearance inspection:\n\n• Areas of the vehicle/equipment not accessible during the inspection\n• Areas where access was restricted for safety reasons\n• Areas outside the designated asbestos removal zone\n• Any areas that were not part of the original asbestos removal scope\n{JOB_SPECIFIC_EXCLUSIONS}",
           
           clearanceCertificationTitle: "CLEARANCE CERTIFICATION",
           clearanceCertificationContent: "An inspection of the vehicle/equipment and the surrounding areas was undertaken on {INSPECTION_DATE}. The LAA found no visible asbestos residue from asbestos removal work in the inspected areas of the vehicle/equipment.\n\n{AIR_MONITORING_RESULTS}\n\nThe LAA considers that the vehicle/equipment does not pose a risk to health and safety from exposure to asbestos and may be returned to service.",
@@ -403,7 +403,7 @@ const getTemplateByType = async (templateType) => {
           inspectionDetailsContent: "Following discussions with {CLIENT_NAME}, Lancaster and Dickenson Consulting (L & D) were contracted to undertake a visual clearance inspection following the removal of {ASBESTOS_TYPE} asbestos from {SITE_NAME} (herein referred to as 'the Site').\n\nAsbestos removal works were undertaken by {ASBESTOS_REMOVALIST}. {LAA_NAME} (ACT Licensed Asbestos Assessor - {LAA_LICENSE}) from L&D visited the Site at {INSPECTION_TIME} on {INSPECTION_DATE}.\n\nTable 1 below outlines the ACM that formed part of the inspection. {APPENDIX_REFERENCES}",
           
           inspectionExclusionsTitle: "INSPECTION EXCLUSIONS",
-          inspectionExclusionsContent: "The following areas were excluded from this clearance inspection:\n\n• Areas not specified in the asbestos removal plan\n• Areas that were not accessible during the inspection\n• Areas outside the designated asbestos removal zone\n• Any areas that were not part of the original asbestos removal scope\n\n{JOB_SPECIFIC_EXCLUSIONS}",
+          inspectionExclusionsContent: "The following areas were excluded from this clearance inspection:\n\n• Areas not specified in the asbestos removal plan\n• Areas that were not accessible during the inspection\n• Areas outside the designated asbestos removal zone\n• Any areas that were not part of the original asbestos removal scope\n{JOB_SPECIFIC_EXCLUSIONS}",
           
           clearanceCertificationTitle: "CLEARANCE CERTIFICATION",
           clearanceCertificationContent: "An inspection of the asbestos removal area and the surrounding areas (including access and egress pathways) was undertaken on {INSPECTION_DATE}. The LAA found no visible asbestos residue from asbestos removal work in the asbestos removal area, or in the vicinity of the area, where the asbestos removal works were carried out.\n\nThe LAA considers that the asbestos removal area does not pose a risk to health and safety from exposure to asbestos and may be re-occupied.",
@@ -966,7 +966,13 @@ const replacePlaceholders = async (content, data) => {
     '{AIR_MONITORING_REFERENCE}': data.airMonitoring ? 'and air monitoring' : '',
     '{AIR_MONITORING_RESULTS}': data.airMonitoring ? `Air monitoring was conducted and results were below the clearance indicator of 0.01 fibres per mL.` : '',
     '{LEAD_SAMPLING?}': data.leadSampling ? ' and sampling to assess for elevated lead dust' : '',
-    '{JOB_SPECIFIC_EXCLUSIONS}': data.jobSpecificExclusions ? data.jobSpecificExclusions : '',
+    '{JOB_SPECIFIC_EXCLUSIONS}': (() => {
+      const raw = data.jobSpecificExclusions;
+      if (raw == null || !String(raw).trim()) return '';
+      const trimmed = String(raw).trim();
+      // Delimiters let us collapse template newlines before/after the job block (PDF + previews).
+      return `%%JOB_EXCLUSIONS_START%%${trimmed}%%JOB_EXCLUSIONS_END%%`;
+    })(),
     '{LEGISLATION}': (() => {
       if (data.selectedLegislation && Array.isArray(data.selectedLegislation) && data.selectedLegislation.length > 0) {
         // Filter legislation based on clearance jurisdiction if available.
@@ -1027,6 +1033,13 @@ const replacePlaceholders = async (content, data) => {
   Object.entries(replacements).forEach(([placeholder, value]) => {
     result = result.replace(new RegExp(placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), value);
   });
+
+  // Clearance: trim vertical whitespace around injected job-specific exclusions (template + modal text).
+  if (result.includes('%%JOB_EXCLUSIONS_START%%')) {
+    result = result.replace(/\n+(?=%%JOB_EXCLUSIONS_START%%)/g, '\n');
+    result = result.replace(/(?<=%%JOB_EXCLUSIONS_END%%)\n+/g, '\n');
+    result = result.replace(/%%JOB_EXCLUSIONS_START%%([\s\S]*?)%%JOB_EXCLUSIONS_END%%/g, (_, inner) => inner.trim());
+  }
 
   // Convert explicit break placeholders first.
   // Requirement: after [BR], add a half-line space.

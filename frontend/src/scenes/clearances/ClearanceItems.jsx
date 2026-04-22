@@ -1441,7 +1441,11 @@ const ClearanceItems = () => {
       showSnackbar("Photo added successfully", "success");
     } catch (error) {
       console.error("Error adding photo:", error);
-      showSnackbar("Failed to add photo", "error");
+      const detail =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message;
+      showSnackbar(detail || "Failed to add photo", "error");
     }
   };
 
@@ -1915,12 +1919,14 @@ const ClearanceItems = () => {
       try {
         const originalSizeKB = Math.round(file.size / 1024);
         const shouldCompress = needsCompression(file, 300);
-        const fullResolutionData = await new Promise((resolve, reject) => {
-          const fullResReader = new FileReader();
-          fullResReader.onload = (e) => resolve(e.target.result);
-          fullResReader.onerror = reject;
-          fullResReader.readAsDataURL(file);
-        });
+
+        const readFileAsDataUrl = (f) =>
+          new Promise((resolve, reject) => {
+            const r = new FileReader();
+            r.onload = (e) => resolve(e.target.result);
+            r.onerror = () => reject(new Error("Failed to read file"));
+            r.readAsDataURL(f);
+          });
 
         console.log(
           "[ClearanceItems] handlePhotoUploadForGallery - Compression check",
@@ -1977,7 +1983,7 @@ const ClearanceItems = () => {
             },
           );
           const addStartTime = performance.now();
-          await handleAddPhotoToItem(compressedImage, fullResolutionData);
+          await handleAddPhotoToItem(compressedImage, null);
           const addEndTime = performance.now();
           console.log(
             "[ClearanceItems] handlePhotoUploadForGallery - Photo added",
@@ -1999,32 +2005,29 @@ const ClearanceItems = () => {
             },
           );
           const readStartTime = performance.now();
-          const reader = new FileReader();
-          reader.onload = async (e) => {
-            const readEndTime = performance.now();
-            console.log(
-              "[ClearanceItems] handlePhotoUploadForGallery - File read completed",
-              {
-                readDuration: `${(readEndTime - readStartTime).toFixed(2)}ms`,
-                timestamp: new Date().toISOString(),
-              },
-            );
-            const addStartTime = performance.now();
-            await handleAddPhotoToItem(e.target.result, fullResolutionData);
-            const addEndTime = performance.now();
-            console.log(
-              "[ClearanceItems] handlePhotoUploadForGallery - Photo added",
-              {
-                addDuration: `${(addEndTime - addStartTime).toFixed(2)}ms`,
-                timestamp: new Date().toISOString(),
-              },
-            );
-            setCompressionStatus({
-              type: "info",
-              message: `No compression needed (${originalSizeKB}KB)`,
-            });
-          };
-          reader.readAsDataURL(file);
+          const dataUrl = await readFileAsDataUrl(file);
+          const readEndTime = performance.now();
+          console.log(
+            "[ClearanceItems] handlePhotoUploadForGallery - File read completed",
+            {
+              readDuration: `${(readEndTime - readStartTime).toFixed(2)}ms`,
+              timestamp: new Date().toISOString(),
+            },
+          );
+          const addStartTime = performance.now();
+          await handleAddPhotoToItem(dataUrl, null);
+          const addEndTime = performance.now();
+          console.log(
+            "[ClearanceItems] handlePhotoUploadForGallery - Photo added",
+            {
+              addDuration: `${(addEndTime - addStartTime).toFixed(2)}ms`,
+              timestamp: new Date().toISOString(),
+            },
+          );
+          setCompressionStatus({
+            type: "info",
+            message: `No compression needed (${originalSizeKB}KB)`,
+          });
         }
 
         const uploadEndTime = performance.now();

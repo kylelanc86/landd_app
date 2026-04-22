@@ -797,9 +797,13 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
     const clearanceCertificationContent = templateContent ? await replacePlaceholders(templateContent.standardSections.clearanceCertificationContent, templateData) : 'Clearance certification content not found';
     const signOffContent = templateContent ? await replacePlaceholders(templateContent.standardSections.signOffContent, templateData) : 'Sign-off content not found';
 
-    // When 5+ items: sign-off moves to a dedicated page (page 2); Inspection Details keeps only certification. Background becomes page 3.
+    // Sign-off moves to a dedicated page when there are 5+ items OR job-specific exclusions.
+    // Inspection Details then keeps only certification, and background shifts by one page.
     const itemCount = (clearanceData.items || []).length;
-    const hasSignOffPage = itemCount >= 5;
+    const hasJobSpecificExclusions = Boolean(
+      clearanceData.jobSpecificExclusions && String(clearanceData.jobSpecificExclusions).trim(),
+    );
+    const hasSignOffPage = itemCount >= 5 || hasJobSpecificExclusions;
     const inspectionDetailsSignOff = hasSignOffPage ? '' : signOffContent;
 
     const asbestosRemovalItemsHtml = `
@@ -868,7 +872,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
     }
 
     // Populate background information template with data
-    // Page number: 3 when sign-off has its own page (5+ items), otherwise 2
+    // Page number: 3 when sign-off has its own page, otherwise 2
     const backgroundPageNumber = hasSignOffPage ? '3' : '2';
     const populatedBackgroundInformation = backgroundInformationTemplateWithUrl
         .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
@@ -884,7 +888,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       .replace(/\[BACKGROUND_PAGE_NUMBER\]/g, backgroundPageNumber)
       .replace(/\[FOOTER_TEXT\]/g, footerText);
 
-    // Populate sign-off page (used only when 5+ items): header, footer, page number 2
+    // Populate sign-off page (used only when sign-off is promoted to its own page): header, footer, page number 2
     const populatedSignOffPage = hasSignOffPage
       ? signOffPageTemplateWithUrl
           .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
@@ -1316,7 +1320,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
           ${populatedInspectionDetails}
         <div class="page-break"></div>
         ${hasSignOffPage ? `
-        <!-- Sign-off Page (5+ items: dedicated page with header, footer, page 2) -->
+        <!-- Sign-off Page (dedicated page with header, footer, page 2) -->
           ${populatedSignOffPage}
         <div class="page-break"></div>
         ` : ''}
@@ -6432,7 +6436,22 @@ const generateLeadAssessmentFlowHTMLV3 = async (assessmentData) => {
       .section-body { font-size: 0.8rem; line-height: 1.5; text-align: justify; margin-bottom: 18px; }
       .section-body.discussion-conclusions-content,
       .section-body.discussion-conclusions-content p { word-break: normal !important; overflow-wrap: break-word !important; }
-      .section-body.discussion-conclusions-content { text-align: justify !important; width: 100%; }
+      .section-body.discussion-conclusions-content {
+        text-align: justify !important;
+        width: 100%;
+        margin-top: 0;
+        margin-bottom: 6px;
+      }
+      .section-body.discussion-conclusions-content.discussion-follow-on { margin-top: 8px; }
+      .section-body.discussion-conclusions-content.job-specific-exclusions { margin-top: 2px; }
+      .section-body.discussion-wrap { margin-bottom: 8px; }
+      .section-body.discussion-signoff { margin-top: 0; }
+      .section-body.discussion-signoff img {
+        display: block;
+        margin: 2px 0 4px 0;
+        padding: 0;
+      }
+      .section-body.discussion-signoff br { line-height: 1.35; margin-bottom: 0.08em; }
       .section-body br { line-height: 1.5; display: block; margin-bottom: 0.25em; }
       .section-body .paragraph { margin-bottom: 8px; }
       .section-body .bullet-list { margin: 0 0 8px 0; padding: 0 0 0 24px; list-style: none; font-size: 0.8rem; color: #222; }
@@ -6591,11 +6610,11 @@ const generateLeadAssessmentFlowHTMLV3 = async (assessmentData) => {
 
     <div class="page-break"></div>
     <div class="section-header">${escapeHtml(ss.discussionTitle || 'DISCUSSION AND CONCLUSIONS')}</div>
-    <div class="section-body">
+    <div class="section-body discussion-wrap">
       ${discussionTypeSummariesHtml || ''}
       ${discussionTemplateHtml ? `<div>${discussionTemplateHtml}</div>` : ''}
-      ${discussionJobHtml ? `<div class="section-body discussion-conclusions-content" style="margin-top: 12px; text-align: justify !important; width: 100%;">${discussionJobHtml}</div>` : ''}
-      ${inspectionExclusionsHtml ? `<div class="section-body discussion-conclusions-content" style="margin-top: 12px; text-align: justify !important; width: 100%;">${inspectionExclusionsHtml}</div>` : ''}
+      ${discussionJobHtml ? `<div class="section-body discussion-conclusions-content discussion-follow-on">${discussionJobHtml}</div>` : ''}
+      ${inspectionExclusionsHtml ? `<div class="section-body discussion-conclusions-content job-specific-exclusions">${inspectionExclusionsHtml}</div>` : ''}
     </div>
 
     <div class="section-body discussion-signoff">
@@ -7114,7 +7133,22 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
           .section-body { font-size: 0.8rem; line-height: 1.5; text-align: justify; margin-bottom: 18px; }
           .section-body.discussion-conclusions-content,
           .section-body.discussion-conclusions-content p { word-break: normal !important; overflow-wrap: break-word !important; }
-          .section-body.discussion-conclusions-content { text-align: justify !important; width: 100%; }
+          .section-body.discussion-conclusions-content {
+            text-align: justify !important;
+            width: 100%;
+            margin-top: 0;
+            margin-bottom: 6px;
+          }
+          .section-body.discussion-conclusions-content.discussion-follow-on { margin-top: 8px; }
+          .section-body.discussion-conclusions-content.job-specific-exclusions { margin-top: 2px; }
+          .section-body.discussion-wrap { margin-bottom: 8px; }
+          .section-body.discussion-signoff { margin-top: 0; }
+          .section-body.discussion-signoff img {
+            display: block;
+            margin: 2px 0 4px 0;
+            padding: 0;
+          }
+          .section-body.discussion-signoff br { line-height: 1.35; margin-bottom: 0.08em; }
           .section-body br { line-height: 1.5; display: block; margin-bottom: 0.25em; }
           .section-body .paragraph { margin-bottom: 8px; }
           .section-body .bullet-list { margin: 0 0 8px 0; padding: 0 0 0 24px; list-style: none; font-size: 0.8rem; color: #222; }
@@ -7229,12 +7263,12 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
 
         ${(identifiedAsbestosItems.length > 0 || flowTableBlocks.length % 2 === 1) ? '<div class="page-break"></div>' : ''}
         <div class="section-header">${escapeHtml(templateContent?.standardSections?.discussionTitle || 'DISCUSSION AND CONCLUSIONS')}</div>
-        <div class="section-body">
+        <div class="section-body discussion-wrap">
           ${asbestosCountLineHtml}
           ${identifiedAsbestosItems.length > 0 ? `<p style="margin: 0; padding-bottom: 8px;">The following is a summary of asbestos materials identified during this assessment:</p>
           ${asbestosItemsSectionFlow}` : ''}
-          ${discussionConclusionsHtml ? `<div class="section-body discussion-conclusions-content" style="margin-top: 12px; text-align: justify !important; width: 100%;">${discussionConclusionsHtml}</div>` : ''}
-          ${inspectionExclusionsHtml ? `<div class="section-body discussion-conclusions-content" style="margin-top: 12px; text-align: justify !important; width: 100%;">${inspectionExclusionsHtml}</div>` : ''}
+          ${discussionConclusionsHtml ? `<div class="section-body discussion-conclusions-content discussion-follow-on">${discussionConclusionsHtml}</div>` : ''}
+          ${inspectionExclusionsHtml ? `<div class="section-body discussion-conclusions-content job-specific-exclusions">${inspectionExclusionsHtml}</div>` : ''}
         </div>
 
         ${recommendedControlMeasuresHtml}
