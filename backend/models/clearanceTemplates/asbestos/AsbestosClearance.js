@@ -277,4 +277,23 @@ asbestosClearanceSchema.index({ clearanceDate: 1 });
 asbestosClearanceSchema.index({ asbestosRemovalJobId: 1 });
 asbestosClearanceSchema.index({ projectId: 1, clearanceType: 1, clearanceDate: 1 });
 
+// fullResolutionData is not used in PDFs; storing it per photo can push the whole clearance over MongoDB's 16MB cap.
+asbestosClearanceSchema.pre("save", function (next) {
+  try {
+    if (!this.items?.length) return next();
+    for (const item of this.items) {
+      for (const photo of item.photographs || []) {
+        if (photo.fullResolutionData != null && photo.fullResolutionData !== "") {
+          if (photo._doc) delete photo._doc.fullResolutionData;
+          else delete photo.fullResolutionData;
+        }
+      }
+    }
+    this.markModified("items");
+  } catch (err) {
+    console.warn("AsbestosClearance pre-save strip fullResolutionData:", err.message);
+  }
+  next();
+});
+
 module.exports = mongoose.model("AsbestosClearance", asbestosClearanceSchema); 

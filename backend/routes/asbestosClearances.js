@@ -977,7 +977,7 @@ router.delete("/:id/items/:itemId", auth, checkPermission("asbestos.edit"), asyn
 // Add photo to clearance item
 router.post("/:id/items/:itemId/photos", auth, checkPermission("asbestos.edit"), async (req, res) => {
   try {
-    const { photoData, fullResolutionData, includeInReport = true } = req.body;
+    const { photoData, includeInReport = true } = req.body;
 
     if (!photoData) {
       return res.status(400).json({ message: "Photo data is required" });
@@ -1005,10 +1005,9 @@ router.post("/:id/items/:itemId/photos", auth, checkPermission("asbestos.edit"),
     // If this is the first photo and no photo numbers exist, start from 1
     const actualPhotoNumber = item.photographs.length === 0 ? 1 : nextPhotoNumber;
 
-    // Add new photo
+    // Add new photo (store compressed `data` only — never fullResolutionData on asbestos clearances)
     item.photographs.push({
       data: photoData,
-      ...(fullResolutionData ? { fullResolutionData } : {}),
       includeInReport: includeInReport,
       uploadedAt: new Date(),
       photoNumber: actualPhotoNumber,
@@ -1021,6 +1020,12 @@ router.post("/:id/items/:itemId/photos", auth, checkPermission("asbestos.edit"),
     res.status(201).json(item);
   } catch (error) {
     console.error("Error adding photo to clearance item:", error);
+    if (error.code === 10334) {
+      return res.status(413).json({
+        message:
+          "This clearance is too large to save (database 16MB limit). Remove or replace some photos, the site plan, or attached air monitoring files, then try again.",
+      });
+    }
     res.status(500).json({ message: "Server error" });
   }
 });

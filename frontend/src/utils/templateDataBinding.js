@@ -43,7 +43,8 @@ export const populateTemplateContent = async (clearance, template = null) => {
       
       // Special handling for inspection exclusions to append job-specific exclusions
       if (key === 'inspectionExclusionsContent' && clearance.jobSpecificExclusions) {
-        populatedValue += '\n\n' + clearance.jobSpecificExclusions;
+        const extra = String(clearance.jobSpecificExclusions).trim();
+        if (extra) populatedValue += `\n${extra}`;
       }
       
       populatedSections[key] = populatedValue;
