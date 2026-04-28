@@ -795,7 +795,8 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
     const inspectionDetailsContent = templateContent ? await replacePlaceholders(templateContent.standardSections.inspectionDetailsContent, templateData) : 'Inspection details content not found';
     const inspectionExclusionsContent = templateContent ? await replacePlaceholders(templateContent.standardSections.inspectionExclusionsContent, templateData) : 'Inspection exclusions content not found';
     const clearanceCertificationContent = templateContent ? await replacePlaceholders(templateContent.standardSections.clearanceCertificationContent, templateData) : 'Clearance certification content not found';
-    const signOffContent = templateContent ? await replacePlaceholders(templateContent.standardSections.signOffContent, templateData) : 'Sign-off content not found';
+    const signOffContentRaw = templateContent ? await replacePlaceholders(templateContent.standardSections.signOffContent, templateData) : 'Sign-off content not found';
+    const signOffContent = `<div class="signature-block">${signOffContentRaw}</div>`;
 
     // Sign-off moves to a dedicated page when there are 5+ items OR job-specific exclusions.
     // Inspection Details then keeps only certification, and background shifts by one page.
@@ -2262,7 +2263,7 @@ const generateLeadClearanceHTML = async (clearanceData, pdfId = 'unknown') => {
     ? await replacePlaceholders(String(clearanceData.jobSpecificExclusions).trim(), templateData)
     : 'None specified.';
 
-  const leadSignOffTemplate = 'Please do not hesitate to contact the undersigned should you have any queries regarding this report.<br /><br />For and on behalf of Lancaster and Dickenson Consulting.<br />[SIGNATURE_IMAGE]<br /><span class="sign-off-name">[LAA_NAME]</span><br /><span class="sign-off-company">Lancaster &amp; Dickenson Consulting</span>';
+  const leadSignOffTemplate = 'Please do not hesitate to contact the undersigned should you have any queries regarding this report.<br /><br />For and on behalf of Lancaster and Dickenson Consulting.<br /><div class="sign-off-signature">[SIGNATURE_IMAGE]</div><span class="sign-off-name">[LAA_NAME]</span><span class="sign-off-company">Lancaster &amp; Dickenson Consulting</span>';
   const leadSignOffHtml = await replacePlaceholders(leadSignOffTemplate, templateData);
 
   const appendicesForText = getLeadClearanceAppendices(clearanceData);
@@ -2400,9 +2401,10 @@ const generateLeadClearanceHTML = async (clearanceData, pdfId = 'unknown') => {
     .cover-company-details { font-size: 0.75rem; color: #222; line-height: 1.5; position: absolute; bottom: 150px; left: 24px; z-index: 6; width: calc(50% - 48px); }
     .cover-logo { position: absolute; right: 32px; bottom: 32px; width: 300px; background: rgba(255,255,255,0.95); padding: 5px; border-radius: 3px; z-index: 10; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
     .sign-off-block { font-size: 0.8rem; color: #222; line-height: 1.5; }
-    .sign-off-block img { margin-top: 0; padding-top: 0; display: block; }
-    .sign-off-block .sign-off-name { margin-top: 8px; }
-    .sign-off-block .sign-off-company { margin-top: 4px; font-weight: 500; }
+    .sign-off-block .sign-off-signature { margin: 1px 0; line-height: 1; }
+    .sign-off-block img { margin: 0; padding: 0; display: block; }
+    .sign-off-block .sign-off-name { display: block; margin-top: 2px; line-height: 1.3; }
+    .sign-off-block .sign-off-company { display: block; margin-top: 1px; line-height: 1.3; font-weight: 500; }
     .content ul, .content .paragraph ul { margin: 0 0 8px 0; padding-left: 24px; list-style-position: outside; }
     .content ul li, .content .paragraph ul li { margin-bottom: 6px; }
     .content ul li:last-child, .content .paragraph ul li:last-child { margin-bottom: 0; }
@@ -6445,13 +6447,17 @@ const generateLeadAssessmentFlowHTMLV3 = async (assessmentData) => {
       .section-body.discussion-conclusions-content.discussion-follow-on { margin-top: 8px; }
       .section-body.discussion-conclusions-content.job-specific-exclusions { margin-top: 2px; }
       .section-body.discussion-wrap { margin-bottom: 8px; }
-      .section-body.discussion-signoff { margin-top: 0; }
+      .section-body.discussion-signoff { margin-top: 0; margin-bottom: 0; line-height: 1.2; }
       .section-body.discussion-signoff img {
         display: block;
-        margin: 2px 0 4px 0;
+        margin: 0 0 1px 0;
         padding: 0;
       }
-      .section-body.discussion-signoff br { line-height: 1.35; margin-bottom: 0.08em; }
+      .section-body.discussion-signoff br { display: block; line-height: 1.1; margin: 0; }
+      .section-body.discussion-signoff p,
+      .section-body.discussion-signoff .paragraph { margin: 0 0 1px 0; line-height: 1.2; }
+      .section-body.discussion-signoff p:last-child,
+      .section-body.discussion-signoff .paragraph:last-child { margin-bottom: 0; }
       .section-body br { line-height: 1.5; display: block; margin-bottom: 0.25em; }
       .section-body .paragraph { margin-bottom: 8px; }
       .section-body .bullet-list { margin: 0 0 8px 0; padding: 0 0 0 24px; list-style: none; font-size: 0.8rem; color: #222; }
@@ -7142,13 +7148,17 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
           .section-body.discussion-conclusions-content.discussion-follow-on { margin-top: 8px; }
           .section-body.discussion-conclusions-content.job-specific-exclusions { margin-top: 2px; }
           .section-body.discussion-wrap { margin-bottom: 8px; }
-          .section-body.discussion-signoff { margin-top: 0; }
+          .section-body.discussion-signoff { margin-top: 0; margin-bottom: 0; line-height: 1.2; }
           .section-body.discussion-signoff img {
             display: block;
-            margin: 2px 0 4px 0;
+            margin: 0 0 1px 0;
             padding: 0;
           }
-          .section-body.discussion-signoff br { line-height: 1.35; margin-bottom: 0.08em; }
+          .section-body.discussion-signoff br { display: block; line-height: 1.1; margin: 0; }
+          .section-body.discussion-signoff p,
+          .section-body.discussion-signoff .paragraph { margin: 0 0 1px 0; line-height: 1.2; }
+          .section-body.discussion-signoff p:last-child,
+          .section-body.discussion-signoff .paragraph:last-child { margin-bottom: 0; }
           .section-body br { line-height: 1.5; display: block; margin-bottom: 0.25em; }
           .section-body .paragraph { margin-bottom: 8px; }
           .section-body .bullet-list { margin: 0 0 8px 0; padding: 0 0 0 24px; list-style: none; font-size: 0.8rem; color: #222; }

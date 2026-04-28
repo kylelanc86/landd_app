@@ -2189,7 +2189,7 @@ const AssessmentItems = () => {
     }
   };
 
-  const handleAddPhotoToItem = async (photoData, fullResolutionData = null) => {
+  const handleAddPhotoToItem = async (photoData) => {
     if (isReportLocked || !selectedItemForPhotos) return;
     try {
       const response = await asbestosAssessmentService.addPhotoToItem(
@@ -2197,7 +2197,6 @@ const AssessmentItems = () => {
         selectedItemForPhotos._id,
         photoData,
         true,
-        fullResolutionData,
       );
       await asbestosAssessmentService.update(id, {
         projectId: assessment.projectId?._id || assessment.projectId,
@@ -2666,12 +2665,6 @@ const AssessmentItems = () => {
       try {
         const originalSizeKB = Math.round(file.size / 1024);
         const shouldCompress = needsCompression(file, 300);
-        const fullResolutionData = await new Promise((resolve, reject) => {
-          const fullResReader = new FileReader();
-          fullResReader.onload = (e) => resolve(e.target.result);
-          fullResReader.onerror = reject;
-          fullResReader.readAsDataURL(file);
-        });
 
         if (shouldCompress) {
           setCompressionStatus({
@@ -2693,7 +2686,7 @@ const AssessmentItems = () => {
             ((originalSizeKB - compressedSizeKB) / originalSizeKB) * 100,
           );
 
-          await handleAddPhotoToItem(compressedImage, fullResolutionData);
+          await handleAddPhotoToItem(compressedImage);
 
           setCompressionStatus({
             type: "success",
@@ -2702,7 +2695,7 @@ const AssessmentItems = () => {
         } else {
           const reader = new FileReader();
           reader.onload = async (e) => {
-            await handleAddPhotoToItem(e.target.result, fullResolutionData);
+            await handleAddPhotoToItem(e.target.result);
             setCompressionStatus({
               type: "info",
               message: `No compression needed (${originalSizeKB}KB)`,

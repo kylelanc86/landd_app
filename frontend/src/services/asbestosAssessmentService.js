@@ -131,9 +131,13 @@ const asbestosAssessmentService = {
     includeInReport = true,
     fullResolutionData = null,
   ) => {
+    const payload = { photoData, includeInReport };
+    if (fullResolutionData) {
+      payload.fullResolutionData = fullResolutionData;
+    }
     const response = await api.post(
       `/assessments/${assessmentId}/items/${itemId}/photos`,
-      { photoData, includeInReport, fullResolutionData }
+      payload
     );
     return response.data;
   },

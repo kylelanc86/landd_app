@@ -94,9 +94,13 @@ const leadClearanceService = {
     includeInReport = true,
     fullResolutionData = null,
   ) => {
+    const payload = { photoData, includeInReport };
+    if (fullResolutionData) {
+      payload.fullResolutionData = fullResolutionData;
+    }
     const response = await axios.post(
       `${API_BASE_URL}/${clearanceId}/items/${itemId}/photos`,
-      { photoData, includeInReport, fullResolutionData }
+      payload
     );
     return response.data;
   },

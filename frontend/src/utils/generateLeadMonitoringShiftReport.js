@@ -301,6 +301,33 @@ export async function generateLeadMonitoringShiftReport({
           },
 
           {
+            text: [
+              "Static air monitoring was undertaken during works to ensure that controls were appropriate to mitigate lead exposure risks. Air monitoring was conducted in line with ",
+              {
+                text: "ISO 15202-1:2020: Workplace air - Determination of metals and metalloids in airborne particulate matter by inductively coupled plasma atomic emission spectrometry",
+                italics: true,
+              },
+
+             {
+                text: " and ",
+                italics: false
+              },
+              {
+                text: "AS/NZS 4361.2:2017: Guide to Hazardous Paint Management: Part 2.",
+                italics: true,
+              },
+            ],
+            alignment: "justify",
+            margin: [0, 4, 0, 0],
+          },
+
+          {
+            text: "Air samples were collected using IOM samplers and air monitors were placed at the approximate height of an adult's breathing zone (about 1.5m from ground surface) with monitoring conducted for a representative period of the work shift.",
+            alignment: "justify",
+            margin: [0, 4, 0, 0],
+          },
+
+          {
             text: "Table 1 below outlines the samples that formed part of the inspection. The certificate of analysis for the samples is presented in Appendix A of this report.",
             alignment: "justify",
             margin: [0, 4, 0, 0],
@@ -396,8 +423,8 @@ export async function generateLeadMonitoringShiftReport({
         alignment: "justify",
         margin: [0, 0, 0, 5],
       },
-      // Sign-off (no section header) — new page if more than 6 samples so table doesn't crowd it
-      ...(sortedSamples.length > 5 ? [{ text: "", pageBreak: "before" }] : []),
+      // Sign-off (no section header) — force onto a fresh page when sample table is likely to crowd footer/signature.
+      ...(sortedSamples.length > 2 ? [{ text: "", pageBreak: "before" }] : []),
       {
         stack: [
           {
@@ -466,8 +493,8 @@ export async function generateLeadMonitoringShiftReport({
   const mainContent = appendixStartIndex >= 0 ? content.slice(0, appendixStartIndex) : content;
   const appendixContent = appendixStartIndex >= 0 ? content.slice(appendixStartIndex) : [];
 
-  // Main report is 2 pages when we inject a page break before sign-off (e.g. >5 samples), else 1
-  const mainPageCount = sortedSamples.length > 5 ? 2 : 1;
+  // Main report is 2 pages when we inject a page break before sign-off (e.g. >2 samples), else 1
+  const mainPageCount = sortedSamples.length > 2 ? 2 : 1;
 
   const docDefinition = {
     pageSize: "A4",
@@ -636,15 +663,27 @@ export async function generateLeadMonitoringShiftReport({
       { responseType: "arraybuffer", validateStatus: (s) => s === 200 },
     );
   } catch (err) {
+    let backendMessage = null;
+    const responseData = err?.response?.data;
+    if (responseData instanceof ArrayBuffer) {
+      try {
+        const decoded = new TextDecoder("utf-8").decode(new Uint8Array(responseData));
+        const parsed = JSON.parse(decoded);
+        backendMessage = parsed?.message || null;
+      } catch {
+        backendMessage = null;
+      }
+    } else if (typeof responseData === "string") {
+      backendMessage = responseData;
+    } else if (responseData && typeof responseData === "object") {
+      backendMessage = responseData.message || null;
+    }
+
     const msg =
       err.response?.status === 404
-        ? (typeof err.response?.data === "string"
-            ? err.response.data
-            : err.response?.data?.message) ||
-          "No analysis report has been attached for this shift. Please attach the PDF in the Attach Analysis Report modal before viewing."
-        : (typeof err.response?.data === "string"
-            ? err.response.data
-            : err.response?.data?.message) ||
+        ? backendMessage ||
+          "Analysis report file could not be found on the server. Please re-attach the PDF in the Attach Analysis Report modal before viewing."
+        : backendMessage ||
           err.message ||
           "Failed to fetch analysis report.";
     throw new Error(msg);
@@ -700,7 +739,10 @@ export async function generateLeadMonitoringShiftReport({
     link.click();
     document.body.removeChild(link);
   }
-  window.URL.revokeObjectURL(url);
+  // Delay revocation so Chrome's built-in PDF viewer can still download from the blob URL.
+  setTimeout(() => {
+    window.URL.revokeObjectURL(url);
+  }, 60 * 1000);
 
   return filename;
 }

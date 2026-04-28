@@ -110,6 +110,13 @@ const shiftSchema = new mongoose.Schema({
     type: String,
     required: false
   },
+  // Lead analysis report PDF stored in MongoDB as base64 data (same pattern as asbestos fibre analysis reports)
+  // Keep excluded from normal queries to avoid large payloads in shift list/detail APIs.
+  analysisReportData: {
+    type: String,
+    required: false,
+    select: false
+  },
   analysisReportOriginalName: {
     type: String,
     required: false
