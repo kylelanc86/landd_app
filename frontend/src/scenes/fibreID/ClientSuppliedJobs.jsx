@@ -1034,7 +1034,11 @@ const ClientSuppliedJobs = () => {
       }
     } catch (error) {
       console.error("Error authorising report:", error);
-      showSnackbar("Failed to authorise report. Please try again.", "error");
+      showSnackbar(
+        error.response?.data?.message ||
+          "Failed to authorise report. Please try again.",
+        "error",
+      );
     } finally {
       setAuthorisingReports((prev) => ({ ...prev, [job._id]: false }));
     }
@@ -1420,6 +1424,8 @@ const ClientSuppliedJobs = () => {
                               reportViewed:
                                 reportViewedJobIds.has(job._id) ||
                                 !!job.reportViewedAt,
+                              isAnalysisComplete:
+                                job.status === "Analysis Complete",
                               alreadySentForAuthorisation: !!job.authorisationRequestedBy,
                               hasEditPermission: hasPermission(
                                 currentUser,
@@ -1434,10 +1440,12 @@ const ClientSuppliedJobs = () => {
                             const visibility = {
                               showAuthorise:
                                 baseVisible &&
+                                conditions.isAnalysisComplete &&
                                 conditions.isLabSignatory &&
                                 conditions.hasEditPermission,
                               showSend:
                                 baseVisible &&
+                                conditions.isAnalysisComplete &&
                                 !conditions.isLabSignatory &&
                                 conditions.hasEditPermission,
                             };

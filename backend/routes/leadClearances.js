@@ -550,7 +550,7 @@ router.delete("/:id/items/:itemId", auth, checkPermission(permEdit), async (req,
 // Add photo to lead clearance item
 router.post("/:id/items/:itemId/photos", auth, checkPermission(permEdit), async (req, res) => {
   try {
-    const { photoData, fullResolutionData, includeInReport = true } = req.body;
+    const { photoData, includeInReport = true } = req.body;
 
     if (!photoData) {
       return res.status(400).json({ message: "Photo data is required" });
@@ -575,7 +575,6 @@ router.post("/:id/items/:itemId/photos", auth, checkPermission(permEdit), async 
 
     item.photographs.push({
       data: photoData,
-      ...(fullResolutionData ? { fullResolutionData } : {}),
       includeInReport,
       uploadedAt: new Date(),
       photoNumber: nextPhotoNumber,

@@ -397,7 +397,7 @@ const LeadClearanceItems = () => {
     }
   };
 
-  const handleAddPhotoToItem = async (photoData, fullResolutionData = null) => {
+  const handleAddPhotoToItem = async (photoData) => {
     if (!selectedItemForPhotos) return;
     try {
       await leadClearanceService.addPhotoToItem(
@@ -405,7 +405,6 @@ const LeadClearanceItems = () => {
         selectedItemForPhotos._id,
         photoData,
         true,
-        fullResolutionData,
       );
       const updatedItems = await leadClearanceService.getItems(clearanceId);
       const updatedItem = updatedItems.find(
@@ -606,12 +605,6 @@ const LeadClearanceItems = () => {
     setPhotoFile(file);
     setCompressionStatus({ type: "processing", message: "Processing image..." });
     try {
-      const fullResolutionData = await new Promise((resolve, reject) => {
-        const fullResReader = new FileReader();
-        fullResReader.onload = (e) => resolve(e.target.result);
-        fullResReader.onerror = reject;
-        fullResReader.readAsDataURL(file);
-      });
       if (needsCompression(file, 300)) {
         const compressed = await compressImage(file, {
           maxWidth: 1000,
@@ -619,12 +612,12 @@ const LeadClearanceItems = () => {
           quality: 0.75,
           maxSizeKB: 300,
         });
-        await handleAddPhotoToItem(compressed, fullResolutionData);
+        await handleAddPhotoToItem(compressed);
         setCompressionStatus({ type: "success", message: "Image added." });
       } else {
         const reader = new FileReader();
         reader.onload = async (e) => {
-          await handleAddPhotoToItem(e.target.result, fullResolutionData);
+          await handleAddPhotoToItem(e.target.result);
           setCompressionStatus({ type: "info", message: "Image added." });
         };
         reader.readAsDataURL(file);

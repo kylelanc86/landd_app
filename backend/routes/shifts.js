@@ -684,16 +684,21 @@ router.post('/:id/upload-analysis-report', auth, checkPermission(['jobs.edit']),
     if (!file.mimetype || !file.mimetype.toLowerCase().includes('pdf')) {
       return res.status(400).json({ error: 'File must be a PDF' });
     }
-    const uploadsRoot = process.env.UPLOADS_DIR || path.join(__dirname, '..', 'uploads');
-    const uploadDir = path.join(uploadsRoot, 'lead-analysis-reports');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
+
+    // Same persistence strategy as asbestos fibre analysis reports: store PDF as base64 in MongoDB.
+    // Enforce a conservative raw-size cap to stay below MongoDB 16MB document limit after base64 expansion.
+    const MAX_RAW_PDF_BYTES = 10 * 1024 * 1024; // 10MB
+    if (file.size > MAX_RAW_PDF_BYTES) {
+      return res.status(400).json({
+        error: 'File too large. Maximum supported PDF size is 10MB for persistent storage.',
+      });
     }
-    const ext = path.extname(file.name) || '.pdf';
-    const fileName = `${req.params.id}${ext}`;
-    const filePath = path.join(uploadDir, fileName);
-    await file.mv(filePath);
-    shift.analysisReportPath = path.join('lead-analysis-reports', fileName);
+
+    const rawBuffer = Buffer.isBuffer(file.data) ? file.data : Buffer.from(file.data || []);
+    const reportData = rawBuffer.toString('base64');
+    shift.analysisReportData = reportData;
+    // Kept for backwards compatibility in UI checks that rely on truthy path to indicate attachment exists.
+    shift.analysisReportPath = 'db:analysis-report';
     shift.analysisReportOriginalName = file.name;
     await shift.save();
     res.json({
@@ -706,33 +711,22 @@ router.post('/:id/upload-analysis-report', auth, checkPermission(['jobs.edit']),
   }
 });
 
-// Download lead analysis report PDF for a shift
-// Uses process.env.UPLOADS_DIR if set (e.g. /data/uploads on DigitalOcean for a persistent volume)
+// Download lead analysis report PDF for a shift (stored in MongoDB base64)
 router.get('/:id/analysis-report', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
-    const shift = await Shift.findById(req.params.id).select('analysisReportPath analysisReportOriginalName');
+    const shift = await Shift.findById(req.params.id).select('+analysisReportData analysisReportOriginalName analysisReportPath');
     if (!shift) {
       console.warn('[analysis-report] Shift not found:', req.params.id);
       return res.status(404).json({ message: 'Analysis report not found' });
     }
-    if (!shift.analysisReportPath) {
-      console.warn('[analysis-report] No analysisReportPath for shift:', req.params.id);
+    if (!shift.analysisReportData) {
+      console.warn('[analysis-report] No analysisReportData for shift:', req.params.id);
       return res.status(404).json({ message: 'Analysis report not found' });
     }
-    const uploadsRoot = process.env.UPLOADS_DIR || path.join(__dirname, '..', 'uploads');
-    const fullPath = path.join(uploadsRoot, shift.analysisReportPath);
-    if (!fs.existsSync(fullPath)) {
-      console.error(
-        '[analysis-report] File missing on disk. shiftId=%s, analysisReportPath=%s, resolvedPath=%s',
-        req.params.id,
-        shift.analysisReportPath,
-        fullPath
-      );
-      return res.status(404).json({
-        message:
-          'Analysis report file not found on the server. If the app was recently redeployed, the file may have been lost (uploads are not persisted by default). Please re-upload the PDF in the Attach Analysis Report modal.',
-        code: 'ANALYSIS_REPORT_FILE_MISSING',
-      });
+
+    const pdfBuffer = Buffer.from(shift.analysisReportData, 'base64');
+    if (!pdfBuffer || pdfBuffer.length === 0) {
+      return res.status(404).json({ message: 'Analysis report not found' });
     }
     const name = shift.analysisReportOriginalName || 'analysis-report.pdf';
     res.setHeader('Content-Type', 'application/pdf');
@@ -740,7 +734,7 @@ router.get('/:id/analysis-report', auth, checkPermission(['jobs.view']), async (
       'Content-Disposition',
       buildContentDispositionAttachment(name, { defaultFilename: 'analysis-report.pdf' })
     );
-    res.sendFile(path.resolve(fullPath));
+    res.send(pdfBuffer);
   } catch (error) {
     console.error('Error downloading analysis report:', error);
     res.status(500).json({ message: error.message });

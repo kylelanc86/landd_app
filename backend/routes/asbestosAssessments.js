@@ -1344,7 +1344,7 @@ router.delete('/:id/items/:itemId', async (req, res) => {
 // POST /api/assessments/:id/items/:itemId/photos - add photo to assessment item
 router.post('/:id/items/:itemId/photos', async (req, res) => {
   try {
-    const { photoData, fullResolutionData, includeInReport = true } = req.body;
+    const { photoData, includeInReport = true } = req.body;
 
     if (!photoData) {
       return res.status(400).json({ message: 'Photo data is required' });
@@ -1368,10 +1368,12 @@ router.post('/:id/items/:itemId/photos', async (req, res) => {
     // If this is the first photo and no photo numbers exist, start from 1
     const actualPhotoNumber = item.photographs.length === 0 ? 1 : nextPhotoNumber;
 
+    // Temporary mitigation: do not store full-resolution images for new uploads
+    // across assessment flows. Existing stored full-res data remains untouched.
+
     // Add new photo
     item.photographs.push({
       data: photoData,
-      ...(fullResolutionData ? { fullResolutionData } : {}),
       includeInReport: includeInReport,
       uploadedAt: new Date(),
       photoNumber: actualPhotoNumber,
