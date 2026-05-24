@@ -18,10 +18,6 @@ import {
   DialogContentText,
   DialogTitle,
   TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Alert,
   CircularProgress,
   Breadcrumbs,
@@ -40,6 +36,8 @@ import { formatDate, formatDateForInput } from "../../../utils/dateFormat";
 import { equipmentService } from "../../../services/equipmentService";
 import plmMicroscopeService from "../../../services/plmMicroscopeService";
 import { useAuth } from "../../../context/AuthContext";
+import LookupField from "../../../components/LookupField";
+import { equipmentOptionsFromList, buildEquipmentDisplayLabel } from "../../../utils/lookupOptions";
 
 const PLMMicroscopePage = () => {
   const theme = useTheme();
@@ -55,6 +53,7 @@ const PLMMicroscopePage = () => {
   const [calibrationToDelete, setCalibrationToDelete] = useState(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editingCalibration, setEditingCalibration] = useState(null);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [selectedMicroscopeForHistory, setSelectedMicroscopeForHistory] =
     useState(null);
@@ -230,6 +229,7 @@ const PLMMicroscopePage = () => {
 
   const handleAdd = () => {
     setEditingCalibration(null);
+    setIsEditMode(true);
     const todayDate = formatDateForInput(new Date());
     setFormData({
       microscopeReference: "",
@@ -245,6 +245,7 @@ const PLMMicroscopePage = () => {
 
   const handleEdit = (calibration) => {
     setEditingCalibration(calibration);
+    setIsEditMode(false);
     const microscopeEquipment = microscopes.find(
       (m) => m.equipmentReference === calibration.microscopeReference
     );
@@ -285,6 +286,7 @@ const PLMMicroscopePage = () => {
     });
 
     setEditingCalibration(calibration);
+    setIsEditMode(false);
     setHistoryDialogOpen(false);
     setAddDialogOpen(true);
     setError(null);
@@ -426,6 +428,15 @@ const PLMMicroscopePage = () => {
       setLoading(false);
     }
   };
+
+  const handleCloseDialog = () => {
+    setAddDialogOpen(false);
+    setEditingCalibration(null);
+    setIsEditMode(false);
+    setError(null);
+  };
+
+  const lookupViewMode = Boolean(editingCalibration && !isEditMode);
 
   const handleMicroscopeChange = (microscopeEquipmentId) => {
     const selectedMicroscope = microscopes.find(
@@ -743,11 +754,7 @@ const PLMMicroscopePage = () => {
       {/* Add/Edit Servicing Dialog */}
       <Dialog
         open={addDialogOpen}
-        onClose={() => {
-          setAddDialogOpen(false);
-          setEditingCalibration(null);
-          setError(null);
-        }}
+        onClose={handleCloseDialog}
         maxWidth="md"
         fullWidth
       >
@@ -757,16 +764,35 @@ const PLMMicroscopePage = () => {
             justifyContent="space-between"
             alignItems="center"
           >
-            <Typography variant="h6">
-              {editingCalibration ? "Edit Servicing" : "Add New Servicing"}
-            </Typography>
-            <IconButton
-              onClick={() => {
-                setAddDialogOpen(false);
-                setEditingCalibration(null);
-                setError(null);
-              }}
-            >
+            <Box display="flex" alignItems="center" gap={2} flexWrap="wrap">
+              <Typography variant="h6">
+                {editingCalibration
+                  ? lookupViewMode
+                    ? "View Servicing"
+                    : "Edit Servicing"
+                  : "Add New Servicing"}
+              </Typography>
+              {lookupViewMode && (
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<EditIcon />}
+                  onClick={() => setIsEditMode(true)}
+                >
+                  Edit Record
+                </Button>
+              )}
+              {editingCalibration && isEditMode && (
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={() => handleEdit(editingCalibration)}
+                >
+                  Cancel Edit
+                </Button>
+              )}
+            </Box>
+            <IconButton onClick={handleCloseDialog}>
               <CloseIcon />
             </IconButton>
           </Box>
@@ -780,33 +806,26 @@ const PLMMicroscopePage = () => {
             )}
             <Stack spacing={3} sx={{ mt: 1 }}>
               <Box display="flex" gap={2}>
-                <FormControl fullWidth required>
-                  <InputLabel>Microscope</InputLabel>
-                  <Select
-                    value={formData.microscopeEquipmentId}
-                    onChange={(e) => handleMicroscopeChange(e.target.value)}
-                    label="Microscope"
-                    disabled={microscopesLoading}
-                  >
-                    <MenuItem value="">
-                      <em>Select a microscope</em>
-                    </MenuItem>
-                    {microscopes.length > 0 ? (
-                      microscopes.map((microscope) => (
-                        <MenuItem key={microscope._id} value={microscope._id}>
-                          {microscope.equipmentReference} -{" "}
-                          {microscope.brandModel}
-                        </MenuItem>
-                      ))
-                    ) : (
-                      <MenuItem disabled>
-                        {microscopesLoading
-                          ? "Loading..."
-                          : "No microscopes found"}
-                      </MenuItem>
-                    )}
-                  </Select>
-                </FormControl>
+                <LookupField
+                  mode={lookupViewMode ? "view" : "edit"}
+                  label="Microscope"
+                  required
+                  value={formData.microscopeEquipmentId}
+                  displayLabel={
+                    formData.microscopeReference ||
+                    buildEquipmentDisplayLabel(
+                      microscopes.find(
+                        (m) =>
+                          String(m._id) === String(formData.microscopeEquipmentId),
+                      ),
+                    )
+                  }
+                  options={equipmentOptionsFromList(microscopes)}
+                  onChange={(e) => handleMicroscopeChange(e.target.value)}
+                  disabled={microscopesLoading}
+                  loading={microscopesLoading}
+                  emptyOptionsText="No microscopes found"
+                />
                 <TextField
                   fullWidth
                   label="Servicing Date"
@@ -815,6 +834,7 @@ const PLMMicroscopePage = () => {
                   onChange={(e) => handleDateChange(e.target.value)}
                   InputLabelProps={{ shrink: true }}
                   required
+                  disabled={lookupViewMode}
                 />
               </Box>
               <TextField
@@ -825,6 +845,7 @@ const PLMMicroscopePage = () => {
                   setFormData({ ...formData, servicingCompany: e.target.value })
                 }
                 required
+                disabled={lookupViewMode}
               />
               <TextField
                 fullWidth
@@ -835,16 +856,19 @@ const PLMMicroscopePage = () => {
                 onChange={(e) =>
                   setFormData({ ...formData, notes: e.target.value })
                 }
+                disabled={lookupViewMode}
               />
-              <Button variant="outlined" component="label" fullWidth>
-                Attach Service Report
-                <input
-                  type="file"
-                  hidden
-                  accept=".pdf"
-                  onChange={handleFileChange}
-                />
-              </Button>
+              {!lookupViewMode && (
+                <Button variant="outlined" component="label" fullWidth>
+                  Attach Service Report
+                  <input
+                    type="file"
+                    hidden
+                    accept=".pdf"
+                    onChange={handleFileChange}
+                  />
+                </Button>
+              )}
               {formData.serviceReport && (
                 <Typography variant="body2" color="primary">
                   File selected: {formData.serviceReport.name}
@@ -860,27 +884,23 @@ const PLMMicroscopePage = () => {
             </Stack>
           </DialogContent>
           <DialogActions>
-            <Button
-              onClick={() => {
-                setAddDialogOpen(false);
-                setEditingCalibration(null);
-                setError(null);
-              }}
-            >
-              Cancel
+            <Button onClick={handleCloseDialog}>
+              {lookupViewMode ? "Close" : "Cancel"}
             </Button>
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={
-                loading ||
-                !formData.microscopeEquipmentId ||
-                !formData.date ||
-                !formData.servicingCompany
-              }
-            >
-              {loading ? <CircularProgress size={24} /> : "Save"}
-            </Button>
+            {!lookupViewMode && (
+              <Button
+                type="submit"
+                variant="contained"
+                disabled={
+                  loading ||
+                  !formData.microscopeEquipmentId ||
+                  !formData.date ||
+                  !formData.servicingCompany
+                }
+              >
+                {loading ? <CircularProgress size={24} /> : "Save"}
+              </Button>
+            )}
           </DialogActions>
         </Box>
       </Dialog>

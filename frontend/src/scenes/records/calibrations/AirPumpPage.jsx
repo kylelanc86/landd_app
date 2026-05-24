@@ -45,6 +45,12 @@ import { flowmeterCalibrationService } from "../../../services/flowmeterCalibrat
 import { useUserLists } from "../../../context/UserListsContext";
 import { formatDate, formatDateForInput } from "../../../utils/dateFormat";
 import { useAuth } from "../../../context/AuthContext";
+import LookupField from "../../../components/LookupField";
+import {
+  userOptionsFromList,
+  equipmentOptionsFromList,
+  buildEquipmentDisplayLabel,
+} from "../../../utils/lookupOptions";
 
 const AirPumpPage = () => {
   const theme = useTheme();
@@ -74,6 +80,7 @@ const AirPumpPage = () => {
     technicianId: "",
     technicianName: "",
     flowmeterId: "",
+    flowmeterReference: "",
     notes: "",
   });
 
@@ -477,6 +484,7 @@ const AirPumpPage = () => {
       technicianId: "",
       technicianName: "",
       flowmeterId: "",
+      flowmeterReference: "",
       notes: "",
     });
     setCalibrations([]);
@@ -492,6 +500,7 @@ const AirPumpPage = () => {
       technicianId: "",
       technicianName: "",
       flowmeterId: "",
+      flowmeterReference: "",
       notes: "",
     });
     setCalibrations([]);
@@ -520,6 +529,20 @@ const AirPumpPage = () => {
       technicianId: technicianId,
       technicianName: selectedTechnician
         ? `${selectedTechnician.firstName} ${selectedTechnician.lastName}`
+        : "",
+    }));
+    setHasUnsavedChanges(true);
+  };
+
+  const handleFlowmeterChange = (flowmeterEquipmentId) => {
+    const selectedFlowmeter = flowmeters.find(
+      (f) => String(f._id) === String(flowmeterEquipmentId),
+    );
+    setStaticFormData((prev) => ({
+      ...prev,
+      flowmeterId: flowmeterEquipmentId,
+      flowmeterReference: selectedFlowmeter
+        ? selectedFlowmeter.equipmentReference
         : "",
     }));
     setHasUnsavedChanges(true);
@@ -1148,30 +1171,26 @@ const AirPumpPage = () => {
                   Calibration Details
                 </Typography>
                 <Box display="flex" gap={2} flexWrap="wrap">
-                  <FormControl fullWidth required>
-                    <InputLabel>Pump</InputLabel>
-                    <Select
-                      value={staticFormData.pumpEquipmentId}
-                      onChange={(e) => handlePumpChange(e.target.value)}
-                      label="Pump"
-                      disabled={pumpsLoading}
-                    >
-                      <MenuItem value="">
-                        <em>Select a pump</em>
-                      </MenuItem>
-                      {pumps.length > 0 ? (
-                        pumps.map((pump) => (
-                          <MenuItem key={pump._id} value={pump._id}>
-                            {pump.equipmentReference} - {pump.brandModel}
-                          </MenuItem>
-                        ))
-                      ) : (
-                        <MenuItem disabled>
-                          {pumpsLoading ? "Loading..." : "No pumps found"}
-                        </MenuItem>
-                      )}
-                    </Select>
-                  </FormControl>
+                  <LookupField
+                    label="Pump"
+                    required
+                    value={staticFormData.pumpEquipmentId}
+                    displayLabel={
+                      staticFormData.pumpId ||
+                      buildEquipmentDisplayLabel(
+                        pumps.find(
+                          (p) =>
+                            String(p._id) ===
+                            String(staticFormData.pumpEquipmentId),
+                        ),
+                      )
+                    }
+                    options={equipmentOptionsFromList(pumps)}
+                    onChange={(e) => handlePumpChange(e.target.value)}
+                    disabled={pumpsLoading}
+                    loading={pumpsLoading}
+                    emptyOptionsText="No pumps found"
+                  />
                   <TextField
                     fullWidth
                     label="Calibration Date"
@@ -1187,70 +1206,38 @@ const AirPumpPage = () => {
                     InputLabelProps={{ shrink: true }}
                     required
                   />
-                  <FormControl fullWidth required>
-                    <InputLabel>Technician</InputLabel>
-                    <Select
-                      value={staticFormData.technicianId}
-                      onChange={(e) => handleTechnicianChange(e.target.value)}
-                      label="Technician"
-                      disabled={userListsLoading}
-                    >
-                      <MenuItem value="">
-                        <em>Select a technician</em>
-                      </MenuItem>
-                      {activeTechnicians.length > 0 ? (
-                        activeTechnicians.map((technician) => (
-                          <MenuItem key={technician._id} value={technician._id}>
-                            {technician.firstName} {technician.lastName}
-                          </MenuItem>
-                        ))
-                      ) : (
-                        <MenuItem disabled>
-                          {userListsLoading
-                            ? "Loading..."
-                            : "No technicians found"}
-                        </MenuItem>
-                      )}
-                    </Select>
-                  </FormControl>
-                  <FormControl fullWidth>
-                    <InputLabel>Flowmeter</InputLabel>
-                    <Select
-                      value={staticFormData.flowmeterId}
-                      onChange={(e) => {
-                        setStaticFormData({
-                          ...staticFormData,
-                          flowmeterId: e.target.value,
-                        });
-                        setHasUnsavedChanges(true);
-                      }}
-                      label="Flowmeter"
-                      disabled={flowmetersLoading}
-                    >
-                      <MenuItem value="">
-                        <em>Select a flowmeter (optional)</em>
-                      </MenuItem>
-                      {flowmeters.length > 0 ? (
-                        flowmeters.map((flowmeter) => (
-                          <MenuItem
-                            key={flowmeter._id}
-                            value={String(flowmeter._id)}
-                          >
-                            {flowmeter.equipmentReference}
-                            {flowmeter.brandModel
-                              ? ` - ${flowmeter.brandModel}`
-                              : ""}
-                          </MenuItem>
-                        ))
-                      ) : (
-                        <MenuItem disabled>
-                          {flowmetersLoading
-                            ? "Loading..."
-                            : "No calibrated flowmeters available"}
-                        </MenuItem>
-                      )}
-                    </Select>
-                  </FormControl>
+                  <LookupField
+                    label="Technician"
+                    required
+                    value={staticFormData.technicianId}
+                    displayLabel={staticFormData.technicianName}
+                    options={userOptionsFromList(activeTechnicians)}
+                    onChange={(e) => handleTechnicianChange(e.target.value)}
+                    disabled={userListsLoading}
+                    loading={userListsLoading}
+                    emptyOptionsText="No technicians found"
+                  />
+                  <LookupField
+                    label="Flowmeter"
+                    allowEmpty
+                    emptyDisplay="-"
+                    emptyOptionLabel="Select a flowmeter (optional)"
+                    value={staticFormData.flowmeterId}
+                    displayLabel={
+                      staticFormData.flowmeterReference ||
+                      buildEquipmentDisplayLabel(
+                        flowmeters.find(
+                          (f) =>
+                            String(f._id) === String(staticFormData.flowmeterId),
+                        ),
+                      )
+                    }
+                    options={equipmentOptionsFromList(flowmeters)}
+                    onChange={(e) => handleFlowmeterChange(e.target.value)}
+                    disabled={flowmetersLoading}
+                    loading={flowmetersLoading}
+                    emptyOptionsText="No calibrated flowmeters available"
+                  />
                 </Box>
               </Box>
 

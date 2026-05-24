@@ -34,11 +34,13 @@ import {
   RadioGroup,
   FormControlLabel,
   Chip,
+  Alert,
 } from "@mui/material";
 import CommentIcon from "@mui/icons-material/Comment";
 import { useParams, useNavigate } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ClearIcon from "@mui/icons-material/Clear";
+import EditIcon from "@mui/icons-material/Edit";
 import { iaqSampleService } from "../../../services/iaqSampleService";
 import { iaqRecordService } from "../../../services/iaqRecordService";
 import pcmMicroscopeService from "../../../services/pcmMicroscopeService";
@@ -50,9 +52,79 @@ import AutoSizer from "react-virtualized-auto-sizer";
 import { useAuth } from "../../../context/AuthContext";
 import { useUserLists } from "../../../context/UserListsContext";
 import { useSnackbar } from "../../../context/SnackbarContext";
+import {
+  generateIAQReference,
+  formatIAQSampleDisplay,
+  resolveAnalystName,
+  getAnalystUserId,
+} from "../../../utils/iaqReference";
+import LookupField from "../../../components/LookupField";
+import LookupRadioGroup from "../../../components/LookupRadioGroup";
+import { userOptionsFromList } from "../../../utils/lookupOptions";
 
 const SAMPLES_KEY = "ldc_iaq_samples";
 const ANALYSIS_PROGRESS_KEY = "ldc_iaq_analysis_progress";
+
+const getSampleKey = (sampleOrId) =>
+  String(typeof sampleOrId === "object" ? sampleOrId._id : sampleOrId);
+
+const normalizeFibreCountCell = (cell) => {
+  if (cell === "" || cell === null || cell === undefined) return "";
+  return String(cell);
+};
+
+const normalizeFibreCountsGrid = (fibreCounts) => {
+  if (!fibreCounts || !Array.isArray(fibreCounts) || fibreCounts.length !== 5) {
+    return Array(5)
+      .fill()
+      .map(() => Array(20).fill(""));
+  }
+  return fibreCounts.map((row) => {
+    if (!Array.isArray(row) || row.length !== 20) {
+      return Array(20).fill("");
+    }
+    return row.map(normalizeFibreCountCell);
+  });
+};
+
+const isFibreCountCellFilled = (cell) =>
+  cell !== "" && cell !== null && cell !== undefined;
+
+const isFibreGridComplete = (fibreCounts) => {
+  const grid = normalizeFibreCountsGrid(fibreCounts);
+  return grid.every((row) => row.every(isFibreCountCellFilled));
+};
+
+const buildSampleAnalysisState = (sample) => {
+  if (!sample?.analysis) {
+    return {
+      edgesDistribution: "",
+      backgroundDust: "",
+      uncountableDueToDust: false,
+      fibreCounts: normalizeFibreCountsGrid(null),
+      fibresCounted: 0,
+      fieldsCounted: 0,
+      reportedConcentration: "",
+      comment: "",
+    };
+  }
+  const a = sample.analysis;
+  return {
+    edgesDistribution: a.edgesDistribution || "",
+    backgroundDust: a.backgroundDust || "",
+    uncountableDueToDust: a.uncountableDueToDust || false,
+    fibreCounts: normalizeFibreCountsGrid(a.fibreCounts),
+    fibresCounted: a.fibresCounted ?? 0,
+    fieldsCounted: a.fieldsCounted ?? 0,
+    reportedConcentration: a.reportedConcentration || "",
+    comment: a.comment || "",
+  };
+};
+
+const formatAnalysisFieldLabel = (value) => {
+  if (!value) return "—";
+  return value.charAt(0).toUpperCase() + value.slice(1);
+};
 
 // Simplified Sample Summary Component for IAQ
 const IAQSampleSummary = React.memo(
@@ -61,7 +133,7 @@ const IAQSampleSummary = React.memo(
     analysis,
     analysisDetails,
     getMicroscopeConstantInfo,
-    generateIAQReference,
+    iaqReference,
     onAnalysisChange,
     onFibreCountChange,
     onKeyDown,
@@ -76,13 +148,12 @@ const IAQSampleSummary = React.memo(
     onOpenCommentModal,
   }) => {
     const isComplete =
-      analysis &&
-      analysis.fibreCounts &&
-      analysis.fibreCounts.every((row) =>
-        row.every(
-          (cell) => cell !== "" && cell !== null && cell !== undefined
-        )
-      );
+      analysis?.fibreCounts && isFibreGridComplete(analysis.fibreCounts);
+
+    const showAsAnalysed =
+      (isReadOnly && sample.status === "analysed") ||
+      (isReadOnly && isFibreGridComplete(analysis?.fibreCounts)) ||
+      (!isReadOnly && isSampleAnalysed(sample._id));
 
     return (
       <Paper
@@ -102,9 +173,11 @@ const IAQSampleSummary = React.memo(
         >
           <Box>
             <Typography variant="h5">
-              {generateIAQReference() && sample.fullSampleID
-                ? `${generateIAQReference()} - ${sample.fullSampleID}`
-                : sample.fullSampleID || sample.sampleNumber}
+              {formatIAQSampleDisplay(
+                sample.fullSampleID,
+                iaqReference,
+                sample.sampleNumber
+              )}
             </Typography>
             <Typography variant="body1" color="text.secondary">
               Cowl {sample.cowlNo || "N/A"}
@@ -137,13 +210,19 @@ const IAQSampleSummary = React.memo(
               size="small"
               startIcon={<CommentIcon />}
               onClick={() => onOpenCommentModal(sample._id)}
-              disabled={isReadOnly}
+              disabled={isReadOnly && !analysis?.comment}
               sx={{
                 textTransform: "none",
                 minWidth: "auto",
               }}
             >
-              {analysis?.comment ? "View/Edit Comment" : "Add Comment"}
+              {isReadOnly
+                ? analysis?.comment
+                  ? "View Comment"
+                  : "No Comment"
+                : analysis?.comment
+                  ? "View/Edit Comment"
+                  : "Add Comment"}
             </Button>
             <Chip
               label={
@@ -151,7 +230,7 @@ const IAQSampleSummary = React.memo(
                   ? "Failed Sample Collection"
                   : isFilterUncountable(sample._id)
                   ? "Uncountable"
-                  : isSampleAnalysed(sample._id)
+                  : showAsAnalysed
                   ? "Sample Analysed"
                   : "To be counted"
               }
@@ -160,7 +239,7 @@ const IAQSampleSummary = React.memo(
                   ? "error"
                   : isFilterUncountable(sample._id)
                   ? "error"
-                  : isSampleAnalysed(sample._id)
+                  : showAsAnalysed
                   ? "success"
                   : "default"
               }
@@ -170,7 +249,7 @@ const IAQSampleSummary = React.memo(
                   ? "error.main"
                   : isFilterUncountable(sample._id)
                   ? "error.main"
-                  : isSampleAnalysed(sample._id)
+                  : showAsAnalysed
                   ? "success.main"
                   : "grey.400",
                 color: "white",
@@ -186,68 +265,93 @@ const IAQSampleSummary = React.memo(
             spacing={3}
             sx={{ mb: 2 }}
           >
-            <FormControl component="fieldset">
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Edges/Distribution
-              </Typography>
-              <RadioGroup
-                row
-                value={analysis?.edgesDistribution || ""}
-                onChange={(e) =>
-                  onAnalysisChange(
-                    sample._id,
-                    "edgesDistribution",
-                    e.target.value
-                  )
-                }
-                disabled={isReadOnly}
-              >
-                <FormControlLabel
-                  value="pass"
-                  control={<Radio size="small" />}
-                  label="Pass"
-                />
-                <FormControlLabel
-                  value="fail"
-                  control={<Radio size="small" />}
-                  label={<span style={{ color: "red" }}>Fail</span>}
-                />
-              </RadioGroup>
-            </FormControl>
-            <FormControl component="fieldset">
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Background Dust
-              </Typography>
-              <RadioGroup
-                row
-                value={analysis?.backgroundDust || ""}
-                onChange={(e) =>
-                  onAnalysisChange(sample._id, "backgroundDust", e.target.value)
-                }
-                disabled={isReadOnly}
-              >
-                <FormControlLabel
-                  value="low"
-                  control={<Radio size="small" />}
-                  label="Low"
-                />
-                <FormControlLabel
-                  value="medium"
-                  control={<Radio size="small" />}
-                  label="Medium"
-                />
-                <FormControlLabel
-                  value="high"
-                  control={<Radio size="small" />}
-                  label="High"
-                />
-                <FormControlLabel
-                  value="fail"
-                  control={<Radio size="small" />}
-                  label={<span style={{ color: "red" }}>Fail</span>}
-                />
-              </RadioGroup>
-            </FormControl>
+            {isReadOnly ? (
+              <>
+                <Box>
+                  <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+                    Edges/Distribution
+                  </Typography>
+                  <Typography variant="body1">
+                    {formatAnalysisFieldLabel(analysis?.edgesDistribution)}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+                    Background Dust
+                  </Typography>
+                  <Typography variant="body1">
+                    {formatAnalysisFieldLabel(analysis?.backgroundDust)}
+                  </Typography>
+                </Box>
+              </>
+            ) : (
+              <>
+                <FormControl component="fieldset">
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Edges/Distribution
+                  </Typography>
+                  <RadioGroup
+                    row
+                    value={analysis?.edgesDistribution || ""}
+                    onChange={(e) =>
+                      onAnalysisChange(
+                        sample._id,
+                        "edgesDistribution",
+                        e.target.value
+                      )
+                    }
+                  >
+                    <FormControlLabel
+                      value="pass"
+                      control={<Radio size="small" />}
+                      label="Pass"
+                    />
+                    <FormControlLabel
+                      value="fail"
+                      control={<Radio size="small" />}
+                      label={<span style={{ color: "red" }}>Fail</span>}
+                    />
+                  </RadioGroup>
+                </FormControl>
+                <FormControl component="fieldset">
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Background Dust
+                  </Typography>
+                  <RadioGroup
+                    row
+                    value={analysis?.backgroundDust || ""}
+                    onChange={(e) =>
+                      onAnalysisChange(
+                        sample._id,
+                        "backgroundDust",
+                        e.target.value
+                      )
+                    }
+                  >
+                    <FormControlLabel
+                      value="low"
+                      control={<Radio size="small" />}
+                      label="Low"
+                    />
+                    <FormControlLabel
+                      value="medium"
+                      control={<Radio size="small" />}
+                      label="Medium"
+                    />
+                    <FormControlLabel
+                      value="high"
+                      control={<Radio size="small" />}
+                      label="High"
+                    />
+                    <FormControlLabel
+                      value="fail"
+                      control={<Radio size="small" />}
+                      label={<span style={{ color: "red" }}>Fail</span>}
+                    />
+                  </RadioGroup>
+                </FormControl>
+              </>
+            )}
             <Box
               sx={{
                 display: "flex",
@@ -262,7 +366,7 @@ const IAQSampleSummary = React.memo(
                   variant="contained"
                   size="small"
                   onClick={() => onOpenFibreCountModal(sample._id)}
-                  disabled={isReadOnly || isFilterUncountable(sample._id)}
+                  disabled={!isReadOnly && isFilterUncountable(sample._id)}
                   sx={{
                     backgroundColor: isSampleAnalysed(sample._id)
                       ? "success.main"
@@ -274,9 +378,11 @@ const IAQSampleSummary = React.memo(
                     },
                   }}
                 >
-                  {isSampleAnalysed(sample._id)
-                    ? "Edit Fibre Counts"
-                    : "Enter Fibre Counts"}
+                  {isReadOnly
+                    ? "View Fibre Counts"
+                    : isSampleAnalysed(sample._id)
+                      ? "Edit Fibre Counts"
+                      : "Enter Fibre Counts"}
                 </Button>
               )}
             </Box>
@@ -401,6 +507,8 @@ const IAQAnalysis = () => {
   const [activeCommentSampleId, setActiveCommentSampleId] = useState(null);
   const [commentText, setCommentText] = useState("");
   const [allRecords, setAllRecords] = useState([]);
+  const [unlockDialogOpen, setUnlockDialogOpen] = useState(false);
+  const [unlockingAnalysis, setUnlockingAnalysis] = useState(false);
 
   // Load samples and in-progress analysis data
   useEffect(() => {
@@ -437,44 +545,7 @@ const IAQAnalysis = () => {
         // Initialize sample analyses from existing data
         const initialAnalyses = {};
         sortedSamples.forEach((sample) => {
-          if (sample.analysis) {
-            // Ensure fibreCounts is a valid 5x20 array
-            let fibreCounts = sample.analysis.fibreCounts;
-            if (!fibreCounts || !Array.isArray(fibreCounts) || fibreCounts.length !== 5) {
-              fibreCounts = Array(5).fill().map(() => Array(20).fill(""));
-            } else {
-              // Ensure each row is a valid array of 20 elements
-              fibreCounts = fibreCounts.map((row) => {
-                if (!Array.isArray(row) || row.length !== 20) {
-                  return Array(20).fill("");
-                }
-                return row.map((cell) => cell || "");
-              });
-            }
-            
-            initialAnalyses[sample._id] = {
-              edgesDistribution: sample.analysis.edgesDistribution || "",
-              backgroundDust: sample.analysis.backgroundDust || "",
-              uncountableDueToDust:
-                sample.analysis.uncountableDueToDust || false,
-              fibreCounts: fibreCounts,
-              fibresCounted: sample.analysis.fibresCounted || 0,
-              fieldsCounted: sample.analysis.fieldsCounted || 0,
-              reportedConcentration: sample.analysis.reportedConcentration || "",
-              comment: sample.analysis.comment || "",
-            };
-          } else {
-            initialAnalyses[sample._id] = {
-              edgesDistribution: "",
-              backgroundDust: "",
-              uncountableDueToDust: false,
-              fibreCounts: Array(5).fill().map(() => Array(20).fill("")),
-              fibresCounted: 0,
-              fieldsCounted: 0,
-              reportedConcentration: "",
-              comment: "",
-            };
-          }
+          initialAnalyses[getSampleKey(sample)] = buildSampleAnalysisState(sample);
         });
 
         // Load analysis details from first sample with analysis
@@ -490,19 +561,25 @@ const IAQAnalysis = () => {
           });
         }
 
-        // Load analysedBy from record if available
-        if (recordData.analysedBy) {
-          // Handle both populated object and ID string
-          const analysedById = typeof recordData.analysedBy === 'object' 
-            ? recordData.analysedBy._id || recordData.analysedBy.id
-            : recordData.analysedBy;
-          if (analysedById) {
-            setAnalysedBy(analysedById);
+        // Load analyst name from record or first analysed sample
+        const analystSource =
+          recordData.analysedBy ||
+          sortedSamples.find((s) => s.analysedBy)?.analysedBy;
+        if (analystSource) {
+          const analystName = resolveAnalystName(analystSource, activeCounters);
+          if (analystName) {
+            setAnalysedBy(analystName);
           }
         }
 
-        // Load saved progress from localStorage
-        const progressData = localStorage.getItem(ANALYSIS_PROGRESS_KEY);
+        const isRecordFinalised =
+          recordData.status === "Complete - Satisfactory" ||
+          recordData.status === "Complete - Failed";
+
+        // Load saved progress from localStorage (skip when analysis is finalised)
+        const progressData = !isRecordFinalised
+          ? localStorage.getItem(ANALYSIS_PROGRESS_KEY)
+          : null;
         if (progressData) {
           const parsed = JSON.parse(progressData);
           if (parsed.iaqRecordId === iaqRecordId) {
@@ -510,29 +587,25 @@ const IAQAnalysis = () => {
               setAnalysisDetails(parsed.analysisDetails);
             }
             if (parsed.analysedBy) {
-              // Ensure we're using the ID, not a name string
-              const analysedById = typeof parsed.analysedBy === 'object' 
-                ? parsed.analysedBy._id || parsed.analysedBy.id
-                : parsed.analysedBy;
-              // If it's a name string, try to find the user ID
-              if (analysedById && !analysedById.match(/^[0-9a-fA-F]{24}$/)) {
-                // It's not a valid ObjectId, might be a name - find the user from active analysts
-                const matchingUser = activeCounters.find(
-                  (u) => `${u.firstName} ${u.lastName}` === analysedById
-                );
-                if (matchingUser) {
-                  setAnalysedBy(matchingUser._id);
-                }
-              } else if (analysedById) {
-                setAnalysedBy(analysedById);
+              const analystName = resolveAnalystName(
+                parsed.analysedBy,
+                activeCounters
+              );
+              if (analystName) {
+                setAnalysedBy(analystName);
               }
             }
             const mergedAnalyses = { ...initialAnalyses };
             Object.keys(parsed.sampleAnalyses).forEach((sampleId) => {
-              if (mergedAnalyses[sampleId]) {
-                mergedAnalyses[sampleId] = {
-                  ...mergedAnalyses[sampleId],
+              const key = getSampleKey(sampleId);
+              if (mergedAnalyses[key]) {
+                mergedAnalyses[key] = {
+                  ...mergedAnalyses[key],
                   ...parsed.sampleAnalyses[sampleId],
+                  fibreCounts: normalizeFibreCountsGrid(
+                    parsed.sampleAnalyses[sampleId]?.fibreCounts ||
+                      mergedAnalyses[key].fibreCounts
+                  ),
                 };
               }
             });
@@ -779,8 +852,54 @@ const IAQAnalysis = () => {
     fetchActiveEquipment();
   }, [calculateStatus]);
 
+  const iaqReference = useMemo(
+    () => generateIAQReference(iaqRecord, allRecords),
+    [iaqRecord, allRecords]
+  );
+
+  const isReadOnly = useMemo(
+    () =>
+      iaqRecord?.status === "Complete - Satisfactory" ||
+      iaqRecord?.status === "Complete - Failed",
+    [iaqRecord?.status]
+  );
+
+  // Re-resolve analyst when user lists load (record may store ObjectId)
+  useEffect(() => {
+    const source =
+      iaqRecord?.analysedBy || samples.find((s) => s.analysedBy)?.analysedBy;
+    if (!source || activeCounters.length === 0) return;
+
+    const resolved = resolveAnalystName(source, activeCounters);
+    if (
+      resolved &&
+      resolved !== analysedBy &&
+      (!analysedBy || /^[0-9a-fA-F]{24}$/.test(analysedBy))
+    ) {
+      setAnalysedBy(resolved);
+    }
+  }, [iaqRecord, samples, activeCounters, analysedBy]);
+
+  const analystDisplayName = useMemo(() => {
+    if (analysedBy && !/^[0-9a-fA-F]{24}$/.test(analysedBy)) {
+      return analysedBy;
+    }
+    return (
+      resolveAnalystName(iaqRecord?.analysedBy, activeCounters) ||
+      resolveAnalystName(
+        samples.find((s) => s.analysedBy)?.analysedBy,
+        activeCounters
+      ) ||
+      resolveAnalystName(analysedBy, activeCounters) ||
+      ""
+    );
+  }, [analysedBy, iaqRecord, samples, activeCounters]);
+
   // Save progress to localStorage
   useEffect(() => {
+    if (isReadOnly || samples.length === 0) {
+      return;
+    }
     if (samples.length > 0) {
       const progressData = {
         iaqRecordId,
@@ -793,7 +912,7 @@ const IAQAnalysis = () => {
         JSON.stringify(progressData)
       );
     }
-  }, [analysisDetails, sampleAnalyses, analysedBy, iaqRecordId, samples.length]);
+  }, [analysisDetails, sampleAnalyses, analysedBy, iaqRecordId, samples.length, isReadOnly]);
 
   // Calculate duration in minutes
   const calculateDuration = useCallback((startTime, endTime) => {
@@ -896,42 +1015,6 @@ const IAQAnalysis = () => {
       return 50000; // Fallback
     },
     [graticuleCalibrations]
-  );
-
-  // Generate IAQ reference
-  const generateIAQReference = useCallback(
-    (record = null) => {
-      const recordToUse = record || iaqRecord;
-      if (!recordToUse || allRecords.length === 0) return "";
-
-      const dateObj = new Date(recordToUse.monitoringDate);
-      const month = dateObj.toLocaleString("default", { month: "short" });
-      const year = dateObj.getFullYear();
-      const monthYear = `${month} ${year}`;
-
-      // Find all records for the same month-year, sorted by creation time
-      const sameMonthYearRecords = allRecords
-        .filter((r) => {
-          const recordDate = new Date(r.monitoringDate);
-          return (
-            recordDate.getMonth() === dateObj.getMonth() &&
-            recordDate.getFullYear() === dateObj.getFullYear()
-          );
-        })
-        .sort((a, b) => {
-          // Sort by creation time to maintain order
-          return new Date(a.createdAt) - new Date(b.createdAt);
-        });
-
-      // Find the position of the current record (1-indexed)
-      const reportNumber =
-        sameMonthYearRecords.findIndex(
-          (r) => (r._id || r.id) === (recordToUse._id || recordToUse.id)
-        ) + 1;
-
-      return `${monthYear} - ${reportNumber}`;
-    },
-    [iaqRecord, allRecords]
   );
 
   // Get microscope constant info for display (using graticule calibrations like original)
@@ -1120,21 +1203,26 @@ const IAQAnalysis = () => {
   // Check if sample is analysed
   const isSampleAnalysed = useCallback(
     (sampleId) => {
-      const analysis = sampleAnalyses[sampleId];
-      if (!analysis || isFilterUncountable(sampleId)) {
+      const id = getSampleKey(sampleId);
+      const sample = samples.find((s) => getSampleKey(s) === id);
+      if (isFilterUncountable(id)) {
+        return false;
+      }
+      if (
+        isReadOnly &&
+        (sample?.status === "analysed" || sample?.analysis?.reportedConcentration)
+      ) {
+        return true;
+      }
+
+      const analysis = sampleAnalyses[id];
+      if (!analysis) {
         return false;
       }
 
-      // Check if all 100 fibre count fields are filled (not empty strings)
-      if (!analysis.fibreCounts || !Array.isArray(analysis.fibreCounts)) {
-        return false;
-      }
-
-      return analysis.fibreCounts.every((row) =>
-        row.every((cell) => cell !== "" && cell !== null && cell !== undefined)
-      );
+      return isFibreGridComplete(analysis.fibreCounts);
     },
-    [sampleAnalyses, isFilterUncountable]
+    [sampleAnalyses, isFilterUncountable, isReadOnly, samples]
   );
 
   // Handle analysis details change
@@ -1322,45 +1410,36 @@ const IAQAnalysis = () => {
 
   // Handle open fibre count modal
   const handleOpenFibreCountModal = (sampleId) => {
-    const analysis = sampleAnalyses[sampleId] || {};
-    if (!analysis.edgesDistribution || !analysis.backgroundDust) {
+    const id = getSampleKey(sampleId);
+    const sample = samples.find((s) => getSampleKey(s) === id);
+    const analysis = {
+      ...buildSampleAnalysisState(sample),
+      ...(sampleAnalyses[id] || {}),
+      fibreCounts: normalizeFibreCountsGrid(
+        (sampleAnalyses[id] || buildSampleAnalysisState(sample)).fibreCounts
+      ),
+    };
+
+    if (
+      !isReadOnly &&
+      (!analysis.edgesDistribution || !analysis.backgroundDust)
+    ) {
       setValidationDialogOpen(true);
       return;
     }
 
-    // Ensure fibreCounts is initialized if it doesn't exist
-    if (!analysis.fibreCounts || !Array.isArray(analysis.fibreCounts) || analysis.fibreCounts.length === 0) {
-      setSampleAnalyses((prev) => {
-        const newAnalyses = { ...prev };
-        newAnalyses[sampleId] = {
-          ...newAnalyses[sampleId],
-          ...analysis,
-          fibreCounts: Array(5)
-            .fill()
-            .map(() => Array(20).fill("")),
-          fibresCounted: analysis.fibresCounted || 0,
-          fieldsCounted: analysis.fieldsCounted || 0,
-        };
-        return newAnalyses;
-      });
-      // Set snapshot with empty array
-      setFibreCountSnapshot({
-        fibreCounts: Array(5)
-          .fill()
-          .map(() => Array(20).fill("")),
-        fibresCounted: 0,
-        fieldsCounted: 0,
-      });
-    } else {
-      // Save a snapshot of the current fibre counts for cancel functionality
-      setFibreCountSnapshot({
-        fibreCounts: analysis.fibreCounts.map((row) => [...row]),
-        fibresCounted: analysis.fibresCounted || 0,
-        fieldsCounted: analysis.fieldsCounted || 0,
-      });
-    }
+    setSampleAnalyses((prev) => ({
+      ...prev,
+      [id]: analysis,
+    }));
 
-    setActiveSampleId(sampleId);
+    setFibreCountSnapshot({
+      fibreCounts: analysis.fibreCounts.map((row) => [...row]),
+      fibresCounted: analysis.fibresCounted ?? 0,
+      fieldsCounted: analysis.fieldsCounted ?? 0,
+    });
+
+    setActiveSampleId(id);
     setFibreCountModalOpen(true);
   };
 
@@ -1677,7 +1756,7 @@ const IAQAnalysis = () => {
               reportedConcentration: getReportedConcentration(sample._id) || "",
               comment: analysis.comment || "",
             },
-            analysedBy: analysedBy ? analysedBy : undefined,
+            analysedBy: getAnalystUserId(analysedBy, activeCounters),
             status: "analysed",
           };
 
@@ -1686,7 +1765,7 @@ const IAQAnalysis = () => {
           // If no analysis data exists yet, still save the microscope calibration selections
           const analysisData = {
             analysis: baseAnalysisData,
-            analysedBy: analysedBy ? analysedBy : undefined,
+            analysedBy: getAnalystUserId(analysedBy, activeCounters),
             status: "analysed",
           };
           await iaqSampleService.update(sample._id, analysisData);
@@ -1719,7 +1798,8 @@ const IAQAnalysis = () => {
       // Update IAQ record status
       await iaqRecordService.update(iaqRecordId, {
         status: recordStatus,
-        analysedBy: analysedBy,
+        analysedBy: analystDisplayName || analysedBy,
+        analysisDate: new Date().toISOString(),
       });
 
       // Clear localStorage
@@ -1738,6 +1818,24 @@ const IAQAnalysis = () => {
     setCancelDialogOpen(true);
   };
 
+  const handleUnlockAnalysis = async () => {
+    try {
+      setUnlockingAnalysis(true);
+      const response = await iaqRecordService.unlockAnalysis(iaqRecordId);
+      setIaqRecord(response.data);
+      setUnlockDialogOpen(false);
+      showSnackbar("Analysis unlocked for editing", "success");
+    } catch (error) {
+      console.error("Error unlocking analysis:", error);
+      showSnackbar(
+        error.response?.data?.message || "Failed to unlock analysis",
+        "error"
+      );
+    } finally {
+      setUnlockingAnalysis(false);
+    }
+  };
+
   // Render sample forms
   const renderSampleForms = () => {
     if (samples.length <= 6) {
@@ -1753,10 +1851,13 @@ const IAQAnalysis = () => {
             >
               <IAQSampleSummary
                 sample={sample}
-                analysis={sampleAnalyses[sample._id]}
+                analysis={{
+                  ...buildSampleAnalysisState(sample),
+                  ...sampleAnalyses[getSampleKey(sample)],
+                }}
                 analysisDetails={analysisDetails}
                 getMicroscopeConstantInfo={getMicroscopeConstantInfo}
-                generateIAQReference={generateIAQReference}
+                iaqReference={iaqReference}
                 onAnalysisChange={handleSampleAnalysisChange}
                 onFibreCountChange={handleFibreCountChange}
                 onKeyDown={handleKeyDown}
@@ -1766,7 +1867,7 @@ const IAQAnalysis = () => {
                 calculateConcentration={calculateConcentration}
                 getReportedConcentration={getReportedConcentration}
                 inputRefs={inputRefs}
-                isReadOnly={false}
+                isReadOnly={isReadOnly}
                 onOpenFibreCountModal={handleOpenFibreCountModal}
                 onOpenCommentModal={handleOpenCommentModal}
               />
@@ -1789,15 +1890,11 @@ const IAQAnalysis = () => {
             >
               {({ index, style }) => {
                 const sample = samples[index];
-                const isComplete =
-                  sampleAnalyses[sample._id] &&
-                  sampleAnalyses[sample._id].fibreCounts &&
-                  sampleAnalyses[sample._id].fibreCounts.every((row) =>
-                    row.every(
-                      (cell) =>
-                        cell !== "" && cell !== null && cell !== undefined
-                    )
-                  );
+                const mergedAnalysis = {
+                  ...buildSampleAnalysisState(sample),
+                  ...sampleAnalyses[getSampleKey(sample)],
+                };
+                const isComplete = isFibreGridComplete(mergedAnalysis.fibreCounts);
                 return (
                   <div
                     style={{
@@ -1808,9 +1905,10 @@ const IAQAnalysis = () => {
                   >
                     <IAQSampleSummary
                       sample={sample}
-                      analysis={sampleAnalyses[sample._id]}
+                      analysis={mergedAnalysis}
                       analysisDetails={analysisDetails}
                       getMicroscopeConstantInfo={getMicroscopeConstantInfo}
+                      iaqReference={iaqReference}
                       onAnalysisChange={handleSampleAnalysisChange}
                       onFibreCountChange={handleFibreCountChange}
                       onKeyDown={handleKeyDown}
@@ -1820,7 +1918,7 @@ const IAQAnalysis = () => {
                       calculateConcentration={calculateConcentration}
                       getReportedConcentration={getReportedConcentration}
                       inputRefs={inputRefs}
-                      isReadOnly={false}
+                      isReadOnly={isReadOnly}
                       onOpenFibreCountModal={handleOpenFibreCountModal}
                       onOpenCommentModal={handleOpenCommentModal}
                     />
@@ -1852,15 +1950,35 @@ const IAQAnalysis = () => {
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
-      <Button
-        startIcon={<ArrowBackIcon />}
-        onClick={() =>
-          navigate(`/records/indoor-air-quality/${iaqRecordId}/samples`)
-        }
-        sx={{ mb: 4 }}
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 2,
+          mb: 4,
+        }}
       >
-        Back to Samples
-      </Button>
+        <Button
+          startIcon={<ArrowBackIcon />}
+          onClick={() =>
+            navigate(`/records/indoor-air-quality/${iaqRecordId}/samples`)
+          }
+        >
+          Back to Samples
+        </Button>
+        {isReadOnly && (
+          <Button
+            variant="contained"
+            color="error"
+            startIcon={<EditIcon />}
+            onClick={() => setUnlockDialogOpen(true)}
+          >
+            Edit Analysis
+          </Button>
+        )}
+      </Box>
 
       <Typography
         variant="h2"
@@ -1872,8 +1990,14 @@ const IAQAnalysis = () => {
           mb: 4,
         }}
       >
-        Fibre Count Analysis
+        {isReadOnly ? "Analysis Records" : "Fibre Count Analysis"}
       </Typography>
+
+      {isReadOnly && (
+        <Alert severity="info" sx={{ mb: 3 }}>
+          Analysis has been finalised. This view is read-only.
+        </Alert>
+      )}
 
       {/* Analyst Dropdown */}
       <Stack
@@ -1882,23 +2006,19 @@ const IAQAnalysis = () => {
         alignItems="center"
         mb={3}
       >
-        <FormControl fullWidth sx={{ maxWidth: 300 }}>
-          <InputLabel>Analyst</InputLabel>
-          <Select
-            value={analysedBy}
-            label="Analyst"
-            onChange={(e) => setAnalysedBy(e.target.value)}
-          >
-            {activeCounters.map((user) => (
-              <MenuItem
-                key={user._id}
-                value={user._id}
-              >
-                {user.firstName} {user.lastName}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        <LookupField
+          sx={{ maxWidth: 300 }}
+          mode={isReadOnly ? "view" : "edit"}
+          label="Analyst"
+          value={analysedBy}
+          displayLabel={analystDisplayName}
+          options={userOptionsFromList(activeCounters, (u) =>
+            `${u.firstName} ${u.lastName}`.trim(),
+          )}
+          onChange={(e) => setAnalysedBy(e.target.value)}
+          allowEmpty
+          emptyOptionLabel="Select analyst"
+        />
       </Stack>
 
       <Box component="form" onSubmit={handleSubmit}>
@@ -1908,88 +2028,59 @@ const IAQAnalysis = () => {
             <Stack spacing={3}>
               <Typography variant="h5">Microscope Calibration</Typography>
               <Stack direction={{ xs: "column", sm: "row" }} spacing={3}>
-                <FormControl component="fieldset">
-                  <Typography variant="subtitle1" sx={{ mb: 1 }}>
-                    Microscope
-                  </Typography>
-                  <RadioGroup
-                    row
-                    name="microscope"
-                    value={analysisDetails.microscope}
-                    onChange={handleAnalysisDetailsChange}
-                  >
-                    {activeMicroscopes.length > 0 ? (
-                      activeMicroscopes.map((microscope) => (
-                        <FormControlLabel
-                          key={microscope._id}
-                          value={microscope.equipmentReference}
-                          control={<Radio />}
-                          label={microscope.equipmentReference}
-                        />
-                      ))
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">
-                        No active Phase Contrast Microscope available
-                      </Typography>
-                    )}
-                  </RadioGroup>
-                </FormControl>
+                <LookupRadioGroup
+                  mode={isReadOnly ? "view" : "edit"}
+                  label="Microscope"
+                  name="microscope"
+                  value={analysisDetails.microscope}
+                  displayValue={analysisDetails.microscope}
+                  options={activeMicroscopes.map((m) => ({
+                    value: m.equipmentReference,
+                    label: m.equipmentReference,
+                  }))}
+                  onChange={handleAnalysisDetailsChange}
+                  disabled={isReadOnly}
+                  emptyMessage="No active Phase Contrast Microscope available"
+                />
                 <Box sx={{ width: 24 }} />
-                <FormControl component="fieldset">
-                  <Typography variant="subtitle1" sx={{ mb: 1 }}>
-                    Test Slide
-                  </Typography>
-                  <RadioGroup
-                    row
-                    name="testSlide"
-                    value={analysisDetails.testSlide}
-                    onChange={handleAnalysisDetailsChange}
-                  >
-                    {activeTestSlides.length > 0 ? (
-                      activeTestSlides.map((testSlide) => (
-                        <FormControlLabel
-                          key={testSlide._id}
-                          value={testSlide.equipmentReference}
-                          control={<Radio />}
-                          label={testSlide.equipmentReference}
-                        />
-                      ))
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">
-                        No active HSE Test Slide available
-                      </Typography>
-                    )}
-                  </RadioGroup>
-                </FormControl>
+                <LookupRadioGroup
+                  mode={isReadOnly ? "view" : "edit"}
+                  label="Test Slide"
+                  name="testSlide"
+                  value={analysisDetails.testSlide}
+                  displayValue={analysisDetails.testSlide}
+                  options={activeTestSlides.map((t) => ({
+                    value: t.equipmentReference,
+                    label: t.equipmentReference,
+                  }))}
+                  onChange={handleAnalysisDetailsChange}
+                  disabled={isReadOnly}
+                  emptyMessage="No active HSE Test Slide available"
+                />
                 <Box sx={{ width: 24 }} />
-                <FormControl component="fieldset">
-                  <Typography variant="subtitle1" sx={{ mb: 1 }}>
-                    Test Slide Lines
-                  </Typography>
-                  <RadioGroup
-                    row
-                    name="testSlideLines"
-                    value={analysisDetails.testSlideLines}
-                    onChange={handleAnalysisDetailsChange}
-                  >
-                    <FormControlLabel
-                      value="Partial5"
-                      control={<Radio />}
-                      label="Partial5"
-                    />
-                    <FormControlLabel
-                      value="6"
-                      control={<Radio />}
-                      label="6"
-                    />
-                  </RadioGroup>
-                </FormControl>
+                <LookupRadioGroup
+                  mode={isReadOnly ? "view" : "edit"}
+                  label="Test Slide Lines"
+                  name="testSlideLines"
+                  value={analysisDetails.testSlideLines}
+                  displayValue={
+                    analysisDetails.testSlideLines === "Partial5"
+                      ? "Partial5"
+                      : analysisDetails.testSlideLines
+                  }
+                  options={[
+                    { value: "Partial5", label: "Partial5" },
+                    { value: "6", label: "6" },
+                  ]}
+                  onChange={handleAnalysisDetailsChange}
+                  disabled={isReadOnly}
+                />
               </Stack>
             </Stack>
           </Paper>
 
           {/* Sample Forms */}
-          {isCalibrationComplete() ? (
+          {isReadOnly || isCalibrationComplete() ? (
             renderSampleForms()
           ) : (
             <Paper sx={{ p: 3, textAlign: "center" }}>
@@ -2004,52 +2095,54 @@ const IAQAnalysis = () => {
             </Paper>
           )}
 
-          <Box
-            sx={{ display: "flex", justifyContent: "flex-end", mt: 3, gap: 2 }}
-          >
-            <Button
-              variant="outlined"
-              onClick={handleCancel}
-              sx={{
-                color: theme.palette.primary.main,
-                borderColor: theme.palette.primary.main,
-                "&:hover": {
-                  borderColor: theme.palette.primary.dark,
-                },
-              }}
+          {!isReadOnly && (
+            <Box
+              sx={{ display: "flex", justifyContent: "flex-end", mt: 3, gap: 2 }}
             >
-              Cancel
-            </Button>
-            <Button
-              variant="contained"
-              onClick={handleSaveAndClose}
-              sx={{
-                backgroundColor: theme.palette.primary[400],
-                "&:hover": {
-                  backgroundColor: theme.palette.primary[500],
-                },
-              }}
-            >
-              Save & Close
-            </Button>
-            <Button
-              variant="contained"
-              onClick={handleSubmit}
-              disabled={!isAllAnalysisComplete}
-              sx={{
-                backgroundColor: "#1976d2",
-                "&:hover": {
-                  backgroundColor: "#1565c0",
-                },
-                "&.Mui-disabled": {
-                  backgroundColor: theme.palette.grey[700],
-                  color: theme.palette.grey[500],
-                },
-              }}
-            >
-              Finalise Analysis
-            </Button>
-          </Box>
+              <Button
+                variant="outlined"
+                onClick={handleCancel}
+                sx={{
+                  color: theme.palette.primary.main,
+                  borderColor: theme.palette.primary.main,
+                  "&:hover": {
+                    borderColor: theme.palette.primary.dark,
+                  },
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="contained"
+                onClick={handleSaveAndClose}
+                sx={{
+                  backgroundColor: theme.palette.primary[400],
+                  "&:hover": {
+                    backgroundColor: theme.palette.primary[500],
+                  },
+                }}
+              >
+                Save & Close
+              </Button>
+              <Button
+                variant="contained"
+                onClick={handleSubmit}
+                disabled={!isAllAnalysisComplete}
+                sx={{
+                  backgroundColor: "#1976d2",
+                  "&:hover": {
+                    backgroundColor: "#1565c0",
+                  },
+                  "&.Mui-disabled": {
+                    backgroundColor: theme.palette.grey[700],
+                    color: theme.palette.grey[500],
+                  },
+                }}
+              >
+                Finalise Analysis
+              </Button>
+            </Box>
+          )}
 
           {/* Fibre Count Modal */}
           <Dialog
@@ -2061,7 +2154,11 @@ const IAQAnalysis = () => {
             <DialogTitle>
               Fibre Counts -{" "}
               {activeSampleId &&
-                samples.find((s) => s._id === activeSampleId)?.fullSampleID}
+                formatIAQSampleDisplay(
+                  samples.find((s) => s._id === activeSampleId)?.fullSampleID,
+                  iaqReference,
+                  samples.find((s) => s._id === activeSampleId)?.sampleNumber
+                )}
             </DialogTitle>
             <DialogContent sx={{ position: "relative" }}>
               {activeSampleId && sampleAnalyses[activeSampleId] && (
@@ -2078,8 +2175,7 @@ const IAQAnalysis = () => {
                       mb: 2,
                     }}
                   >
-                    {iaqRecord?.status !== "Complete - Satisfactory" &&
-                      iaqRecord?.status !== "Complete - Failed" && (
+                    {!isReadOnly && (
                         <Button
                           startIcon={<ClearIcon />}
                           onClick={handleClearTableInModal}
@@ -2135,9 +2231,8 @@ const IAQAnalysis = () => {
                                 size="small"
                                 onClick={() => handleFillZeros(activeSampleId)}
                                 disabled={
-                                  isFilterUncountable(activeSampleId) ||
-                                  iaqRecord?.status === "Complete - Satisfactory" ||
-                                  iaqRecord?.status === "Complete - Failed"
+                                  isReadOnly ||
+                                  isFilterUncountable(activeSampleId)
                                 }
                                 sx={{
                                   minWidth: "auto",
@@ -2172,23 +2267,10 @@ const IAQAnalysis = () => {
                       <TableBody>
                         {(() => {
                           const analysis = sampleAnalyses[activeSampleId] || {};
-                          let fibreCounts = analysis.fibreCounts;
-                          
-                          // Ensure fibreCounts is a valid 5x20 array
-                          if (!fibreCounts || !Array.isArray(fibreCounts) || fibreCounts.length !== 5) {
-                            fibreCounts = Array(5)
-                              .fill()
-                              .map(() => Array(20).fill(""));
-                          } else {
-                            // Ensure each row is a valid array of 20 elements
-                            fibreCounts = fibreCounts.map((row) => {
-                              if (!Array.isArray(row) || row.length !== 20) {
-                                return Array(20).fill("");
-                              }
-                              return row.map((cell) => cell || "");
-                            });
-                          }
-                          
+                          const fibreCounts = normalizeFibreCountsGrid(
+                            analysis.fibreCounts
+                          );
+
                           return fibreCounts.map((row, rowIndex) => (
                             <TableRow key={rowIndex}>
                               <TableCell sx={{ p: 0.5 }}>
@@ -2202,7 +2284,7 @@ const IAQAnalysis = () => {
                                 >
                                   <TextField
                                     type="text"
-                                    value={cell || ""}
+                                    value={normalizeFibreCountCell(cell)}
                                     onChange={(e) =>
                                       handleFibreCountChange(
                                         activeSampleId,
@@ -2221,9 +2303,8 @@ const IAQAnalysis = () => {
                                     }
                                     size="small"
                                     disabled={
-                                      isFilterUncountable(activeSampleId) ||
-                                      iaqRecord?.status === "Complete - Satisfactory" ||
-                                      iaqRecord?.status === "Complete - Failed"
+                                      isReadOnly ||
+                                      isFilterUncountable(activeSampleId)
                                     }
                                     inputRef={(el) => {
                                       inputRefs.current[
@@ -2280,13 +2361,17 @@ const IAQAnalysis = () => {
               )}
             </DialogContent>
             <DialogActions>
-              <Button onClick={handleCancelFibreCountModal}>Cancel</Button>
-              <Button
-                onClick={handleSaveAndCloseFibreCountModal}
-                variant="contained"
-              >
-                Save & Close
+              <Button onClick={handleCancelFibreCountModal}>
+                {isReadOnly ? "Close" : "Cancel"}
               </Button>
+              {!isReadOnly && (
+                <Button
+                  onClick={handleSaveAndCloseFibreCountModal}
+                  variant="contained"
+                >
+                  Save & Close
+                </Button>
+              )}
             </DialogActions>
           </Dialog>
 
@@ -2299,10 +2384,13 @@ const IAQAnalysis = () => {
           >
             <DialogTitle>
               {activeCommentSampleId &&
-                `Comment - ${
+                `Comment - ${formatIAQSampleDisplay(
                   samples.find((s) => s._id === activeCommentSampleId)
-                    ?.fullSampleID
-                }`}
+                    ?.fullSampleID,
+                  iaqReference,
+                  samples.find((s) => s._id === activeCommentSampleId)
+                    ?.sampleNumber
+                )}`}
             </DialogTitle>
             <DialogContent>
               <TextField
@@ -2313,19 +2401,24 @@ const IAQAnalysis = () => {
                 onChange={(e) => setCommentText(e.target.value)}
                 placeholder="Enter comment for this sample..."
                 sx={{ mt: 2 }}
+                InputProps={{ readOnly: isReadOnly }}
               />
             </DialogContent>
             <DialogActions>
-              <Button onClick={handleCancelCommentModal}>Cancel</Button>
-              {activeCommentSampleId &&
+              <Button onClick={handleCancelCommentModal}>
+                {isReadOnly ? "Close" : "Cancel"}
+              </Button>
+              {!isReadOnly && activeCommentSampleId &&
                 sampleAnalyses[activeCommentSampleId]?.comment && (
                   <Button onClick={handleDeleteComment} color="error">
                     Delete Comment
                   </Button>
                 )}
-              <Button onClick={handleSaveComment} variant="contained">
-                Save Comment
-              </Button>
+              {!isReadOnly && (
+                <Button onClick={handleSaveComment} variant="contained">
+                  Save Comment
+                </Button>
+              )}
             </DialogActions>
           </Dialog>
 
@@ -2375,6 +2468,49 @@ const IAQAnalysis = () => {
           </Dialog>
         </Stack>
       </Box>
+
+      <Dialog
+        open={unlockDialogOpen}
+        onClose={() => !unlockingAnalysis && setUnlockDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Unlock Analysis for Editing?</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ mb: 2 }}>
+            Are you sure you want to unlock the analysis details for editing?
+          </Typography>
+          <Typography variant="body2" color="text.secondary" component="div">
+            If you continue:
+            <Box component="ul" sx={{ mt: 1, mb: 0, pl: 2.5 }}>
+              <li>
+                The IAQ record status will be reset to{" "}
+                <strong>Samples Submitted to Lab</strong>
+              </li>
+              <li>
+                Report authorisation will be cleared (including any approved
+                report details)
+              </li>
+            </Box>
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setUnlockDialogOpen(false)}
+            disabled={unlockingAnalysis}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleUnlockAnalysis}
+            variant="contained"
+            color="warning"
+            disabled={unlockingAnalysis}
+          >
+            {unlockingAnalysis ? "Unlocking..." : "Unlock Analysis"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

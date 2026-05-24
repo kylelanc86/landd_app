@@ -121,6 +121,7 @@ const ClearanceItems = () => {
   const [localPhotoChanges, setLocalPhotoChanges] = useState({}); // Track local changes
   const [photosToDelete, setPhotosToDelete] = useState(new Set()); // Track photos to delete
   const [localPhotoDescriptions, setLocalPhotoDescriptions] = useState({}); // Track local description changes
+  const [savingPhotoChanges, setSavingPhotoChanges] = useState(false);
   const [editingDescriptionPhotoId, setEditingDescriptionPhotoId] =
     useState(null); // Track which photo description is being edited
   const [fullSizePhotoDialogOpen, setFullSizePhotoDialogOpen] = useState(false);
@@ -464,15 +465,19 @@ const ClearanceItems = () => {
     }
   };
 
-  const fetchData = async () => {
+  const fetchData = async (options = {}) => {
+    const { silent = false } = options;
     console.log("[ClearanceItems] fetchData - Starting", {
       clearanceId,
+      silent,
       timestamp: new Date().toISOString(),
     });
     const fetchStartTime = performance.now();
 
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
 
       // Check if clearanceId is valid
       if (!clearanceId) {
@@ -677,10 +682,14 @@ const ClearanceItems = () => {
         totalDuration: `${(fetchEndTime - fetchStartTime).toFixed(2)}ms`,
         timestamp: new Date().toISOString(),
       });
-      setError(`Failed to load data: ${err.message || "Unknown error"}`);
+      if (!silent) {
+        setError(`Failed to load data: ${err.message || "Unknown error"}`);
+      }
     } finally {
       const loadingEndTime = performance.now();
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
       console.log("[ClearanceItems] fetchData - Loading state set to false", {
         totalDuration: `${(loadingEndTime - fetchStartTime).toFixed(2)}ms`,
         timestamp: new Date().toISOString(),
@@ -1323,8 +1332,9 @@ const ClearanceItems = () => {
     setFullSizeArrowMode(false);
     setSelectedArrowId(null);
     setMovingArrowId(null);
+    setSavingPhotoChanges(false);
 
-    await fetchData();
+    await fetchData({ silent: true });
   };
 
   // Handle site plan save
@@ -1412,8 +1422,13 @@ const ClearanceItems = () => {
   };
 
   // Add photo to existing item
-  const handleAddPhotoToItem = async (photoData, fullResolutionData = null) => {
-    if (!selectedItemForPhotos) return;
+  const handleAddPhotoToItem = async (
+    photoData,
+    fullResolutionData = null,
+    options = {},
+  ) => {
+    const { suppressSnackbar = false } = options;
+    if (!selectedItemForPhotos) return false;
 
     try {
       const response = await asbestosClearanceService.addPhotoToItem(
@@ -1431,22 +1446,47 @@ const ClearanceItems = () => {
           photographs: response.photographs,
         }));
       } else if (response) {
-        // If response is the entire item, update the selected item
         setSelectedItemForPhotos(response);
       }
 
-      setPhotoPreview(null);
-      setPhotoFile(null);
-      setCompressionStatus(null);
-      showSnackbar("Photo added successfully", "success");
+      if (!suppressSnackbar) {
+        setPhotoPreview(null);
+        setPhotoFile(null);
+        setCompressionStatus(null);
+        showSnackbar("Photo added successfully", "success");
+      }
+      return true;
     } catch (error) {
       console.error("Error adding photo:", error);
-      const detail =
-        error.response?.data?.message ||
-        error.response?.data?.error ||
-        error.message;
-      showSnackbar(detail || "Failed to add photo", "error");
+      if (!suppressSnackbar) {
+        const detail =
+          error.response?.data?.message ||
+          error.response?.data?.error ||
+          error.message;
+        showSnackbar(detail || "Failed to add photo", "error");
+      }
+      return false;
     }
+  };
+
+  const fileToPhotoDataUrl = async (file) => {
+    const readFileAsDataUrl = (f) =>
+      new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = () => reject(new Error("Failed to read file"));
+        reader.readAsDataURL(f);
+      });
+
+    if (needsCompression(file, 300)) {
+      return compressImage(file, {
+        maxWidth: 1000,
+        maxHeight: 1000,
+        quality: 0.75,
+        maxSizeKB: 300,
+      });
+    }
+    return readFileAsDataUrl(file);
   };
 
   // Delete photo from item
@@ -1772,57 +1812,59 @@ const ClearanceItems = () => {
 
   // Save all photo changes to backend
   const savePhotoChanges = async () => {
-    try {
-      const togglePromises = [];
-      const descriptionPromises = [];
-      let toggleResults = [];
-      let descriptionResults = [];
-      let deletionResults = [];
+    if (!selectedItemForPhotos?._id || savingPhotoChanges) return;
 
-      // Handle photo inclusion changes (can be done in parallel)
+    setSavingPhotoChanges(true);
+    try {
+      const updatesByPhotoId = new Map();
+
       Object.entries(localPhotoChanges).forEach(
         ([photoId, includeInReport]) => {
-          const photo = selectedItemForPhotos?.photographs?.find(
-            (p) => p._id === photoId,
+          const photo = selectedItemForPhotos.photographs?.find(
+            (p) => String(p._id) === String(photoId),
           );
           if (photo && photo.includeInReport !== includeInReport) {
-            togglePromises.push(
-              asbestosClearanceService.togglePhotoInReport(
-                clearanceId,
-                selectedItemForPhotos._id,
-                photoId,
-              ),
-            );
+            const entry = updatesByPhotoId.get(photoId) || { photoId };
+            entry.includeInReport = includeInReport;
+            updatesByPhotoId.set(photoId, entry);
           }
         },
       );
 
-      // Handle photo description changes (can be done in parallel)
       Object.entries(localPhotoDescriptions).forEach(
         ([photoId, description]) => {
-          descriptionPromises.push(
-            asbestosClearanceService.updatePhotoDescription(
-              clearanceId,
-              selectedItemForPhotos._id,
-              photoId,
-              description,
-            ),
-          );
+          const entry = updatesByPhotoId.get(photoId) || { photoId };
+          entry.description = description;
+          updatesByPhotoId.set(photoId, entry);
         },
       );
 
-      // Process toggle operations in parallel
-      if (togglePromises.length > 0) {
-        toggleResults = await Promise.allSettled(togglePromises);
+      const metadataUpdates = Array.from(updatesByPhotoId.values());
+      let metadataSaved = metadataUpdates.length === 0;
+
+      if (metadataUpdates.length > 0) {
+        try {
+          const result =
+            await asbestosClearanceService.batchUpdatePhotoMetadata(
+              clearanceId,
+              selectedItemForPhotos._id,
+              metadataUpdates,
+            );
+          metadataSaved = true;
+          if (result?.item) {
+            setSelectedItemForPhotos(result.item);
+          }
+        } catch (error) {
+          console.error("Error batch updating photo metadata:", error);
+          const detail =
+            error.response?.data?.message ||
+            error.response?.data?.error ||
+            error.message;
+          showSnackbar(detail || "Failed to save photo changes", "error");
+        }
       }
 
-      // Process description updates in parallel
-      if (descriptionPromises.length > 0) {
-        descriptionResults = await Promise.allSettled(descriptionPromises);
-      }
-
-      // Handle photo deletions sequentially to avoid backend race conditions
-      // Process deletions one at a time to prevent concurrent modification errors
+      const deletionFailures = [];
       for (const photoId of photosToDelete) {
         try {
           await asbestosClearanceService.deletePhotoFromItem(
@@ -1830,63 +1872,35 @@ const ClearanceItems = () => {
             selectedItemForPhotos._id,
             photoId,
           );
-          deletionResults.push({ status: "fulfilled", photoId });
         } catch (error) {
           console.error(`Error deleting photo ${photoId}:`, error);
-          deletionResults.push({ status: "rejected", photoId, reason: error });
+          deletionFailures.push(photoId);
         }
       }
 
-      // Combine results
-      const allResults = [
-        ...toggleResults,
-        ...descriptionResults,
-        ...deletionResults,
-      ];
-      const failures = allResults.filter((r) => r.status === "rejected");
-      const successes = allResults.filter((r) => r.status === "fulfilled");
-
-      // Log any failures for debugging
-      failures.forEach((result) => {
-        if (result.reason) {
-          console.error(
-            `Operation failed for photo ${result.photoId || "unknown"}:`,
-            result.reason,
-          );
+      if (!metadataSaved) {
+        if (deletionFailures.length === 0 && photosToDelete.size > 0) {
+          showSnackbar("Photo deletions saved, but other changes failed", "warning");
         }
-      });
+        return;
+      }
 
-      if (failures.length > 0) {
-        if (successes.length === 0) {
-          // All operations failed
-          showSnackbar("Failed to save photo changes", "error");
-          return;
-        } else {
-          // Some operations succeeded, some failed
-          showSnackbar(
-            `Saved ${successes.length} of ${allResults.length} changes. Some operations failed.`,
-            "warning",
-          );
-        }
-      } else {
-        // All operations succeeded
+      if (deletionFailures.length > 0) {
+        showSnackbar(
+          `Saved metadata changes. Failed to delete ${deletionFailures.length} photo(s).`,
+          "warning",
+        );
+      } else if (metadataUpdates.length > 0 || photosToDelete.size > 0) {
         showSnackbar("Photo changes saved successfully", "success");
       }
 
-      // Clear local changes - refresh will update the state
-      // Only clear if we had at least some successes
-      if (successes.length > 0) {
-        setLocalPhotoChanges({});
-        setPhotosToDelete(new Set());
-        setLocalPhotoDescriptions({});
-      }
+      setLocalPhotoChanges({});
+      setPhotosToDelete(new Set());
+      setLocalPhotoDescriptions({});
 
-      // Refresh data to get updated state
-      await fetchData();
-
-      // Update selected item
       const updatedItems = await asbestosClearanceService.getItems(clearanceId);
-      const updatedItem = updatedItems.find(
+      setItems(updatedItems || []);
+      const updatedItem = updatedItems?.find(
         (item) => item._id === selectedItemForPhotos._id,
       );
       if (updatedItem) {
@@ -1895,161 +1909,105 @@ const ClearanceItems = () => {
     } catch (error) {
       console.error("Error saving photo changes:", error);
       showSnackbar("Failed to save photo changes", "error");
+    } finally {
+      setSavingPhotoChanges(false);
     }
   };
 
-  // Handle photo upload for photo gallery
+  // Handle photo upload for photo gallery (supports multiple files)
   const handlePhotoUploadForGallery = async (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      console.log("[ClearanceItems] handlePhotoUploadForGallery - Starting", {
-        fileName: file.name,
-        fileSize: `${(file.size / 1024).toFixed(2)}KB`,
-        fileType: file.type,
-        timestamp: new Date().toISOString(),
-      });
-      const uploadStartTime = performance.now();
+    const fileList = event.target.files;
+    if (!fileList?.length) return;
 
-      setPhotoFile(file);
+    const files = Array.from(fileList).filter((f) =>
+      f.type.startsWith("image/"),
+    );
+    event.target.value = "";
+
+    if (files.length === 0) {
+      showSnackbar("Please select image files only", "warning");
+      return;
+    }
+
+    const total = files.length;
+    let succeeded = 0;
+    let failed = 0;
+
+    setCompressionStatus({
+      type: "processing",
+      message:
+        total === 1
+          ? "Processing image..."
+          : `Processing ${total} images...`,
+    });
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
       setCompressionStatus({
         type: "processing",
-        message: "Processing image...",
+        message:
+          total === 1
+            ? "Processing image..."
+            : `Processing image ${i + 1} of ${total}...`,
       });
 
       try {
-        const originalSizeKB = Math.round(file.size / 1024);
-        const shouldCompress = needsCompression(file, 300);
-
-        const readFileAsDataUrl = (f) =>
-          new Promise((resolve, reject) => {
-            const r = new FileReader();
-            r.onload = (e) => resolve(e.target.result);
-            r.onerror = () => reject(new Error("Failed to read file"));
-            r.readAsDataURL(f);
-          });
-
-        console.log(
-          "[ClearanceItems] handlePhotoUploadForGallery - Compression check",
-          {
-            originalSizeKB,
-            shouldCompress,
-            timestamp: new Date().toISOString(),
-          },
-        );
-
-        if (shouldCompress) {
-          console.log(
-            "[ClearanceItems] handlePhotoUploadForGallery - Starting compression",
-            {
-              timestamp: new Date().toISOString(),
-            },
-          );
-          const compressionStartTime = performance.now();
-
-          setCompressionStatus({
-            type: "compressing",
-            message: "Compressing image...",
-          });
-
-          const compressedImage = await compressImage(file, {
-            maxWidth: 1000,
-            maxHeight: 1000,
-            quality: 0.75,
-            maxSizeKB: 300,
-          });
-
-          const compressionEndTime = performance.now();
-          console.log(
-            "[ClearanceItems] handlePhotoUploadForGallery - Compression completed",
-            {
-              compressionDuration: `${(
-                compressionEndTime - compressionStartTime
-              ).toFixed(2)}ms`,
-              timestamp: new Date().toISOString(),
-            },
-          );
-
-          const compressedSizeKB = Math.round(
-            (compressedImage.length * 0.75) / 1024,
-          );
-          const reduction = Math.round(
-            ((originalSizeKB - compressedSizeKB) / originalSizeKB) * 100,
-          );
-
-          console.log(
-            "[ClearanceItems] handlePhotoUploadForGallery - Adding compressed photo",
-            {
-              timestamp: new Date().toISOString(),
-            },
-          );
-          const addStartTime = performance.now();
-          await handleAddPhotoToItem(compressedImage, null);
-          const addEndTime = performance.now();
-          console.log(
-            "[ClearanceItems] handlePhotoUploadForGallery - Photo added",
-            {
-              addDuration: `${(addEndTime - addStartTime).toFixed(2)}ms`,
-              timestamp: new Date().toISOString(),
-            },
-          );
-
-          setCompressionStatus({
-            type: "success",
-            message: `Compressed: ${originalSizeKB}KB → ${compressedSizeKB}KB (${reduction}% reduction)`,
-          });
-        } else {
-          console.log(
-            "[ClearanceItems] handlePhotoUploadForGallery - No compression needed, reading file",
-            {
-              timestamp: new Date().toISOString(),
-            },
-          );
-          const readStartTime = performance.now();
-          const dataUrl = await readFileAsDataUrl(file);
-          const readEndTime = performance.now();
-          console.log(
-            "[ClearanceItems] handlePhotoUploadForGallery - File read completed",
-            {
-              readDuration: `${(readEndTime - readStartTime).toFixed(2)}ms`,
-              timestamp: new Date().toISOString(),
-            },
-          );
-          const addStartTime = performance.now();
-          await handleAddPhotoToItem(dataUrl, null);
-          const addEndTime = performance.now();
-          console.log(
-            "[ClearanceItems] handlePhotoUploadForGallery - Photo added",
-            {
-              addDuration: `${(addEndTime - addStartTime).toFixed(2)}ms`,
-              timestamp: new Date().toISOString(),
-            },
-          );
-          setCompressionStatus({
-            type: "info",
-            message: `No compression needed (${originalSizeKB}KB)`,
-          });
-        }
-
-        const uploadEndTime = performance.now();
-        console.log(
-          "[ClearanceItems] handlePhotoUploadForGallery - Completed",
-          {
-            totalDuration: `${(uploadEndTime - uploadStartTime).toFixed(2)}ms`,
-            timestamp: new Date().toISOString(),
-          },
-        );
+        const dataUrl = await fileToPhotoDataUrl(file);
+        const ok = await handleAddPhotoToItem(dataUrl, null, {
+          suppressSnackbar: true,
+        });
+        if (ok) succeeded++;
+        else failed++;
       } catch (error) {
-        const uploadEndTime = performance.now();
-        console.error("[ClearanceItems] handlePhotoUploadForGallery - Error", {
-          error: error,
-          errorMessage: error.message,
-          totalDuration: `${(uploadEndTime - uploadStartTime).toFixed(2)}ms`,
-          timestamp: new Date().toISOString(),
-        });
-        setCompressionStatus({
-          type: "error",
-          message: "Failed to process image",
-        });
+        console.error("Error processing upload:", file.name, error);
+        failed++;
+      }
+    }
+
+    setPhotoPreview(null);
+    setPhotoFile(null);
+
+    if (failed === 0) {
+      setCompressionStatus({
+        type: "success",
+        message:
+          total === 1
+            ? "Photo added successfully"
+            : `${succeeded} photos added successfully`,
+      });
+      showSnackbar(
+        total === 1
+          ? "Photo added successfully"
+          : `${succeeded} photos added successfully`,
+        "success",
+      );
+    } else if (succeeded === 0) {
+      setCompressionStatus({
+        type: "error",
+        message: "Failed to upload photos",
+      });
+      showSnackbar("Failed to upload photos", "error");
+    } else {
+      setCompressionStatus({
+        type: "warning",
+        message: `Added ${succeeded} of ${total} photos`,
+      });
+      showSnackbar(`Added ${succeeded} of ${total} photos`, "warning");
+    }
+
+    if (succeeded > 0 && selectedItemForPhotos?._id) {
+      try {
+        const updatedItems =
+          await asbestosClearanceService.getItems(clearanceId);
+        setItems(updatedItems || []);
+        const updatedItem = updatedItems?.find(
+          (item) => item._id === selectedItemForPhotos._id,
+        );
+        if (updatedItem) {
+          setSelectedItemForPhotos(updatedItem);
+        }
+      } catch (err) {
+        console.error("Error refreshing items after upload:", err);
       }
     }
   };
@@ -4518,32 +4476,6 @@ const ClearanceItems = () => {
                 Manage Photos
               </Typography>
             </Box>
-            {isMobileLandscape && selectedItemForPhotos && (
-              <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-                <Button
-                  variant="outlined"
-                  startIcon={<PhotoCameraIcon />}
-                  onClick={handleTakePhoto}
-                  size="small"
-                >
-                  Take Photo
-                </Button>
-                <Button
-                  variant="outlined"
-                  startIcon={<UploadIcon />}
-                  component="label"
-                  size="small"
-                >
-                  Upload Photo
-                  <input
-                    type="file"
-                    hidden
-                    accept="image/*"
-                    onChange={handlePhotoUploadForGallery}
-                  />
-                </Button>
-              </Box>
-            )}
             <IconButton onClick={handleClosePhotoGallery}>
               <CloseIcon />
             </IconButton>
@@ -4577,61 +4509,44 @@ const ClearanceItems = () => {
                   <>
                 <Box
                   sx={{
-                    mb: 3,
-                    ...(isMobileLandscape && {
-                      display: "flex",
-                      flexWrap: "wrap",
-                      alignItems: "center",
-                      gap: 1,
-                      "& .MuiTypography-root": { mb: 0 },
-                    }),
+                    mb: compressionStatus ? 2 : 3,
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "flex-start",
+                    justifyContent: "space-between",
+                    gap: 2,
                   }}
                 >
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    sx={{ mb: isMobileLandscape ? 0 : 1 }}
-                  >
-                    <strong>Location:</strong>{" "}
-                    {selectedItemForPhotos.locationDescription}
-                  </Typography>
-                  {isMobileLandscape && (
-                    <Typography variant="body2" color="text.secondary">
-                      |
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mb: 1 }}
+                    >
+                      <strong>Location:</strong>{" "}
+                      {selectedItemForPhotos.locationDescription}
                     </Typography>
-                  )}
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    sx={{ mb: isMobileLandscape ? 0 : 1 }}
-                  >
-                    <strong>Room/Area:</strong>{" "}
-                    {selectedItemForPhotos.roomArea}
-                  </Typography>
-                  {isMobileLandscape && (
-                    <Typography variant="body2" color="text.secondary">
-                      |
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mb: 1 }}
+                    >
+                      <strong>Room/Area:</strong>{" "}
+                      {selectedItemForPhotos.roomArea}
                     </Typography>
-                  )}
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    sx={{ mb: isMobileLandscape ? 0 : 0 }}
+                    <Typography variant="body2" color="text.secondary">
+                      <strong>Material:</strong>{" "}
+                      {selectedItemForPhotos.materialDescription}
+                    </Typography>
+                  </Box>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      gap: 1,
+                      flexShrink: 0,
+                      alignItems: "center",
+                    }}
                   >
-                    <strong>Material:</strong>{" "}
-                    {selectedItemForPhotos.materialDescription}
-                  </Typography>
-                </Box>
-
-                {!isMobileLandscape && (
-                <Box sx={{ mb: 3, p: 2, bgcolor: "grey.50", borderRadius: 2 }}>
-                  <Typography
-                    variant="subtitle1"
-                    sx={{ mb: 2, fontWeight: 600 }}
-                  >
-                    Add New Photo
-                  </Typography>
-                  <Box sx={{ display: "flex", gap: 1 }}>
                     <Button
                       variant="outlined"
                       startIcon={<PhotoCameraIcon />}
@@ -4646,21 +4561,24 @@ const ClearanceItems = () => {
                       component="label"
                       size="small"
                     >
-                      Upload Photo
+                      Upload Photos
                       <input
                         type="file"
                         hidden
                         accept="image/*"
+                        multiple
                         onChange={handlePhotoUploadForGallery}
                       />
                     </Button>
                   </Box>
-                  {compressionStatus && (
-                    <Alert severity={compressionStatus.type} sx={{ mt: 2 }}>
-                      {compressionStatus.message}
-                    </Alert>
-                  )}
                 </Box>
+                {compressionStatus && (
+                  <Alert
+                    severity={compressionStatus.type}
+                    sx={{ mb: 3 }}
+                  >
+                    {compressionStatus.message}
+                  </Alert>
                 )}
 
                 {/* Photos Grid */}
@@ -5090,12 +5008,20 @@ const ClearanceItems = () => {
           <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
             <Button
               onClick={async () => {
+                if (savingPhotoChanges) return;
                 if (hasUnsavedChanges()) {
                   await savePhotoChanges();
+                } else {
+                  await handleClosePhotoGallery();
                 }
-                await handleClosePhotoGallery();
               }}
+              disabled={savingPhotoChanges}
               variant="contained"
+              startIcon={
+                savingPhotoChanges ? (
+                  <CircularProgress size={18} color="inherit" />
+                ) : null
+              }
               sx={{
                 minWidth: 100,
                 borderRadius: 2,
@@ -5111,7 +5037,11 @@ const ClearanceItems = () => {
                 },
               }}
             >
-              {hasUnsavedChanges() ? "Update" : "Done"}
+              {savingPhotoChanges
+                ? "Updating..."
+                : hasUnsavedChanges()
+                  ? "Update"
+                  : "Done"}
             </Button>
           </DialogActions>
         </Dialog>

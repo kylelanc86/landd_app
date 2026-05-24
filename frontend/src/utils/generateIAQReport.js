@@ -1,6 +1,11 @@
 import pdfMake from "pdfmake/build/pdfmake";
 import api from '../services/api';
 import { formatDateInSydney } from '../utils/dateUtils';
+import {
+  generateIAQReference,
+  formatIAQSampleDisplay,
+  resolveAnalystName,
+} from './iaqReference';
 
 // Helper to format date as DD/MM/YYYY in Sydney timezone (for report authorisation, issue dates)
 function formatDate(dateStr) {
@@ -120,38 +125,6 @@ const formatReportedConcentration = (sample) => {
   return reportedConc;
 };
 
-// Generate IAQ Reference
-function generateIAQReference(record, allRecords) {
-  if (!record || !allRecords) return '';
-  
-  const dateObj = new Date(record.monitoringDate);
-  const month = dateObj.toLocaleString("default", { month: "short" });
-  const year = dateObj.getFullYear();
-  const monthYear = `${month} ${year}`;
-
-  // Find all records for the same month-year, sorted by creation time
-  const sameMonthYearRecords = allRecords
-    .filter((r) => {
-      const recordDate = new Date(r.monitoringDate);
-      return (
-        recordDate.getMonth() === dateObj.getMonth() &&
-        recordDate.getFullYear() === dateObj.getFullYear()
-      );
-    })
-    .sort((a, b) => {
-      // Sort by creation time to maintain order
-      return new Date(a.createdAt) - new Date(b.createdAt);
-    });
-
-  // Find the position of the current record (1-indexed)
-  const reportNumber =
-    sameMonthYearRecords.findIndex(
-      (r) => (r._id || r.id) === (record._id || record.id)
-    ) + 1;
-
-  return `IAQ ${monthYear} - ${reportNumber}`;
-}
-
 export async function generateIAQReport({ record, allRecords, samples, openInNewTab = false, returnPdfData = false, reportApprovedBy = null, reportIssueDate = null }) {
   // Determine base URL for fonts
   const baseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -187,17 +160,10 @@ export async function generateIAQReport({ record, allRecords, samples, openInNew
   }).filter(Boolean)));
 
   // Get analyst name
-  let analystName = 'N/A';
-  if (record.analysedBy) {
-    if (typeof record.analysedBy === 'object') {
-      analystName = `${record.analysedBy.firstName || ''} ${record.analysedBy.lastName || ''}`.trim();
-    }
-  } else if (samples.length > 0 && samples[0].analysedBy) {
-    const firstAnalysedBy = samples[0].analysedBy;
-    if (typeof firstAnalysedBy === 'object') {
-      analystName = `${firstAnalysedBy.firstName || ''} ${firstAnalysedBy.lastName || ''}`.trim();
-    }
-  }
+  let analystName =
+    resolveAnalystName(record.analysedBy) ||
+    resolveAnalystName(samples[0]?.analysedBy) ||
+    'N/A';
 
   // Get IAQ reference
   const iaqReference = generateIAQReference(record, allRecords);
@@ -403,7 +369,7 @@ export async function generateIAQReport({ record, allRecords, samples, openInNew
                         width: '50%'
                       },
                       {
-                        text: [ { text: 'Analysis Date: ', bold: true }, { text: record.updatedAt ? formatDate(record.updatedAt) : 'N/A' } ],
+                        text: [ { text: 'Analysis Date: ', bold: true }, { text: (record.analysisDate || record.updatedAt) ? formatDate(record.analysisDate || record.updatedAt) : 'N/A' } ],
                         style: 'tableContent',
                         margin: [0, 0, 0, 2],
                         width: '50%'
@@ -553,9 +519,11 @@ export async function generateIAQReport({ record, allRecords, samples, openInNew
                   const uncountableDueToDust = sample.analysis?.uncountableDueToDust === true || sample.analysis?.uncountableDueToDust === 'true';
                   const isFailed = sample.status === "failed";
                   
-                  // Format sample ID with IAQ reference
-                  const sampleID = sample.fullSampleID || sample.sampleNumber || 'N/A';
-                  const displaySampleID = iaqReference ? `${iaqReference} - ${sampleID}` : sampleID;
+                  const displaySampleID = formatIAQSampleDisplay(
+                    sample.fullSampleID,
+                    iaqReference,
+                    sample.sampleNumber
+                  );
                   
                   return [
                     { text: displaySampleID, style: 'tableContent' },

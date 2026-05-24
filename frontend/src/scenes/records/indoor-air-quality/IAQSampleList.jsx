@@ -37,6 +37,10 @@ import { iaqSampleService } from "../../../services/iaqSampleService";
 import { formatDate, formatTime } from "../../../utils/dateUtils";
 import PermissionGate from "../../../components/PermissionGate";
 import { useAuth } from "../../../context/AuthContext";
+import {
+  generateIAQReference,
+  formatIAQSampleDisplay,
+} from "../../../utils/iaqReference";
 
 const IAQSampleList = () => {
   const theme = useTheme();
@@ -312,38 +316,14 @@ const IAQSampleList = () => {
     });
   };
 
-  // Generate IAQ Reference for display
-  const generateIAQReference = (record = null) => {
-    const recordToUse = record || iaqRecord;
-    if (!recordToUse) return "";
-    
-    const dateObj = new Date(recordToUse.monitoringDate);
-    const month = dateObj.toLocaleString("default", { month: "short" });
-    const year = dateObj.getFullYear();
-    const monthYear = `${month} ${year}`;
+  const iaqReference = useMemo(
+    () => generateIAQReference(iaqRecord, allRecords),
+    [iaqRecord, allRecords]
+  );
 
-    // Find all records for the same month-year, sorted by creation time
-    const sameMonthYearRecords = allRecords
-      .filter((r) => {
-        const recordDate = new Date(r.monitoringDate);
-        return (
-          recordDate.getMonth() === dateObj.getMonth() &&
-          recordDate.getFullYear() === dateObj.getFullYear()
-        );
-      })
-      .sort((a, b) => {
-        // Sort by creation time to maintain order
-        return new Date(a.createdAt) - new Date(b.createdAt);
-      });
-
-    // Find the position of the current record (1-indexed)
-    const reportNumber =
-      sameMonthYearRecords.findIndex(
-        (r) => (r._id || r.id) === (recordToUse._id || recordToUse.id)
-      ) + 1;
-
-    return `${monthYear} - ${reportNumber}`;
-  };
+  const isAnalysisFinalised =
+    iaqRecord?.status === "Complete - Satisfactory" ||
+    iaqRecord?.status === "Complete - Failed";
 
   // Format flowrate: 1 decimal place if whole number or 1.5, otherwise 2 decimal places
   const formatFlowrate = (flowrate) => {
@@ -359,12 +339,13 @@ const IAQSampleList = () => {
     return num.toFixed(2);
   };
 
-  // Format sample number as {IAQREFERENCE} - {SampleNumber}
   const formatSampleNumber = (sample) => {
     if (!sample) return "-";
-    const iaqRef = generateIAQReference();
-    const sampleNum = sample.fullSampleID || sample.sampleNumber || "";
-    return `${iaqRef} - ${sampleNum}`;
+    return formatIAQSampleDisplay(
+      sample.fullSampleID,
+      iaqReference,
+      sample.sampleNumber
+    );
   };
 
   if (loading) {
@@ -389,7 +370,7 @@ const IAQSampleList = () => {
           Indoor Air Quality Records
         </Link>
         <Typography color="text.primary">
-          {generateIAQReference()}
+          {iaqReference}
         </Typography>
       </Breadcrumbs>
 
@@ -403,7 +384,7 @@ const IAQSampleList = () => {
           mb: 4,
         }}
       >
-        Indoor Air Quality: {generateIAQReference()}
+        Indoor Air Quality: {iaqReference}
       </Typography>
 
       <Box
@@ -570,6 +551,31 @@ const IAQSampleList = () => {
           </TableBody>
         </Table>
       </TableContainer>
+
+      {isAnalysisFinalised && (
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "flex-end",
+            mt: 3,
+          }}
+        >
+          <Button
+            variant="contained"
+            onClick={() =>
+              navigate(`/records/indoor-air-quality/${iaqRecordId}/analysis`)
+            }
+            sx={{
+              backgroundColor: theme.palette.secondary.main,
+              "&:hover": {
+                backgroundColor: theme.palette.secondary.dark,
+              },
+            }}
+          >
+            Analysis Records
+          </Button>
+        </Box>
+      )}
 
       {/* Sampling Complete and Samples Submitted to Lab Buttons */}
       <Box

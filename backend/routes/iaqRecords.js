@@ -4,6 +4,10 @@ const IAQRecord = require('../models/IAQRecord');
 const IAQSample = require('../models/IAQSample');
 const User = require('../models/User');
 const { sendMail } = require('../services/mailer');
+const {
+  notifyAuthorisationRequesterOnApproval,
+  getFrontendUrl,
+} = require('../services/reportAuthorisationNotificationService');
 const { formatDateSydney, todaySydney } = require('../utils/dateUtils');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
@@ -69,6 +73,19 @@ router.patch('/:id', auth, checkPermission(['projects.edit']), async (req, res) 
     }
     if (req.body.status !== undefined) {
       record.status = req.body.status;
+      const completeStatuses = ['Complete - Satisfactory', 'Complete - Failed'];
+      if (
+        completeStatuses.includes(req.body.status) &&
+        !record.analysisDate &&
+        req.body.analysisDate === undefined
+      ) {
+        record.analysisDate = new Date();
+      }
+    }
+    if (req.body.analysisDate !== undefined) {
+      record.analysisDate = req.body.analysisDate
+        ? new Date(req.body.analysisDate)
+        : null;
     }
     if (req.body.reportApprovedBy !== undefined) {
       record.reportApprovedBy = req.body.reportApprovedBy;
@@ -86,6 +103,36 @@ router.patch('/:id', auth, checkPermission(['projects.edit']), async (req, res) 
     const updatedRecord = await record.save();
     res.json(updatedRecord);
   } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+// POST /api/iaq-records/:id/unlock-analysis - reopen finalised analysis for editing
+router.post('/:id/unlock-analysis', auth, checkPermission(['projects.edit']), async (req, res) => {
+  try {
+    const record = await IAQRecord.findById(req.params.id);
+    if (!record) {
+      return res.status(404).json({ message: 'IAQ record not found' });
+    }
+
+    const completeStatuses = ['Complete - Satisfactory', 'Complete - Failed'];
+    if (!completeStatuses.includes(record.status)) {
+      return res.status(400).json({
+        message: 'Analysis can only be unlocked when the record is complete',
+      });
+    }
+
+    record.status = 'Samples Submitted to Lab';
+    record.reportApprovedBy = null;
+    record.reportIssueDate = null;
+    record.authorisationRequestedBy = null;
+    record.authorisationRequestedByEmail = null;
+    record.reportViewedAt = null;
+
+    const updatedRecord = await record.save();
+    res.json(updatedRecord);
+  } catch (err) {
+    console.error('Error unlocking IAQ analysis:', err);
     res.status(400).json({ message: err.message });
   }
 });
@@ -111,6 +158,7 @@ router.post('/:id/authorise', auth, checkPermission(['projects.edit']), async (r
       });
     }
 
+    const wasAlreadyAuthorised = Boolean(record.reportApprovedBy);
     const approver =
       req.user?.firstName && req.user?.lastName
         ? `${req.user.firstName} ${req.user.lastName}`
@@ -122,57 +170,22 @@ router.post('/:id/authorise', auth, checkPermission(['projects.edit']), async (r
 
     const updatedRecord = await record.save();
 
-    // Send notification email to the user who requested authorisation
-    if (updatedRecord.authorisationRequestedBy) {
-      try {
-        const requester = await User.findById(updatedRecord.authorisationRequestedBy)
-          .select('firstName lastName email');
-        
-        if (requester && requester.email) {
-          const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-          const recordUrl = `${frontendUrl}/records/indoor-air-quality`;
-          
-          await sendMail({
-            to: requester.email,
-            subject: `IAQ Report Authorised - ${generateIAQReference(record)}`,
-            text: `
-Your IAQ report has been authorised.
+    const iaqReference = generateIAQReference(record);
 
-IAQ Reference: ${generateIAQReference(record)}
-Authorised by: ${approver}
-Authorisation Date: ${todaySydney()}
+    await notifyAuthorisationRequesterOnApproval({
+      authorisationRequestedBy: updatedRecord.authorisationRequestedBy,
+      wasAlreadyAuthorised,
+      isNowAuthorised: Boolean(updatedRecord.reportApprovedBy),
+      approverName: approver,
+      reportTypeLabel: 'Indoor air quality',
+      subjectIdentifier: iaqReference,
+      details: [
+        { label: 'IAQ reference', value: iaqReference },
+        { label: 'Authorisation date', value: todaySydney() },
+      ],
+      viewUrl: `${getFrontendUrl()}/records/indoor-air-quality`,
+    });
 
-You can view the authorised report at: ${recordUrl}
-            `,
-            html: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
-                <div style="margin-bottom: 30px;">
-                  <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
-                </div>
-                <div style="color: #333; line-height: 1.6;">
-                  <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Report Authorised</h2>
-                  <p>Hello ${requester.firstName},</p>
-                  <p>Your IAQ report has been authorised:</p>
-                  <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
-                    <p style="margin: 5px 0;"><strong>IAQ Reference:</strong> ${generateIAQReference(record)}</p>
-                    <p style="margin: 5px 0;"><strong>Authorised by:</strong> ${approver}</p>
-                    <p style="margin: 5px 0;"><strong>Authorisation Date:</strong> ${todaySydney()}</p>
-                  </div>
-                  <div style="text-align: center; margin: 30px 0;">
-                    <a href="${recordUrl}" style="background-color: rgb(25, 138, 44); color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">View Report</a>
-                  </div>
-                  <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;">
-                  <p style="color: #666; font-size: 12px;">This is an automated message, please do not reply to this email.</p>
-                </div>
-              </div>
-            `
-          });
-        }
-      } catch (emailError) {
-        console.error('Error sending authorisation notification email:', emailError);
-        // Don't fail the request if email fails
-      }
-    }
 
     res.json({
       message: 'Report authorised successfully',

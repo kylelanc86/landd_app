@@ -36,6 +36,8 @@ import { formatDate, formatDateForInput } from "../../../utils/dateFormat";
 import { equipmentService } from "../../../services/equipmentService";
 import { efaService } from "../../../services/efaService";
 import userService from "../../../services/userService";
+import LookupField from "../../../components/LookupField";
+import { userOptionsFromList } from "../../../utils/lookupOptions";
 
 const EFAPage = () => {
   const theme = useTheme();
@@ -158,6 +160,7 @@ const EFAPage = () => {
   // Dialog states
   const [openDialog, setOpenDialog] = useState(false);
   const [editingCalibration, setEditingCalibration] = useState(null);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState(false);
   const [calibrationToDelete, setCalibrationToDelete] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -182,6 +185,7 @@ const EFAPage = () => {
 
   const handleAdd = () => {
     setEditingCalibration(null);
+    setIsEditMode(true);
     const todayDate = formatDateForInput(new Date());
     setFormData({
       date: todayDate,
@@ -206,6 +210,7 @@ const EFAPage = () => {
     if (item && item.isCalibrated) {
       const calibration = item;
       setEditingCalibration(calibration);
+      setIsEditMode(false);
 
       // Find the technician ID by matching the technician name
       const technicianName =
@@ -366,9 +371,12 @@ const EFAPage = () => {
   const handleCloseDialog = () => {
     setOpenDialog(false);
     setEditingCalibration(null);
+    setIsEditMode(false);
     setError(null);
     setFilterErrors([]);
   };
+
+  const lookupViewMode = Boolean(editingCalibration && !isEditMode);
 
   const handleCloseDeleteDialog = () => {
     setDeleteDialog(false);
@@ -734,38 +742,57 @@ const EFAPage = () => {
         fullWidth
       >
         <DialogTitle>
-          {editingCalibration ? "Edit Calibration" : "Add New Calibration"}
+          <Box display="flex" alignItems="center" gap={2} flexWrap="wrap">
+            <Typography variant="h6">
+              {editingCalibration
+                ? lookupViewMode
+                  ? "View Calibration"
+                  : "Edit Calibration"
+                : "Add New Calibration"}
+            </Typography>
+            {lookupViewMode && (
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<EditIcon />}
+                onClick={() => setIsEditMode(true)}
+              >
+                Edit Record
+              </Button>
+            )}
+            {editingCalibration && isEditMode && (
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={() => handleEdit(editingCalibration._id)}
+              >
+                Cancel Edit
+              </Button>
+            )}
+          </Box>
         </DialogTitle>
         <DialogContent>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
-            <FormControl fullWidth required>
-              <InputLabel>Filter Holder Model</InputLabel>
-              <Select
-                value={formData.filterHolderModel}
-                onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    filterHolderModel: e.target.value,
-                  }))
-                }
-                label="Filter Holder Model"
-              >
-                <MenuItem value="">
-                  <em>Select a Filter Holder Model</em>
-                </MenuItem>
-                {efas.length > 0 ? (
-                  efas.map((efa) => (
-                    <MenuItem key={efa._id} value={efa.equipmentReference}>
-                      {efa.equipmentReference}
-                    </MenuItem>
-                  ))
-                ) : (
-                  <MenuItem disabled>
-                    {efasLoading ? "Loading..." : "No Filter Holders found"}
-                  </MenuItem>
-                )}
-              </Select>
-            </FormControl>
+            <LookupField
+              mode={lookupViewMode ? "view" : "edit"}
+              label="Filter Holder Model"
+              required
+              value={formData.filterHolderModel}
+              displayLabel={formData.filterHolderModel}
+              options={(efas || []).map((efa) => ({
+                value: efa.equipmentReference,
+                label: efa.equipmentReference,
+              }))}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  filterHolderModel: e.target.value,
+                }))
+              }
+              disabled={efasLoading}
+              loading={efasLoading}
+              emptyOptionsText="No Filter Holders found"
+            />
             <TextField
               fullWidth
               label="Calibration Date"
@@ -776,6 +803,7 @@ const EFAPage = () => {
               }
               InputLabelProps={{ shrink: true }}
               required
+              disabled={lookupViewMode}
             />
             {/* Filter Measurements */}
             <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>
@@ -1110,32 +1138,18 @@ const EFAPage = () => {
                 {formData.status}
               </Typography>
             </Box>
-            <FormControl fullWidth required>
-              <InputLabel>Technician</InputLabel>
-              <Select
-                value={formData.technicianId}
-                onChange={(e) => handleTechnicianChange(e.target.value)}
-                label="Technician"
-                disabled={labSignatoriesLoading}
-              >
-                <MenuItem value="">
-                  <em>Select a technician</em>
-                </MenuItem>
-                {labSignatories.length > 0 ? (
-                  labSignatories.map((technician) => (
-                    <MenuItem key={technician._id} value={technician._id}>
-                      {technician.firstName} {technician.lastName}
-                    </MenuItem>
-                  ))
-                ) : (
-                  <MenuItem disabled>
-                    {labSignatoriesLoading
-                      ? "Loading..."
-                      : "No lab signatories found"}
-                  </MenuItem>
-                )}
-              </Select>
-            </FormControl>
+            <LookupField
+              mode={lookupViewMode ? "view" : "edit"}
+              label="Technician"
+              required
+              value={formData.technicianId}
+              displayLabel={formData.technicianName}
+              options={userOptionsFromList(labSignatories)}
+              onChange={(e) => handleTechnicianChange(e.target.value)}
+              disabled={labSignatoriesLoading}
+              loading={labSignatoriesLoading}
+              emptyOptionsText="No lab signatories found"
+            />
             <TextField
               fullWidth
               label="Next Calibration"
@@ -1157,16 +1171,20 @@ const EFAPage = () => {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
-          <Button onClick={handleSubmit} variant="contained" disabled={loading}>
-            {loading ? (
-              <CircularProgress size={20} />
-            ) : editingCalibration ? (
-              "Update"
-            ) : (
-              "Save"
-            )}
+          <Button onClick={handleCloseDialog}>
+            {lookupViewMode ? "Close" : "Cancel"}
           </Button>
+          {!lookupViewMode && (
+            <Button onClick={handleSubmit} variant="contained" disabled={loading}>
+              {loading ? (
+                <CircularProgress size={20} />
+              ) : editingCalibration ? (
+                "Update"
+              ) : (
+                "Save"
+              )}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
 

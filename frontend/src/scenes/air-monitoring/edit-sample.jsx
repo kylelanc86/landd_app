@@ -77,6 +77,7 @@ const EditSample = () => {
   const [collectionFieldsEdited, setCollectionFieldsEdited] = useState(false);
 
   const isSimplifiedSample = form.isFieldBlank || form.isNegAirExhaust;
+  const showSamplerFields = !form.isNegAirExhaust;
 
   // Check if the selected pump has a 1.5 L/min calibration available
   // If not, 13mm filter size should not be available (since 13mm requires 1.5 L/min)
@@ -1029,7 +1030,7 @@ const EditSample = () => {
     if (!form.sampler) {
       errors.sampler = "Sampler is required";
     }
-    if (!form.samplerPickup) {
+    if (!form.samplerPickup && !form.isFieldBlank) {
       errors.samplerPickup = "Sampler (pick-up) is required";
     }
 
@@ -1496,17 +1497,23 @@ const EditSample = () => {
                   </Select>
                 </FormControl>
               </Box>
-              <Typography
-                variant="h6"
-                sx={{
-                  color: theme.palette.primary.main,
-                  borderBottom: `2px solid ${theme.palette.primary.main}`,
-                  pb: 1,
-                  mb: 2,
-                }}
-              >
-                Air-monitor Setup
-              </Typography>
+            </>
+          )}
+          {showSamplerFields && (
+            <>
+              {!form.isFieldBlank && (
+                <Typography
+                  variant="h6"
+                  sx={{
+                    color: theme.palette.primary.main,
+                    borderBottom: `2px solid ${theme.palette.primary.main}`,
+                    pb: 1,
+                    mb: 2,
+                  }}
+                >
+                  Air-monitor Setup
+                </Typography>
+              )}
               <FormControl
                 fullWidth
                 size="small"
@@ -1534,6 +1541,10 @@ const EditSample = () => {
                   </Typography>
                 )}
               </FormControl>
+            </>
+          )}
+          {!isSimplifiedSample && (
+            <>
               <Box sx={{ display: "flex", gap: 1, flexDirection: { xs: "column", sm: "row" }, flexWrap: "wrap", alignItems: { sm: "flex-start" } }}>
                 <Box sx={{ display: "flex", gap: 1, alignItems: "center", flex: { sm: "0 0 auto" } }}>
                   <FormControl required size="small" sx={{ minWidth: 100 }} error={!!fieldErrors.startTime}>

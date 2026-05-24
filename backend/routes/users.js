@@ -300,8 +300,9 @@ router.put('/:id', auth, async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Admins cannot set themselves or anyone else as super_admin; only super_admin can assign super_admin role
-    if (role === 'super_admin') {
+    // Block promoting someone to super_admin (not saving an existing super_admin's other fields)
+    const isPromotingToSuperAdmin = role === 'super_admin' && targetUser.role !== 'super_admin';
+    if (isPromotingToSuperAdmin) {
       if (!isRequesterSuperAdmin) {
         return res.status(403).json({ message: 'Only a super admin can assign the super admin role.' });
       }

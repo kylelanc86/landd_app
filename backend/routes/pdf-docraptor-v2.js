@@ -268,6 +268,321 @@ const generateAttachmentText = (clearanceData) => {
   return ''; // Fallback
 };
 
+const CLEARANCE_ATTACHMENT_PLACEHOLDERS = [
+  '[ATTACHMENTS]',
+  '{ATTACHMENTS}',
+  '[APPENDIX_REFERENCES]',
+  '{APPENDIX_REFERENCES}',
+];
+
+/** Remove attachment placeholders from raw template text (before replacePlaceholders). */
+function stripClearanceAttachmentPlaceholdersFromRaw(raw) {
+  if (!raw) return '';
+  let result = raw;
+  for (const placeholder of CLEARANCE_ATTACHMENT_PLACEHOLDERS) {
+    const pattern = new RegExp(placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    result = result.replace(pattern, '');
+  }
+  return result;
+}
+
+/** Insert attachment text into processed HTML (after replacePlaceholders). */
+function applyClearanceAttachmentPlaceholders(html, attachmentText) {
+  if (!html) return '';
+  const value = attachmentText || '';
+  let result = html;
+  for (const placeholder of CLEARANCE_ATTACHMENT_PLACEHOLDERS) {
+    const pattern = new RegExp(placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    result = result.replace(pattern, value);
+  }
+  return result;
+}
+
+/**
+ * Extract inner HTML of the first <body>...</body> from a full HTML document.
+ */
+function extractBodyContent(html) {
+  if (!html || typeof html !== 'string') return '';
+  const match = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  return match ? match[1].trim() : html;
+}
+
+/**
+ * Extract inner HTML of the first <style>...</style> from a full HTML document.
+ */
+function extractStyleContent(html) {
+  if (!html || typeof html !== 'string') return '';
+  const match = html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+  return match ? match[1].trim() : '';
+}
+
+/** Flow body sections for clearance main content (inspection through limitations). */
+function buildClearanceFlowBody(flowParts) {
+  const {
+    templateContent,
+    inspectionDetailsContent,
+    asbestosRemovalItemsHtml,
+    inspectionExclusionsContent,
+    clearanceCertificationContent,
+    signOffContent,
+    backgroundInformationContent,
+    legislativeRequirementsContent,
+    clearanceCertificateLimitationsTitle,
+    clearanceCertificateLimitationsContent,
+  } = flowParts;
+
+  const inspectionTitle =
+    templateContent?.standardSections?.inspectionDetailsTitle || 'INSPECTION DETAILS';
+  const exclusionsTitle =
+    templateContent?.standardSections?.inspectionExclusionsTitle || 'INSPECTION EXCLUSIONS';
+  const certificationTitle =
+    templateContent?.standardSections?.clearanceCertificationTitle || 'CLEARANCE CERTIFICATION';
+  const backgroundTitle =
+    templateContent?.standardSections?.backgroundInformationTitle || 'BACKGROUND INFORMATION';
+  const legislativeTitle =
+    templateContent?.standardSections?.legislativeRequirementsTitle || 'LEGISLATIVE REQUIREMENTS';
+
+  return [
+    `<div class="section-header">${escapeHtml(inspectionTitle)}</div>`,
+    `<div class="section-body inspection-details-body">${inspectionDetailsContent}</div>`,
+    asbestosRemovalItemsHtml,
+    `<div class="section-header">${escapeHtml(exclusionsTitle)}</div>`,
+    `<div class="section-body inspection-exclusions-body">${inspectionExclusionsContent}</div>`,
+    `<div class="section-header">${escapeHtml(certificationTitle)}</div>`,
+    `<div class="section-body">${clearanceCertificationContent}${signOffContent}</div>`,
+    `<div class="page-break"></div>`,
+    `<div class="section-header background-section-header">${escapeHtml(backgroundTitle)}</div>`,
+    `<div class="section-body">${backgroundInformationContent}</div>`,
+    `<div class="section-header">${escapeHtml(legislativeTitle)}</div>`,
+    `<div class="section-body">${legislativeRequirementsContent}</div>`,
+    `<div class="section-header">${escapeHtml(clearanceCertificateLimitationsTitle)}</div>`,
+    `<div class="section-body">${clearanceCertificateLimitationsContent}</div>`,
+  ].join('\n');
+}
+
+function buildClearanceMainFlowInnerHtml(flowSections, footerText, logoBase64) {
+  const safeFooter = escapeHtml(footerText);
+  return `
+    <div id="pageHeader">
+      <div class="header">
+        <img class="logo" src="data:image/png;base64,${logoBase64}" alt="Company Logo" />
+        <div class="company-details">
+          Lancaster & Dickenson Consulting Pty Ltd<br />
+          4/6 Dacre Street<br />
+          Mitchell ACT 2911<br />
+          <span class="website">www.landd.com.au</span>
+        </div>
+      </div>
+      <div class="header-line"></div>
+    </div>
+    <div id="pageFooter">
+      <div class="footer">
+        <div class="footer-border-line"></div>
+        <div class="footer-content">
+          <div class="footer-text">${safeFooter}</div>
+          <div class="page-number"></div>
+        </div>
+      </div>
+    </div>
+    ${flowSections}
+  `;
+}
+
+function buildClearanceFlowCss() {
+  return `
+    @page {
+      size: A4;
+      margin: 35mm 48px 24mm 48px;
+      @top { content: element(pageHeader); }
+      @bottom {
+        content: element(pageFooter);
+        vertical-align: bottom;
+      }
+    }
+    #pageHeader { position: running(pageHeader); box-sizing: border-box; width: 100%; padding: 16px 0 0 0; }
+    #pageHeader .header { display: flex; justify-content: space-between; align-items: flex-start; padding: 0; margin: 0; }
+    #pageHeader .header-line { width: 100%; height: 1.5px; background: #16b12b; margin: 8px 0 0 0; border-radius: 0; display: block; }
+    #pageFooter { position: running(pageFooter); box-sizing: border-box; width: 100%; padding: 0 0 16px 0; }
+    #pageFooter .footer { width: 100%; margin: 0; text-align: justify; font-size: 0.75rem; color: #222; }
+    #pageFooter .footer-border-line { width: 100%; height: 1.5px; background: #16b12b; margin: 0 0 6px 0; border-radius: 0; display: block; }
+    #pageFooter .footer-content { width: 100%; display: flex; justify-content: space-between; align-items: flex-end; }
+    #pageFooter .footer-text { flex: 1; }
+    #pageFooter .page-number { font-size: 0.75rem; color: #222; font-weight: 500; margin-left: 20px; }
+    #pageFooter .page-number::after { content: counter(page); }
+    .logo { width: 243px; height: auto; display: block; margin: 0; }
+    .company-details { text-align: right; font-size: 0.75rem; line-height: 1.5; margin-top: 8px; margin: 0; }
+    .website { color: #16b12b; font-weight: 500; }
+    .section-header { font-size: 0.9rem; font-weight: 700; text-transform: uppercase; margin: 10px 0 10px 0; letter-spacing: 0.01em; color: #222; }
+    .page-break + .section-header,
+    .background-section-header { margin-top: 0; }
+    .section-body { font-size: 0.8rem; line-height: 1.5; text-align: justify; margin-bottom: 18px; color: #222; }
+    .section-body .paragraph { margin-bottom: 8px; }
+    .section-body .bullet-list { margin: 0 0 8px 0; padding: 0 0 0 24px; list-style: none; font-size: 0.8rem; color: #222; }
+    .section-body .bullet-list li { margin-bottom: 8px; position: relative; padding-left: 20px; line-height: 1.5; text-align: left; }
+    .section-body .bullet-list li::before { content: "•"; position: absolute; left: 0; top: 0.25em; font-size: 1em; color: #222; line-height: 1; }
+    .section-body.inspection-exclusions-body .paragraph { margin-bottom: 5px; }
+    .section-body.inspection-details-body .paragraph { margin-bottom: 6px; }
+    .table-container { margin: 6px 0 20px 0; width: 100%; }
+    .table-title { font-size: 0.8rem; font-weight: 700; margin: 10px 0 10px 0; color: #222; }
+    .clearance-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; margin: 10px 0; page-break-inside: auto; break-inside: auto; }
+    .clearance-table thead { display: table-header-group; }
+    .clearance-table tr { page-break-inside: avoid; break-inside: avoid; }
+    .clearance-table th, .clearance-table td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: top; word-wrap: break-word; overflow-wrap: break-word; }
+    .clearance-table th { background-color: #f5f5f5; font-weight: 700; }
+    .clearance-table tr:nth-child(even) { background-color: #f9f9f9; }
+    .signature-block { margin-top: 12px; font-size: 0.8rem; color: #222; line-height: 1.5; }
+    .signature-block .paragraph { margin: 0 0 1px 0; line-height: 1.2; }
+    .signature-block img { display: block; margin: 0 0 1px 0; max-width: 150px; max-height: 75px; }
+    .page-break { page-break-before: always; break-before: page; height: 0; margin: 0; padding: 0; }
+  `;
+}
+
+function assembleClearanceSingleHTML({
+  coverHtml,
+  versionHtml,
+  flowBody,
+  appendixSegments,
+  frontendUrl,
+  logoBase64,
+}) {
+  const A4_HEIGHT = '297mm';
+  const A4_WIDTH = '210mm';
+  const A4_LANDSCAPE_HEIGHT = '210mm';
+  const A4_LANDSCAPE_WIDTH = '297mm';
+
+  const coverBody = extractBodyContent(coverHtml);
+  const versionBody = extractBodyContent(versionHtml);
+  let coverCss = extractStyleContent(coverHtml).replace(/@page\s*\{/g, '@page cover {');
+  let versionCss = extractStyleContent(versionHtml).replace(/@page\s*\{/g, '@page version {');
+
+  const flowCss = buildClearanceFlowCss().replace(/@page\s*\{/g, '@page main {');
+  const mainCss = `${flowCss}\n.main-section-start { counter-reset: page 1; box-sizing: border-box; }\n`;
+
+  const photoPageCss = getLeadPhotoPageStyles(frontendUrl).replace(/@page\s*\{/g, '@page appendix-photos {');
+  const sitePlanLandscapeCss = `
+    @page appendix-landscape { size: A4 landscape; margin: 0; }
+    .site-plan-page { page: appendix-landscape; height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden; page-break-after: avoid; page-break-inside: avoid; box-sizing: border-box; }
+    .site-plan-page .header { flex-shrink: 0; display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 48px 0 48px; margin: 0; font-family: "Gothic", Arial, sans-serif; box-sizing: border-box; }
+    .site-plan-page .header-line, .site-plan-page .green-line { flex-shrink: 0; width: calc(100% - 96px); height: 1.5px; background: #16b12b; margin: 8px auto 0 auto; border-radius: 0; display: block; }
+    .site-plan-page .content { flex: 1; min-height: 0; overflow: hidden; padding: 5px 48px 10px 48px; display: flex; flex-direction: column; box-sizing: border-box; }
+    .site-plan-page .footer { flex-shrink: 0; position: relative; left: 0; right: 0; bottom: 0; width: calc(100% - 96px); margin: 0 auto; padding: 0 0 16px 0; text-align: justify; font-size: 0.75rem; color: #222; font-family: "Gothic", Arial, sans-serif; box-sizing: border-box; }
+    .site-plan-page .footer-border-line { width: 100%; height: 1.5px; background: #16b12b; margin: 0 0 6px 0; border-radius: 0; display: block; }
+    .site-plan-page .footer-content { width: 100%; display: flex; justify-content: space-between; align-items: flex-end; }
+    .site-plan-page .footer-text { flex: 1; }
+  `;
+
+  const singleDocLayoutCss = `
+    @page { size: A4; margin: 0; }
+    body { font-family: "Gothic", Arial, sans-serif; color: #222; margin: 0; padding: 0; }
+    .single-doc-cover, .single-doc-version, .single-doc-appendix { width: ${A4_WIDTH}; min-width: ${A4_WIDTH}; height: ${A4_HEIGHT}; min-height: ${A4_HEIGHT}; box-sizing: border-box; }
+    .single-doc-cover .cover-page, .single-doc-cover .page, .single-doc-version .page, .single-doc-appendix .page { width: 100% !important; height: 100% !important; min-height: 100% !important; box-sizing: border-box; }
+    .single-doc-section { page-break-before: always; break-before: page; }
+    .single-doc-cover { page-break-before: avoid; }
+    .single-doc-cover .cover-page .cover-content p.cover-meta .cover-meta-label { display: block; font-weight: 700; margin: 0 0 6px 0; }
+    .single-doc-cover .cover-page .cover-content p.cover-meta .cover-meta-value { display: block; font-weight: 400; }
+    .single-doc-photos-section .page {
+      page: appendix-photos;
+      width: ${A4_WIDTH};
+      min-width: ${A4_WIDTH};
+      height: ${A4_HEIGHT} !important;
+      min-height: ${A4_HEIGHT} !important;
+      max-height: none;
+      box-sizing: border-box;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      page-break-after: always;
+      break-after: page;
+    }
+    .single-doc-photos-section .page .header,
+    .single-doc-photos-section .page .header-line { flex-shrink: 0; }
+    .single-doc-photos-section .page .content {
+      flex: 0 0 auto;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: flex-start !important;
+      align-items: stretch !important;
+      align-content: flex-start !important;
+      padding: 10px 48px 80px 48px !important;
+    }
+    .single-doc-photos-section .page .photo-container {
+      flex: 0 0 auto;
+      align-self: stretch;
+    }
+    .single-doc-photos-section .page .footer {
+      position: absolute !important;
+      left: 0 !important;
+      right: 0 !important;
+      bottom: 16px !important;
+      flex-shrink: 0;
+      width: calc(100% - 96px);
+      margin: 0 auto !important;
+    }
+    .single-doc-photos-section .page:last-child { page-break-after: avoid; break-after: avoid; }
+    .single-doc-photos-section > .page-break { display: none; height: 0; margin: 0; padding: 0; }
+    .single-doc-site-plan-section { width: ${A4_LANDSCAPE_WIDTH}; min-width: ${A4_LANDSCAPE_WIDTH}; height: ${A4_LANDSCAPE_HEIGHT}; min-height: ${A4_LANDSCAPE_HEIGHT}; box-sizing: border-box; }
+    .single-doc-site-plan-section .site-plan-page { width: 100% !important; height: 100% !important; min-height: 100% !important; box-sizing: border-box; }
+  `;
+
+  const versionAppendixOverridesCss = `
+    .single-doc-version .header, .single-doc-appendix .header { display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 48px 0 48px; margin: 0; }
+    .single-doc-version .header-line, .single-doc-version .green-line, .single-doc-appendix .header-line, .single-doc-appendix .green-line { width: calc(100% - 96px); height: 1.5px; background: #16b12b; margin: 8px auto 0 auto; border-radius: 0; }
+    .single-doc-version .footer, .single-doc-appendix .footer { position: absolute; left: 48px; right: 48px; bottom: 0; width: calc(100% - 96px); margin: 0; padding-bottom: 16px; text-align: justify; font-size: 0.75rem; color: #222; box-sizing: border-box; }
+    .single-doc-version .footer .footer-border-line, .single-doc-appendix .footer .footer-border-line { width: 100%; height: 1.5px; background: #16b12b; margin-bottom: 6px; border-radius: 0; }
+    .single-doc-version .footer .footer-content, .single-doc-appendix .footer .footer-content { width: 100%; display: flex; justify-content: space-between; align-items: flex-end; }
+    .single-doc-version .footer .footer-text, .single-doc-appendix .footer .footer-text { flex: 1; }
+  `;
+
+  let appendixCss = '';
+  const bodyParts = [
+    `<div class="single-doc-cover" style="page: cover">${coverBody}</div>`,
+    `<div class="single-doc-version single-doc-section" style="page: version">${versionBody}</div>`,
+    `<div class="single-doc-main single-doc-section" style="page: main"><div class="main-section-start">${flowBody}</div></div>`,
+  ];
+
+  for (const seg of appendixSegments || []) {
+    if (seg.type === 'appendix-cover') {
+      if (seg.css) appendixCss += seg.css.replace(/@page\s*\{/g, '@page appendix {');
+      bodyParts.push(`<div class="single-doc-appendix single-doc-section" style="page: appendix">${seg.body}</div>`);
+    } else if (seg.type === 'photos') {
+      bodyParts.push(`<div class="single-doc-photos-section single-doc-section">${seg.body}</div>`);
+    } else if (seg.type === 'site-plan') {
+      bodyParts.push(`<div class="single-doc-site-plan-section single-doc-section" style="page: appendix-landscape">${seg.body}</div>`);
+    }
+  }
+
+  const combinedCss = [
+    `@font-face { font-family: "Gothic"; src: url("${frontendUrl}/fonts/static/Gothic-Regular.ttf") format("truetype"); font-weight: normal; font-style: normal; }`,
+    `@font-face { font-family: "Gothic"; src: url("${frontendUrl}/fonts/static/Gothic-Bold.ttf") format("truetype"); font-weight: bold; font-style: normal; }`,
+    `@font-face { font-family: "Gothic"; src: url("${frontendUrl}/fonts/static/Gothic-Italic.ttf") format("truetype"); font-weight: normal; font-style: italic; }`,
+    `@font-face { font-family: "Gothic"; src: url("${frontendUrl}/fonts/static/Gothic-BoldItalic.ttf") format("truetype"); font-weight: bold; font-style: italic; }`,
+    '* { hyphens: none !important; -webkit-hyphens: none !important; -ms-hyphens: none !important; word-break: keep-all !important; overflow-wrap: normal !important; }',
+    singleDocLayoutCss,
+    '.page-break { page-break-before: always; break-before: page; height: 0; margin: 0; padding: 0; }',
+    coverCss,
+    versionCss,
+    mainCss,
+    appendixCss,
+    photoPageCss,
+    sitePlanLandscapeCss,
+    versionAppendixOverridesCss,
+  ].filter(Boolean).join('\n');
+
+  const bodyHtml = bodyParts.join('\n');
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Asbestos Clearance Report</title>
+  <style>${combinedCss}</style>
+</head>
+<body>
+${bodyHtml}
+</body>
+</html>`;
+}
+
 const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
   try {
     console.log("=== PDF GENERATION STARTED ===");
@@ -277,10 +592,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
     // Load DocRaptor-optimized templates
     const templateDir = path.join(__dirname, '../templates/DocRaptor/AsbestosClearance');
     const coverTemplate = fs.readFileSync(path.join(templateDir, 'CoverPage.html'), 'utf8');
-    const versionControlTemplateWithUrl = fs.readFileSync(path.join(templateDir, 'VersionControl.html'), 'utf8');
-    const inspectionDetailsTemplate = fs.readFileSync(path.join(templateDir, 'InspectionDetails.html'), 'utf8');
-    const signOffPageTemplate = fs.readFileSync(path.join(templateDir, 'SignOffPage.html'), 'utf8');
-    const backgroundInformationTemplate = fs.readFileSync(path.join(templateDir, 'BackgroundInformation.html'), 'utf8');
+    const versionControlTemplate = fs.readFileSync(path.join(templateDir, 'VersionControl.html'), 'utf8');
     const appendixACoverTemplateWithUrl = fs.readFileSync(path.join(templateDir, 'AppendixACover.html'), 'utf8');
     // photographsTemplate no longer used - photos generated independently
     const photoItemTemplate = fs.readFileSync(path.join(templateDir, 'PhotoItem.html'), 'utf8');
@@ -294,10 +606,7 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
     // Replace [FRONTEND_URL] placeholder in all templates with actual frontend URL
     const replaceFrontendUrl = (template) => template.replace(/\[FRONTEND_URL\]/g, frontendUrl);
     const coverTemplateWithUrl = replaceFrontendUrl(coverTemplate);
-    const versionControlTemplateWithUrlWithUrl = replaceFrontendUrl(versionControlTemplateWithUrl);
-    const inspectionDetailsTemplateWithUrl = replaceFrontendUrl(inspectionDetailsTemplate);
-    const signOffPageTemplateWithUrl = replaceFrontendUrl(signOffPageTemplate);
-    const backgroundInformationTemplateWithUrl = replaceFrontendUrl(backgroundInformationTemplate);
+    const versionControlTemplateWithUrl = replaceFrontendUrl(versionControlTemplate);
     const appendixACoverTemplateWithUrlWithUrl = replaceFrontendUrl(appendixACoverTemplateWithUrl);
     const photoItemTemplateWithUrl = replaceFrontendUrl(photoItemTemplate);
     const photoPageTemplateWithUrl = replaceFrontendUrl(photoPageTemplate);
@@ -771,11 +1080,6 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
           .replace(/\[FOOTER_TEXT\]/g, footerText);
         
         pages.push(page);
-        
-        // Add page break between pages (but not after the last page)
-        if (i + 2 < photosForReport.length) {
-          pages.push('<div class="page-break"></div>');
-        }
       }
       
       return pages.join('');
@@ -792,20 +1096,41 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       selectedLegislation
     };
     
-    const inspectionDetailsContent = templateContent ? await replacePlaceholders(templateContent.standardSections.inspectionDetailsContent, templateData) : 'Inspection details content not found';
-    const inspectionExclusionsContent = templateContent ? await replacePlaceholders(templateContent.standardSections.inspectionExclusionsContent, templateData) : 'Inspection exclusions content not found';
-    const clearanceCertificationContent = templateContent ? await replacePlaceholders(templateContent.standardSections.clearanceCertificationContent, templateData) : 'Clearance certification content not found';
-    const signOffContentRaw = templateContent ? await replacePlaceholders(templateContent.standardSections.signOffContent, templateData) : 'Sign-off content not found';
-    const signOffContent = `<div class="signature-block">${signOffContentRaw}</div>`;
+    const attachmentText = generateAttachmentText(clearanceData);
 
-    // Sign-off moves to a dedicated page when there are 5+ items OR job-specific exclusions.
-    // Inspection Details then keeps only certification, and background shifts by one page.
-    const itemCount = (clearanceData.items || []).length;
-    const hasJobSpecificExclusions = Boolean(
-      clearanceData.jobSpecificExclusions && String(clearanceData.jobSpecificExclusions).trim(),
-    );
-    const hasSignOffPage = itemCount >= 5 || hasJobSpecificExclusions;
-    const inspectionDetailsSignOff = hasSignOffPage ? '' : signOffContent;
+    let inspectionDetailsRaw = templateContent
+      ? stripClearanceAttachmentPlaceholdersFromRaw(templateContent.standardSections.inspectionDetailsContent)
+      : '';
+    if (attachmentText) {
+      const trimmed = inspectionDetailsRaw.trimEnd();
+      inspectionDetailsRaw = trimmed ? `${trimmed} ${attachmentText}` : attachmentText;
+    }
+    let inspectionDetailsContent = templateContent
+      ? await replacePlaceholders(inspectionDetailsRaw, templateData)
+      : 'Inspection details content not found';
+    inspectionDetailsContent = applyClearanceAttachmentPlaceholders(inspectionDetailsContent, attachmentText);
+
+    const inspectionExclusionsContent = templateContent
+      ? await replacePlaceholders(
+          stripClearanceAttachmentPlaceholdersFromRaw(templateContent.standardSections.inspectionExclusionsContent),
+          templateData,
+        )
+      : 'Inspection exclusions content not found';
+
+    const clearanceCertificationContent = templateContent
+      ? await replacePlaceholders(
+          stripClearanceAttachmentPlaceholdersFromRaw(templateContent.standardSections.clearanceCertificationContent),
+          templateData,
+        )
+      : 'Clearance certification content not found';
+
+    const signOffContentRaw = templateContent
+      ? await replacePlaceholders(
+          stripClearanceAttachmentPlaceholdersFromRaw(templateContent.standardSections.signOffContent),
+          templateData,
+        )
+      : 'Sign-off content not found';
+    const signOffContent = `<div class="signature-block">${signOffContentRaw}</div>`;
 
     const asbestosRemovalItemsHtml = `
         <div class="table-container">
@@ -821,34 +1146,6 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
             </tbody>
           </table>
         </div>`;
-
-    // Populate inspection details template with data
-    const populatedInspectionDetails = inspectionDetailsTemplateWithUrl
-      .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
-      .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
-      .replace(/\[CLEARANCE_DATE\]/g, formatClearanceDate(clearanceData.clearanceDate))
-      .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
-      .replace(/\[CLIENT_NAME\]/g, clearanceData.projectId?.client?.name || clearanceData.clientName || 'Unknown Client')
-      .replace(/\[ASBESTOS_TYPE\]/g, clearanceData.clearanceType || 'Non-friable')
-      .replace(/\[ASBESTOS_REMOVALIST\]/g, clearanceData.asbestosRemovalist || 'Unknown Removalist')
-      .replace(/\[LAA_NAME\]/g, clearanceData.LAA || 'Unknown LAA')
-      .replace(/\[LAA_LICENSE\]/g, 'AA00031')
-      .replace(/\[INSPECTION_TIME\]/g, formatInspectionTime(clearanceData.inspectionTime))
-      .replace(/\[INSPECTION_DATE\]/g, clearanceData.clearanceDate ? formatDateSydney(clearanceData.clearanceDate) : 'Unknown')
-      .replace(/\[SIGNATURE_IMAGE\]/g, '') // Will be handled by replacePlaceholders in template content
-      .replace(/\[ASBESTOS_REMOVAL_ITEMS_HTML\]/g, asbestosRemovalItemsHtml)
-      // Template content placeholders
-      .replace(/\[INSPECTION_DETAILS_TITLE\]/g, templateContent?.standardSections?.inspectionDetailsTitle || 'INSPECTION DETAILS')
-      .replace(/\[INSPECTION_DETAILS_CONTENT\]/g, inspectionDetailsContent)
-      .replace(/\[INSPECTION_EXCLUSIONS_TITLE\]/g, templateContent?.standardSections?.inspectionExclusionsTitle || 'INSPECTION EXCLUSIONS')
-      .replace(/\[INSPECTION_EXCLUSIONS_CONTENT\]/g, inspectionExclusionsContent)
-      .replace(/\[CLEARANCE_CERTIFICATION_TITLE\]/g, templateContent?.standardSections?.clearanceCertificationTitle || 'CLEARANCE CERTIFICATION')
-      .replace(/\[CLEARANCE_CERTIFICATION_CONTENT\]/g, clearanceCertificationContent)
-      .replace(/\[PRE_SIGNOFF_SECTIONS\]/g, "")
-      .replace(/\[INSPECTION_PAGE_VARIANT_CLASS\]/g, "")
-      .replace(/\[SIGN_OFF_CONTENT\]/g, inspectionDetailsSignOff)
-      .replace(/\[ATTACHMENTS\]/g, generateAttachmentText(clearanceData))
-      .replace(/\[FOOTER_TEXT\]/g, footerText);
 
     // Prepare background information template content placeholders (async operations)
     const backgroundInformationContent = templateContent ? await replacePlaceholders(templateContent.standardSections.backgroundInformationContent, templateData) : 'Background information content not found';
@@ -872,116 +1169,89 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       clearanceCertificateLimitationsTitle = templateContent?.standardSections?.nonFriableClearanceCertificateLimitationsTitle || 'Non-Friable Clearance Certificate Limitations';
     }
 
-    // Populate background information template with data
-    // Page number: 3 when sign-off has its own page, otherwise 2
-    const backgroundPageNumber = hasSignOffPage ? '3' : '2';
-    const populatedBackgroundInformation = backgroundInformationTemplateWithUrl
-        .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
-        .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
-        .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
-      // Template content placeholders
-      .replace(/\[BACKGROUND_INFORMATION_TITLE\]/g, templateContent?.standardSections?.backgroundInformationTitle || 'BACKGROUND INFORMATION')
-      .replace(/\[BACKGROUND_INFORMATION_CONTENT\]/g, backgroundInformationContent)
-      .replace(/\[LEGISLATIVE_REQUIREMENTS_TITLE\]/g, templateContent?.standardSections?.legislativeRequirementsTitle || 'LEGISLATIVE REQUIREMENTS')
-      .replace(/\[LEGISLATIVE_REQUIREMENTS_CONTENT\]/g, legislativeRequirementsContent)
-      .replace(/\[CLEARANCE_CERTIFICATE_LIMITATIONS_TITLE\]/g, clearanceCertificateLimitationsTitle)
-      .replace(/\[CLEARANCE_CERTIFICATE_LIMITATIONS_CONTENT\]/g, clearanceCertificateLimitationsContent)
-      .replace(/\[BACKGROUND_PAGE_NUMBER\]/g, backgroundPageNumber)
-      .replace(/\[FOOTER_TEXT\]/g, footerText);
+    const flowSections = buildClearanceFlowBody({
+      templateContent,
+      inspectionDetailsContent,
+      asbestosRemovalItemsHtml,
+      inspectionExclusionsContent,
+      clearanceCertificationContent,
+      signOffContent,
+      backgroundInformationContent,
+      legislativeRequirementsContent,
+      clearanceCertificateLimitationsTitle,
+      clearanceCertificateLimitationsContent,
+    });
+    const flowInnerHtml = buildClearanceMainFlowInnerHtml(flowSections, footerText, logoBase64);
 
-    // Populate sign-off page (used only when sign-off is promoted to its own page): header, footer, page number 2
-    const populatedSignOffPage = hasSignOffPage
-      ? signOffPageTemplateWithUrl
-          .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
-          .replace(/\[SIGN_OFF_CONTENT\]/g, signOffContent)
-          .replace(/\[FOOTER_TEXT\]/g, footerText)
-          .replace(/\[SIGN_OFF_PAGE_NUMBER\]/g, '2')
-      : '';
-
-    // Extract just the page content from each template
     const extractPageContent = (html) => {
       const pageMatch = html.match(/<div class="page">([\s\S]*?)<\/div>\s*<\/body>/);
-      return pageMatch ? `<div class="page">${pageMatch[1]}</div>` : html;
+      return pageMatch ? `<div class="page">${pageMatch[1]}</div>` : extractBodyContent(html);
     };
 
-    // Determine appendix structure based on site plan and air monitoring
+    const appendixSegments = [];
+
     const hasSitePlan = clearanceData.sitePlan && clearanceData.sitePlanFile;
     const hasAirMonitoring = clearanceData.airMonitoring;
-    
-    
-    // Generate dynamic appendix content
-    let appendixContent = '';
-    
-    // Check if we have any photographs
+
     const clearanceItems = clearanceData.items || clearanceData.clearanceItems || clearanceData.removalItems || clearanceData.asbestosItems || [];
-    const hasPhotographs = clearanceItems.some(item => 
+    const hasPhotographs = clearanceItems.some(item =>
       item.photographs && Array.isArray(item.photographs) && item.photographs.length > 0
     );
 
-    // Include Appendix A only if we have photographs
     if (hasPhotographs) {
-      // For Appendix A cover, we need to keep the CSS
       const populatedAppendixACover = appendixACoverTemplateWithUrl
         .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
         .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
         .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
         .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`)
         .replace(/\[FOOTER_TEXT\]/g, footerText);
-
-      // Generate photos section completely independently (no template mixing)
-      console.log("=== ABOUT TO GENERATE PHOTOS SECTION ===");
-      console.log("ClearanceData at photos generation:", clearanceData);
       const photosSection = generateClearancePhotographsContent();
-
-      appendixContent += `
-          <!-- Appendix A Cover Page -->
-          ${populatedAppendixACover}
-          
-          <!-- Photographs Section -->
-          ${photosSection}
-      `;
+      appendixSegments.push({
+        type: 'appendix-cover',
+        body: extractBodyContent(populatedAppendixACover),
+        css: extractStyleContent(populatedAppendixACover),
+      });
+      appendixSegments.push({ type: 'photos', body: photosSection });
     }
-    
-    // Handle Appendix B and C based on content
+
     if (hasSitePlan) {
-      // Site Plan exists - add as Appendix B
-        const populatedAppendixBCover = extractPageContent(
+      const populatedAppendixBCover = extractPageContent(
         appendixBCoverTemplateWithUrl
-        .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
-        .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
-        .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
-        .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`)
-        .replace(/\[FOOTER_TEXT\]/g, footerText)
+          .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
+          .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
+          .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
+          .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`)
+          .replace(/\[FOOTER_TEXT\]/g, footerText)
       );
-      
-      appendixContent += `
-          <!-- Appendix B Cover Page (Site Plan) -->
-          ${populatedAppendixBCover}
-      `;
-      
-      // Add site plan content page if it's an image
+      appendixSegments.push({
+        type: 'appendix-cover',
+        body: populatedAppendixBCover,
+        css: extractStyleContent(appendixBCoverTemplateWithUrl),
+      });
+
       const isSitePlanImage = clearanceData.sitePlanFile && (
-        clearanceData.sitePlanFile.startsWith('/9j/') || 
+        clearanceData.sitePlanFile.startsWith('/9j/') ||
         clearanceData.sitePlanFile.startsWith('iVBORw0KGgo') ||
         clearanceData.sitePlanFile.startsWith('data:image/')
       );
-      
+
       if (isSitePlanImage) {
-        console.log(`[${pdfId}] Generating site plan content page for image data`);
         const trimmedSitePlan = await trimSitePlanImage(clearanceData.sitePlanFile);
         const clearanceDataTrimmed = { ...clearanceData, sitePlanFile: trimmedSitePlan };
         const figureTitle = clearanceData.sitePlanFigureTitle || 'Asbestos Removal Site Plan';
-        const sitePlanContentPage = generateSitePlanContentPage(clearanceDataTrimmed, 'B', logoBase64, footerText, 'sitePlanFile', 'SITE PLAN', figureTitle);
-        console.log(`[${pdfId}] Site plan content page length: ${sitePlanContentPage.length} characters`);
-        console.log(`[${pdfId}] Site plan content contains page-break-after: ${sitePlanContentPage.includes('page-break-after')}`);
-        appendixContent += `
-            <!-- Appendix B Site Plan Content Page -->
-            ${sitePlanContentPage}
-        `;
+        const sitePlanContentPage = generateSitePlanContentPage(
+          clearanceDataTrimmed,
+          'B',
+          logoBase64,
+          footerText,
+          'sitePlanFile',
+          'SITE PLAN',
+          figureTitle
+        );
+        appendixSegments.push({ type: 'site-plan', body: sitePlanContentPage });
       }
-      
-    if (hasAirMonitoring) {
-        // Both Site Plan and Air Monitoring exist - add Air Monitoring as Appendix C
+
+      if (hasAirMonitoring) {
         const populatedAppendixCCover = extractPageContent(
           appendixCCoverTemplateWithUrl
             .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
@@ -990,349 +1260,38 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
             .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`)
             .replace(/\[FOOTER_TEXT\]/g, footerText)
         );
-        
-        appendixContent += `
-            <!-- Appendix C Cover Page (Air Monitoring) -->
-            ${populatedAppendixCCover}
-        `;
+        appendixSegments.push({
+          type: 'appendix-cover',
+          body: populatedAppendixCCover,
+          css: extractStyleContent(appendixCCoverTemplateWithUrl),
+        });
       }
     } else if (hasAirMonitoring) {
-      // No Site Plan but Air Monitoring exists - add Air Monitoring as Appendix B
       const populatedAppendixBCover = extractPageContent(
         appendixBCoverTemplateWithUrl
-        .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
-        .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
-        .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
-        .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`)
-        .replace(/\[FOOTER_TEXT\]/g, footerText)
+          .replace(/\[REPORT_TYPE\]/g, clearanceData.clearanceType || 'Non-Friable')
+          .replace(/\[SITE_ADDRESS\]/g, clearanceData.projectId?.name || clearanceData.siteName || 'Unknown Site')
+          .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
+          .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`)
+          .replace(/\[FOOTER_TEXT\]/g, footerText)
           .replace(/APPENDIX B/g, 'APPENDIX B')
           .replace(/SITE PLAN/g, 'AIR MONITORING REPORT')
       );
-      
-      appendixContent += `
-          <!-- Appendix B Cover Page (Air Monitoring) -->
-          ${populatedAppendixBCover}
-      `;
+      appendixSegments.push({
+        type: 'appendix-cover',
+        body: populatedAppendixBCover,
+        css: extractStyleContent(appendixBCoverTemplateWithUrl),
+      });
     }
 
-    // Create complete HTML document - each template manages its own CSS
-    const completeHTML = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <title>Asbestos Clearance Report</title>
-        <style>
-          /* Force page breaks between sections */
-          .page-break {
-            page-break-before: always;
-            height: 0;
-            margin: 0;
-            padding: 0;
-          }
-
-          /* Prevent word hyphenation globally */
-          body, div, p, span, h1, h2, h3, h4, h5, h6, td, th, li {
-            hyphens: none !important;
-            -webkit-hyphens: none !important;
-            -ms-hyphens: none !important;
-            word-break: keep-all !important;
-            overflow-wrap: normal !important;
-          }
-
-          /* Appendix cover page styles */
-          .centered-text {
-            font-size: 1.8rem;
-            text-transform: uppercase;
-            color: #222;
-            text-align: center;
-            letter-spacing: 0.02em;
-            margin-top: 400px;
-          }
-
-          .appendix-title {
-            font-weight: 700;
-            color: #16b12b;
-            display: block;
-          }
-
-          .photographs-text {
-            font-weight: 400;
-            display: block;
-          }
-
-          .green-line {
-            width: calc(100% - 96px);
-            height: 1.5px;
-            background: #16b12b;
-            margin: 8px auto 0 auto;
-            border-radius: 0;
-          }
-
-          .content {
-            padding: 10px 48px 24px 48px;
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            margin: 0;
-          }
-
-          /* Photographs page styles */
-          .photo-container {
-            display: flex;
-            flex-direction: column;
-            margin-bottom: 18px;
-            margin-top: 18px;
-          }
-
-          .photo-container:last-child {
-            margin-bottom: 0;
-          }
-
-          .photo {
-            height: 400px;
-            background: #f5f5f5;
-            border: 2px solid #ddd;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 8px;
-            position: relative;
-          }
-
-          .photo-placeholder {
-            color: #999;
-            font-size: 0.9rem;
-            text-align: center;
-          }
-
-          .photo img {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-          }
-
-          .photo-details {
-            font-size: 0.8rem;
-            color: #222;
-            line-height: 1.4;
-            text-align: justify;
-          }
-
-          .photo-number {
-            font-weight: 700;
-            color: #16b12b;
-            margin-bottom: 4px;
-          }
-
-          .photo-location {
-            font-weight: 600;
-            margin-bottom: 2px;
-          }
-
-          .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            padding: 16px 48px 0 48px;
-            margin: 0;
-          }
-
-          /* Site plan page header and footer styling */
-          .site-plan-page .header {
-            width: 100vh !important;
-            box-sizing: border-box !important;
-            padding: 16px 48px 0 48px !important;
-          }
-
-          .site-plan-page .footer {
-            width: calc(100vh - 96px) !important;
-            box-sizing: border-box !important;
-            position: absolute !important;
-            left: 48px !important;
-            right: auto !important;
-            bottom: 16px !important;
-            margin: 0 !important;
-          }
-
-          .logo {
-            width: 243px;
-            height: auto;
-            display: block;
-            background: #fff;
-            margin: 0;
-          }
-
-          .company-details {
-            text-align: right;
-            font-size: 0.75rem;
-            color: #222;
-            line-height: 1.5;
-            margin-top: 8px;
-            margin: 0;
-          }
-
-          .company-details .website {
-            color: #16b12b;
-            font-weight: 500;
-          }
-
-          .footer {
-            position: absolute;
-            left: 0;
-            right: 0;
-            bottom: 16px;
-            width: calc(100% - 96px);
-            margin: 0 auto;
-            text-align: justify;
-            font-size: 0.75rem;
-            color: #222;
-          }
-
-          .footer-line {
-            width: 100%;
-            height: 1.5px;
-            background: #16b12b;
-            margin-bottom: 6px;
-            border-radius: 0;
-          }
-
-          .footer-border-line {
-            width: 100%;
-            height: 1.5px;
-            background: #16b12b;
-            margin-bottom: 6px;
-            border-radius: 0;
-          }
-
-          .footer-content {
-            width: 100%;
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-end;
-          }
-
-          .footer-text {
-            flex: 1;
-          }
-
-          /* Site Plan specific styles to prevent CSS conflicts */
-          .file-container {
-            width: calc(100% - 96px) !important;
-            max-width: calc(100% - 96px) !important;
-            margin: 0 auto !important;
-            padding: 0 !important;
-            overflow: hidden !important;
-          }
-
-          .file-container img {
-            width: 100% !important;
-            max-width: 100% !important;
-            height: auto !important;
-            object-fit: contain !important;
-            display: block !important;
-          }
-
-          /* Landscape orientation for site plan pages */
-          .site-plan-page {
-            page-break-before: always;
-            page-break-after: avoid !important;
-            page-break-inside: avoid;
-            transform: rotate(0deg);
-            width: 100vh !important;
-            height: 100vw !important;
-            box-sizing: border-box !important;
-          }
-
-          /* Force no page break after site plan pages */
-          .site-plan-page + * {
-            page-break-before: avoid !important;
-          }
-
-          /* Prevent any automatic page breaks after landscape pages */
-          .site-plan-page:last-child {
-            page-break-after: avoid !important;
-          }
-
-          /* Use named page for landscape site plan pages */
-          @page site-plan-landscape {
-            size: A4 landscape;
-          }
-
-          .site-plan-page {
-            page: site-plan-landscape;
-          }
-
-          /* Reduce content padding for site plan pages - 48px horizontal to stay within page margins */
-          .site-plan-page .content {
-            padding: 5px 48px 10px 48px !important;
-            min-height: auto !important;
-            height: auto !important;
-            max-height: calc(100vh - 150px) !important;
-            overflow: hidden !important;
-          }
-
-          /* Site plan container styling - sizes to fit image */
-          .site-plan-container {
-            box-shadow: none !important;
-            padding: 0 !important;
-            width: fit-content !important;
-            max-width: 85% !important;
-            box-sizing: border-box !important;
-            margin: 12px 0 0 0 !important;
-            border: none !important;
-            border-radius: 0 !important;
-          }
-
-          .site-plan-container img {
-            border-radius: 0 !important;
-            max-height: calc((100vw - 200px) * 0.99) !important;
-            object-fit: contain !important;
-            width: auto !important;
-            height: auto !important;
-            max-width: 100% !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            border: 1.5px solid #999 !important;
-            box-sizing: border-box !important;
-            background: transparent !important;
-          }
-
-          .site-plan-legend-container {
-            border: none !important;
-            border-radius: 0 !important;
-            box-shadow: none !important;
-          }
-
-        </style>
-      </head>
-      <body>
-        <!-- Cover Page -->
-          ${populatedCover}
-        <div class="page-break"></div>
-        
-        <!-- Version Control Page -->
-          ${populatedVersionControl}
-        <div class="page-break"></div>
-        
-        <!-- Inspection Details Page -->
-          ${populatedInspectionDetails}
-        <div class="page-break"></div>
-        ${hasSignOffPage ? `
-        <!-- Sign-off Page (dedicated page with header, footer, page 2) -->
-          ${populatedSignOffPage}
-        <div class="page-break"></div>
-        ` : ''}
-        <!-- Background Information Page -->
-          ${populatedBackgroundInformation}
-        
-        <!-- Appendix Content -->
-        ${appendixContent}
-      </body>
-      </html>
-    `;
+    const completeHTML = assembleClearanceSingleHTML({
+      coverHtml: populatedCover,
+      versionHtml: populatedVersionControl,
+      flowBody: flowInnerHtml,
+      appendixSegments,
+      frontendUrl,
+      logoBase64,
+    });
 
     return completeHTML;
   } catch (error) {
@@ -2825,7 +2784,7 @@ router.post('/generate-asbestos-clearance-v2', async (req, res) => {
 
     const { status_id } = await docRaptorService.createAsyncDocument(htmlContent, {
       page_size: 'A4',
-      prince_options: { page_margin: '0.5in', media: 'print', html_mode: 'quirks' }
+      prince_options: { page_margin: '0in', media: 'print', html_mode: 'quirks' }
     });
 
     const jobId = status_id;
@@ -3014,27 +2973,7 @@ router.get('/status/:jobId', async (req, res) => {
               ...(mergedPdfPath && { mergedPdfPath })
             });
           } else if (job.reportType === 'asbestos-clearance') {
-            let mergedPdfPath = null;
-            if (job.mergePayload) {
-              try {
-                const mainBuffer = await docRaptorService.fetchDocument(job.downloadUrl);
-                const mergedBuffer = await mergeAsbestosClearanceAppendices(mainBuffer, job.mergePayload);
-                fs.mkdirSync(ASBESTOS_CLEARANCE_MERGED_PDF_DIR, { recursive: true });
-                const fileName = `${job.clearanceId}.pdf`;
-                const fullPath = path.join(ASBESTOS_CLEARANCE_MERGED_PDF_DIR, fileName);
-                fs.writeFileSync(fullPath, mergedBuffer);
-                mergedPdfPath = `asbestos-clearances/${fileName}`;
-              } catch (mergeErr) {
-                console.error('Failed to merge/save asbestos clearance PDF for fast download:', mergeErr);
-              }
-            }
-            await AsbestosClearance.findByIdAndUpdate(job.clearanceId, {
-              pdfDownloadUrl: job.downloadUrl,
-              pdfJobId: jobId,
-              pdfReadyAt: new Date(),
-              pdfFilename: job.filename || null,
-              ...(mergedPdfPath && { mergedPdfPath })
-            });
+            await persistAsbestosClearancePdfFromJob(job);
           }
         } catch (updateErr) {
           console.error('Failed to persist clearance PDF URL:', updateErr);
@@ -3043,6 +2982,15 @@ router.get('/status/:jobId', async (req, res) => {
     } catch (err) {
       console.error('DocRaptor status check failed:', err);
       return res.status(502).json({ error: 'Status check failed', details: err.message, status: job.status });
+    }
+  }
+
+  // Job may already be completed in memory (subsequent polls); ensure DB has persisted PDF
+  if (job.status === 'completed' && job.downloadUrl && job.clearanceId && job.reportType === 'asbestos-clearance') {
+    try {
+      await persistAsbestosClearancePdfFromJob(job);
+    } catch (persistErr) {
+      console.error('Failed to persist asbestos clearance PDF on status poll:', persistErr);
     }
   }
 
@@ -3129,6 +3077,88 @@ async function mergeAsbestosClearanceAppendices(pdfBuffer, payload) {
   return result;
 }
 
+function asbestosClearanceMergedFileExists(mergedPdfPath) {
+  if (!mergedPdfPath) return false;
+  const fullPath = path.join(__dirname, '..', 'generated-pdfs', mergedPdfPath);
+  return fs.existsSync(fullPath);
+}
+
+/**
+ * Persist asbestos clearance PDF URLs / merged file after async DocRaptor job completes.
+ * Idempotent: skips when a merged file is already on disk.
+ */
+async function persistAsbestosClearancePdfFromJob(job) {
+  if (job.reportType !== 'asbestos-clearance' || job.status !== 'completed' || !job.downloadUrl || !job.clearanceId) {
+    return;
+  }
+  const existing = await AsbestosClearance.findById(job.clearanceId)
+    .select('mergedPdfPath pdfDownloadUrl')
+    .lean();
+  if (existing?.mergedPdfPath && asbestosClearanceMergedFileExists(existing.mergedPdfPath)) {
+    return;
+  }
+
+  let mergedPdfPath = null;
+  const mergePayload = job.mergePayload || {};
+  try {
+    const mainBuffer = await docRaptorService.fetchDocument(job.downloadUrl);
+    const mergedBuffer = await mergeAsbestosClearanceAppendices(mainBuffer, mergePayload);
+    fs.mkdirSync(ASBESTOS_CLEARANCE_MERGED_PDF_DIR, { recursive: true });
+    const fileName = `${job.clearanceId}.pdf`;
+    const fullPath = path.join(ASBESTOS_CLEARANCE_MERGED_PDF_DIR, fileName);
+    fs.writeFileSync(fullPath, mergedBuffer);
+    mergedPdfPath = `asbestos-clearances/${fileName}`;
+  } catch (mergeErr) {
+    console.error('Failed to merge/save asbestos clearance PDF for fast download:', mergeErr);
+  }
+
+  await AsbestosClearance.findByIdAndUpdate(job.clearanceId, {
+    pdfDownloadUrl: job.downloadUrl,
+    pdfJobId: job.statusId,
+    pdfReadyAt: new Date(),
+    pdfFilename: job.filename || null,
+    ...(mergedPdfPath && { mergedPdfPath }),
+  });
+}
+
+/**
+ * Resolve clearance PDF bytes: prefer on-disk merged file, else DocRaptor URL + merge.
+ */
+async function resolveAsbestosClearancePdfBuffer(clearance) {
+  if (clearance.mergedPdfPath && asbestosClearanceMergedFileExists(clearance.mergedPdfPath)) {
+    const fullPath = path.join(__dirname, '..', 'generated-pdfs', clearance.mergedPdfPath);
+    return fs.readFileSync(fullPath);
+  }
+  if (!clearance.pdfDownloadUrl) {
+    return null;
+  }
+  const airReports =
+    clearance.airMonitoringReports && clearance.airMonitoringReports.length > 0
+      ? [...clearance.airMonitoringReports].sort(
+          (a, b) => new Date(a.shiftDate || 0) - new Date(b.shiftDate || 0),
+        )
+      : clearance.airMonitoringReport
+        ? [{ reportData: clearance.airMonitoringReport }]
+        : [];
+  let pdfBuffer = await docRaptorService.fetchDocument(clearance.pdfDownloadUrl);
+  pdfBuffer = await mergeAsbestosClearanceAppendices(pdfBuffer, {
+    airReports,
+    sitePlan: clearance.sitePlan,
+    sitePlanFile: clearance.sitePlanFile,
+    airMonitoringReport: clearance.airMonitoringReport,
+  });
+  try {
+    fs.mkdirSync(ASBESTOS_CLEARANCE_MERGED_PDF_DIR, { recursive: true });
+    const mergedPdfPath = `asbestos-clearances/${clearance._id}.pdf`;
+    const fullPath = path.join(__dirname, '..', 'generated-pdfs', mergedPdfPath);
+    fs.writeFileSync(fullPath, pdfBuffer);
+    await AsbestosClearance.findByIdAndUpdate(clearance._id, { mergedPdfPath });
+  } catch (saveErr) {
+    console.warn('Could not cache merged asbestos clearance PDF for future downloads:', saveErr);
+  }
+  return pdfBuffer;
+}
+
 /**
  * Download asbestos clearance PDF by clearance ID.
  * When mergedPdfPath exists: streams pre-merged file from disk (fast, no fetch/merge).
@@ -3141,43 +3171,16 @@ router.get('/download-by-clearance/:clearanceId', async (req, res) => {
     if (!clearance) {
       return res.status(404).json({ error: 'Clearance not found' });
     }
-    if (!clearance.pdfDownloadUrl && !clearance.mergedPdfPath) {
+    const pdfBuffer = await resolveAsbestosClearancePdfBuffer(clearance);
+    if (!pdfBuffer) {
       return res.status(404).json({
         error: 'No PDF available for this clearance',
-        hint: 'Generate the PDF first using Generate PDF'
+        hint: 'Generate the PDF first using Generate PDF',
       });
     }
     const filename = clearance.pdfFilename || `clearance_${clearanceId}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', buildContentDispositionAttachment(filename));
-
-    if (clearance.mergedPdfPath) {
-      const fullPath = path.join(__dirname, '..', 'generated-pdfs', clearance.mergedPdfPath);
-      if (fs.existsSync(fullPath)) {
-        const stat = fs.statSync(fullPath);
-        res.setHeader('Content-Length', stat.size);
-        const readStream = fs.createReadStream(fullPath);
-        return readStream.pipe(res);
-      }
-    }
-    if (!clearance.pdfDownloadUrl) {
-      return res.status(404).json({
-        error: 'No PDF available for this clearance',
-        hint: 'Generate the PDF first using Generate PDF'
-      });
-    }
-    let pdfBuffer = await docRaptorService.fetchDocument(clearance.pdfDownloadUrl);
-    pdfBuffer = await mergeAsbestosClearanceAppendices(pdfBuffer, clearance);
-    try {
-      fs.mkdirSync(ASBESTOS_CLEARANCE_MERGED_PDF_DIR, { recursive: true });
-      const fileName = `${clearanceId}.pdf`;
-      const mergedPdfPath = `asbestos-clearances/${fileName}`;
-      const fullPath = path.join(__dirname, '..', 'generated-pdfs', mergedPdfPath);
-      fs.writeFileSync(fullPath, pdfBuffer);
-      await AsbestosClearance.findByIdAndUpdate(clearanceId, { mergedPdfPath });
-    } catch (saveErr) {
-      console.warn('Could not cache merged asbestos clearance PDF for future downloads:', saveErr);
-    }
     res.setHeader('Content-Length', pdfBuffer.length);
     res.send(pdfBuffer);
   } catch (error) {
@@ -7331,24 +7334,6 @@ const splitPdfBuffer = async (buffer, splitAtPage) => {
   pages2.forEach((p) => doc2.addPage(p));
   return [Buffer.from(await doc1.save()), Buffer.from(await doc2.save())];
 };
-
-/**
- * Extract inner HTML of the first <body>...</body> from a full HTML document.
- */
-function extractBodyContent(html) {
-  if (!html || typeof html !== 'string') return '';
-  const match = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-  return match ? match[1].trim() : html;
-}
-
-/**
- * Extract inner HTML of the first <style>...</style> from a full HTML document.
- */
-function extractStyleContent(html) {
-  if (!html || typeof html !== 'string') return '';
-  const match = html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
-  return match ? match[1].trim() : '';
-}
 
 /**
  * V3: Generate single-page Appendix A or B cover HTML (footer with no page number).

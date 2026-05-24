@@ -43,6 +43,12 @@ import { equipmentService } from "../../../services/equipmentService";
 import { flowmeterCalibrationService } from "../../../services/flowmeterCalibrationService";
 import { formatDate, formatDateForInput } from "../../../utils/dateFormat";
 import userService from "../../../services/userService";
+import LookupField from "../../../components/LookupField";
+import {
+  userOptionsFromList,
+  equipmentOptionsFromList,
+  buildEquipmentDisplayLabel,
+} from "../../../utils/lookupOptions";
 
 const AirPumpCalibrationPage = () => {
   const theme = useTheme();
@@ -78,6 +84,7 @@ const AirPumpCalibrationPage = () => {
     flowmeterId: "",
     technicianId: "",
     technicianName: "",
+    flowmeterDisplay: "",
   });
 
   // Array of calibration test results (one per flowrate)
@@ -306,6 +313,7 @@ const AirPumpCalibrationPage = () => {
       flowmeterId: "",
       technicianId: "",
       technicianName: "",
+      flowmeterDisplay: "",
     });
     setCalibrationTests([]);
     setActiveTab(0);
@@ -579,6 +587,12 @@ const AirPumpCalibrationPage = () => {
       }
     );
 
+    const flowmeterDisplay = buildEquipmentDisplayLabel(
+      typeof calibration.flowmeterId === "object"
+        ? calibration.flowmeterId
+        : null,
+    );
+
     const staticFormDataToSet = {
       calibrationDate: new Date(calibration.calibrationDate)
         .toISOString()
@@ -587,6 +601,7 @@ const AirPumpCalibrationPage = () => {
       flowmeterId: flowmeterId,
       technicianId: technicianId,
       technicianName: technicianName,
+      flowmeterDisplay,
     };
 
     setStaticFormData(staticFormDataToSet);
@@ -620,6 +635,7 @@ const AirPumpCalibrationPage = () => {
 
   const handleAdd = () => {
     setEditingCalibration(null);
+    setIsEditMode(true);
     const todayDate = formatDateForInput(new Date());
     setStaticFormData({
       calibrationDate: todayDate,
@@ -627,6 +643,7 @@ const AirPumpCalibrationPage = () => {
       flowmeterId: "",
       technicianId: "",
       technicianName: "",
+      flowmeterDisplay: "",
     });
     setCalibrationTests([]);
     setActiveTab(0);
@@ -1069,70 +1086,56 @@ const AirPumpCalibrationPage = () => {
                     required
                     disabled={editingCalibration && !isEditMode}
                   />
-                  <FormControl sx={{ flex: 1 }} required>
-                    <InputLabel>Technician</InputLabel>
-                    <Select
-                      value={staticFormData.technicianId}
-                      onChange={(e) => handleTechnicianChange(e.target.value)}
-                      label="Technician"
-                      disabled={labSignatoriesLoading || (editingCalibration && !isEditMode)}
-                    >
-                      <MenuItem value="">
-                        <em>Select a technician</em>
-                      </MenuItem>
-                      {labSignatories.length > 0 ? (
-                        labSignatories.map((technician) => (
-                          <MenuItem key={technician._id} value={technician._id}>
-                            {technician.firstName} {technician.lastName}
-                          </MenuItem>
-                        ))
-                      ) : (
-                        <MenuItem disabled>
-                          {labSignatoriesLoading
-                            ? "Loading..."
-                            : "No technicians found"}
-                        </MenuItem>
-                      )}
-                    </Select>
-                  </FormControl>
-                  <FormControl sx={{ flex: 1 }}>
-                    <InputLabel>Flowmeter</InputLabel>
-                    <Select
-                      value={staticFormData.flowmeterId}
-                      onChange={(e) => {
-                        setStaticFormData({
-                          ...staticFormData,
-                          flowmeterId: e.target.value,
-                        });
-                        setHasUnsavedChanges(true);
-                      }}
-                      label="Flowmeter"
-                      disabled={flowmeters.length === 0 || (editingCalibration && !isEditMode)}
-                    >
-                      <MenuItem value="">
-                        <em>Select a flowmeter (optional)</em>
-                      </MenuItem>
-                      {flowmeters.length > 0 ? (
-                        flowmeters.map((flowmeter) => (
-                          <MenuItem
-                            key={flowmeter._id}
-                            value={String(flowmeter._id)}
-                          >
-                            {flowmeter.equipmentReference}
-                            {flowmeter.brandModel
-                              ? ` - ${flowmeter.brandModel}`
-                              : ""}
-                          </MenuItem>
-                        ))
-                      ) : (
-                        <MenuItem disabled>
-                          {loading
-                            ? "Loading flowmeters..."
-                            : "No calibrated flowmeters available"}
-                        </MenuItem>
-                      )}
-                    </Select>
-                  </FormControl>
+                  <LookupField
+                    sx={{ flex: 1 }}
+                    mode={
+                      editingCalibration && !isEditMode ? "view" : "edit"
+                    }
+                    label="Technician"
+                    required
+                    value={staticFormData.technicianId}
+                    displayLabel={staticFormData.technicianName}
+                    options={userOptionsFromList(labSignatories)}
+                    onChange={(e) => handleTechnicianChange(e.target.value)}
+                    disabled={labSignatoriesLoading}
+                    loading={labSignatoriesLoading}
+                    loadingText="Loading..."
+                    emptyOptionsText="No technicians found"
+                  />
+                  <LookupField
+                    sx={{ flex: 1 }}
+                    mode={
+                      editingCalibration && !isEditMode ? "view" : "edit"
+                    }
+                    label="Flowmeter"
+                    required={false}
+                    allowEmpty
+                    emptyDisplay="-"
+                    value={staticFormData.flowmeterId}
+                    displayLabel={staticFormData.flowmeterDisplay}
+                    options={equipmentOptionsFromList(flowmeters)}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      const selected = flowmeters.find(
+                        (f) => String(f._id) === String(id),
+                      );
+                      setStaticFormData({
+                        ...staticFormData,
+                        flowmeterId: id,
+                        flowmeterDisplay: selected
+                          ? buildEquipmentDisplayLabel(selected)
+                          : "",
+                      });
+                      setHasUnsavedChanges(true);
+                    }}
+                    disabled={flowmeters.length === 0 && !staticFormData.flowmeterId}
+                    emptyOptionsText={
+                      loading
+                        ? "Loading flowmeters..."
+                        : "No calibrated flowmeters available"
+                    }
+                    emptyOptionLabel="Select a flowmeter (optional)"
+                  />
                 </Box>
               </Box>
 

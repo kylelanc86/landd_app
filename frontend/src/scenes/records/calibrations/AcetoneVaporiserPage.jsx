@@ -18,10 +18,6 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Alert,
   Stack,
 } from "@mui/material";
@@ -37,6 +33,12 @@ import { equipmentService } from "../../../services/equipmentService";
 import { useAuth } from "../../../context/AuthContext";
 import userService from "../../../services/userService";
 import { acetoneVaporiserCalibrationService } from "../../../services/acetoneVaporiserCalibrationService";
+import LookupField from "../../../components/LookupField";
+import {
+  userOptionsFromList,
+  equipmentOptionsFromList,
+  buildEquipmentDisplayLabel,
+} from "../../../utils/lookupOptions";
 
 const AcetoneVaporiserPage = () => {
   const theme = useTheme();
@@ -48,6 +50,8 @@ const AcetoneVaporiserPage = () => {
 
   // Dialog and form state
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [editingCalibration, setEditingCalibration] = useState(null);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [vaporisers, setVaporisers] = useState([]);
   const [vaporisersLoading, setVaporisersLoading] = useState(false);
   const [technicians, setTechnicians] = useState([]);
@@ -57,9 +61,12 @@ const AcetoneVaporiserPage = () => {
 
   const [formData, setFormData] = useState({
     equipmentId: "",
+    vaporiserReference: "",
     date: formatDateForInput(new Date()),
     technicianId: "",
+    technicianName: "",
     temperature: "",
+    notes: "",
   });
 
   useEffect(() => {
@@ -79,6 +86,8 @@ const AcetoneVaporiserPage = () => {
         setFormData((prev) => ({
           ...prev,
           technicianId: currentUser._id,
+          technicianName:
+            `${currentUser.firstName || ""} ${currentUser.lastName || ""}`.trim(),
         }));
       }
     }
@@ -193,12 +202,19 @@ const AcetoneVaporiserPage = () => {
   };
 
   const handleAdd = () => {
+    setEditingCalibration(null);
+    setIsEditMode(true);
     setFormError(null);
     setFormData({
       equipmentId: "",
+      vaporiserReference: "",
       date: formatDateForInput(new Date()),
       technicianId: currentUser?._id || "",
+      technicianName: currentUser
+        ? `${currentUser.firstName || ""} ${currentUser.lastName || ""}`.trim()
+        : "",
       temperature: "",
+      notes: "",
     });
     setAddDialogOpen(true);
   };
@@ -206,14 +222,100 @@ const AcetoneVaporiserPage = () => {
   const handleDialogClose = () => {
     if (!submitting) {
       setAddDialogOpen(false);
+      setEditingCalibration(null);
+      setIsEditMode(false);
       setFormError(null);
       setFormData({
         equipmentId: "",
+        vaporiserReference: "",
         date: formatDateForInput(new Date()),
         technicianId: "",
+        technicianName: "",
         temperature: "",
+        notes: "",
       });
     }
+  };
+
+  const handleVaporiserChange = (equipmentId) => {
+    const selectedVaporiser = vaporisers.find(
+      (v) => String(v._id) === String(equipmentId),
+    );
+    setFormData((prev) => ({
+      ...prev,
+      equipmentId,
+      vaporiserReference: selectedVaporiser
+        ? selectedVaporiser.equipmentReference
+        : "",
+    }));
+  };
+
+  const handleTechnicianChange = (technicianId) => {
+    const selectedTechnician = technicians.find(
+      (t) => String(t._id) === String(technicianId),
+    );
+    setFormData((prev) => ({
+      ...prev,
+      technicianId,
+      technicianName: selectedTechnician
+        ? `${selectedTechnician.firstName} ${selectedTechnician.lastName}`
+        : "",
+    }));
+  };
+
+  const populateFormFromCalibration = (calibration) => {
+    let equipmentId = "";
+    let vaporiserReference = calibration.vaporiserReference || "";
+    if (calibration.vaporiserId) {
+      if (
+        typeof calibration.vaporiserId === "object" &&
+        calibration.vaporiserId._id
+      ) {
+        equipmentId = calibration.vaporiserId._id;
+        vaporiserReference =
+          calibration.vaporiserId.equipmentReference || vaporiserReference;
+      } else {
+        equipmentId = calibration.vaporiserId;
+        const vaporiser = vaporisers.find(
+          (v) => String(v._id) === String(calibration.vaporiserId),
+        );
+        if (vaporiser) {
+          vaporiserReference = vaporiser.equipmentReference;
+        }
+      }
+    }
+
+    let technicianId = "";
+    let technicianName = "";
+    if (calibration.calibratedBy) {
+      if (
+        typeof calibration.calibratedBy === "object" &&
+        calibration.calibratedBy._id
+      ) {
+        technicianId = calibration.calibratedBy._id;
+        technicianName =
+          `${calibration.calibratedBy.firstName || ""} ${calibration.calibratedBy.lastName || ""}`.trim();
+      } else {
+        technicianId = calibration.calibratedBy;
+        const technician = technicians.find(
+          (t) => String(t._id) === String(calibration.calibratedBy),
+        );
+        if (technician) {
+          technicianName =
+            `${technician.firstName} ${technician.lastName}`.trim();
+        }
+      }
+    }
+
+    setFormData({
+      equipmentId,
+      vaporiserReference,
+      date: formatDateForInput(new Date(calibration.date)),
+      technicianId,
+      technicianName,
+      temperature: calibration.temperature?.toString() || "",
+      notes: calibration.notes || "",
+    });
   };
 
   const handleSetToday = () => {
@@ -256,7 +358,14 @@ const AcetoneVaporiserPage = () => {
         notes: formData.notes || "",
       };
 
-      await acetoneVaporiserCalibrationService.create(calibrationData);
+      if (editingCalibration) {
+        await acetoneVaporiserCalibrationService.update(
+          editingCalibration._id,
+          calibrationData,
+        );
+      } else {
+        await acetoneVaporiserCalibrationService.create(calibrationData);
+      }
 
       handleDialogClose();
       fetchData();
@@ -272,9 +381,25 @@ const AcetoneVaporiserPage = () => {
     }
   };
 
-  const handleEdit = (id) => {
-    console.log("Edit calibration:", id);
+  const handleEdit = async (id) => {
+    try {
+      const calibration = await acetoneVaporiserCalibrationService.getById(id);
+      setEditingCalibration(calibration);
+      setIsEditMode(false);
+      populateFormFromCalibration(calibration);
+      setFormError(null);
+      setAddDialogOpen(true);
+    } catch (error) {
+      console.error("Error fetching calibration for edit:", error);
+      alert(
+        error.response?.data?.message ||
+          error.message ||
+          "Failed to load calibration data",
+      );
+    }
   };
+
+  const lookupViewMode = Boolean(editingCalibration && !isEditMode);
 
   const handleDelete = async (id) => {
     if (
@@ -426,7 +551,37 @@ const AcetoneVaporiserPage = () => {
             justifyContent="space-between"
             alignItems="center"
           >
-            <Typography variant="h6">Add New Calibration</Typography>
+            <Box display="flex" alignItems="center" gap={2} flexWrap="wrap">
+              <Typography variant="h6">
+                {editingCalibration
+                  ? lookupViewMode
+                    ? "View Calibration"
+                    : "Edit Calibration"
+                  : "Add New Calibration"}
+              </Typography>
+              {lookupViewMode && (
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<EditIcon />}
+                  onClick={() => setIsEditMode(true)}
+                >
+                  Edit Record
+                </Button>
+              )}
+              {editingCalibration && isEditMode && (
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={() => {
+                    setIsEditMode(false);
+                    populateFormFromCalibration(editingCalibration);
+                  }}
+                >
+                  Cancel Edit
+                </Button>
+              )}
+            </Box>
             <IconButton onClick={handleDialogClose} disabled={submitting}>
               <CloseIcon />
             </IconButton>
@@ -444,32 +599,25 @@ const AcetoneVaporiserPage = () => {
               </Alert>
             )}
             <Stack spacing={3} sx={{ mt: 1 }}>
-              <FormControl fullWidth required>
-                <InputLabel>Equipment ID</InputLabel>
-                <Select
-                  value={formData.equipmentId}
-                  onChange={(e) =>
-                    setFormData({ ...formData, equipmentId: e.target.value })
-                  }
-                  label="Equipment ID"
-                  disabled={vaporisersLoading || submitting}
-                >
-                  <MenuItem value="">
-                    <em>Select an acetone vaporiser</em>
-                  </MenuItem>
-                  {vaporisers.length > 0 ? (
-                    vaporisers.map((vaporiser) => (
-                      <MenuItem key={vaporiser._id} value={vaporiser._id}>
-                        {vaporiser.equipmentReference}
-                      </MenuItem>
-                    ))
-                  ) : (
-                    <MenuItem disabled>
-                      {vaporisersLoading ? "Loading..." : "No vaporisers found"}
-                    </MenuItem>
-                  )}
-                </Select>
-              </FormControl>
+              <LookupField
+                mode={lookupViewMode ? "view" : "edit"}
+                label="Acetone Vaporiser"
+                required
+                value={formData.equipmentId}
+                displayLabel={
+                  formData.vaporiserReference ||
+                  buildEquipmentDisplayLabel(
+                    vaporisers.find(
+                      (v) => String(v._id) === String(formData.equipmentId),
+                    ),
+                  )
+                }
+                options={equipmentOptionsFromList(vaporisers)}
+                onChange={(e) => handleVaporiserChange(e.target.value)}
+                disabled={vaporisersLoading || submitting}
+                loading={vaporisersLoading}
+                emptyOptionsText="No vaporisers found"
+              />
 
               <Box>
                 <Box
@@ -488,48 +636,34 @@ const AcetoneVaporiserPage = () => {
                     }
                     InputLabelProps={{ shrink: true }}
                     required
-                    disabled={submitting}
+                    disabled={submitting || lookupViewMode}
                     sx={{ mr: 1 }}
                   />
-                  <Button
-                    variant="outlined"
-                    onClick={handleSetToday}
-                    disabled={submitting}
-                    sx={{ ml: 1, minWidth: "100px" }}
-                  >
-                    Today
-                  </Button>
+                  {!lookupViewMode && (
+                    <Button
+                      variant="outlined"
+                      onClick={handleSetToday}
+                      disabled={submitting}
+                      sx={{ ml: 1, minWidth: "100px" }}
+                    >
+                      Today
+                    </Button>
+                  )}
                 </Box>
               </Box>
 
-              <FormControl fullWidth required>
-                <InputLabel>Technician</InputLabel>
-                <Select
-                  value={formData.technicianId}
-                  onChange={(e) =>
-                    setFormData({ ...formData, technicianId: e.target.value })
-                  }
-                  label="Technician"
-                  disabled={techniciansLoading || submitting}
-                >
-                  <MenuItem value="">
-                    <em>Select a technician</em>
-                  </MenuItem>
-                  {technicians.length > 0 ? (
-                    technicians.map((technician) => (
-                      <MenuItem key={technician._id} value={technician._id}>
-                        {technician.firstName} {technician.lastName}
-                      </MenuItem>
-                    ))
-                  ) : (
-                    <MenuItem disabled>
-                      {techniciansLoading
-                        ? "Loading..."
-                        : "No technicians found"}
-                    </MenuItem>
-                  )}
-                </Select>
-              </FormControl>
+              <LookupField
+                mode={lookupViewMode ? "view" : "edit"}
+                label="Technician"
+                required
+                value={formData.technicianId}
+                displayLabel={formData.technicianName}
+                options={userOptionsFromList(technicians)}
+                onChange={(e) => handleTechnicianChange(e.target.value)}
+                disabled={techniciansLoading || submitting}
+                loading={techniciansLoading}
+                emptyOptionsText="No technicians found"
+              />
 
               <TextField
                 fullWidth
@@ -541,7 +675,7 @@ const AcetoneVaporiserPage = () => {
                 }
                 placeholder="Enter temperature in degrees C"
                 required
-                disabled={submitting}
+                disabled={submitting || lookupViewMode}
                 inputProps={{ step: "0.1" }}
                 helperText="Pass mark is between 65 and 100 degrees C"
               />
@@ -549,23 +683,29 @@ const AcetoneVaporiserPage = () => {
           </DialogContent>
           <DialogActions sx={{ p: 2 }}>
             <Button onClick={handleDialogClose} disabled={submitting}>
-              Cancel
+              {lookupViewMode ? "Close" : "Cancel"}
             </Button>
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={submitting}
-              startIcon={submitting ? null : <AddIcon />}
-            >
-              {submitting ? (
-                <Box display="flex" alignItems="center" gap={1}>
-                  <CircularProgress size={16} />
-                  Saving...
-                </Box>
-              ) : (
-                "Add Calibration"
-              )}
-            </Button>
+            {!lookupViewMode && (
+              <Button
+                type="submit"
+                variant="contained"
+                disabled={submitting}
+                startIcon={
+                  submitting ? null : editingCalibration ? null : <AddIcon />
+                }
+              >
+                {submitting ? (
+                  <Box display="flex" alignItems="center" gap={1}>
+                    <CircularProgress size={16} />
+                    Saving...
+                  </Box>
+                ) : editingCalibration ? (
+                  "Update Calibration"
+                ) : (
+                  "Add Calibration"
+                )}
+              </Button>
+            )}
           </DialogActions>
         </Box>
       </Dialog>

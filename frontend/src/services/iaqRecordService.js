@@ -71,7 +71,17 @@ export const iaqRecordService = {
     } catch (error) {
       throw error;
     }
-  }
+  },
+
+  // Unlock finalised analysis for editing (clears authorisation, resets status)
+  unlockAnalysis: async (id) => {
+    try {
+      const response = await api.post(`${BASE_URL}/${id}/unlock-analysis`);
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
 };
 
 export default iaqRecordService;

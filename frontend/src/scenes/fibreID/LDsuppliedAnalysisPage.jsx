@@ -37,6 +37,11 @@ import { useNavigate, useParams } from "react-router-dom";
 import { asbestosAssessmentService } from "../../services/api";
 import customDataFieldGroupService from "../../services/customDataFieldGroupService";
 import { useUserLists } from "../../context/UserListsContext";
+import LookupField from "../../components/LookupField";
+import {
+  userOptionsFromList,
+  buildUserDisplayLabel,
+} from "../../utils/lookupOptions";
 
 const LDsuppliedAnalysisPage = () => {
   const navigate = useNavigate();
@@ -963,24 +968,23 @@ const LDsuppliedAnalysisPage = () => {
           alignItems="flex-start"
           sx={{ mb: 2 }}
         >
-          <FormControl sx={{ minWidth: 200 }} required error={!analyst?.trim()}>
-            <InputLabel>Analyst</InputLabel>
-            <Select
+          <Box sx={{ minWidth: 200 }}>
+            <LookupField
+              mode={
+                assessmentItem?.analysisData?.isAnalysed ? "view" : "edit"
+              }
+              label="Analyst"
+              required
               value={analyst || ""}
+              displayLabel={buildUserDisplayLabel(
+                activeIdentifiers.find((a) => String(a._id) === String(analyst)),
+              )}
+              options={userOptionsFromList(activeIdentifiers)}
               onChange={(e) => setAnalyst(e.target.value)}
-              label="Analyst *"
-              disabled={assessmentItem?.analysisData?.isAnalysed}
-            >
-              <MenuItem value="">
-                <em>Select Analyst</em>
-              </MenuItem>
-              {activeIdentifiers.map((analystOption) => (
-                <MenuItem key={analystOption._id} value={analystOption._id}>
-                  {analystOption.firstName} {analystOption.lastName}
-                </MenuItem>
-              ))}
-            </Select>
-            {!analyst?.trim() && (
+              allowEmpty
+              emptyOptionLabel="Select Analyst"
+            />
+            {!analyst?.trim() && !assessmentItem?.analysisData?.isAnalysed && (
               <Typography
                 variant="caption"
                 color="error"
@@ -989,7 +993,7 @@ const LDsuppliedAnalysisPage = () => {
                 Required
               </Typography>
             )}
-          </FormControl>
+          </Box>
           <TextField
             type="date"
             label="Analysis Date"

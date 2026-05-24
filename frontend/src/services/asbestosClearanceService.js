@@ -150,6 +150,15 @@ const asbestosClearanceService = {
     return response.data;
   },
 
+  // Batch-update photo descriptions and/or includeInReport (single save — avoids parallel write races)
+  batchUpdatePhotoMetadata: async (clearanceId, itemId, updates) => {
+    const response = await axios.patch(
+      `${API_BASE_URL}/${clearanceId}/items/${itemId}/photos/metadata`,
+      { updates },
+    );
+    return response.data;
+  },
+
   // Toggle photo inclusion in report
   togglePhotoInReport: async (clearanceId, itemId, photoId) => {
     const response = await axios.patch(
