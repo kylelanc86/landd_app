@@ -39,6 +39,8 @@ import { formatDate, formatDateForInput } from "../../../utils/dateFormat";
 import { useAuth } from "../../../context/AuthContext";
 import userService from "../../../services/userService";
 import { riLiquidCalibrationService } from "../../../services/riLiquidCalibrationService";
+import LookupField from "../../../components/LookupField";
+import { userOptionsFromList } from "../../../utils/lookupOptions";
 
 const RiLiquidPage = () => {
   const theme = useTheme();
@@ -50,8 +52,8 @@ const RiLiquidPage = () => {
 
   // Dialog and form state
   const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [editingCalibrationId, setEditingCalibrationId] = useState(null);
+  const [editingCalibration, setEditingCalibration] = useState(null);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [technicians, setTechnicians] = useState([]);
   const [techniciansLoading, setTechniciansLoading] = useState(false);
   const [formError, setFormError] = useState(null);
@@ -62,6 +64,7 @@ const RiLiquidPage = () => {
     date: formatDateForInput(new Date()),
     dateOpened: formatDateForInput(new Date()),
     technicianId: "",
+    technicianName: "",
     refractiveIndex: "",
     asbestosTypeVerified: "",
     batchNumber: "",
@@ -85,6 +88,8 @@ const RiLiquidPage = () => {
         setFormData((prev) => ({
           ...prev,
           technicianId: currentUser._id,
+          technicianName:
+            `${currentUser.firstName || ""} ${currentUser.lastName || ""}`.trim(),
         }));
       }
     }
@@ -199,12 +204,17 @@ const RiLiquidPage = () => {
   };
 
   const handleAdd = () => {
+    setEditingCalibration(null);
+    setIsEditMode(true);
     setFormError(null);
     setFormData({
       bottleId: "",
       date: formatDateForInput(new Date()),
       dateOpened: formatDateForInput(new Date()),
       technicianId: currentUser?._id || "",
+      technicianName: currentUser
+        ? `${currentUser.firstName || ""} ${currentUser.lastName || ""}`.trim()
+        : "",
       refractiveIndex: "",
       asbestosTypeVerified: "",
       batchNumber: "",
@@ -217,14 +227,15 @@ const RiLiquidPage = () => {
   const handleDialogClose = () => {
     if (!submitting) {
       setAddDialogOpen(false);
-      setEditDialogOpen(false);
-      setEditingCalibrationId(null);
+      setEditingCalibration(null);
+      setIsEditMode(false);
       setFormError(null);
       setFormData({
         bottleId: "",
         date: formatDateForInput(new Date()),
         dateOpened: formatDateForInput(new Date()),
         technicianId: "",
+        technicianName: "",
         refractiveIndex: "",
         asbestosTypeVerified: "",
         batchNumber: "",
@@ -232,6 +243,58 @@ const RiLiquidPage = () => {
         notes: "",
       });
     }
+  };
+
+  const handleTechnicianChange = (technicianId) => {
+    const selectedTechnician = technicians.find(
+      (t) => String(t._id) === String(technicianId),
+    );
+    setFormData((prev) => ({
+      ...prev,
+      technicianId,
+      technicianName: selectedTechnician
+        ? `${selectedTechnician.firstName} ${selectedTechnician.lastName}`
+        : "",
+    }));
+  };
+
+  const populateFormFromCalibration = (calibration) => {
+    let technicianId = "";
+    let technicianName = "";
+    if (calibration.calibratedBy) {
+      if (
+        typeof calibration.calibratedBy === "object" &&
+        calibration.calibratedBy._id
+      ) {
+        technicianId = calibration.calibratedBy._id;
+        technicianName =
+          `${calibration.calibratedBy.firstName || ""} ${calibration.calibratedBy.lastName || ""}`.trim();
+      } else {
+        technicianId = calibration.calibratedBy;
+        const technician = technicians.find(
+          (t) => String(t._id) === String(calibration.calibratedBy),
+        );
+        if (technician) {
+          technicianName =
+            `${technician.firstName} ${technician.lastName}`.trim();
+        }
+      }
+    }
+
+    setFormData({
+      bottleId: calibration.bottleId || "",
+      date: formatDateForInput(new Date(calibration.date)),
+      dateOpened: calibration.dateOpened
+        ? formatDateForInput(new Date(calibration.dateOpened))
+        : formatDateForInput(new Date()),
+      technicianId,
+      technicianName,
+      refractiveIndex: calibration.refractiveIndex?.toString() || "",
+      asbestosTypeVerified: calibration.asbestosTypeVerified || "",
+      batchNumber: calibration.batchNumber || "",
+      status: calibration.status || "Pass",
+      notes: calibration.notes || "",
+    });
   };
 
   const handleSetToday = () => {
@@ -296,10 +359,9 @@ const RiLiquidPage = () => {
         notes: formData.notes || "",
       };
 
-      if (editingCalibrationId) {
-        // Update existing calibration
+      if (editingCalibration) {
         await riLiquidCalibrationService.update(
-          editingCalibrationId,
+          editingCalibration._id,
           calibrationData,
         );
       } else {
@@ -329,40 +391,12 @@ const RiLiquidPage = () => {
 
   const handleEdit = async (id) => {
     try {
-      // Fetch the calibration record
       const calibration = await riLiquidCalibrationService.getById(id);
-
-      // Handle calibratedBy - it might be an object with _id or just an _id string
-      let technicianId = "";
-      if (calibration.calibratedBy) {
-        if (
-          typeof calibration.calibratedBy === "object" &&
-          calibration.calibratedBy._id
-        ) {
-          technicianId = calibration.calibratedBy._id;
-        } else if (typeof calibration.calibratedBy === "string") {
-          technicianId = calibration.calibratedBy;
-        }
-      }
-
-      // Populate form with existing data
-      setFormData({
-        bottleId: calibration.bottleId || "",
-        date: formatDateForInput(new Date(calibration.date)),
-        dateOpened: calibration.dateOpened
-          ? formatDateForInput(new Date(calibration.dateOpened))
-          : formatDateForInput(new Date()),
-        technicianId: technicianId,
-        refractiveIndex: calibration.refractiveIndex?.toString() || "",
-        asbestosTypeVerified: calibration.asbestosTypeVerified || "",
-        batchNumber: calibration.batchNumber || "",
-        status: calibration.status || "Pass",
-        notes: calibration.notes || "",
-      });
-
-      setEditingCalibrationId(id);
+      setEditingCalibration(calibration);
+      setIsEditMode(false);
+      populateFormFromCalibration(calibration);
       setFormError(null);
-      setEditDialogOpen(true);
+      setAddDialogOpen(true);
     } catch (error) {
       console.error("Error fetching calibration for edit:", error);
       alert(
@@ -372,6 +406,8 @@ const RiLiquidPage = () => {
       );
     }
   };
+
+  const lookupViewMode = Boolean(editingCalibration && !isEditMode);
 
   const handleMarkAsEmpty = async (bottleId) => {
     if (
@@ -599,7 +635,7 @@ const RiLiquidPage = () => {
 
       {/* Add/Edit Calibration Dialog */}
       <Dialog
-        open={addDialogOpen || editDialogOpen}
+        open={addDialogOpen}
         onClose={handleDialogClose}
         maxWidth="sm"
         fullWidth
@@ -610,11 +646,37 @@ const RiLiquidPage = () => {
             justifyContent="space-between"
             alignItems="center"
           >
-            <Typography variant="h6">
-              {editingCalibrationId
-                ? "Edit Calibration"
-                : "Add New Calibration"}
-            </Typography>
+            <Box display="flex" alignItems="center" gap={2} flexWrap="wrap">
+              <Typography variant="h6">
+                {editingCalibration
+                  ? lookupViewMode
+                    ? "View Calibration"
+                    : "Edit Calibration"
+                  : "Add New Calibration"}
+              </Typography>
+              {lookupViewMode && (
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<EditIcon />}
+                  onClick={() => setIsEditMode(true)}
+                >
+                  Edit Record
+                </Button>
+              )}
+              {editingCalibration && isEditMode && (
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={() => {
+                    setIsEditMode(false);
+                    populateFormFromCalibration(editingCalibration);
+                  }}
+                >
+                  Cancel Edit
+                </Button>
+              )}
+            </Box>
             <IconButton onClick={handleDialogClose} disabled={submitting}>
               <CloseIcon />
             </IconButton>
@@ -641,7 +703,7 @@ const RiLiquidPage = () => {
                 }
                 placeholder="Enter bottle ID"
                 required
-                disabled={submitting}
+                disabled={submitting || lookupViewMode}
               />
 
               <Box>
@@ -661,48 +723,34 @@ const RiLiquidPage = () => {
                     }
                     InputLabelProps={{ shrink: true }}
                     required
-                    disabled={submitting}
+                    disabled={submitting || lookupViewMode}
                     sx={{ mr: 1 }}
                   />
-                  <Button
-                    variant="outlined"
-                    onClick={handleSetToday}
-                    disabled={submitting}
-                    sx={{ ml: 1, minWidth: "100px" }}
-                  >
-                    Today
-                  </Button>
+                  {!lookupViewMode && (
+                    <Button
+                      variant="outlined"
+                      onClick={handleSetToday}
+                      disabled={submitting}
+                      sx={{ ml: 1, minWidth: "100px" }}
+                    >
+                      Today
+                    </Button>
+                  )}
                 </Box>
               </Box>
 
-              <FormControl fullWidth required>
-                <InputLabel>Technician</InputLabel>
-                <Select
-                  value={formData.technicianId}
-                  onChange={(e) =>
-                    setFormData({ ...formData, technicianId: e.target.value })
-                  }
-                  label="Technician"
-                  disabled={techniciansLoading || submitting}
-                >
-                  <MenuItem value="">
-                    <em>Select a technician</em>
-                  </MenuItem>
-                  {technicians.length > 0 ? (
-                    technicians.map((technician) => (
-                      <MenuItem key={technician._id} value={technician._id}>
-                        {technician.firstName} {technician.lastName}
-                      </MenuItem>
-                    ))
-                  ) : (
-                    <MenuItem disabled>
-                      {techniciansLoading
-                        ? "Loading..."
-                        : "No technicians found"}
-                    </MenuItem>
-                  )}
-                </Select>
-              </FormControl>
+              <LookupField
+                mode={lookupViewMode ? "view" : "edit"}
+                label="Technician"
+                required
+                value={formData.technicianId}
+                displayLabel={formData.technicianName}
+                options={userOptionsFromList(technicians)}
+                onChange={(e) => handleTechnicianChange(e.target.value)}
+                disabled={techniciansLoading || submitting}
+                loading={techniciansLoading}
+                emptyOptionsText="No technicians found"
+              />
 
               <FormControl fullWidth required>
                 <InputLabel>Refractive Index</InputLabel>
@@ -721,7 +769,7 @@ const RiLiquidPage = () => {
                     });
                   }}
                   label="Refractive Index"
-                  disabled={submitting}
+                  disabled={submitting || lookupViewMode}
                 >
                   <MenuItem value="">
                     <em>Select refractive index</em>
@@ -749,7 +797,7 @@ const RiLiquidPage = () => {
                     });
                   }}
                   label="Asbestos Type Verified"
-                  disabled={submitting}
+                  disabled={submitting || lookupViewMode}
                 >
                   <MenuItem value="">
                     <em>Select asbestos type</em>
@@ -777,22 +825,24 @@ const RiLiquidPage = () => {
                     }
                     InputLabelProps={{ shrink: true }}
                     required
-                    disabled={submitting}
+                    disabled={submitting || lookupViewMode}
                     sx={{ mr: 1 }}
                   />
-                  <Button
-                    variant="outlined"
-                    onClick={() => {
-                      setFormData((prev) => ({
-                        ...prev,
-                        dateOpened: formatDateForInput(new Date()),
-                      }));
-                    }}
-                    disabled={submitting}
-                    sx={{ ml: 1, minWidth: "100px" }}
-                  >
-                    Today
-                  </Button>
+                  {!lookupViewMode && (
+                    <Button
+                      variant="outlined"
+                      onClick={() => {
+                        setFormData((prev) => ({
+                          ...prev,
+                          dateOpened: formatDateForInput(new Date()),
+                        }));
+                      }}
+                      disabled={submitting}
+                      sx={{ ml: 1, minWidth: "100px" }}
+                    >
+                      Today
+                    </Button>
+                  )}
                 </Box>
               </Box>
 
@@ -805,7 +855,7 @@ const RiLiquidPage = () => {
                 }
                 placeholder="Enter batch number"
                 required
-                disabled={submitting}
+                disabled={submitting || lookupViewMode}
               />
 
               <FormControl fullWidth>
@@ -847,33 +897,35 @@ const RiLiquidPage = () => {
                 onChange={(e) =>
                   setFormData({ ...formData, notes: e.target.value })
                 }
-                disabled={submitting}
+                disabled={submitting || lookupViewMode}
               />
             </Stack>
           </DialogContent>
           <DialogActions sx={{ p: 2 }}>
             <Button onClick={handleDialogClose} disabled={submitting}>
-              Cancel
+              {lookupViewMode ? "Close" : "Cancel"}
             </Button>
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={submitting}
-              startIcon={
-                submitting ? null : editingCalibrationId ? null : <AddIcon />
-              }
-            >
-              {submitting ? (
-                <Box display="flex" alignItems="center" gap={1}>
-                  <CircularProgress size={16} />
-                  Saving...
-                </Box>
-              ) : editingCalibrationId ? (
-                "Update Calibration"
-              ) : (
-                "Add Calibration"
-              )}
-            </Button>
+            {!lookupViewMode && (
+              <Button
+                type="submit"
+                variant="contained"
+                disabled={submitting}
+                startIcon={
+                  submitting ? null : editingCalibration ? null : <AddIcon />
+                }
+              >
+                {submitting ? (
+                  <Box display="flex" alignItems="center" gap={1}>
+                    <CircularProgress size={16} />
+                    Saving...
+                  </Box>
+                ) : editingCalibration ? (
+                  "Update Calibration"
+                ) : (
+                  "Add Calibration"
+                )}
+              </Button>
+            )}
           </DialogActions>
         </Box>
       </Dialog>

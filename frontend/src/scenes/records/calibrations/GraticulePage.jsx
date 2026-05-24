@@ -37,6 +37,12 @@ import { equipmentService } from "../../../services/equipmentService";
 import { graticuleService } from "../../../services/graticuleService";
 import { efaService } from "../../../services/efaService";
 import { useUserLists } from "../../../context/UserListsContext";
+import LookupField from "../../../components/LookupField";
+import {
+  userOptionsFromList,
+  equipmentOptionsFromList,
+  buildEquipmentDisplayLabel,
+} from "../../../utils/lookupOptions";
 
 const GraticulePage = () => {
   const theme = useTheme();
@@ -328,6 +334,7 @@ const GraticulePage = () => {
   // Dialog states
   const [openDialog, setOpenDialog] = useState(false);
   const [editingCalibration, setEditingCalibration] = useState(null);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState(false);
   const [calibrationToDelete, setCalibrationToDelete] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -352,6 +359,7 @@ const GraticulePage = () => {
 
   const handleAdd = () => {
     setEditingCalibration(null);
+    setIsEditMode(true);
     const todayDate = formatDateForInput(new Date());
     setFormData({
       graticuleId: "",
@@ -376,6 +384,7 @@ const GraticulePage = () => {
     if (item && item.isCalibrated) {
       const calibration = item;
       setEditingCalibration(calibration);
+      setIsEditMode(false);
 
       // Parse scale field to extract diameter
       let diameter = "";
@@ -631,8 +640,11 @@ const GraticulePage = () => {
   const handleCloseDialog = () => {
     setOpenDialog(false);
     setEditingCalibration(null);
+    setIsEditMode(false);
     setError(null);
   };
+
+  const lookupViewMode = Boolean(editingCalibration && !isEditMode);
 
   const handleCloseDeleteDialog = () => {
     setDeleteDialog(false);
@@ -1109,34 +1121,56 @@ const GraticulePage = () => {
         fullWidth
       >
         <DialogTitle>
-          {editingCalibration ? "Edit Calibration" : "Add New Calibration"}
+          <Box display="flex" alignItems="center" gap={2} flexWrap="wrap">
+            <Typography variant="h6">
+              {editingCalibration
+                ? lookupViewMode
+                  ? "View Calibration"
+                  : "Edit Calibration"
+                : "Add New Calibration"}
+            </Typography>
+            {lookupViewMode && (
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<EditIcon />}
+                onClick={() => setIsEditMode(true)}
+              >
+                Edit Record
+              </Button>
+            )}
+            {editingCalibration && isEditMode && (
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={() => handleEdit(editingCalibration._id)}
+              >
+                Cancel Edit
+              </Button>
+            )}
+          </Box>
         </DialogTitle>
         <DialogContent>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
-            <FormControl fullWidth required>
-              <InputLabel>Graticule</InputLabel>
-              <Select
-                value={formData.graticuleEquipmentId}
-                onChange={(e) => handleGraticuleChange(e.target.value)}
-                label="Graticule"
-                disabled={graticulesLoading}
-              >
-                <MenuItem value="">
-                  <em>Select a graticule</em>
-                </MenuItem>
-                {graticules.length > 0 ? (
-                  graticules.map((graticule) => (
-                    <MenuItem key={graticule._id} value={graticule._id}>
-                      {graticule.equipmentReference}
-                    </MenuItem>
-                  ))
-                ) : (
-                  <MenuItem disabled>
-                    {graticulesLoading ? "Loading..." : "No graticules found"}
-                  </MenuItem>
-                )}
-              </Select>
-            </FormControl>
+            <LookupField
+              mode={lookupViewMode ? "view" : "edit"}
+              label="Graticule"
+              required
+              value={formData.graticuleEquipmentId}
+              displayLabel={
+                formData.graticuleId ||
+                buildEquipmentDisplayLabel(
+                  graticules.find(
+                    (g) => String(g._id) === String(formData.graticuleEquipmentId),
+                  ),
+                )
+              }
+              options={equipmentOptionsFromList(graticules)}
+              onChange={(e) => handleGraticuleChange(e.target.value)}
+              disabled={graticulesLoading}
+              loading={graticulesLoading}
+              emptyOptionsText="No graticules found"
+            />
             <TextField
               fullWidth
               label="Calibration Date"
@@ -1145,6 +1179,7 @@ const GraticulePage = () => {
               onChange={(e) => handleDateChange(e.target.value)}
               InputLabelProps={{ shrink: true }}
               required
+              disabled={lookupViewMode}
             />
             <TextField
               fullWidth
@@ -1194,58 +1229,40 @@ const GraticulePage = () => {
                 Pass: 98-102 µm
               </Typography>
             </FormControl>
-            <FormControl fullWidth required>
-              <InputLabel>Technician</InputLabel>
-              <Select
-                value={formData.technicianId}
-                onChange={(e) => handleTechnicianChange(e.target.value)}
-                label="Technician"
-                disabled={userListsLoading}
-              >
-                <MenuItem value="">
-                  <em>Select a technician</em>
-                </MenuItem>
-                {activeTechnicians.length > 0 ? (
-                  activeTechnicians.map((technician) => (
-                    <MenuItem key={technician._id} value={technician._id}>
-                      {technician.firstName} {technician.lastName}
-                    </MenuItem>
-                  ))
-                ) : (
-                  <MenuItem disabled>
-                    {userListsLoading
-                      ? "Loading..."
-                      : "No lab signatories found"}
-                  </MenuItem>
-                )}
-              </Select>
-            </FormControl>
-            <FormControl fullWidth>
-              <InputLabel>PCM Microscope</InputLabel>
-              <Select
-                value={formData.microscopeId}
-                onChange={(e) => handleMicroscopeChange(e.target.value)}
-                label="PCM Microscope"
-                disabled={pcmMicroscopesLoading}
-              >
-                <MenuItem value="">
-                  <em>Select a PCM microscope (optional)</em>
-                </MenuItem>
-                {pcmMicroscopes.length > 0 ? (
-                  pcmMicroscopes.map((microscope) => (
-                    <MenuItem key={microscope._id} value={microscope._id}>
-                      {microscope.equipmentReference}
-                    </MenuItem>
-                  ))
-                ) : (
-                  <MenuItem disabled>
-                    {pcmMicroscopesLoading
-                      ? "Loading..."
-                      : "No PCM microscopes found"}
-                  </MenuItem>
-                )}
-              </Select>
-            </FormControl>
+            <LookupField
+              mode={lookupViewMode ? "view" : "edit"}
+              label="Technician"
+              required
+              value={formData.technicianId}
+              displayLabel={formData.technicianName}
+              options={userOptionsFromList(activeTechnicians)}
+              onChange={(e) => handleTechnicianChange(e.target.value)}
+              disabled={userListsLoading}
+              loading={userListsLoading}
+              emptyOptionsText="No lab signatories found"
+            />
+            <LookupField
+              mode={lookupViewMode ? "view" : "edit"}
+              label="PCM Microscope"
+              required={false}
+              allowEmpty
+              emptyDisplay="-"
+              value={formData.microscopeId}
+              displayLabel={
+                formData.microscopeReference ||
+                buildEquipmentDisplayLabel(
+                  pcmMicroscopes.find(
+                    (m) => String(m._id) === String(formData.microscopeId),
+                  ),
+                )
+              }
+              options={equipmentOptionsFromList(pcmMicroscopes)}
+              onChange={(e) => handleMicroscopeChange(e.target.value)}
+              disabled={pcmMicroscopesLoading}
+              loading={pcmMicroscopesLoading}
+              emptyOptionsText="No PCM microscopes found"
+              emptyOptionLabel="Select a PCM microscope (optional)"
+            />
             <TextField
               fullWidth
               label="Next Calibration (Optional)"
@@ -1258,16 +1275,20 @@ const GraticulePage = () => {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
-          <Button onClick={handleSubmit} variant="contained" disabled={loading}>
-            {loading ? (
-              <CircularProgress size={20} />
-            ) : editingCalibration ? (
-              "Update"
-            ) : (
-              "Save"
-            )}
+          <Button onClick={handleCloseDialog}>
+            {lookupViewMode ? "Close" : "Cancel"}
           </Button>
+          {!lookupViewMode && (
+            <Button onClick={handleSubmit} variant="contained" disabled={loading}>
+              {loading ? (
+                <CircularProgress size={20} />
+              ) : editingCalibration ? (
+                "Update"
+              ) : (
+                "Save"
+              )}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
 

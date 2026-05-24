@@ -199,6 +199,7 @@ const ProjectInformation = () => {
       number: "",
       email: "",
     },
+    additionalProjectContacts: [],
   });
 
   // Keep formRef in sync
@@ -641,6 +642,16 @@ const ProjectInformation = () => {
               users: Array.isArray(projectRes.data.users)
                 ? projectRes.data.users
                 : [],
+              projectContact: projectRes.data.projectContact || {
+                name: "",
+                number: "",
+                email: "",
+              },
+              additionalProjectContacts: Array.isArray(
+                projectRes.data.additionalProjectContacts,
+              )
+                ? projectRes.data.additionalProjectContacts
+                : [],
             };
 
             setForm(projectData);
@@ -1030,6 +1041,49 @@ const ProjectInformation = () => {
     }));
   };
 
+  const emptyProjectContact = () => ({ name: "", number: "", email: "" });
+
+  const handleAddProjectContact = () => {
+    setForm((prev) => ({
+      ...prev,
+      additionalProjectContacts: [
+        ...(prev.additionalProjectContacts || []),
+        emptyProjectContact(),
+      ],
+    }));
+  };
+
+  const handleRemoveProjectContact = (index) => {
+    setForm((prev) => ({
+      ...prev,
+      additionalProjectContacts: (prev.additionalProjectContacts || []).filter(
+        (_, i) => i !== index,
+      ),
+    }));
+  };
+
+  const handleAdditionalContactChange = (index, field, value) => {
+    setForm((prev) => {
+      const contacts = [...(prev.additionalProjectContacts || [])];
+      contacts[index] = { ...contacts[index], [field]: value };
+      return { ...prev, additionalProjectContacts: contacts };
+    });
+  };
+
+  const validateProjectContactEmails = () => {
+    const allContacts = [
+      form.projectContact,
+      ...(form.additionalProjectContacts || []),
+    ].filter(Boolean);
+
+    for (const contact of allContacts) {
+      if (contact.email && !contact.email.includes("@")) {
+        return false;
+      }
+    }
+    return true;
+  };
+
   const handleClientClick = async (client) => {
     if (!client || !client._id) return;
 
@@ -1160,12 +1214,9 @@ const ProjectInformation = () => {
     }
 
     // Additional custom validation for email fields
-    if (
-      form.projectContact?.email &&
-      !form.projectContact.email.includes("@")
-    ) {
+    if (!validateProjectContactEmails()) {
       showSnackbar(
-        "Please enter a valid email address for project contact",
+        "Please enter a valid email address for each project contact",
         "error",
       );
       return;
@@ -1180,6 +1231,19 @@ const ProjectInformation = () => {
     // Prevent multiple submissions - set saving flag immediately to prevent race condition
     if (saving) {
       console.log("🚫 SUBMISSION BLOCKED - Already saving");
+      return;
+    }
+
+    if (formElementRef.current && !formElementRef.current.checkValidity()) {
+      formElementRef.current.reportValidity();
+      return;
+    }
+
+    if (!validateProjectContactEmails()) {
+      showSnackbar(
+        "Please enter a valid email address for each project contact",
+        "error",
+      );
       return;
     }
 
@@ -1707,6 +1771,45 @@ const ProjectInformation = () => {
                       )
                     </Typography>
                   )}
+                  {form.d_Date &&
+                    (() => {
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      const due = new Date(form.d_Date);
+                      due.setHours(0, 0, 0, 0);
+                      const diffTime = due.getTime() - today.getTime();
+                      const diffDays = Math.ceil(
+                        diffTime / (1000 * 60 * 60 * 24),
+                      );
+
+                      if (diffDays === 0) {
+                        return (
+                          <Chip
+                            label="Due today"
+                            color="warning"
+                            variant="filled"
+                            sx={{ fontWeight: "bold" }}
+                          />
+                        );
+                      }
+                      if (diffDays < 0) {
+                        return (
+                          <Chip
+                            label={`${Math.abs(diffDays)} days overdue`}
+                            color="error"
+                            variant="filled"
+                            sx={{ fontWeight: "bold" }}
+                          />
+                        );
+                      }
+                      return (
+                        <Chip
+                          label={`${diffDays} days left`}
+                          color="success"
+                          variant="filled"
+                        />
+                      );
+                    })()}
                 </Box>
               </Grid>
 
@@ -1727,51 +1830,6 @@ const ProjectInformation = () => {
                     }
                     label="Large Project (HAZ prefix)"
                   />
-                </Grid>
-              )}
-
-              {form.d_Date && (
-                <Grid item xs={12}>
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                    {(() => {
-                      const today = new Date();
-                      today.setHours(0, 0, 0, 0);
-                      const due = new Date(form.d_Date);
-                      due.setHours(0, 0, 0, 0);
-                      const diffTime = due.getTime() - today.getTime();
-                      const diffDays = Math.ceil(
-                        diffTime / (1000 * 60 * 60 * 24),
-                      );
-
-                      if (diffDays === 0) {
-                        return (
-                          <Chip
-                            label="Due today"
-                            color="warning"
-                            variant="filled"
-                            sx={{ fontWeight: "bold" }}
-                          />
-                        );
-                      } else if (diffDays < 0) {
-                        return (
-                          <Chip
-                            label={`${Math.abs(diffDays)} days overdue`}
-                            color="error"
-                            variant="filled"
-                            sx={{ fontWeight: "bold" }}
-                          />
-                        );
-                      } else {
-                        return (
-                          <Chip
-                            label={`${diffDays} days left`}
-                            color="success"
-                            variant="filled"
-                          />
-                        );
-                      }
-                    })()}
-                  </Box>
                 </Grid>
               )}
 
@@ -1935,8 +1993,8 @@ const ProjectInformation = () => {
                 />
               </Grid>
 
-              {/* Due Date, Status, and Work Order on same line */}
-              <Grid item xs={12} md={4}>
+              {/* Due Date, Budget, Status, and Work Order on same line */}
+              <Grid item xs={12} md={3}>
                 <TextField
                   fullWidth
                   label="Due Date"
@@ -1961,7 +2019,19 @@ const ProjectInformation = () => {
                 />
               </Grid>
 
-              <Grid item xs={12} md={4}>
+              <Grid item xs={12} md={3}>
+                <TextField
+                  fullWidth
+                  label="Project Budget ($)"
+                  name="budget"
+                  type="number"
+                  value={form.budget || 0}
+                  onChange={handleChange}
+                  inputProps={{ min: 0, step: 0.01 }}
+                />
+              </Grid>
+
+              <Grid item xs={12} md={3}>
                 <FormControl fullWidth required>
                   <InputLabel>Status</InputLabel>
                   <Select
@@ -2007,7 +2077,7 @@ const ProjectInformation = () => {
                 </FormControl>
               </Grid>
 
-              <Grid item xs={12} md={4}>
+              <Grid item xs={12} md={3}>
                 <TextField
                   fullWidth
                   label="Work Order/Job Reference"
@@ -2064,25 +2134,12 @@ const ProjectInformation = () => {
               <Grid item xs={12}>
                 <TextField
                   fullWidth
-                  label="Project Budget ($)"
-                  name="budget"
-                  type="number"
-                  value={form.budget || 0}
-                  onChange={handleChange}
-                  inputProps={{ min: 0, step: 0.01 }}
-                  helperText="Budget amount for project cost tracking and reporting"
-                />
-              </Grid>
-
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
                   label="Notes"
                   name="notes"
                   value={form.notes}
                   onChange={handleChange}
                   multiline
-                  rows={6}
+                  rows={18}
                   InputProps={{
                     sx: {
                       fontSize: "0.875rem",
@@ -2098,12 +2155,27 @@ const ProjectInformation = () => {
               </Grid>
 
               <Grid item xs={12}>
-                <Typography
-                  variant="subtitle1"
-                  sx={{ mt: 1, mb: 0, fontWeight: "bold" }}
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1,
+                    mt: 1,
+                    mb: 0,
+                  }}
                 >
-                  Project Contact
-                </Typography>
+                  <Typography variant="subtitle1" sx={{ fontWeight: "bold" }}>
+                    Project Contacts
+                  </Typography>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<AddIcon />}
+                    onClick={handleAddProjectContact}
+                  >
+                    Add contact
+                  </Button>
+                </Box>
               </Grid>
 
               <Grid item xs={12} md={4} sx={{ pt: 0.5 }}>
@@ -2139,6 +2211,78 @@ const ProjectInformation = () => {
                   autoComplete="new-password"
                 />
               </Grid>
+
+              {(form.additionalProjectContacts || []).map((contact, index) => (
+                <React.Fragment key={`additional-contact-${index}`}>
+                  <Grid item xs={12} sx={{ pt: 1 }}>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <Typography variant="body2" color="text.secondary">
+                        Additional contact {index + 1}
+                      </Typography>
+                      <IconButton
+                        size="small"
+                        color="error"
+                        onClick={() => handleRemoveProjectContact(index)}
+                        aria-label={`Remove additional contact ${index + 1}`}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={12} md={4} sx={{ pt: 0.5 }}>
+                    <TextField
+                      fullWidth
+                      label="Contact Name"
+                      value={contact.name || ""}
+                      onChange={(e) =>
+                        handleAdditionalContactChange(
+                          index,
+                          "name",
+                          e.target.value,
+                        )
+                      }
+                      autoComplete="new-password"
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4} sx={{ pt: 0.5 }}>
+                    <TextField
+                      fullWidth
+                      label="Contact Number"
+                      value={contact.number || ""}
+                      onChange={(e) =>
+                        handleAdditionalContactChange(
+                          index,
+                          "number",
+                          e.target.value,
+                        )
+                      }
+                      autoComplete="new-password"
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4} sx={{ pt: 0.5 }}>
+                    <TextField
+                      fullWidth
+                      label="Contact Email"
+                      type="email"
+                      value={contact.email || ""}
+                      onChange={(e) =>
+                        handleAdditionalContactChange(
+                          index,
+                          "email",
+                          e.target.value,
+                        )
+                      }
+                      autoComplete="new-password"
+                    />
+                  </Grid>
+                </React.Fragment>
+              ))}
 
               <Grid item xs={12}>
                 <Typography

@@ -10,6 +10,10 @@ const {
 } = require("../services/asbestosRemovalJobSyncService");
 const { getLegislationForReportTemplate } = require("../services/templateService");
 const { formatDateSydney } = require("../utils/dateUtils");
+const {
+  notifyClearanceAuthorisationRequesterOnApproval,
+  resolveAsbestosClearanceJobUrl,
+} = require("../services/reportAuthorisationNotificationService");
 
 // Exclude soft-deleted clearances from list queries
 const notDeletedClearanceFilter = {
@@ -23,6 +27,16 @@ function removeEnclosureCertificatePdfFileIfExists(mergedPdfPath) {
     if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
   } catch (err) {
     console.warn("Could not delete enclosure certificate PDF file:", err.message);
+  }
+}
+
+function removeAsbestosClearanceMergedPdfFileIfExists(mergedPdfPath) {
+  if (!mergedPdfPath || typeof mergedPdfPath !== "string") return;
+  const fullPath = path.join(__dirname, "..", "generated-pdfs", mergedPdfPath);
+  try {
+    if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+  } catch (err) {
+    console.warn("Could not delete asbestos clearance merged PDF file:", err.message);
   }
 }
 
@@ -41,7 +55,8 @@ function clearEnclosureCertificatePdfFields(clearance) {
 
 /** Clear persisted PDF fields when clearance content changes so the UI shows Generate instead of Download. */
 function clearClearancePdfFields(clearance) {
-  const pdfFields = ["pdfDownloadUrl", "pdfJobId", "pdfReadyAt", "pdfFilename"];
+  removeAsbestosClearanceMergedPdfFileIfExists(clearance.mergedPdfPath);
+  const pdfFields = ["pdfDownloadUrl", "pdfJobId", "pdfReadyAt", "pdfFilename", "mergedPdfPath"];
   pdfFields.forEach((field) => {
     clearance[field] = undefined;
     clearance.markModified(field);
@@ -1030,6 +1045,72 @@ router.post("/:id/items/:itemId/photos", auth, checkPermission("asbestos.edit"),
   }
 });
 
+// Batch-update photo metadata (descriptions, includeInReport) in a single save.
+// Must be registered before /photos/:photoId routes so "metadata" is not treated as a photo id.
+router.patch(
+  "/:id/items/:itemId/photos/metadata",
+  auth,
+  checkPermission("asbestos.edit"),
+  async (req, res) => {
+    try {
+      const { updates } = req.body;
+      if (!Array.isArray(updates) || updates.length === 0) {
+        return res.status(400).json({ message: "updates array is required" });
+      }
+
+      const clearance = await AsbestosClearance.findById(req.params.id);
+      if (!clearance) {
+        return res.status(404).json({ message: "Asbestos clearance not found" });
+      }
+
+      const item = clearance.items.id(req.params.itemId);
+      if (!item) {
+        return res.status(404).json({ message: "Clearance item not found" });
+      }
+
+      const notFound = [];
+      for (const update of updates) {
+        const photoId = update?.photoId;
+        if (!photoId) continue;
+        const photo = item.photographs.id(photoId);
+        if (!photo) {
+          notFound.push(String(photoId));
+          continue;
+        }
+        if (update.description !== undefined) {
+          photo.description = update.description;
+        }
+        if (typeof update.includeInReport === "boolean") {
+          photo.includeInReport = update.includeInReport;
+        }
+      }
+
+      if (notFound.length === updates.length) {
+        return res.status(404).json({ message: "No matching photos found", notFound });
+      }
+
+      clearance.updatedBy = req.user.id;
+      clearClearancePdfFields(clearance);
+      await clearance.save();
+
+      res.json({
+        message: "Photo metadata updated successfully",
+        item,
+        ...(notFound.length > 0 ? { notFound } : {}),
+      });
+    } catch (error) {
+      console.error("Error batch updating photo metadata:", error);
+      if (error.code === 10334) {
+        return res.status(413).json({
+          message:
+            "This clearance is too large to save (database 16MB limit). Remove or replace some photos, the site plan, or attached air monitoring files, then try again.",
+        });
+      }
+      res.status(500).json({ message: "Server error", error: error.message });
+    }
+  },
+);
+
 // Replace photo pixels and/or full arrows array (e.g. after rotate)
 router.patch("/:id/items/:itemId/photos/:photoId", auth, checkPermission("asbestos.edit"), async (req, res) => {
   try {
@@ -1329,6 +1410,7 @@ router.post("/:id/authorise", auth, checkPermission("asbestos.edit"), async (req
       });
     }
 
+    const wasAlreadyAuthorised = Boolean(clearance.reportApprovedBy);
     const approver =
       req.user?.firstName && req.user?.lastName
         ? `${req.user.firstName} ${req.user.lastName}`
@@ -1340,118 +1422,21 @@ router.post("/:id/authorise", auth, checkPermission("asbestos.edit"), async (req
 
     clearClearancePdfFields(clearance);
     const updatedClearance = await clearance.save();
+    const populatedForEmail = await AsbestosClearance.findById(updatedClearance._id)
+      .populate({
+        path: "projectId",
+        select: "projectID name client",
+        populate: { path: "client", select: "name" },
+      });
 
-    // Send notification email to the user who requested authorisation
-    if (updatedClearance.authorisationRequestedBy) {
-      try {
-        const { sendMail } = require("../services/mailer");
-        const User = require("../models/User");
+    await notifyClearanceAuthorisationRequesterOnApproval({
+      clearance: populatedForEmail || updatedClearance,
+      wasAlreadyAuthorised,
+      approverName: approver,
+      reportTypeLabel: clearance.clearanceType || "Asbestos clearance",
+      resolveJobUrl: resolveAsbestosClearanceJobUrl,
+    });
 
-        // Get requester user details
-        const requester = await User.findById(updatedClearance.authorisationRequestedBy)
-          .select("firstName lastName email");
-        
-        if (requester && requester.email) {
-          const projectName = clearance.projectId?.name || "Unknown Project";
-          const projectID = clearance.projectId?.projectID || "N/A";
-          const clientName = clearance.projectId?.client?.name || "the client";
-          const clearanceDate = clearance.clearanceDate
-            ? formatDateSydney(clearance.clearanceDate)
-            : "N/A";
-          const clearanceType = clearance.clearanceType || "Asbestos Clearance";
-          const approverName = approver;
-          const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
-          
-          // Use direct link if available, otherwise fall back to finding the job
-          let jobId = null;
-          if (clearance.asbestosRemovalJobId) {
-            jobId = clearance.asbestosRemovalJobId.toString();
-          } else {
-            // Fallback for existing clearances that don't have the direct link
-            const AsbestosRemovalJob = require("../models/AsbestosRemovalJob");
-            const projectId = clearance.projectId?._id?.toString() || clearance.projectId?.toString();
-            
-            if (projectId) {
-              const jobs = await AsbestosRemovalJob.find({ 
-                projectId,
-                $or: [
-                  { clearance: true },
-                  { jobType: { $in: ["clearance", "air_monitoring_and_clearance"] } }
-                ]
-              })
-              .select("_id asbestosRemovalist createdAt")
-              .sort({ createdAt: -1 })
-              .lean();
-              
-              if (jobs.length === 1) {
-                jobId = jobs[0]._id.toString();
-              } else if (jobs.length > 1) {
-                const matchingJob = jobs.find(job => 
-                  job.asbestosRemovalist === clearance.asbestosRemovalist
-                );
-                jobId = matchingJob 
-                  ? matchingJob._id.toString() 
-                  : jobs[0]._id.toString();
-              } else {
-                const anyJob = await AsbestosRemovalJob.findOne({ projectId })
-                  .select("_id")
-                  .sort({ createdAt: -1 })
-                  .lean();
-                jobId = anyJob?._id?.toString();
-              }
-            }
-          }
-          
-          const clearanceUrl = jobId
-            ? `${frontendUrl}/asbestos-removal/jobs/${jobId}/details`
-            : `${frontendUrl}/projects`;
-
-          await sendMail({
-            to: requester.email,
-            subject: `Report Authorised - ${projectID}: ${clearanceType}`,
-            text: `
-The asbestos clearance report you requested for authorisation has been authorised.
-
-Project: ${projectName} (${projectID})
-Client: ${clientName}
-Clearance Type: ${clearanceType}
-Clearance Date: ${clearanceDate}
-Authorised by: ${approverName}
-
-View the report at: ${clearanceUrl}
-            `.trim(),
-            html: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
-                <div style="margin-bottom: 30px;">
-                  <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
-                </div>
-                <div style="color: #333; line-height: 1.6;">
-                  <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Report Authorised</h2>
-                  <p>Hello ${requester.firstName},</p>
-                  <p>The asbestos clearance report you requested for authorisation has been authorised:</p>
-                  <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
-                    <p style="margin: 5px 0;"><strong>Project:</strong> ${projectName}</p>
-                    <p style="margin: 5px 0;"><strong>Project ID:</strong> ${projectID}</p>
-                    <p style="margin: 5px 0;"><strong>Client:</strong> ${clientName}</p>
-                    <p style="margin: 5px 0;"><strong>Clearance Type:</strong> ${clearanceType}</p>
-                    <p style="margin: 5px 0;"><strong>Clearance Date:</strong> ${clearanceDate}</p>
-                    <p style="margin: 5px 0;"><strong>Authorised by:</strong> ${approverName}</p>
-                  </div>
-                  <div style="text-align: center; margin: 30px 0;">
-                    <a href="${clearanceUrl}" style="background-color: rgb(25, 138, 44); color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">View Report</a>
-                  </div>
-                  <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;">
-                  <p style="color: #666; font-size: 12px;">This is an automated message, please do not reply to this email.</p>
-                </div>
-              </div>
-            `,
-          });
-        }
-      } catch (emailError) {
-        // Log error but don't fail the request
-        console.error("Error sending authorisation notification email:", emailError);
-      }
-    }
 
     const populatedClearance = await AsbestosClearance.findById(updatedClearance._id)
       .populate({

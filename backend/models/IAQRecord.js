@@ -35,6 +35,14 @@ const iaqRecordSchema = new mongoose.Schema({
     type: Date,
     required: false
   },
+  analysedBy: {
+    type: String,
+    required: false
+  },
+  analysisDate: {
+    type: Date,
+    required: false
+  },
   createdAt: {
     type: Date,
     default: Date.now

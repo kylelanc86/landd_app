@@ -129,6 +129,24 @@ const projectSchema = new mongoose.Schema({
       lowercase: true
     }
   },
+  additionalProjectContacts: [{
+    name: {
+      type: String,
+      required: false,
+      trim: true
+    },
+    number: {
+      type: String,
+      required: false,
+      trim: true
+    },
+    email: {
+      type: String,
+      required: false,
+      trim: true,
+      lowercase: true
+    }
+  }],
   users: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

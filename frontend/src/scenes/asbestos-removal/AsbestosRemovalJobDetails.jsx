@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useSnackbar } from "../../context/SnackbarContext";
 import {
@@ -66,6 +66,7 @@ import {
   startClearancePDFJob,
   getClearancePDFStatus,
   downloadClearancePDFByClearanceId,
+  downloadClearancePDFByJobId,
 } from "../../utils/templatePDFGenerator";
 import { generateShiftReport } from "../../utils/generateShiftReport";
 import { useAuth } from "../../context/AuthContext";
@@ -83,6 +84,33 @@ const getTimestamp = () =>
   typeof performance !== "undefined" && performance.now
     ? performance.now()
     : Date.now();
+
+const CLEARANCE_FORM_COMPARE_KEYS = [
+  "clearanceDate",
+  "inspectionTime",
+  "clearanceType",
+  "asbestosRemovalist",
+  "LAA",
+  "jurisdiction",
+  "secondaryHeader",
+  "vehicleEquipmentDescription",
+  "notes",
+  "jobSpecificExclusions",
+];
+
+const normalizeClearanceFormForCompare = (form) => {
+  const normalized = {};
+  for (const key of CLEARANCE_FORM_COMPARE_KEYS) {
+    normalized[key] = String(form?.[key] ?? "").trim();
+  }
+  return normalized;
+};
+
+const clearanceFormsAreEqual = (a, b) => {
+  const left = normalizeClearanceFormForCompare(a);
+  const right = normalizeClearanceFormForCompare(b);
+  return CLEARANCE_FORM_COMPARE_KEYS.every((key) => left[key] === right[key]);
+};
 
 const AsbestosRemovalJobDetails = () => {
   const renderCountRef = useRef(0);
@@ -116,6 +144,7 @@ const AsbestosRemovalJobDetails = () => {
   const [clearanceDialogOpen, setClearanceDialogOpen] = useState(false);
   const [editingClearance, setEditingClearance] = useState(null);
   const [pendingClearanceEdit, setPendingClearanceEdit] = useState(null);
+  const [clearanceFormBaseline, setClearanceFormBaseline] = useState(null);
   const [airMonitoringReports, setAirMonitoringReports] = useState([]);
   const [loadingReports, setLoadingReports] = useState(false);
 
@@ -169,6 +198,11 @@ const AsbestosRemovalJobDetails = () => {
     useComplexTemplate: false,
     jobSpecificExclusions: "",
   });
+
+  const clearanceFormHasChanges = useMemo(() => {
+    if (!editingClearance || !clearanceFormBaseline) return true;
+    return !clearanceFormsAreEqual(clearanceForm, clearanceFormBaseline);
+  }, [clearanceForm, clearanceFormBaseline, editingClearance]);
 
   const latestFetchIdRef = useRef(0);
   const clearancesBackgroundFetchTriggeredRef = useRef(false);
@@ -390,25 +424,7 @@ const AsbestosRemovalJobDetails = () => {
               : 0;
             return dateB - dateA; // Newest first
           });
-          // Preserve pdfReadyAt/pdfDownloadUrl from existing state when refetch doesn't have them yet
-          // (e.g. after PDF generation completes, backend may not have persisted before this refetch)
-          setClearances((prev) => {
-            const byId = new Map(prev.map((c) => [String(c._id), c]));
-            return sortedClearances.map((c) => {
-              const existing = byId.get(String(c._id));
-              const hasPdfFromServer = c.pdfReadyAt || c.pdfDownloadUrl;
-              if (!hasPdfFromServer && existing && (existing.pdfReadyAt || existing.pdfDownloadUrl)) {
-                return {
-                  ...c,
-                  pdfReadyAt: existing.pdfReadyAt ?? c.pdfReadyAt,
-                  pdfDownloadUrl: existing.pdfDownloadUrl ?? c.pdfDownloadUrl,
-                  pdfFilename: existing.pdfFilename ?? c.pdfFilename,
-                  updatedAt: existing.updatedAt ?? c.updatedAt,
-                };
-              }
-              return c;
-            });
-          });
+          setClearances(sortedClearances);
           setClearancesLoaded(true); // Mark as loaded when fetched via fetchJobDetails
           const clearancesSetDuration = Math.round(
             getTimestamp() - clearancesStart,
@@ -706,20 +722,17 @@ const AsbestosRemovalJobDetails = () => {
         const data = await getClearancePDFStatus(clearancePdfJobId);
         if (data.status === "completed" || data.ready) {
           const clearanceId = clearancePdfGeneratingForClearanceId;
+          const jobId = clearancePdfJobId;
           setClearancePdfStatus("idle");
           setClearancePdfJobId(null);
           setClearancePdfGeneratingForClearanceId(null);
-          // Optimistic update: mark this clearance as having a valid PDF so the icon turns green immediately
-          const now = new Date();
-          setClearances((prev) =>
-            prev.map((c) =>
-              String(c._id) === String(clearanceId)
-                ? { ...c, pdfReadyAt: now, updatedAt: now }
-                : c
-            )
-          );
           try {
-            const { filename } = await downloadClearancePDFByClearanceId(clearanceId);
+            let filename;
+            try {
+              ({ filename } = await downloadClearancePDFByJobId(jobId));
+            } catch (jobDownloadErr) {
+              ({ filename } = await downloadClearancePDFByClearanceId(clearanceId));
+            }
             showSnackbar(`Downloaded: ${filename}`, "success");
             setReportViewedClearanceIds((prev) =>
               new Set(prev).add(clearanceId),
@@ -732,6 +745,8 @@ const AsbestosRemovalJobDetails = () => {
           } catch (e) {
             showSnackbar(e.message || "Download failed", "error");
           }
+          clearancesLoadingRef.current = false;
+          await fetchClearances();
           return;
         }
         if (data.status === "failed") {
@@ -783,7 +798,7 @@ const AsbestosRemovalJobDetails = () => {
         ? `${matchingAssessor.firstName} ${matchingAssessor.lastName}`
         : storedLAA; // Fallback to stored value if no exact match found
 
-      setClearanceForm({
+      const editFormValues = {
         projectId: clearance.projectId._id || clearance.projectId,
         clearanceDate: clearance.clearanceDate
           ? new Date(clearance.clearanceDate).toISOString().split("T")[0]
@@ -799,7 +814,10 @@ const AsbestosRemovalJobDetails = () => {
         notes: clearance.notes || "",
         useComplexTemplate: clearance.useComplexTemplate || false,
         jobSpecificExclusions: clearance.jobSpecificExclusions || "",
-      });
+      };
+
+      setClearanceForm(editFormValues);
+      setClearanceFormBaseline({ ...editFormValues });
 
       // Now open the dialog - assessors are loaded and form is set
       setClearanceDialogOpen(true);
@@ -1165,6 +1183,13 @@ const AsbestosRemovalJobDetails = () => {
     setShiftDialogOpen(true);
   };
 
+  const handleCloseClearanceDialog = () => {
+    setClearanceDialogOpen(false);
+    setEditingClearance(null);
+    setPendingClearanceEdit(null);
+    setClearanceFormBaseline(null);
+  };
+
   const handleCreateClearance = () => {
     // Lazy load removalists and clearances if not already loaded or loading
     fetchAsbestosRemovalists();
@@ -1172,6 +1197,7 @@ const AsbestosRemovalJobDetails = () => {
       fetchClearances();
     }
     setEditingClearance(null);
+    setClearanceFormBaseline(null);
     resetClearanceForm();
     setClearanceDialogOpen(true);
   };
@@ -1539,7 +1565,7 @@ const AsbestosRemovalJobDetails = () => {
 
   // Green icon = retained PDF available → click only downloads. Orange = no PDF yet → click generates then downloads.
   const hasRetainedValidPdf = (clearance) =>
-    Boolean(clearance.pdfReadyAt || clearance.pdfDownloadUrl);
+    Boolean(clearance.mergedPdfPath || clearance.pdfDownloadUrl);
 
   const handleDownloadOrGenerateClearanceReport = async (clearance, event) => {
     event?.stopPropagation();
@@ -1862,8 +1888,7 @@ const AsbestosRemovalJobDetails = () => {
 
       // Close modal and refresh clearances list
       await fetchClearances();
-      setClearanceDialogOpen(false);
-      setEditingClearance(null);
+      handleCloseClearanceDialog();
       resetClearanceForm();
     } catch (err) {
       console.error("Error creating clearance:", err);
@@ -2844,7 +2869,7 @@ const AsbestosRemovalJobDetails = () => {
       {/* Clearance Modal */}
       <Dialog
         open={clearanceDialogOpen}
-        onClose={() => setClearanceDialogOpen(false)}
+        onClose={handleCloseClearanceDialog}
         maxWidth="md"
         fullWidth
       >
@@ -3167,13 +3192,15 @@ const AsbestosRemovalJobDetails = () => {
             </Grid>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setClearanceDialogOpen(false)}>
+            <Button onClick={handleCloseClearanceDialog}>
               Cancel
             </Button>
             <Button
               type="submit"
               variant="contained"
-              disabled={creating}
+              disabled={
+                creating || (Boolean(editingClearance) && !clearanceFormHasChanges)
+              }
               sx={{
                 backgroundColor: colors.secondary[600],
                 color: colors.grey[100],

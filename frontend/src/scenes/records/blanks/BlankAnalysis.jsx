@@ -43,6 +43,12 @@ import { useAuth } from "../../../context/AuthContext";
 import { useUserLists } from "../../../context/UserListsContext";
 import { useSnackbar } from "../../../context/SnackbarContext";
 import { formatDate } from "../../../utils/dateFormat";
+import LookupField from "../../../components/LookupField";
+import LookupRadioGroup from "../../../components/LookupRadioGroup";
+import {
+  userOptionsFromList,
+  buildUserDisplayLabel,
+} from "../../../utils/lookupOptions";
 
 const BlankAnalysis = () => {
   const { blankId } = useParams();
@@ -787,117 +793,81 @@ const BlankAnalysis = () => {
           Analysis Details
         </Typography>
         <Stack direction={{ xs: "column", sm: "row" }} spacing={3}>
-          <FormControl component="fieldset">
-            <Typography variant="subtitle1" sx={{ mb: 1 }}>
-              Microscope
-            </Typography>
-            <RadioGroup
-              row
-              name="microscope"
-              value={analysisDetails.microscope}
-              onChange={(e) =>
-                setAnalysisDetails((prev) => ({
-                  ...prev,
-                  microscope: e.target.value,
-                }))
-              }
-              disabled={isReadOnly}
-            >
-              {activeMicroscopes.length > 0 ? (
-                activeMicroscopes.map((microscope) => (
-                  <FormControlLabel
-                    key={microscope._id}
-                    value={microscope.equipmentReference}
-                    control={<Radio />}
-                    label={microscope.equipmentReference}
-                  />
-                ))
-              ) : (
-                <Typography variant="body2" color="text.secondary">
-                  No active Phase Contrast Microscope available
-                </Typography>
-              )}
-            </RadioGroup>
-          </FormControl>
+          <LookupRadioGroup
+            mode={isReadOnly ? "view" : "edit"}
+            label="Microscope"
+            name="microscope"
+            value={analysisDetails.microscope}
+            displayValue={analysisDetails.microscope}
+            options={activeMicroscopes.map((m) => ({
+              value: m.equipmentReference,
+              label: m.equipmentReference,
+            }))}
+            onChange={(e) =>
+              setAnalysisDetails((prev) => ({
+                ...prev,
+                microscope: e.target.value,
+              }))
+            }
+            disabled={isReadOnly}
+            emptyMessage="No active Phase Contrast Microscope available"
+          />
           <Box sx={{ width: 24 }} />
-          <FormControl component="fieldset">
-            <Typography variant="subtitle1" sx={{ mb: 1 }}>
-              Test Slide
-            </Typography>
-            <RadioGroup
-              row
-              name="testSlide"
-              value={analysisDetails.testSlide}
-              onChange={(e) =>
-                setAnalysisDetails((prev) => ({
-                  ...prev,
-                  testSlide: e.target.value,
-                }))
-              }
-              disabled={isReadOnly}
-            >
-              {activeTestSlides.length > 0 ? (
-                activeTestSlides.map((testSlide) => (
-                  <FormControlLabel
-                    key={testSlide._id}
-                    value={testSlide.equipmentReference}
-                    control={<Radio />}
-                    label={testSlide.equipmentReference}
-                  />
-                ))
-              ) : (
-                <Typography variant="body2" color="text.secondary">
-                  No active HSE Test Slide available
-                </Typography>
-              )}
-            </RadioGroup>
-          </FormControl>
+          <LookupRadioGroup
+            mode={isReadOnly ? "view" : "edit"}
+            label="Test Slide"
+            name="testSlide"
+            value={analysisDetails.testSlide}
+            displayValue={analysisDetails.testSlide}
+            options={activeTestSlides.map((t) => ({
+              value: t.equipmentReference,
+              label: t.equipmentReference,
+            }))}
+            onChange={(e) =>
+              setAnalysisDetails((prev) => ({
+                ...prev,
+                testSlide: e.target.value,
+              }))
+            }
+            disabled={isReadOnly}
+            emptyMessage="No active HSE Test Slide available"
+          />
           <Box sx={{ width: 24 }} />
+          <LookupRadioGroup
+            mode={isReadOnly ? "view" : "edit"}
+            label="Test Slide Lines"
+            name="testSlideLines"
+            value={analysisDetails.testSlideLines}
+            displayValue={analysisDetails.testSlideLines}
+            options={[
+              { value: "5", label: "5" },
+              { value: "Partial 6", label: "Partial 6" },
+            ]}
+            onChange={(e) =>
+              setAnalysisDetails((prev) => ({
+                ...prev,
+                testSlideLines: e.target.value,
+              }))
+            }
+            disabled={isReadOnly}
+          />
 
-          <FormControl component="fieldset" sx={{ minWidth: 200 }}>
-            <Typography variant="subtitle2" sx={{ mb: 1 }}>
-              Test Slide Lines
-            </Typography>
-            <RadioGroup
-              row
-              name="testSlideLines"
-              value={analysisDetails.testSlideLines}
-              onChange={(e) =>
-                setAnalysisDetails((prev) => ({
-                  ...prev,
-                  testSlideLines: e.target.value,
-                }))
-              }
-              disabled={isReadOnly}
-            >
-              <FormControlLabel
-                value="5"
-                control={<Radio size="small" />}
-                label="5"
-              />
-              <FormControlLabel
-                value="Partial 6"
-                control={<Radio size="small" />}
-                label="Partial 6"
-              />
-            </RadioGroup>
-          </FormControl>
-
-          <FormControl sx={{ minWidth: 200 }}>
-            <InputLabel>Analysed By</InputLabel>
-            <Select
-              value={analysedBy || ""}
-              onChange={(e) => setAnalysedBy(e.target.value)}
-              disabled={isReadOnly}
-              label="Analysed By"
-            >
-              {activeCounters.map((user) => (
-                <MenuItem key={user._id} value={user._id}>
-                  {user.firstName} {user.lastName}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <LookupField
+            sx={{ minWidth: 200 }}
+            mode={isReadOnly ? "view" : "edit"}
+            label="Analysed By"
+            value={analysedBy || ""}
+            displayLabel={buildUserDisplayLabel(
+              blank?.analysedBy,
+              buildUserDisplayLabel(
+                activeCounters.find((u) => String(u._id) === String(analysedBy)),
+              ),
+            )}
+            options={userOptionsFromList(activeCounters)}
+            onChange={(e) => setAnalysedBy(e.target.value)}
+            allowEmpty
+            emptyOptionLabel="Select analyst"
+          />
         </Stack>
       </Paper>
 

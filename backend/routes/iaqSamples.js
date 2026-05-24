@@ -4,6 +4,11 @@ const IAQSample = require('../models/IAQSample');
 const IAQRecord = require('../models/IAQRecord');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
+const {
+  generateIAQReference,
+  extractAMSampleSuffix,
+  buildIAQFullSampleID,
+} = require('../utils/iaqReference');
 
 // Get all IAQ samples
 router.get('/', auth, checkPermission(['jobs.view']), async (req, res) => {
@@ -68,10 +73,17 @@ router.post('/', auth, checkPermission(['jobs.create']), async (req, res) => {
         ? `C${req.body.cowlNo}`
         : req.body.cowlNo || "";
 
+    const allRecords = await IAQRecord.find().sort({ createdAt: 1 }).lean();
+    const sampleSuffix = extractAMSampleSuffix(
+      req.body.sampleNumber || req.body.fullSampleID
+    );
+    const iaqReference = generateIAQReference(iaqRecord, allRecords);
+    const fullSampleID = buildIAQFullSampleID(iaqReference, sampleSuffix);
+
     const sample = new IAQSample({
       iaqRecord: req.body.iaqRecord,
-      sampleNumber: req.body.sampleNumber,
-      fullSampleID: req.body.fullSampleID || req.body.sampleNumber,
+      sampleNumber: sampleSuffix,
+      fullSampleID,
       location: req.body.location,
       pumpNo: req.body.pumpNo,
       flowmeter: req.body.flowmeter,

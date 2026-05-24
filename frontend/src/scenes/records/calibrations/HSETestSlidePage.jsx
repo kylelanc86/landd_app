@@ -18,10 +18,6 @@ import {
   DialogContentText,
   DialogTitle,
   TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Alert,
   CircularProgress,
   Breadcrumbs,
@@ -31,6 +27,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AddIcon from "@mui/icons-material/Add";
+import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import CloseIcon from "@mui/icons-material/Close";
 import HistoryIcon from "@mui/icons-material/History";
@@ -39,6 +36,8 @@ import { formatDate, formatDateForInput } from "../../../utils/dateFormat";
 import { equipmentService } from "../../../services/equipmentService";
 import hseTestSlideService from "../../../services/hseTestSlideService";
 import { useAuth } from "../../../context/AuthContext";
+import LookupField from "../../../components/LookupField";
+import { equipmentOptionsFromList, buildEquipmentDisplayLabel } from "../../../utils/lookupOptions";
 
 const HSETestSlidePage = () => {
   const theme = useTheme();
@@ -54,6 +53,7 @@ const HSETestSlidePage = () => {
   const [calibrationToDelete, setCalibrationToDelete] = useState(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editingCalibration, setEditingCalibration] = useState(null);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [selectedTestSlideForHistory, setSelectedTestSlideForHistory] =
     useState(null);
@@ -214,6 +214,7 @@ const HSETestSlidePage = () => {
 
   const handleAdd = () => {
     setEditingCalibration(null);
+    setIsEditMode(true);
     const todayDate = formatDateForInput(new Date());
     setFormData({
       testSlideReference: "",
@@ -230,6 +231,7 @@ const HSETestSlidePage = () => {
 
   const handleEdit = (calibration) => {
     setEditingCalibration(calibration);
+    setIsEditMode(false);
     const testSlideEquipment = testSlides.find(
       (ts) => ts.equipmentReference === calibration.testSlideReference
     );
@@ -323,6 +325,15 @@ const HSETestSlidePage = () => {
       setLoading(false);
     }
   };
+
+  const handleCloseDialog = () => {
+    setAddDialogOpen(false);
+    setEditingCalibration(null);
+    setIsEditMode(false);
+    setError(null);
+  };
+
+  const lookupViewMode = Boolean(editingCalibration && !isEditMode);
 
   const handleTestSlideChange = (testSlideEquipmentId) => {
     const selectedTestSlide = testSlides.find(
@@ -614,11 +625,7 @@ const HSETestSlidePage = () => {
       {/* Add/Edit Calibration Dialog */}
       <Dialog
         open={addDialogOpen}
-        onClose={() => {
-          setAddDialogOpen(false);
-          setEditingCalibration(null);
-          setError(null);
-        }}
+        onClose={handleCloseDialog}
         maxWidth="md"
         fullWidth
       >
@@ -628,16 +635,35 @@ const HSETestSlidePage = () => {
             justifyContent="space-between"
             alignItems="center"
           >
-            <Typography variant="h6">
-              {editingCalibration ? "Edit Calibration" : "Add New Calibration"}
-            </Typography>
-            <IconButton
-              onClick={() => {
-                setAddDialogOpen(false);
-                setEditingCalibration(null);
-                setError(null);
-              }}
-            >
+            <Box display="flex" alignItems="center" gap={2} flexWrap="wrap">
+              <Typography variant="h6">
+                {editingCalibration
+                  ? lookupViewMode
+                    ? "View Calibration"
+                    : "Edit Calibration"
+                  : "Add New Calibration"}
+              </Typography>
+              {lookupViewMode && (
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<EditIcon />}
+                  onClick={() => setIsEditMode(true)}
+                >
+                  Edit Record
+                </Button>
+              )}
+              {editingCalibration && isEditMode && (
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={() => handleEdit(editingCalibration)}
+                >
+                  Cancel Edit
+                </Button>
+              )}
+            </Box>
+            <IconButton onClick={handleCloseDialog}>
               <CloseIcon />
             </IconButton>
           </Box>
@@ -651,33 +677,26 @@ const HSETestSlidePage = () => {
             )}
             <Stack spacing={3} sx={{ mt: 1 }}>
               <Box display="flex" gap={2}>
-                <FormControl fullWidth required>
-                  <InputLabel>Test Slide</InputLabel>
-                  <Select
-                    value={formData.testSlideEquipmentId}
-                    onChange={(e) => handleTestSlideChange(e.target.value)}
-                    label="Test Slide"
-                    disabled={testSlidesLoading}
-                  >
-                    <MenuItem value="">
-                      <em>Select a test slide</em>
-                    </MenuItem>
-                    {testSlides.length > 0 ? (
-                      testSlides.map((testSlide) => (
-                        <MenuItem key={testSlide._id} value={testSlide._id}>
-                          {testSlide.equipmentReference} -{" "}
-                          {testSlide.brandModel}
-                        </MenuItem>
-                      ))
-                    ) : (
-                      <MenuItem disabled>
-                        {testSlidesLoading
-                          ? "Loading..."
-                          : "No test slides found"}
-                      </MenuItem>
-                    )}
-                  </Select>
-                </FormControl>
+                <LookupField
+                  mode={lookupViewMode ? "view" : "edit"}
+                  label="Test Slide"
+                  required
+                  value={formData.testSlideEquipmentId}
+                  displayLabel={
+                    formData.testSlideReference ||
+                    buildEquipmentDisplayLabel(
+                      testSlides.find(
+                        (ts) =>
+                          String(ts._id) === String(formData.testSlideEquipmentId),
+                      ),
+                    )
+                  }
+                  options={equipmentOptionsFromList(testSlides)}
+                  onChange={(e) => handleTestSlideChange(e.target.value)}
+                  disabled={testSlidesLoading}
+                  loading={testSlidesLoading}
+                  emptyOptionsText="No test slides found"
+                />
                 <TextField
                   fullWidth
                   label="Calibration Date"
@@ -688,6 +707,7 @@ const HSETestSlidePage = () => {
                   }
                   InputLabelProps={{ shrink: true }}
                   required
+                  disabled={lookupViewMode}
                 />
               </Box>
               <TextField
@@ -701,6 +721,7 @@ const HSETestSlidePage = () => {
                   })
                 }
                 required
+                disabled={lookupViewMode}
               />
               <TextField
                 fullWidth
@@ -712,6 +733,7 @@ const HSETestSlidePage = () => {
                     certificateNumber: e.target.value,
                   })
                 }
+                disabled={lookupViewMode}
               />
               <TextField
                 fullWidth
@@ -722,16 +744,19 @@ const HSETestSlidePage = () => {
                 onChange={(e) =>
                   setFormData({ ...formData, notes: e.target.value })
                 }
+                disabled={lookupViewMode}
               />
-              <Button variant="outlined" component="label" fullWidth>
-                Attach Certificate
-                <input
-                  type="file"
-                  hidden
-                  accept=".pdf"
-                  onChange={handleFileChange}
-                />
-              </Button>
+              {!lookupViewMode && (
+                <Button variant="outlined" component="label" fullWidth>
+                  Attach Certificate
+                  <input
+                    type="file"
+                    hidden
+                    accept=".pdf"
+                    onChange={handleFileChange}
+                  />
+                </Button>
+              )}
               {formData.certificate && (
                 <Typography variant="body2" color="primary">
                   File selected: {formData.certificate.name}
@@ -747,27 +772,23 @@ const HSETestSlidePage = () => {
             </Stack>
           </DialogContent>
           <DialogActions>
-            <Button
-              onClick={() => {
-                setAddDialogOpen(false);
-                setEditingCalibration(null);
-                setError(null);
-              }}
-            >
-              Cancel
+            <Button onClick={handleCloseDialog}>
+              {lookupViewMode ? "Close" : "Cancel"}
             </Button>
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={
-                loading ||
-                !formData.testSlideEquipmentId ||
-                !formData.date ||
-                !formData.calibrationCompany
-              }
-            >
-              {loading ? <CircularProgress size={24} /> : "Save"}
-            </Button>
+            {!lookupViewMode && (
+              <Button
+                type="submit"
+                variant="contained"
+                disabled={
+                  loading ||
+                  !formData.testSlideEquipmentId ||
+                  !formData.date ||
+                  !formData.calibrationCompany
+                }
+              >
+                {loading ? <CircularProgress size={24} /> : "Save"}
+              </Button>
+            )}
           </DialogActions>
         </Box>
       </Dialog>

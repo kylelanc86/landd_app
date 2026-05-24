@@ -30,6 +30,10 @@ import { iaqSampleService } from "../../../services/iaqSampleService";
 import { useAuth } from "../../../context/AuthContext";
 import { useUserLists } from "../../../context/UserListsContext";
 import { useSnackbar } from "../../../context/SnackbarContext";
+import {
+  generateIAQReference,
+  buildIAQFullSampleID,
+} from "../../../utils/iaqReference";
 
 const FIELD_BLANK_LOCATION = "Field blank";
 
@@ -74,10 +78,19 @@ const IAQNewSample = () => {
   const [loading, setLoading] = useState(false);
   const [loadingCriticalData, setLoadingCriticalData] = useState(true);
   const [iaqSamples, setIaqSamples] = useState([]);
+  const [iaqRecord, setIaqRecord] = useState(null);
+  const [allRecords, setAllRecords] = useState([]);
   const [insufficientSampleTime, setInsufficientSampleTime] = useState(false);
   const [collectionTimeBeforeSetup, setCollectionTimeBeforeSetup] = useState(false);
   const [showCollectionSection, setShowCollectionSection] = useState(false);
   const [collectionFieldsEdited, setCollectionFieldsEdited] = useState(false);
+
+  const previewFullSampleID = useMemo(() => {
+    if (!form.sampleNumber) return "";
+    if (!iaqRecord || allRecords.length === 0) return form.sampleNumber;
+    const iaqRef = generateIAQReference(iaqRecord, allRecords);
+    return buildIAQFullSampleID(iaqRef, form.sampleNumber);
+  }, [form.sampleNumber, iaqRecord, allRecords]);
 
   const isSimplifiedSample = form.isFieldBlank;
 
@@ -430,11 +443,15 @@ const IAQNewSample = () => {
         setLoadingCriticalData(true);
 
         // Fetch IAQ record and samples
-        const [recordResponse, samplesResponse] = await Promise.all([
-          iaqRecordService.getById(iaqRecordId),
-          iaqSampleService.getByIAQRecord(iaqRecordId),
-        ]);
+        const [recordResponse, samplesResponse, allRecordsResponse] =
+          await Promise.all([
+            iaqRecordService.getById(iaqRecordId),
+            iaqSampleService.getByIAQRecord(iaqRecordId),
+            iaqRecordService.getAll(),
+          ]);
 
+        setIaqRecord(recordResponse.data);
+        setAllRecords(allRecordsResponse.data || []);
         const fetchedSamples = samplesResponse.data || [];
         setIaqSamples(fetchedSamples);
 
@@ -886,10 +903,13 @@ const IAQNewSample = () => {
         normalizedLocation = "Field blank";
       }
 
+      const iaqRef = generateIAQReference(iaqRecord, allRecords);
+      const fullSampleID = buildIAQFullSampleID(iaqRef, form.sampleNumber);
+
       const sampleData = {
         iaqRecord: iaqRecordId,
         sampleNumber: form.sampleNumber,
-        fullSampleID: form.sampleNumber, // For IAQ, fullSampleID is just the sample number
+        fullSampleID,
         location: normalizedLocation,
         pumpNo: form.pumpNo || null,
         flowmeter: form.flowmeter || null,
@@ -1046,7 +1066,7 @@ const IAQNewSample = () => {
               helperText={
                 fieldErrors.sampleNumber
                   ? fieldErrors.sampleNumber
-                  : `Full Sample ID: ${form.sampleNumber || "XXX"}`
+                  : `Full Sample ID: ${previewFullSampleID || "..."}`
               }
             />
           </Box>

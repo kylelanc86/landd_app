@@ -38,6 +38,12 @@ import { formatDate, formatDateForInput } from "../../../utils/dateFormat";
 import { equipmentService } from "../../../services/equipmentService";
 import { flowmeterCalibrationService } from "../../../services/flowmeterCalibrationService";
 import userService from "../../../services/userService";
+import LookupField from "../../../components/LookupField";
+import {
+  userOptionsFromList,
+  equipmentOptionsFromList,
+  buildEquipmentDisplayLabel,
+} from "../../../utils/lookupOptions";
 
 const FlowmeterPage = () => {
   const theme = useTheme();
@@ -54,6 +60,7 @@ const FlowmeterPage = () => {
   const [calibrationToDelete, setCalibrationToDelete] = useState(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editingCalibration, setEditingCalibration] = useState(null);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [selectedFlowmeterForHistory, setSelectedFlowmeterForHistory] =
     useState(null);
@@ -269,6 +276,7 @@ const FlowmeterPage = () => {
 
   const handleAdd = () => {
     setEditingCalibration(null);
+    setIsEditMode(true);
     const todayDate = formatDateForInput(new Date());
     setFormData({
       flowmeterId: "",
@@ -652,10 +660,13 @@ const FlowmeterPage = () => {
     });
 
     setEditingCalibration(calibration);
+    setIsEditMode(false);
     setHistoryDialogOpen(false);
     setAddDialogOpen(true);
     setError(null);
   };
+
+  const lookupViewMode = Boolean(editingCalibration && !isEditMode);
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
@@ -899,6 +910,7 @@ const FlowmeterPage = () => {
         onClose={() => {
           setAddDialogOpen(false);
           setEditingCalibration(null);
+          setIsEditMode(false);
           setError(null);
         }}
         maxWidth="md"
@@ -910,13 +922,42 @@ const FlowmeterPage = () => {
             justifyContent="space-between"
             alignItems="center"
           >
-            <Typography variant="h6">
-              {editingCalibration ? "Edit Calibration" : "Add New Calibration"}
-            </Typography>
+            <Box display="flex" alignItems="center" gap={2}>
+              <Typography variant="h6">
+                {editingCalibration
+                  ? lookupViewMode
+                    ? "View Calibration"
+                    : "Edit Calibration"
+                  : "Add New Calibration"}
+              </Typography>
+              {lookupViewMode && (
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<EditIcon />}
+                  onClick={() => setIsEditMode(true)}
+                >
+                  Edit Record
+                </Button>
+              )}
+              {editingCalibration && isEditMode && (
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={() => {
+                    setIsEditMode(false);
+                    handleEditFromHistory(editingCalibration);
+                  }}
+                >
+                  Cancel Edit
+                </Button>
+              )}
+            </Box>
             <IconButton
               onClick={() => {
                 setAddDialogOpen(false);
                 setEditingCalibration(null);
+                setIsEditMode(false);
                 setError(null);
               }}
             >
@@ -933,32 +974,26 @@ const FlowmeterPage = () => {
             )}
             <Stack spacing={3} sx={{ mt: 1 }}>
               <Box display="flex" gap={2}>
-                <FormControl fullWidth required>
-                  <InputLabel>Flowmeter</InputLabel>
-                  <Select
-                    value={formData.flowmeterEquipmentId}
-                    onChange={(e) => handleFlowmeterChange(e.target.value)}
-                    label="Flowmeter"
-                    disabled={flowmetersLoading}
-                  >
-                    <MenuItem value="">
-                      <em>Select a flowmeter</em>
-                    </MenuItem>
-                    {flowmeters.length > 0 ? (
-                      flowmeters.map((flowmeter) => (
-                        <MenuItem key={flowmeter._id} value={flowmeter._id}>
-                          {flowmeter.equipmentReference}
-                        </MenuItem>
-                      ))
-                    ) : (
-                      <MenuItem disabled>
-                        {flowmetersLoading
-                          ? "Loading..."
-                          : "No flowmeters found"}
-                      </MenuItem>
-                    )}
-                  </Select>
-                </FormControl>
+                <LookupField
+                  mode={lookupViewMode ? "view" : "edit"}
+                  label="Flowmeter"
+                  required
+                  value={formData.flowmeterEquipmentId}
+                  displayLabel={
+                    formData.flowmeterId ||
+                    buildEquipmentDisplayLabel(
+                      flowmeters.find(
+                        (f) => String(f._id) === String(formData.flowmeterEquipmentId),
+                      ),
+                    )
+                  }
+                  options={equipmentOptionsFromList(flowmeters)}
+                  onChange={(e) => handleFlowmeterChange(e.target.value)}
+                  disabled={flowmetersLoading}
+                  loading={flowmetersLoading}
+                  loadingText="Loading..."
+                  emptyOptionsText="No flowmeters found"
+                />
                 <TextField
                   fullWidth
                   label="Calibration Date"
@@ -967,33 +1002,20 @@ const FlowmeterPage = () => {
                   onChange={(e) => handleDateChange(e.target.value)}
                   InputLabelProps={{ shrink: true }}
                   required
+                  disabled={lookupViewMode}
                 />
-                <FormControl fullWidth required>
-                  <InputLabel>Technician</InputLabel>
-                  <Select
-                    value={formData.technicianId}
-                    onChange={(e) => handleTechnicianChange(e.target.value)}
-                    label="Technician"
-                    disabled={labSignatoriesLoading}
-                  >
-                    <MenuItem value="">
-                      <em>Select a technician</em>
-                    </MenuItem>
-                    {labSignatories.length > 0 ? (
-                      labSignatories.map((technician) => (
-                        <MenuItem key={technician._id} value={technician._id}>
-                          {technician.firstName} {technician.lastName}
-                        </MenuItem>
-                      ))
-                    ) : (
-                      <MenuItem disabled>
-                        {labSignatoriesLoading
-                          ? "Loading..."
-                          : "No technicians found"}
-                      </MenuItem>
-                    )}
-                  </Select>
-                </FormControl>
+                <LookupField
+                  mode={lookupViewMode ? "view" : "edit"}
+                  label="Technician"
+                  required
+                  value={formData.technicianId}
+                  displayLabel={formData.technicianName}
+                  options={userOptionsFromList(labSignatories)}
+                  onChange={(e) => handleTechnicianChange(e.target.value)}
+                  disabled={labSignatoriesLoading}
+                  loading={labSignatoriesLoading}
+                  emptyOptionsText="No technicians found"
+                />
               </Box>
               <Box display="flex" gap={2}>
                 <FormControl fullWidth required>
@@ -1279,11 +1301,13 @@ const FlowmeterPage = () => {
               onClick={() => {
                 setAddDialogOpen(false);
                 setEditingCalibration(null);
+                setIsEditMode(false);
                 setError(null);
               }}
             >
-              Cancel
+              {lookupViewMode ? "Close" : "Cancel"}
             </Button>
+            {!lookupViewMode && (
             <Button
               type="submit"
               variant="contained"
@@ -1301,6 +1325,7 @@ const FlowmeterPage = () => {
             >
               {loading ? <CircularProgress size={24} /> : "Save"}
             </Button>
+            )}
           </DialogActions>
         </Box>
       </Dialog>

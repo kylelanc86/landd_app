@@ -197,6 +197,23 @@
         -ms-hyphens: none;
       }
 
+      .cover-page .cover-content p.cover-meta {
+        margin: 0 0 10px 0;
+      }
+
+      .cover-page .cover-content p.cover-meta .cover-meta-label {
+        display: block;
+        font-weight: 700;
+        color: #111;
+        margin: 0 0 6px 0;
+      }
+
+      .cover-page .cover-content p.cover-meta .cover-meta-value {
+        display: block;
+        font-weight: 400;
+        color: #222;
+      }
+
       .cover-page .cover-content b {
         font-weight: 700;
         color: #111;
@@ -285,8 +302,14 @@
         <h1>[REPORT_TITLE]</h1>
         <div class="address">[SITE_ADDRESS]</div>
         <div class="secondary-header">[SECONDARY_HEADER]</div>
-        <p><b>Job Reference</b><br />[JOB_REFERENCE]</p>
-        <p><b>Clearance Date</b><br />[CLEARANCE_DATE]</p>
+        <p class="cover-meta">
+          <span class="cover-meta-label">Job Reference</span>
+          <span class="cover-meta-value">[JOB_REFERENCE]</span>
+        </p>
+        <p class="cover-meta">
+          <span class="cover-meta-label">Clearance Date</span>
+          <span class="cover-meta-value">[CLEARANCE_DATE]</span>
+        </p>
       </div>
       <div class="cover-company-details">
         Lancaster & Dickenson Consulting Pty Ltd<br />

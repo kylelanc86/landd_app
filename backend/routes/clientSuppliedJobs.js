@@ -4,6 +4,10 @@ const ClientSuppliedJob = require('../models/ClientSuppliedJob');
 const Project = require('../models/Project');
 const User = require('../models/User');
 const { sendMail } = require('../services/mailer');
+const {
+  notifyAuthorisationRequesterOnApproval,
+  getFrontendUrl,
+} = require('../services/reportAuthorisationNotificationService');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 
@@ -548,6 +552,7 @@ router.post('/:id/authorise', auth, checkPermission('clientSup.edit'), async (re
       });
     }
 
+    const wasAlreadyAuthorised = Boolean(job.reportApprovedBy);
     const approver =
       req.user?.firstName && req.user?.lastName
         ? `${req.user.firstName} ${req.user.lastName}`
@@ -559,63 +564,24 @@ router.post('/:id/authorise', auth, checkPermission('clientSup.edit'), async (re
 
     const updatedJob = await job.save();
 
-    // Send notification email to the user who requested authorisation
-    if (updatedJob.authorisationRequestedBy) {
-      try {
-        const requester = await User.findById(updatedJob.authorisationRequestedBy)
-          .select('firstName lastName email');
-        
-        if (requester && requester.email) {
-          const projectName = job.projectId?.name || 'Unknown Project';
-          const projectID = job.projectId?.projectID || 'N/A';
-          const jobType = job.jobType || 'Analysis';
-          const approverName = approver;
-          const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-          const basePath = '/client-supplied';
-          const jobUrl = `${frontendUrl}${basePath}`;
+    const projectName = job.projectId?.name || 'Unknown Project';
+    const projectID = job.projectId?.projectID || 'N/A';
+    const jobType = job.jobType || 'Analysis';
 
-          await sendMail({
-            to: requester.email,
-            subject: `Report Authorised - ${projectID}: ${jobType} Report`,
-            text: `
-The ${jobType} report you requested for authorisation has been authorised.
+    await notifyAuthorisationRequesterOnApproval({
+      authorisationRequestedBy: updatedJob.authorisationRequestedBy,
+      wasAlreadyAuthorised,
+      isNowAuthorised: Boolean(updatedJob.reportApprovedBy),
+      approverName: approver,
+      reportTypeLabel: `Client supplied ${jobType} report`,
+      subjectIdentifier: projectID,
+      details: [
+        { label: 'Project', value: `${projectName} (${projectID})` },
+        { label: 'Job type', value: jobType },
+      ],
+      viewUrl: `${getFrontendUrl()}/client-supplied`,
+    });
 
-Project: ${projectName} (${projectID})
-Job Type: ${jobType}
-Authorised by: ${approverName}
-
-View the report at: ${jobUrl}
-            `,
-            html: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
-                <div style="margin-bottom: 30px;">
-                  <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
-                </div>
-                <div style="color: #333; line-height: 1.6;">
-                  <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Report Authorised</h2>
-                  <p>Hello ${requester.firstName},</p>
-                  <p>The ${jobType} report you requested for authorisation has been authorised:</p>
-                  <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
-                    <p style="margin: 5px 0;"><strong>Project:</strong> ${projectName}</p>
-                    <p style="margin: 5px 0;"><strong>Project ID:</strong> ${projectID}</p>
-                    <p style="margin: 5px 0;"><strong>Job Type:</strong> ${jobType}</p>
-                    <p style="margin: 5px 0;"><strong>Authorised by:</strong> ${approverName}</p>
-                  </div>
-                  <div style="text-align: center; margin: 30px 0;">
-                    <a href="${jobUrl}" style="background-color: rgb(25, 138, 44); color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">View Report</a>
-                  </div>
-                  <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;">
-                  <p style="color: #666; font-size: 12px;">This is an automated message, please do not reply to this email.</p>
-                </div>
-              </div>
-            `
-          });
-        }
-      } catch (emailError) {
-        console.error('Error sending authorisation notification email:', emailError);
-        // Don't fail the request if email fails
-      }
-    }
 
     res.json(updatedJob);
   } catch (err) {

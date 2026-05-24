@@ -1751,9 +1751,24 @@ const ProjectReports = () => {
         const res = await asbestosAssessmentService.reviseAsbestosAssessmentReport(
           assessmentId,
         );
+        const revisedJobType =
+          res.data?.job?.jobType ||
+          report.data?.jobType ||
+          (report.data?.description?.includes("Residential")
+            ? "residential-asbestos"
+            : null);
+        const isResidential = revisedJobType === "residential-asbestos";
+        try {
+          sessionStorage.removeItem("residentialAsbestosJobsCache");
+          sessionStorage.removeItem("asbestosAssessmentJobsCache");
+        } catch (_) {
+          /* ignore */
+        }
         showSnackbar(
           res.data?.message ||
-            "Assessment report reset for editing. Open the job from Surveys (Asbestos or Residential Asbestos Assessment) to revise and re-authorise.",
+            (isResidential
+              ? "Assessment report reset for editing. Open the job from Surveys → Residential Asbestos Assessments to revise and re-authorise."
+              : "Assessment report reset for editing. Open the job from Surveys → Asbestos Assessment to revise and re-authorise."),
           "success",
         );
         loadReports();

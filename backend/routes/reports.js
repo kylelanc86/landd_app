@@ -47,7 +47,10 @@ router.get('/asbestos-assessment/:projectId', auth, checkPermission(['projects.v
         date: assessment.assessmentDate || assessment.createdAt,
         type: 'asbestos_assessment',
         reference: assessment.projectId.projectID,
-        description: assessment.description || 'Asbestos Assessment Report',
+        description:
+          assessment.jobType === 'residential-asbestos'
+            ? assessment.description || 'Residential Asbestos Assessment Report'
+            : assessment.description || 'Asbestos Assessment Report',
         status: assessment.status,
         jobType: assessment.jobType || 'asbestos-assessment',
         reportAuthorisedBy: assessment.reportAuthorisedBy || null,

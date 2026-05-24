@@ -507,6 +507,9 @@ router.post('/', auth, checkPermission(['projects.create']), async (req, res) =>
         number: "",
         email: ""
       },
+      additionalProjectContacts: Array.isArray(req.body.additionalProjectContacts)
+        ? req.body.additionalProjectContacts
+        : [],
       notes: req.body.notes || "",
       budget: parseFloat(req.body.budget) || 0
     });
@@ -737,6 +740,11 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
     }
     project.isLargeProject = req.body.isLargeProject !== undefined ? req.body.isLargeProject : project.isLargeProject;
     project.projectContact = req.body.projectContact || project.projectContact;
+    if (req.body.additionalProjectContacts !== undefined) {
+      project.additionalProjectContacts = Array.isArray(req.body.additionalProjectContacts)
+        ? req.body.additionalProjectContacts
+        : [];
+    }
     project.notes = req.body.notes !== undefined ? req.body.notes : project.notes;
     project.budget = req.body.budget !== undefined ? parseFloat(req.body.budget) || 0 : project.budget;
 

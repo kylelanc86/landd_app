@@ -41,6 +41,11 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { clientSuppliedJobsService } from "../../services/api";
 import customDataFieldGroupService from "../../services/customDataFieldGroupService";
 import { useUserLists } from "../../context/UserListsContext";
+import LookupField from "../../components/LookupField";
+import {
+  userOptionsFromList,
+  buildUserDisplayLabel,
+} from "../../utils/lookupOptions";
 import { formatLabReferenceForDisplay } from "../../utils/formatters";
 
 const ClientSuppliedFibreIDAnalysis = () => {
@@ -1403,29 +1408,26 @@ const ClientSuppliedFibreIDAnalysis = () => {
           alignItems="flex-start"
           sx={{ mb: 2 }}
         >
-          <FormControl sx={{ minWidth: 200 }} required error={!analyst?.trim()}>
-            <InputLabel>Analyst</InputLabel>
-            <Select
+          <Box sx={{ minWidth: 200 }}>
+            <LookupField
+              mode={isSampleAnalysed() ? "view" : "edit"}
+              label="Analyst"
+              required
               value={analyst}
+              displayLabel={buildUserDisplayLabel(
+                activeIdentifiers.find((a) => String(a._id) === String(analyst)),
+              )}
+              options={userOptionsFromList(activeIdentifiers)}
               onChange={(e) => setAnalyst(e.target.value)}
-              label="Analyst *"
-              disabled={isSampleAnalysed()}
-            >
-              <MenuItem value="">
-                <em>Select Analyst</em>
-              </MenuItem>
-              {activeIdentifiers.map((analystOption) => (
-                <MenuItem key={analystOption._id} value={analystOption._id}>
-                  {analystOption.firstName} {analystOption.lastName}
-                </MenuItem>
-              ))}
-            </Select>
-            {!analyst?.trim() && (
+              allowEmpty
+              emptyOptionLabel="Select Analyst"
+            />
+            {!analyst?.trim() && !isSampleAnalysed() && (
               <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 1.5 }}>
                 Required
               </Typography>
             )}
-          </FormControl>
+          </Box>
           <TextField
             type="date"
             label="Analysis Date"

@@ -17,6 +17,9 @@ const {
 } = require("../services/asbestosRemovalJobSyncService");
 const { sendMail } = require("../services/mailer");
 const { formatDateSydney } = require("../utils/dateUtils");
+const {
+  notifyShiftAuthorisationRequesterOnApproval,
+} = require("../services/reportAuthorisationNotificationService");
 const { buildContentDispositionAttachment } = require('../utils/contentDisposition');
 
 // Exclude soft-deleted shifts from list queries (restorable from archived data page)
@@ -247,6 +250,8 @@ router.patch('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports
       return res.status(404).json({ message: 'Shift not found' });
     }
 
+    const shiftBeforeUpdate = shift.toObject();
+
     // Only update the fields that are provided in the request
     const allowedUpdates = [
       'status',
@@ -304,6 +309,12 @@ router.patch('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports
       }
 
       const updatedShift = await shift.save();
+
+      await notifyShiftAuthorisationRequesterOnApproval(
+        shiftBeforeUpdate,
+        updatedShift,
+      );
+
       if (shift.job && shift.jobModel === 'AsbestosRemovalJob') {
         await syncAirMonitoringForJob(shift.job);
       }
@@ -361,9 +372,7 @@ router.put('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports']
     const previousJobId = shift.job ? shift.job.toString() : null;
     const previousJobModel = shift.jobModel || 'AsbestosRemovalJob';
 
-    // Check if report was already authorised before update
-    const wasAlreadyAuthorised = Boolean(shift.reportApprovedBy);
-    const hasAuthorisationRequester = Boolean(shift.authorisationRequestedBy);
+    const shiftBeforeUpdate = shift.toObject();
 
     // Update all fields from the request body
     Object.assign(shift, req.body);
@@ -381,122 +390,11 @@ router.put('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports']
 
       const updatedShift = await shift.save();
 
-      // Check if report was just authorised (wasn't authorised before but is now) and send notification to requester
-      if (!wasAlreadyAuthorised && updatedShift.reportApprovedBy && hasAuthorisationRequester && updatedShift.authorisationRequestedBy) {
-        try {
-          // Get requester user details
-          const requester = await User.findById(updatedShift.authorisationRequestedBy)
-            .select('firstName lastName email');
-          
-          if (requester && requester.email) {
-            // Get shift details for email
-            const populatedShift = await Shift.findById(updatedShift._id)
-              .populate({
-                path: 'job',
-                populate: {
-                  path: 'projectId',
-                  select: 'projectID name client',
-                  populate: {
-                    path: 'client',
-                    select: 'name',
-                  },
-                },
-              });
+      await notifyShiftAuthorisationRequesterOnApproval(
+        shiftBeforeUpdate,
+        updatedShift,
+      );
 
-            let projectName =
-              populatedShift.job?.projectId?.name ||
-              populatedShift.job?.projectName ||
-              'Unknown Project';
-            let projectID =
-              populatedShift.job?.projectId?.projectID || populatedShift.job?.jobID || 'N/A';
-            let clientName =
-              populatedShift.job?.projectId?.client?.name ||
-              populatedShift.job?.client ||
-              'the client';
-
-            if (
-              populatedShift.job?.projectId &&
-              typeof populatedShift.job.projectId === 'string'
-            ) {
-              const projectDoc = await Project.findById(
-                populatedShift.job.projectId
-              ).populate('client', 'name');
-              if (projectDoc) {
-                projectName = projectDoc.name || projectName;
-                projectID = projectDoc.projectID || projectID;
-                clientName = projectDoc.client?.name || clientName;
-              }
-            } else if (
-              populatedShift.job?.projectId &&
-              populatedShift.job.projectId?.client &&
-              typeof populatedShift.job.projectId.client === 'string'
-            ) {
-              const clientDoc = await Client.findById(
-                populatedShift.job.projectId.client
-              ).select('name');
-              if (clientDoc) {
-                clientName = clientDoc.name || clientName;
-              }
-            }
-
-            const shiftName = populatedShift.name || 'Air Monitoring Shift';
-            const shiftDate = populatedShift.date
-              ? formatDateSydney(populatedShift.date)
-              : 'N/A';
-            const approverName = updatedShift.reportApprovedBy;
-            const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-            const jobId =
-              typeof populatedShift.job?.id === 'string'
-                ? populatedShift.job.id
-                : populatedShift.job?._id?.toString() || populatedShift.job?.toString();
-            const jobUrl = `${frontendUrl}/asbestos-removal/jobs/${jobId}/details`;
-
-            await sendMail({
-              to: requester.email,
-              subject: `Report Authorised - ${projectID}: ${shiftName}`,
-              text: `
-The air monitoring shift report you requested for authorisation has been authorised.
-
-Project: ${projectName} (${projectID})
-Client: ${clientName}
-Shift: ${shiftName}
-Shift Date: ${shiftDate}
-Authorised by: ${approverName}
-
-View the report at: ${jobUrl}
-              `.trim(),
-              html: `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
-                  <div style="margin-bottom: 30px;">
-                    <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
-                  </div>
-                  <div style="color: #333; line-height: 1.6;">
-                    <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Report Authorised</h2>
-                    <p>Hello ${requester.firstName},</p>
-                    <p>The air monitoring shift report you requested for authorisation has been authorised:</p>
-                    <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
-                      <p style="margin: 5px 0;"><strong>Project:</strong> ${projectName}</p>
-                      <p style="margin: 5px 0;"><strong>Project ID:</strong> ${projectID}</p>
-                      <p style="margin: 5px 0;"><strong>Client:</strong> ${clientName}</p>
-                      <p style="margin: 5px 0;"><strong>Shift:</strong> ${shiftName}</p>
-                      <p style="margin: 5px 0;"><strong>Shift Date:</strong> ${shiftDate}</p>
-                      <p style="margin: 5px 0;"><strong>Authorised by:</strong> ${approverName}</p>
-                    </div>
-                    <div style="text-align: center; margin: 30px 0;">
-                      <a href="${jobUrl}" style="background-color: rgb(25, 138, 44); color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">View Report</a>
-                    </div>
-                    <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;">
-                    <p style="color: #666; font-size: 12px;">This is an automated message, please do not reply to this email.</p>
-                  </div>
-                </div>
-              `,
-            });
-          }
-        } catch (emailError) {
-          // Log error but don't fail the request
-          console.error('Error sending authorisation notification email:', emailError);
-        }
-      }
 
       const updatedJobId = updatedShift.job ? updatedShift.job.toString() : null;
 

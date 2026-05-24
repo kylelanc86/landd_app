@@ -6,6 +6,10 @@ const User = require("../models/User");
 const auth = require("../middleware/auth");
 const checkPermission = require("../middleware/checkPermission");
 const { sendMail } = require("../services/mailer");
+const {
+  notifyClearanceAuthorisationRequesterOnApproval,
+  resolveLeadClearanceJobUrl,
+} = require("../services/reportAuthorisationNotificationService");
 const { formatDateSydney } = require("../utils/dateUtils");
 
 // Use same permission names as asbestos for role consistency
@@ -348,6 +352,7 @@ router.post("/:id/authorise", auth, checkPermission(permEdit), async (req, res) 
         message: "Report has already been authorised",
       });
     }
+    const wasAlreadyAuthorised = Boolean(clearance.reportApprovedBy);
     const approver =
       req.user?.firstName && req.user?.lastName
         ? `${req.user.firstName} ${req.user.lastName}`
@@ -356,6 +361,20 @@ router.post("/:id/authorise", auth, checkPermission(permEdit), async (req, res) 
     clearance.reportIssueDate = new Date();
     clearance.updatedBy = req.user.id;
     const updated = await clearance.save();
+    const populatedForEmail = await LeadClearance.findById(updated._id)
+      .populate({
+        path: "projectId",
+        select: "projectID name client",
+        populate: { path: "client", select: "name" },
+      });
+
+    await notifyClearanceAuthorisationRequesterOnApproval({
+      clearance: populatedForEmail || updated,
+      wasAlreadyAuthorised,
+      approverName: approver,
+      reportTypeLabel: "Lead clearance",
+      resolveJobUrl: resolveLeadClearanceJobUrl,
+    });
     const populated = await LeadClearance.findById(updated._id)
       .populate({
         path: "projectId",

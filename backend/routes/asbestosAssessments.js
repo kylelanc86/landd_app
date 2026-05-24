@@ -2,9 +2,14 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const AsbestosAssessment = require('../models/assessmentTemplates/asbestos/AsbestosAssessment');
+const Project = require('../models/Project');
 const ClientSuppliedJob = require('../models/ClientSuppliedJob');
 const User = require('../models/User');
 const { sendMail } = require('../services/mailer');
+const {
+  notifyAuthorisationRequesterOnApproval,
+  getFrontendUrl,
+} = require('../services/reportAuthorisationNotificationService');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const { getLegislationForReportTemplate } = require('../services/templateService');
@@ -97,13 +102,64 @@ const notDeletedAssessmentFilter = {
 // Query param projectId (ObjectId) - restrict to assessments for that project (e.g. Project Reports active jobs)
 router.get('/', async (req, res) => {
   try {
-    const filterClauses = [{ archived: { $ne: true } }, notDeletedAssessmentFilter];
+    // Exclude closed (archived) jobs unless reopened for editing after Project Reports → Revise
+    const filterClauses = [
+      {
+        $or: [
+          { archived: { $ne: true } },
+          {
+            archived: true,
+            status: 'report-ready-for-review',
+            $or: [
+              { reportAuthorisedBy: null },
+              { reportAuthorisedBy: { $exists: false } },
+              { reportAuthorisedBy: '' },
+            ],
+          },
+        ],
+      },
+      notDeletedAssessmentFilter,
+    ];
     const { jobType, list, projectId: projectIdQuery } = req.query;
     if (projectIdQuery && mongoose.Types.ObjectId.isValid(String(projectIdQuery))) {
       filterClauses.push({ projectId: new mongoose.Types.ObjectId(String(projectIdQuery)) });
     }
     if (jobType === 'residential-asbestos') {
-      filterClauses.push({ jobType: 'residential-asbestos' });
+      const legacyJobTypeClause = {
+        $or: [
+          { jobType: 'asbestos-assessment' },
+          { jobType: { $exists: false } },
+          { jobType: null },
+        ],
+      };
+      let includeLegacyOnResidentialProjects = false;
+      if (projectIdQuery && mongoose.Types.ObjectId.isValid(String(projectIdQuery))) {
+        const project = await Project.findById(projectIdQuery).select('categories').lean();
+        includeLegacyOnResidentialProjects =
+          Array.isArray(project?.categories) &&
+          project.categories.includes('Residential Asbestos Assessment');
+      } else {
+        includeLegacyOnResidentialProjects = true;
+      }
+      if (includeLegacyOnResidentialProjects) {
+        const residentialProjectIds =
+          projectIdQuery && mongoose.Types.ObjectId.isValid(String(projectIdQuery))
+            ? [new mongoose.Types.ObjectId(String(projectIdQuery))]
+            : await Project.find({
+                categories: 'Residential Asbestos Assessment',
+              }).distinct('_id');
+        filterClauses.push({
+          $or: [
+            { jobType: 'residential-asbestos' },
+            {
+              projectId: { $in: residentialProjectIds },
+              ...legacyJobTypeClause,
+            },
+          ],
+        });
+      } else {
+        filterClauses.push({ jobType: 'residential-asbestos' });
+      }
     } else if (jobType === 'lead-assessment') {
       filterClauses.push({ jobType: 'lead-assessment' });
     } else if (jobType === 'asbestos-assessment') {
@@ -779,55 +835,29 @@ router.put('/:id', async (req, res) => {
     const assessmentReportWasAuthorised = !!(existing && existing.reportAuthorisedBy);
     const assessmentReportNowAuthorised = !!job.reportAuthorisedBy;
     if (existing && !assessmentReportWasAuthorised && assessmentReportNowAuthorised && job.authorisationRequestedBy) {
-      try {
-        const requester = await User.findById(job.authorisationRequestedBy)
-          .select('firstName lastName email');
-        if (requester && requester.email) {
-          const projectName = job.projectId?.name || 'Unknown Project';
-          const projectID = job.projectId?.projectID || 'N/A';
-          const approverName = job.reportAuthorisedBy || 'Unknown';
-          const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-          const surveyPath = job.jobType === 'residential-asbestos' ? 'residential-asbestos' : 'asbestos-assessment';
-          const reportLabel = job.jobType === 'residential-asbestos' ? 'Residential Asbestos Assessment' : 'Asbestos Assessment';
-          const jobUrl = `${frontendUrl}/surveys/${surveyPath}`;
-          await sendMail({
-            to: requester.email,
-            subject: `Report Authorised - ${projectID}: ${reportLabel} Report`,
-            text: `
-The ${reportLabel} report you requested for authorisation has been authorised.
+      const surveyPath =
+        job.jobType === 'residential-asbestos'
+          ? 'residential-asbestos'
+          : 'asbestos-assessment';
+      const reportLabel =
+        job.jobType === 'residential-asbestos'
+          ? 'Residential asbestos assessment'
+          : 'Asbestos assessment';
+      const projectName = job.projectId?.name || 'Unknown Project';
+      const projectID = job.projectId?.projectID || 'N/A';
 
-Project: ${projectName} (${projectID})
-Authorised by: ${approverName}
-
-View the report at: ${jobUrl}
-            `.trim(),
-            html: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
-                <div style="margin-bottom: 30px;">
-                  <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
-                </div>
-                <div style="color: #333; line-height: 1.6;">
-                  <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Report Authorised</h2>
-                  <p>Hello ${requester.firstName},</p>
-                  <p>The ${reportLabel} report you requested for authorisation has been authorised:</p>
-                  <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
-                    <p style="margin: 5px 0;"><strong>Project:</strong> ${projectName}</p>
-                    <p style="margin: 5px 0;"><strong>Project ID:</strong> ${projectID}</p>
-                    <p style="margin: 5px 0;"><strong>Authorised by:</strong> ${approverName}</p>
-                  </div>
-                  <div style="text-align: center; margin: 30px 0;">
-                    <a href="${jobUrl}" style="background-color: rgb(25, 138, 44); color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">View Report</a>
-                  </div>
-                  <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;">
-                  <p style="color: #666; font-size: 12px;">This is an automated message, please do not reply to this email.</p>
-                </div>
-              </div>
-            `,
-          });
-        }
-      } catch (emailError) {
-        console.error('Error sending authorisation notification email:', emailError);
-      }
+      await notifyAuthorisationRequesterOnApproval({
+        authorisationRequestedBy: job.authorisationRequestedBy,
+        wasAlreadyAuthorised: assessmentReportWasAuthorised,
+        isNowAuthorised: assessmentReportNowAuthorised,
+        approverName: job.reportAuthorisedBy || 'Unknown',
+        reportTypeLabel: reportLabel,
+        subjectIdentifier: projectID,
+        details: [
+          { label: 'Project', value: `${projectName} (${projectID})` },
+        ],
+        viewUrl: `${getFrontendUrl()}/surveys/${surveyPath}`,
+      });
     }
 
     // Send notification to the user who submitted samples when Fibre ID report is newly authorised (samples analysed)
@@ -1221,6 +1251,8 @@ router.patch('/:id/unlock', auth, checkPermission(['admin.update']), async (req,
     }
 
     job.status = 'report-ready-for-review';
+    job.archived = false;
+    job.markModified('archived');
     job.reportAuthorisedBy = undefined;
     job.reportAuthorisedAt = undefined;
     job.markModified('reportAuthorisedBy');
@@ -1259,8 +1291,20 @@ router.patch('/:id/revise-report', auth, checkPermission('asbestos.edit'), async
       });
     }
 
+    const project = await Project.findById(job.projectId).select('categories').lean();
+    const isResidentialProject =
+      Array.isArray(project?.categories) &&
+      project.categories.includes('Residential Asbestos Assessment');
+    const legacyOrStandardType =
+      !job.jobType || job.jobType === 'asbestos-assessment';
+    if (isResidentialProject && legacyOrStandardType) {
+      job.jobType = 'residential-asbestos';
+    }
+
     job.revision = (typeof job.revision === 'number' ? job.revision : 0) + 1;
     job.status = 'report-ready-for-review';
+    job.archived = false;
+    job.markModified('archived');
     job.reportAuthorisedBy = undefined;
     job.reportAuthorisedAt = undefined;
     job.markModified('reportAuthorisedBy');

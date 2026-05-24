@@ -5,6 +5,7 @@ const AsbestosRemovalJob = require('../models/AsbestosRemovalJob');
 const Project = require('../models/Project');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
+const { sortSamplesByAirMonitoringNumber } = require('../utils/sampleSort');
 
 // Get all samples
 router.get('/', auth, checkPermission(['jobs.view']), async (req, res) => {
@@ -33,9 +34,8 @@ router.get('/shift/:shiftId', auth, checkPermission(['jobs.view']), async (req, 
         populate: {
           path: 'projectId'
         }
-      })
-      .sort({ createdAt: -1 });
-    res.json(samples);
+      });
+    res.json(sortSamplesByAirMonitoringNumber(samples));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

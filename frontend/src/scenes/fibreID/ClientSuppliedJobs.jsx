@@ -13,6 +13,8 @@ import {
   Button,
   Chip,
   IconButton,
+  Breadcrumbs,
+  Link,
   TextField,
   InputAdornment,
   Dialog,
@@ -1234,6 +1236,17 @@ const ClientSuppliedJobs = () => {
               Add New Job
             </Button>
           </Box>
+          <Breadcrumbs>
+            <Link
+              component="button"
+              variant="body1"
+              onClick={() => navigate("/laboratory-services")}
+              sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
+            >
+              <ArrowBackIcon sx={{ mr: 1 }} />
+              Laboratory Services
+            </Link>
+          </Breadcrumbs>
         </Box>
 
         {/* Jobs Table */}
