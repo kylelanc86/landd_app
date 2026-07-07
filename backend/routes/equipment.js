@@ -9,11 +9,23 @@ const GraticuleCalibration = require("../models/GraticuleCalibration");
 const HSETestSlideCalibration = require("../models/HSETestSlideCalibration");
 const AirPumpCalibration = require("../models/AirPumpCalibration");
 const AirPump = require("../models/AirPump");
+const FurnaceCalibration = require("../models/FurnaceCalibration");
+const PneumaticTesterCalibration = require("../models/PneumaticTesterCalibration");
+const PrimaryFlowmeterCalibration = require("../models/PrimaryFlowmeterCalibration");
+const { getEquipmentDueSnapshot, invalidateCanonicalCache } = require("../services/calibrationCanonicalService");
 
 // Get all equipment
 router.get("/", auth, checkPermission("equipment.view"), async (req, res) => {
   try {
-    const { page = 1, limit = 10, search = "", equipmentType = "", section = "", status = "" } = req.query;
+    const {
+      page = 1,
+      limit = 10,
+      search = "",
+      equipmentType = "",
+      section = "",
+      status = "",
+      includeDueState = "true",
+    } = req.query;
     
     let query = {};
     
@@ -22,6 +34,7 @@ router.get("/", auth, checkPermission("equipment.view"), async (req, res) => {
       query.$or = [
         { equipmentReference: { $regex: search, $options: "i" } },
         { brandModel: { $regex: search, $options: "i" } },
+        { serialNumber: { $regex: search, $options: "i" } },
       ];
     }
     
@@ -45,12 +58,18 @@ router.get("/", auth, checkPermission("equipment.view"), async (req, res) => {
     const equipment = await Equipment.find(query)
       .sort({ equipmentReference: 1 })
       .skip(skip)
-      .limit(parseInt(limit));
+      .limit(parseInt(limit))
+      .lean();
+
+    const equipmentWithDueState =
+      includeDueState === "false"
+        ? equipment
+        : await getEquipmentDueSnapshot(equipment);
     
     const total = await Equipment.countDocuments(query);
     
     res.json({
-      equipment,
+      equipment: equipmentWithDueState,
       total,
       page: parseInt(page),
       totalPages: Math.ceil(total / limit),
@@ -69,17 +88,18 @@ router.get("/:id", auth, checkPermission("equipment.view"), async (req, res) => 
     // Check if the parameter is a valid MongoDB ObjectId
     if (mongoose.Types.ObjectId.isValid(req.params.id)) {
       // Search by _id
-      equipment = await Equipment.findById(req.params.id);
+      equipment = await Equipment.findById(req.params.id).lean();
     } else {
       // Search by equipmentReference
-      equipment = await Equipment.findOne({ equipmentReference: req.params.id });
+      equipment = await Equipment.findOne({ equipmentReference: req.params.id }).lean();
     }
     
     if (!equipment) {
       return res.status(404).json({ message: "Equipment not found" });
     }
     
-    res.json({ equipment });
+    const [equipmentWithDueState] = await getEquipmentDueSnapshot([equipment]);
+    res.json({ equipment: equipmentWithDueState });
   } catch (error) {
     console.error("Error fetching equipment:", error);
     res.status(500).json({ message: "Server error" });
@@ -93,7 +113,8 @@ router.post("/", auth, checkPermission("equipment.create"), async (req, res) => 
       equipmentReference, 
       equipmentType, 
       section, 
-      brandModel, 
+      brandModel,
+      serialNumber,
       status,
       lastCalibration, 
       calibrationDue, 
@@ -111,6 +132,7 @@ router.post("/", auth, checkPermission("equipment.create"), async (req, res) => 
       equipmentType,
       section,
       brandModel,
+      serialNumber: serialNumber?.trim() || undefined,
       status,
       lastCalibration,
       calibrationDue,
@@ -219,6 +241,61 @@ const recalculateCalibrationDates = async (equipmentReference, newCalibrationFre
       }
     }
 
+    // Recalculate FurnaceCalibration records
+    const furnaceCalibrations = await FurnaceCalibration.find({
+      furnaceReference: equipmentReference,
+    });
+    console.log(`Found ${furnaceCalibrations.length} FurnaceCalibration records`);
+    for (const cal of furnaceCalibrations) {
+      if (cal.date) {
+        const nextDue = new Date(cal.date);
+        nextDue.setMonth(nextDue.getMonth() + newCalibrationFrequency);
+        await FurnaceCalibration.updateOne(
+          { _id: cal._id },
+          { $set: { nextCalibration: nextDue } }
+        );
+        updatedCount++;
+      }
+    }
+
+    // Recalculate PneumaticTesterCalibration records
+    const pneumaticTesterCalibrations = await PneumaticTesterCalibration.find({
+      pneumaticTesterReference: equipmentReference,
+    });
+    console.log(
+      `Found ${pneumaticTesterCalibrations.length} PneumaticTesterCalibration records`
+    );
+    for (const cal of pneumaticTesterCalibrations) {
+      if (cal.date) {
+        const nextDue = new Date(cal.date);
+        nextDue.setMonth(nextDue.getMonth() + newCalibrationFrequency);
+        await PneumaticTesterCalibration.updateOne(
+          { _id: cal._id },
+          { $set: { nextCalibration: nextDue } }
+        );
+        updatedCount++;
+      }
+    }
+
+    // Recalculate PrimaryFlowmeterCalibration records
+    const primaryFlowmeterCalibrations = await PrimaryFlowmeterCalibration.find({
+      flowmeterReference: equipmentReference,
+    });
+    console.log(
+      `Found ${primaryFlowmeterCalibrations.length} PrimaryFlowmeterCalibration records`
+    );
+    for (const cal of primaryFlowmeterCalibrations) {
+      if (cal.date) {
+        const nextDue = new Date(cal.date);
+        nextDue.setMonth(nextDue.getMonth() + newCalibrationFrequency);
+        await PrimaryFlowmeterCalibration.updateOne(
+          { _id: cal._id },
+          { $set: { nextCalibration: nextDue } }
+        );
+        updatedCount++;
+      }
+    }
+
     console.log(`Completed recalculation for ${equipmentReference}: updated ${updatedCount} calibration records`);
   } catch (error) {
     console.error(`Error recalculating calibration dates for ${equipmentReference}:`, error);
@@ -233,7 +310,8 @@ router.put("/:id", auth, checkPermission("equipment.edit"), async (req, res) => 
       equipmentReference, 
       equipmentType, 
       section, 
-      brandModel, 
+      brandModel,
+      serialNumber,
       status,
       lastCalibration, 
       calibrationDue, 
@@ -267,6 +345,10 @@ router.put("/:id", auth, checkPermission("equipment.edit"), async (req, res) => 
       lastCalibration,
       calibrationDue,
     };
+
+    if (serialNumber !== undefined) {
+      updateData.serialNumber = serialNumber?.trim() || null;
+    }
     
     // Explicitly set calibrationFrequency to null if provided as null/undefined, otherwise use the value
     if (calibrationFrequency !== undefined) {
@@ -303,6 +385,10 @@ router.put("/:id", auth, checkPermission("equipment.edit"), async (req, res) => 
         console.error(`Failed to recalculate calibration dates for ${equipmentRef}:`, recalcError);
         // Log but don't fail the request
       }
+    }
+
+    if (status !== undefined && status !== existingEquipment.status) {
+      invalidateCanonicalCache();
     }
     
     res.json({ 

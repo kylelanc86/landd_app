@@ -1,4 +1,5 @@
 import axios from 'axios';
+import api from './axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
 
@@ -52,12 +53,7 @@ const stereomicroscopeService = {
   // Create new Stereomicroscope calibration
   create: async (calibrationData) => {
     try {
-      const response = await axios.post(`${API_URL}/stereomicroscope-calibrations`, calibrationData, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await api.post('/stereomicroscope-calibrations', calibrationData);
       return response.data;
     } catch (error) {
       console.error('Error creating Stereomicroscope calibration:', error);
@@ -68,12 +64,7 @@ const stereomicroscopeService = {
   // Update Stereomicroscope calibration
   update: async (id, calibrationData) => {
     try {
-      const response = await axios.put(`${API_URL}/stereomicroscope-calibrations/${id}`, calibrationData, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await api.put(`/stereomicroscope-calibrations/${id}`, calibrationData);
       return response.data;
     } catch (error) {
       console.error('Error updating Stereomicroscope calibration:', error);
@@ -84,11 +75,7 @@ const stereomicroscopeService = {
   // Delete Stereomicroscope calibration
   delete: async (id) => {
     try {
-      const response = await axios.delete(`${API_URL}/stereomicroscope-calibrations/${id}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      const response = await api.delete(`/stereomicroscope-calibrations/${id}`);
       return response.data;
     } catch (error) {
       console.error('Error deleting Stereomicroscope calibration:', error);

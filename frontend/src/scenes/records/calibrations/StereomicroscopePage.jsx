@@ -38,6 +38,10 @@ import stereomicroscopeService from "../../../services/stereomicroscopeService";
 import { useAuth } from "../../../context/AuthContext";
 import LookupField from "../../../components/LookupField";
 import { equipmentOptionsFromList, buildEquipmentDisplayLabel } from "../../../utils/lookupOptions";
+import {
+  CALIBRATION_TABS,
+  getCalibrationsListPath,
+} from "./calibrationsNavigationUtils";
 
 const StereomicroscopePage = () => {
   const theme = useTheme();
@@ -541,7 +545,7 @@ const StereomicroscopePage = () => {
   };
 
   const handleBackToCalibrations = () => {
-    navigate("/records/laboratory/calibrations/list");
+    navigate(getCalibrationsListPath(CALIBRATION_TABS.EXTERNAL));
   };
 
   const handleViewHistory = async (microscope) => {
@@ -573,7 +577,7 @@ const StereomicroscopePage = () => {
   return (
     <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
       <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
-        Stereomicroscope Servicing
+        Stereomicroscope Calibrations
       </Typography>
 
       <Box

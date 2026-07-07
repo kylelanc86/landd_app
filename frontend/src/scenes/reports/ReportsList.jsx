@@ -56,6 +56,17 @@ const ReportsList = ({
         completeLike || (s === "report-ready-for-review" && hasAuth)
       );
     }
+    if (
+      (category === "fibre-id" || category === "fibre-count") &&
+      (report.type === "fibre_id" || report.type === "fibre_count")
+    ) {
+      const approved =
+        report.reportApprovedBy ?? report.data?.reportApprovedBy;
+      const hasApproval =
+        approved != null &&
+        (typeof approved !== "string" || String(approved).trim() !== "");
+      return completeLike || hasApproval;
+    }
     return completeLike;
   };
 
@@ -65,6 +76,8 @@ const ReportsList = ({
         return "Asbestos Assessment Reports";
       case "asbestos-removal-jobs":
         return "Air Monitoring and Clearances";
+      case "lead-removal-jobs":
+        return "Lead Monitoring and Clearances";
       case "fibre-id":
         return "Fibre ID Reports";
       case "fibre-count":
@@ -202,7 +215,19 @@ const ReportsList = ({
                       {report.asbestosRemovalist}
                     </Typography>
                   )}
-                  {report.additionalInfo && !report.asbestosRemovalist && (
+                  {report.leadAbatementContractor && (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      display="block"
+                      sx={{ mt: 0.5 }}
+                    >
+                      {report.leadAbatementContractor}
+                    </Typography>
+                  )}
+                  {report.additionalInfo &&
+                    !report.asbestosRemovalist &&
+                    !report.leadAbatementContractor && (
                     <Typography
                       variant="caption"
                       color="text.secondary"
@@ -277,7 +302,8 @@ const ReportsList = ({
                         </Tooltip>
                       )}
                     {/* CSV Export button for air monitoring reports */}
-                    {report.type === "shift" && onExportCSV && (
+                    {(report.type === "shift" || report.type === "lead_shift") &&
+                      onExportCSV && (
                       <Tooltip title="Export to CSV">
                         <IconButton
                           size="small"

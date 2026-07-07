@@ -95,7 +95,8 @@ router.post('/', async (req, res) => {
       contact2Number: req.body.contact2Number && req.body.contact2Number.trim() !== '' ? req.body.contact2Number.trim() : '-',
       contact2Email: req.body.contact2Email && req.body.contact2Email.trim() !== '' ? req.body.contact2Email.trim().toLowerCase() : '-',
       paymentTerms: req.body.paymentTerms || "Standard (30 days)",
-      written_off: req.body.written_off || false
+      written_off: req.body.written_off || false,
+      notes: req.body.notes || ''
     });
 
     const newClient = await client.save();
@@ -147,6 +148,9 @@ router.patch('/:id', async (req, res) => {
     }
     if (req.body.written_off !== undefined) {
       client.written_off = req.body.written_off;
+    }
+    if (req.body.notes !== undefined) {
+      client.notes = req.body.notes;
     }
 
     const updatedClient = await client.save();

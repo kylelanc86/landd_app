@@ -12,14 +12,10 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControl,
   Grid,
   IconButton,
   InputAdornment,
-  InputLabel,
   Link,
-  MenuItem,
-  Select,
   TextField,
   Typography,
 } from "@mui/material";
@@ -28,64 +24,19 @@ import {
   Close as CloseIcon,
   Description as DescriptionIcon,
   Delete as DeleteIcon,
+  Edit as EditIcon,
   Map as MapIcon,
   PhotoCamera as PhotoCameraIcon,
 } from "@mui/icons-material";
 import MicIcon from "@mui/icons-material/Mic";
 import { useNavigate, useParams } from "react-router-dom";
 import { useSnackbar } from "../../context/SnackbarContext";
-import { useUserLists } from "../../context/UserListsContext";
+import { useAuth } from "../../context/AuthContext";
 import PermissionGate from "../../components/PermissionGate";
+import { hasPermission } from "../../config/permissions";
 import SitePlanDrawing from "../../components/SitePlanDrawing";
-import axios from "../../services/axios";
 import asbestosClearanceService from "../../services/asbestosClearanceService";
 import { compressImage } from "../../utils/imageCompression";
-import { downloadEnclosureCertificateByClearanceId } from "../../utils/templatePDFGenerator";
-
-const pad2 = (n) => String(n).padStart(2, "0");
-
-/** `YYYY-MM-DD` from an ISO date string (browser local timezone). */
-function isoToLocalDate(iso) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-}
-
-/** `HH:mm` from an ISO date string (browser local timezone). */
-function isoToLocalTime(iso) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-}
-
-/** Today as `YYYY-MM-DD` in local timezone. */
-function todayLocalDateString() {
-  const now = new Date();
-  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
-}
-
-/** Current local time as `HH:mm`. */
-function nowLocalTimeString() {
-  const now = new Date();
-  return `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
-}
-
-/**
- * Combine local date + time inputs to ISO UTC for the API.
- * Empty both → null. Date-only → midnight local; time-only → today + that time.
- */
-function localDateTimeToIso(dateStr, timeStr) {
-  const d = (dateStr || "").trim();
-  const t = (timeStr || "").trim();
-  if (!d && !t) return null;
-  const datePart = d || todayLocalDateString();
-  const timePart = t || "00:00";
-  const parsed = new Date(`${datePart}T${timePart}`);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed.toISOString();
-}
 
 /** Default caption under each photo in the enclosure certificate appendix. */
 const DEFAULT_ENCLOSURE_PHOTO_CAPTION =
@@ -98,24 +49,6 @@ const ENCLOSURE_CERTIFICATE_IMAGE_OPTIONS = {
   quality: 0.78,
   maxSizeKB: 400,
 };
-
-/**
- * Returns a compressed JPEG data URL for the PDF. Upload path stores compressed
- * `data:` URLs; this still compresses legacy blob/file photos.
- */
-async function getEnclosurePhotoDataForPdf(photo) {
-  if (photo.file) {
-    return compressImage(photo.file, ENCLOSURE_CERTIFICATE_IMAGE_OPTIONS);
-  }
-  if (photo.previewUrl?.startsWith("data:")) {
-    return photo.previewUrl;
-  }
-  const res = await fetch(photo.previewUrl);
-  const blob = await res.blob();
-  const type = blob.type.startsWith("image/") ? blob.type : "image/jpeg";
-  const file = new File([blob], photo.name || "photo.jpg", { type });
-  return compressImage(file, ENCLOSURE_CERTIFICATE_IMAGE_OPTIONS);
-}
 
 function hydrateEnclosurePhotosFromClearance(serverPhotos) {
   if (!Array.isArray(serverPhotos) || serverPhotos.length === 0) return [];
@@ -148,22 +81,15 @@ function stableEnclosureFieldsKey(description, photoList) {
 
 const EnclosureInspection = () => {
   const navigate = useNavigate();
-  const { clearanceId } = useParams();
+  const { clearanceId, jobId } = useParams();
   const { showSnackbar } = useSnackbar();
-  const { activeLAAs } = useUserLists();
+  const { currentUser } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [clearance, setClearance] = useState(null);
 
   const [enclosureDescription, setEnclosureDescription] = useState("");
-  const [enclosureInspectionDateLocal, setEnclosureInspectionDateLocal] =
-    useState("");
-  const [enclosureInspectionTimeLocal, setEnclosureInspectionTimeLocal] =
-    useState("");
-  const [enclosureInspectedByLocal, setEnclosureInspectedByLocal] =
-    useState("");
-  const [savingEnclosureDateTime, setSavingEnclosureDateTime] = useState(false);
   const [photos, setPhotos] = useState([]);
   const photosRef = useRef([]);
   const uploadPhotoInputRef = useRef(null);
@@ -181,7 +107,9 @@ const EnclosureInspection = () => {
   const [pendingSitePlanData, setPendingSitePlanData] = useState(null);
   const sitePlanDrawingRef = useRef(null);
   const [removingSitePlan, setRemovingSitePlan] = useState(false);
-  const [generatingCertificate, setGeneratingCertificate] = useState(false);
+  const [completingCertificate, setCompletingCertificate] = useState(false);
+  const [reopenDialogOpen, setReopenDialogOpen] = useState(false);
+  const [reopeningCertificate, setReopeningCertificate] = useState(false);
 
   const lastSavedEnclosureFieldsKeyRef = useRef("");
   const prevLoadingRef = useRef(true);
@@ -195,6 +123,13 @@ const EnclosureInspection = () => {
         setLoading(true);
         setError("");
         const data = await asbestosClearanceService.getById(clearanceId);
+        if (!data?.isEnclosureCertificate) {
+          setError(
+            "This record is not an enclosure certificate. Create one from the job Enclosure Inspection tab.",
+          );
+          setClearance(null);
+          return;
+        }
         setClearance(data);
       } catch (err) {
         console.error("Error loading enclosure inspection page:", err);
@@ -237,11 +172,6 @@ const EnclosureInspection = () => {
 
     lastHydratedClearanceIdRef.current = idStr;
 
-    const iso = clearance.enclosureInspectionDateTime;
-    setEnclosureInspectionDateLocal(isoToLocalDate(iso));
-    setEnclosureInspectionTimeLocal(isoToLocalTime(iso));
-    setEnclosureInspectedByLocal(clearance.enclosureInspectedBy || "");
-
     const desc = clearance.enclosureDescription || "";
     setEnclosureDescription(desc);
     const loadedPhotos = hydrateEnclosurePhotosFromClearance(
@@ -255,8 +185,10 @@ const EnclosureInspection = () => {
     );
   }, [loading, clearance]);
 
+  const isCertificateComplete = clearance?.status === "complete";
+
   useEffect(() => {
-    if (!clearanceId || loading || !clearance?._id) return;
+    if (!clearanceId || loading || !clearance?._id || isCertificateComplete) return;
     if (String(clearance._id) !== String(clearanceId)) return;
     const t = setTimeout(async () => {
       const key = stableEnclosureFieldsKey(
@@ -285,6 +217,7 @@ const EnclosureInspection = () => {
     clearanceId,
     loading,
     clearance?._id,
+    isCertificateComplete,
     enclosureDescription,
     photos,
     showSnackbar,
@@ -295,32 +228,30 @@ const EnclosureInspection = () => {
     return type === "Friable" || type === "Friable (Non-Friable Conditions)";
   }, [clearance?.clearanceType]);
 
-  const hasRetainedEnclosureCertificatePdf = useMemo(
+  const canReopenCertificate = useMemo(
     () =>
-      Boolean(
-        clearance?.enclosureCertificatePdfReadyAt ||
-          clearance?.enclosureCertificateMergedPdfPath,
-      ),
-    [
-      clearance?.enclosureCertificatePdfReadyAt,
-      clearance?.enclosureCertificateMergedPdfPath,
-    ],
+      hasPermission(currentUser, "admin.view") ||
+      hasPermission(currentUser, "asbestos.delete"),
+    [currentUser],
   );
 
-  const canGenerateEnclosureCertificate = useMemo(() => {
-    const dateOk = (enclosureInspectionDateLocal || "").trim() !== "";
-    const timeOk = (enclosureInspectionTimeLocal || "").trim() !== "";
+  const canCompleteCertificate = useMemo(() => {
+    if (isCertificateComplete) return false;
     const descOk = (enclosureDescription || "").trim() !== "";
-    const inspectedOk = (enclosureInspectedByLocal || "").trim() !== "";
-    return dateOk && timeOk && descOk && inspectedOk;
+    const dateOk = Boolean(clearance?.clearanceDate);
+    const timeOk = (clearance?.inspectionTime || "").trim() !== "";
+    const laaOk = (clearance?.LAA || "").trim() !== "";
+    return descOk && dateOk && timeOk && laaOk;
   }, [
-    enclosureInspectionDateLocal,
-    enclosureInspectionTimeLocal,
+    isCertificateComplete,
     enclosureDescription,
-    enclosureInspectedByLocal,
+    clearance?.clearanceDate,
+    clearance?.inspectionTime,
+    clearance?.LAA,
   ]);
 
   const startDictation = () => {
+    if (isCertificateComplete) return;
     if (isDictating && recognitionRef.current) {
       stopDictation();
       return;
@@ -406,6 +337,7 @@ const EnclosureInspection = () => {
   };
 
   const performSitePlanSave = async (sitePlanData) => {
+    if (isCertificateComplete) return;
     const imageData =
       typeof sitePlanData === "string"
         ? sitePlanData
@@ -496,6 +428,7 @@ const EnclosureInspection = () => {
   };
 
   const handleRemoveSitePlan = async () => {
+    if (isCertificateComplete) return;
     if (!window.confirm("Are you sure you want to remove the site plan?")) return;
     try {
       setRemovingSitePlan(true);
@@ -524,6 +457,7 @@ const EnclosureInspection = () => {
   };
 
   const handlePhotoUpload = async (event) => {
+    if (isCertificateComplete) return;
     const selectedFiles = Array.from(event.target.files || []);
     if (!selectedFiles.length) return;
     event.target.value = "";
@@ -559,6 +493,7 @@ const EnclosureInspection = () => {
   };
 
   const openCameraDialog = async () => {
+    if (isCertificateComplete) return;
     setCameraError("");
     if (!navigator?.mediaDevices?.getUserMedia) {
       setCameraError("Camera is not supported in this browser.");
@@ -609,6 +544,7 @@ const EnclosureInspection = () => {
   };
 
   const handleRemovePhoto = (photoId) => {
+    if (isCertificateComplete) return;
     setPhotos((prev) => {
       const target = prev.find((photo) => photo.id === photoId);
       if (target?.previewUrl?.startsWith("blob:")) {
@@ -620,6 +556,7 @@ const EnclosureInspection = () => {
   };
 
   const handlePhotoCaptionChange = (photoId, caption) => {
+    if (isCertificateComplete) return;
     setPhotos((prev) =>
       prev.map((photo) =>
         photo.id === photoId ? { ...photo, caption } : photo,
@@ -630,155 +567,62 @@ const EnclosureInspection = () => {
     );
   };
 
-  const handleTodayEnclosureDate = () => {
-    setEnclosureInspectionDateLocal(todayLocalDateString());
-  };
-
-  const handleNowEnclosureTime = () => {
-    setEnclosureInspectionTimeLocal(nowLocalTimeString());
-  };
-
-  const handleSaveEnclosureInspectionDateTime = async () => {
-    if (!clearanceId) return;
+  const handleCompleteCertificate = async () => {
+    if (!clearance?._id || isCertificateComplete) return;
     try {
-      setSavingEnclosureDateTime(true);
-      const iso = localDateTimeToIso(
-        enclosureInspectionDateLocal,
-        enclosureInspectionTimeLocal,
+      setCompletingCertificate(true);
+      const updated = await asbestosClearanceService.updateStatus(
+        clearance._id,
+        "complete",
       );
-      const inspectedTrim = (enclosureInspectedByLocal || "").trim();
-      const photosPayload = serializeEnclosurePhotosForApi(photos);
-      const updated = await asbestosClearanceService.update(clearanceId, {
-        enclosureInspectionDateTime: iso,
-        enclosureInspectedBy: inspectedTrim || null,
-        enclosureDescription,
-        enclosurePhotos: photosPayload,
+      setClearance(updated);
+      showSnackbar("Enclosure certificate marked as complete", "success");
+      if (jobId) {
+        navigate(`/asbestos-removal/jobs/${jobId}/details?tab=enclosure`);
+      }
+    } catch (err) {
+      console.error("Error completing enclosure certificate:", err);
+      showSnackbar(
+        err.response?.data?.message ||
+          "Failed to complete enclosure certificate",
+        "error",
+      );
+    } finally {
+      setCompletingCertificate(false);
+    }
+  };
+
+  const handleReopenCertificate = () => {
+    setReopenDialogOpen(true);
+  };
+
+  const confirmReopenCertificate = async () => {
+    if (!clearance?._id) return;
+    try {
+      setReopeningCertificate(true);
+      const updated = await asbestosClearanceService.update(clearance._id, {
+        status: "in progress",
       });
       setClearance(updated);
-      lastSavedEnclosureFieldsKeyRef.current = stableEnclosureFieldsKey(
-        enclosureDescription,
-        photos,
-      );
-      showSnackbar("Enclosure inspection details saved", "success");
+      showSnackbar("Enclosure certificate reopened successfully!", "success");
     } catch (err) {
-      console.error("Error saving enclosure inspection details:", err);
-      showSnackbar("Failed to save enclosure inspection details", "error");
+      console.error("Error reopening enclosure certificate:", err);
+      showSnackbar(
+        err.response?.data?.message ||
+          "Failed to reopen enclosure certificate",
+        "error",
+      );
     } finally {
-      setSavingEnclosureDateTime(false);
+      setReopeningCertificate(false);
+      setReopenDialogOpen(false);
     }
   };
 
-  const handleGenerateOrDownloadCertificate = async () => {
-    if (!clearance?._id) return;
-
-    if (hasRetainedEnclosureCertificatePdf) {
-      try {
-        setGeneratingCertificate(true);
-        const { filename } = await downloadEnclosureCertificateByClearanceId(
-          clearance._id,
-        );
-        showSnackbar(`Downloaded: ${filename}`, "success");
-      } catch (err) {
-        console.error("Failed to download enclosure certificate:", err);
-        const msg = err?.message || "";
-        const isNoPdf = /no pdf|not available|generate the pdf first/i.test(
-          msg,
-        );
-        if (isNoPdf) {
-          showSnackbar("No saved PDF. Generating a new certificate…", "info");
-          await runEnclosureCertificateGeneration();
-        } else {
-          showSnackbar(
-            msg || "Failed to download enclosure certificate",
-            "error",
-          );
-        }
-      } finally {
-        setGeneratingCertificate(false);
-      }
-      return;
+  useEffect(() => {
+    if (isCertificateComplete && isDictating) {
+      stopDictation();
     }
-
-    await runEnclosureCertificateGeneration();
-  };
-
-  const runEnclosureCertificateGeneration = async () => {
-    if (!clearance?._id) return;
-    try {
-      setGeneratingCertificate(true);
-
-      const enclosurePhotos = await Promise.all(
-        photos.map(async (photo) => {
-          const caption = (photo.caption || "").trim();
-          const data = await getEnclosurePhotoDataForPdf(photo);
-          return {
-            data,
-            description: caption || DEFAULT_ENCLOSURE_PHOTO_CAPTION,
-          };
-        }),
-      );
-
-      const combinedIso = localDateTimeToIso(
-        enclosureInspectionDateLocal,
-        enclosureInspectionTimeLocal,
-      );
-      const clearanceForPdf = {
-        ...clearance,
-        enclosureInspectionDateTime:
-          combinedIso ?? clearance.enclosureInspectionDateTime ?? null,
-        enclosureInspectedBy:
-          (enclosureInspectedByLocal || "").trim() ||
-          clearance.enclosureInspectedBy ||
-          null,
-      };
-
-      const response = await axios.post(
-        "/pdf-docraptor-v2/generate-enclosure-certificate",
-        {
-          clearanceData: clearanceForPdf,
-          enclosureData: {
-            description: enclosureDescription,
-            photos: enclosurePhotos,
-          },
-        },
-        {
-          responseType: "blob",
-          timeout: 120000,
-        },
-      );
-
-      const pdfBlob = new Blob([response.data], { type: "application/pdf" });
-      const contentDisposition = response.headers["content-disposition"];
-      let filename = `enclosure-certificate-${new Date().toISOString().slice(0, 10)}.pdf`;
-      if (contentDisposition) {
-        const match = contentDisposition.match(/filename="(.+)"/);
-        if (match?.[1]) filename = match[1];
-      }
-
-      const url = window.URL.createObjectURL(pdfBlob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-
-      try {
-        const refreshed = await asbestosClearanceService.getById(clearance._id);
-        setClearance(refreshed);
-      } catch (refetchErr) {
-        console.warn("Could not refresh clearance after PDF save:", refetchErr);
-      }
-
-      showSnackbar("Enclosure certificate generated", "success");
-    } catch (err) {
-      console.error("Failed to generate enclosure certificate:", err);
-      showSnackbar("Failed to generate enclosure certificate", "error");
-    } finally {
-      setGeneratingCertificate(false);
-    }
-  };
+  }, [isCertificateComplete, isDictating]);
 
   useEffect(() => {
     if (cameraDialogOpen && videoEl && stream) {
@@ -841,15 +685,27 @@ const EnclosureInspection = () => {
             <ArrowBackIcon sx={{ mr: 1 }} />
             Asbestos Removal Jobs
           </Link>
-          <Link
-            component="button"
-            variant="body1"
-            onClick={() => navigate(`/clearances/${clearanceId}/items`)}
-            sx={{ cursor: "pointer" }}
-          >
-            Clearance Items
-          </Link>
-          <Typography color="text.primary">Enclosure Inspection</Typography>
+          {jobId ? (
+            <Link
+              component="button"
+              variant="body1"
+              onClick={() =>
+                navigate(`/asbestos-removal/jobs/${jobId}/details?tab=enclosure`)
+              }
+              sx={{ cursor: "pointer" }}
+            >
+              Job Details
+            </Link>
+          ) : (
+            <Link
+              component="button"
+              variant="body1"
+              onClick={() => navigate(`/clearances/${clearanceId}/items`)}
+              sx={{ cursor: "pointer" }}
+            >
+              Clearance Items
+            </Link>
+          )}
         </Breadcrumbs>
 
 
@@ -868,18 +724,49 @@ const EnclosureInspection = () => {
           </Typography>
           <Button
             variant="contained"
-            onClick={handleGenerateOrDownloadCertificate}
-            disabled={
-              generatingCertificate || !canGenerateEnclosureCertificate
+            color={
+              isCertificateComplete
+                ? canReopenCertificate
+                  ? "error"
+                  : "success"
+                : "primary"
             }
+            onClick={
+              isCertificateComplete
+                ? canReopenCertificate
+                  ? handleReopenCertificate
+                  : undefined
+                : handleCompleteCertificate
+            }
+            disabled={
+              isCertificateComplete
+                ? !canReopenCertificate || reopeningCertificate
+                : completingCertificate || !canCompleteCertificate
+            }
+            sx={{
+              backgroundColor: isCertificateComplete
+                ? canReopenCertificate
+                  ? "#d32f2f"
+                  : "#2e7d32"
+                : "#1976d2",
+              "&:hover": {
+                backgroundColor: isCertificateComplete
+                  ? canReopenCertificate
+                    ? "#b71c1c"
+                    : "#1b5e20"
+                  : "#1565c0",
+              },
+            }}
           >
-            {generatingCertificate
-              ? hasRetainedEnclosureCertificatePdf
-                ? "Downloading..."
-                : "Generating..."
-              : hasRetainedEnclosureCertificatePdf
-                ? "Download Certificate"
-                : "Generate Certificate"}
+            {isCertificateComplete
+              ? canReopenCertificate
+                ? reopeningCertificate
+                  ? "Reopening..."
+                  : "REOPEN CLEARANCE"
+                : "Certificate Complete"
+              : completingCertificate
+                ? "Completing..."
+                : "Complete Certificate"}
           </Button>
         </Box>
 
@@ -889,117 +776,12 @@ const EnclosureInspection = () => {
           </Alert>
         )}
 
-        <Card sx={{ mb: 3 }}>
-          <CardContent>
-            <Typography variant="h6" sx={{ mb: 2 }}>
-              Enclosure inspection details
-            </Typography>
-            <Box
-              display="flex"
-              flexWrap="wrap"
-              gap={2}
-              alignItems="center"
-            >
-              <Box
-                display="flex"
-                flexWrap="wrap"
-                gap={1}
-                alignItems="center"
-              >
-                <TextField
-                  label="Date"
-                  type="date"
-                  size="small"
-                  value={enclosureInspectionDateLocal}
-                  onChange={(e) => setEnclosureInspectionDateLocal(e.target.value)}
-                  InputLabelProps={{ shrink: true }}
-                  sx={{ minWidth: 160 }}
-                />
-                <Button variant="outlined" size="small" onClick={handleTodayEnclosureDate}>
-                  Today
-                </Button>
-              </Box>
-              <Box
-                display="flex"
-                flexWrap="wrap"
-                gap={1}
-                alignItems="center"
-              >
-                <TextField
-                  label="Time"
-                  type="time"
-                  size="small"
-                  value={enclosureInspectionTimeLocal}
-                  onChange={(e) => setEnclosureInspectionTimeLocal(e.target.value)}
-                  InputLabelProps={{ shrink: true }}
-                  sx={{ minWidth: 130 }}
-                />
-                <Button variant="outlined" size="small" onClick={handleNowEnclosureTime}>
-                  Now
-                </Button>
-              </Box>
-              <FormControl
-                size="small"
-                sx={{ minWidth: 200, flex: "1 1 200px", maxWidth: 360 }}
-              >
-                <InputLabel id="enclosure-inspected-by-label">
-                  Inspected by (LAA)
-                </InputLabel>
-                <Select
-                  labelId="enclosure-inspected-by-label"
-                  label="Inspected by (LAA)"
-                  value={enclosureInspectedByLocal || ""}
-                  onChange={(e) => setEnclosureInspectedByLocal(e.target.value)}
-                  key={`enclosure-laa-${activeLAAs.length}-${enclosureInspectedByLocal}`}
-                >
-                  {activeLAAs.length === 0 ? (
-                    <MenuItem value="" disabled>
-                      Loading assessors…
-                    </MenuItem>
-                  ) : (
-                    [
-                      <MenuItem key="empty" value="">
-                        <em>Select an LAA</em>
-                      </MenuItem>,
-                      ...(enclosureInspectedByLocal &&
-                      !activeLAAs.some(
-                        (a) =>
-                          `${a.firstName} ${a.lastName}` ===
-                          enclosureInspectedByLocal,
-                      )
-                        ? [
-                            <MenuItem
-                              key="stored-only"
-                              value={enclosureInspectedByLocal}
-                            >
-                              {enclosureInspectedByLocal} (saved)
-                            </MenuItem>,
-                          ]
-                        : []),
-                      ...activeLAAs.map((assessor) => {
-                        const name = `${assessor.firstName} ${assessor.lastName}`;
-                        return (
-                          <MenuItem key={assessor._id} value={name}>
-                            {name}
-                          </MenuItem>
-                        );
-                      }),
-                    ]
-                  )}
-                </Select>
-              </FormControl>
-              <Button
-                variant="contained"
-                size="small"
-                onClick={handleSaveEnclosureInspectionDateTime}
-                disabled={savingEnclosureDateTime}
-                sx={{ flexShrink: 0 }}
-              >
-                {savingEnclosureDateTime ? "Saving..." : "Save"}
-              </Button>
-            </Box>
-          </CardContent>
-        </Card>
+        {isCertificateComplete && (
+          <Alert severity="info" sx={{ mb: 3 }}>
+            This enclosure certificate is complete. Fields are read-only until the
+            certificate is reopened.
+          </Alert>
+        )}
 
         <Card sx={{ mb: 3 }}>
           <CardContent>
@@ -1016,8 +798,10 @@ const EnclosureInspection = () => {
               value={enclosureDescription}
               onChange={(e) => setEnclosureDescription(e.target.value)}
               placeholder="Describe the enclosure setup, conditions, and any relevant observations."
+              disabled={isCertificateComplete}
               InputProps={{
-                endAdornment: (
+                readOnly: isCertificateComplete,
+                endAdornment: !isCertificateComplete ? (
                   <InputAdornment position="end">
                     <IconButton
                       onClick={isDictating ? stopDictation : startDictation}
@@ -1027,7 +811,7 @@ const EnclosureInspection = () => {
                       <MicIcon />
                     </IconButton>
                   </InputAdornment>
-                ),
+                ) : undefined,
               }}
             />
             {isDictating && (
@@ -1063,6 +847,7 @@ const EnclosureInspection = () => {
             color="secondary"
             onClick={() => setSitePlanDrawingDialogOpen(true)}
             startIcon={<MapIcon />}
+            disabled={isCertificateComplete}
           >
             {clearance?.sitePlanFile ? "Edit Site Plan" : "Site Plan"}
           </Button>
@@ -1071,7 +856,7 @@ const EnclosureInspection = () => {
               variant="contained"
               color="error"
               onClick={handleRemoveSitePlan}
-              disabled={removingSitePlan}
+              disabled={isCertificateComplete || removingSitePlan}
               startIcon={
                 removingSitePlan ? (
                   <CircularProgress size={16} sx={{ color: "inherit" }} />
@@ -1115,6 +900,7 @@ const EnclosureInspection = () => {
               }}
             >
               <Typography variant="h6">Enclosure Photos</Typography>
+              {!isCertificateComplete && (
               <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
                 <Button
                   variant="outlined"
@@ -1148,6 +934,7 @@ const EnclosureInspection = () => {
                   onChange={handlePhotoUpload}
                 />
               </Box>
+              )}
             </Box>
 
             {photos.length === 0 ? (
@@ -1171,6 +958,7 @@ const EnclosureInspection = () => {
                         }}
                       />
                       <CardContent sx={{ pt: 1.5, pb: 1 }}>
+                        {!isCertificateComplete && (
                         <Box
                           sx={{
                             display: "flex",
@@ -1187,6 +975,7 @@ const EnclosureInspection = () => {
                             <DeleteIcon fontSize="small" />
                           </IconButton>
                         </Box>
+                        )}
                         <TextField
                           fullWidth
                           multiline
@@ -1200,6 +989,8 @@ const EnclosureInspection = () => {
                             handlePhotoCaptionChange(photo.id, e.target.value)
                           }
                           placeholder={DEFAULT_ENCLOSURE_PHOTO_CAPTION}
+                          disabled={isCertificateComplete}
+                          InputProps={{ readOnly: isCertificateComplete }}
                         />
                       </CardContent>
                     </Card>
@@ -1409,6 +1200,85 @@ const EnclosureInspection = () => {
             </Box>,
             document.body,
           )}
+
+        <Dialog
+          open={reopenDialogOpen}
+          onClose={() => setReopenDialogOpen(false)}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "warning.main",
+                color: "white",
+              }}
+            >
+              <EditIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Reopen Clearance
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+            <Typography variant="body1" sx={{ color: "text.primary" }}>
+              Are you sure you want to reopen this enclosure certificate?
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <Button
+              onClick={() => setReopenDialogOpen(false)}
+              variant="outlined"
+              disabled={reopeningCertificate}
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmReopenCertificate}
+              variant="contained"
+              color="warning"
+              disabled={reopeningCertificate}
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+                backgroundColor: "warning.main",
+                "&:hover": { backgroundColor: "warning.dark" },
+              }}
+            >
+              {reopeningCertificate ? "Reopening..." : "Reopen Clearance"}
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </PermissionGate>
   );

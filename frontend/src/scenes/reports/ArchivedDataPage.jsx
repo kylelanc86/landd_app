@@ -192,7 +192,7 @@ const ArchivedDataPage = () => {
       </Button>
       <Box sx={{ mt: 2, mb: 3 }}>
         <Typography variant="h5" component="h1">
-          Deleted / Archived Data
+          Deleted Data
         </Typography>
         {project && (
           <Typography variant="h6" color="text.secondary" sx={{ mt: 0.5 }}>
@@ -465,7 +465,7 @@ const ArchivedDataPage = () => {
         archivedClearances.length === 0 &&
         archivedAssessments.length === 0 && (
           <Typography color="text.secondary" sx={{ mt: 2 }}>
-            No archived data found.
+            No deleted data found.
           </Typography>
         )}
     </Box>

@@ -26,6 +26,14 @@ const plmMicroscopeCalibrationRoutes = require('./routes/plmMicroscopeCalibratio
 const stereomicroscopeCalibrationRoutes = require('./routes/stereomicroscopeCalibrations');
 const hseTestSlideCalibrationRoutes = require('./routes/hseTestSlideCalibrations');
 const flowmeterCalibrationRoutes = require('./routes/flowmeterCalibrations');
+const primaryFlowmeterCalibrationRoutes = require('./routes/primaryFlowmeterCalibrations');
+const furnaceCalibrationRoutes = require('./routes/furnaceCalibrations');
+const pneumaticTesterCalibrationRoutes = require('./routes/pneumaticTesterCalibrations');
+const sieveCalibrationRoutes = require('./routes/sieveCalibrations');
+const massBalanceCalibrationRoutes = require('./routes/massBalanceCalibrations');
+const micrometerCalibrationRoutes = require('./routes/micrometerCalibrations');
+const caliperCalibrationRoutes = require('./routes/caliperCalibrations');
+const fumeHoodCalibrationRoutes = require('./routes/fumeHoodCalibrations');
 const acetoneVaporiserCalibrationRoutes = require('./routes/acetoneVaporiserCalibrations');
 const riLiquidCalibrationRoutes = require('./routes/riLiquidCalibrations');
 const calibrationFrequencyRoutes = require('./routes/calibrationFrequency');
@@ -54,6 +62,7 @@ const controlledDocumentsRoutes = require('./routes/controlledDocuments');
 const impartialityRisksRoutes = require('./routes/impartialityRisks');
 const feedbackRoutes = require('./routes/feedback');
 const incidentsRoutes = require('./routes/incidents');
+const calibrationCanonicalRoutes = require('./routes/calibrationCanonical');
 
 // Load environment variables
 dotenv.config();
@@ -179,6 +188,15 @@ connectDB()
     // Import middleware first
     const requireAuth = require('./middleware/auth');
     const checkTokenBlacklist = require('./middleware/checkTokenBlacklist');
+    const invalidateCanonicalCacheOnMutation = require('./middleware/invalidateCanonicalCacheOnMutation');
+    const calibrationRouteMiddleware = [
+      requireAuth,
+      checkTokenBlacklist,
+      invalidateCanonicalCacheOnMutation,
+    ];
+    const mountCalibrationRoutes = (path, router) => {
+      app.use(path, ...calibrationRouteMiddleware, router);
+    };
     
     // Initialize dashboard stats
     try {
@@ -246,35 +264,59 @@ connectDB()
     app.use('/api/air-pumps', requireAuth, checkTokenBlacklist, airPumpRoutes);
     app.use('/air-pumps', requireAuth, checkTokenBlacklist, airPumpRoutes);
     
-    app.use('/api/air-pump-calibrations', requireAuth, checkTokenBlacklist, airPumpCalibrationRoutes);
-    app.use('/air-pump-calibrations', requireAuth, checkTokenBlacklist, airPumpCalibrationRoutes);
+    mountCalibrationRoutes('/api/air-pump-calibrations', airPumpCalibrationRoutes);
+    mountCalibrationRoutes('/air-pump-calibrations', airPumpCalibrationRoutes);
     
-    app.use('/api/graticule-calibrations', requireAuth, checkTokenBlacklist, graticuleCalibrationRoutes);
-    app.use('/graticule-calibrations', requireAuth, checkTokenBlacklist, graticuleCalibrationRoutes);
+    mountCalibrationRoutes('/api/graticule-calibrations', graticuleCalibrationRoutes);
+    mountCalibrationRoutes('/graticule-calibrations', graticuleCalibrationRoutes);
     
-    app.use('/api/efa-calibrations', requireAuth, checkTokenBlacklist, efaCalibrationRoutes);
-    app.use('/efa-calibrations', requireAuth, checkTokenBlacklist, efaCalibrationRoutes);
+    mountCalibrationRoutes('/api/efa-calibrations', efaCalibrationRoutes);
+    mountCalibrationRoutes('/efa-calibrations', efaCalibrationRoutes);
     
-    app.use('/api/pcm-microscope-calibrations', requireAuth, checkTokenBlacklist, pcmMicroscopeCalibrationRoutes);
-    app.use('/pcm-microscope-calibrations', requireAuth, checkTokenBlacklist, pcmMicroscopeCalibrationRoutes);
+    mountCalibrationRoutes('/api/pcm-microscope-calibrations', pcmMicroscopeCalibrationRoutes);
+    mountCalibrationRoutes('/pcm-microscope-calibrations', pcmMicroscopeCalibrationRoutes);
     
-    app.use('/api/plm-microscope-calibrations', requireAuth, checkTokenBlacklist, plmMicroscopeCalibrationRoutes);
-    app.use('/plm-microscope-calibrations', requireAuth, checkTokenBlacklist, plmMicroscopeCalibrationRoutes);
+    mountCalibrationRoutes('/api/plm-microscope-calibrations', plmMicroscopeCalibrationRoutes);
+    mountCalibrationRoutes('/plm-microscope-calibrations', plmMicroscopeCalibrationRoutes);
     
-    app.use('/api/stereomicroscope-calibrations', requireAuth, checkTokenBlacklist, stereomicroscopeCalibrationRoutes);
-    app.use('/stereomicroscope-calibrations', requireAuth, checkTokenBlacklist, stereomicroscopeCalibrationRoutes);
+    mountCalibrationRoutes('/api/stereomicroscope-calibrations', stereomicroscopeCalibrationRoutes);
+    mountCalibrationRoutes('/stereomicroscope-calibrations', stereomicroscopeCalibrationRoutes);
     
-    app.use('/api/hse-test-slide-calibrations', requireAuth, checkTokenBlacklist, hseTestSlideCalibrationRoutes);
-    app.use('/hse-test-slide-calibrations', requireAuth, checkTokenBlacklist, hseTestSlideCalibrationRoutes);
+    mountCalibrationRoutes('/api/hse-test-slide-calibrations', hseTestSlideCalibrationRoutes);
+    mountCalibrationRoutes('/hse-test-slide-calibrations', hseTestSlideCalibrationRoutes);
     
-    app.use('/api/flowmeter-calibrations', requireAuth, checkTokenBlacklist, flowmeterCalibrationRoutes);
-    app.use('/flowmeter-calibrations', requireAuth, checkTokenBlacklist, flowmeterCalibrationRoutes);
+    mountCalibrationRoutes('/api/flowmeter-calibrations', flowmeterCalibrationRoutes);
+    mountCalibrationRoutes('/flowmeter-calibrations', flowmeterCalibrationRoutes);
+
+    mountCalibrationRoutes('/api/primary-flowmeter-calibrations', primaryFlowmeterCalibrationRoutes);
+    mountCalibrationRoutes('/primary-flowmeter-calibrations', primaryFlowmeterCalibrationRoutes);
+
+    mountCalibrationRoutes('/api/furnace-calibrations', furnaceCalibrationRoutes);
+    mountCalibrationRoutes('/furnace-calibrations', furnaceCalibrationRoutes);
+
+    mountCalibrationRoutes('/api/pneumatic-tester-calibrations', pneumaticTesterCalibrationRoutes);
+    mountCalibrationRoutes('/pneumatic-tester-calibrations', pneumaticTesterCalibrationRoutes);
+
+    mountCalibrationRoutes('/api/sieve-calibrations', sieveCalibrationRoutes);
+    mountCalibrationRoutes('/sieve-calibrations', sieveCalibrationRoutes);
+
+    mountCalibrationRoutes('/api/mass-balance-calibrations', massBalanceCalibrationRoutes);
+    mountCalibrationRoutes('/mass-balance-calibrations', massBalanceCalibrationRoutes);
+
+    mountCalibrationRoutes('/api/micrometer-calibrations', micrometerCalibrationRoutes);
+    mountCalibrationRoutes('/micrometer-calibrations', micrometerCalibrationRoutes);
+
+    mountCalibrationRoutes('/api/caliper-calibrations', caliperCalibrationRoutes);
+    mountCalibrationRoutes('/caliper-calibrations', caliperCalibrationRoutes);
+
+    mountCalibrationRoutes('/api/fume-hood-calibrations', fumeHoodCalibrationRoutes);
+    mountCalibrationRoutes('/fume-hood-calibrations', fumeHoodCalibrationRoutes);
     
-    app.use('/api/acetone-vaporiser-calibrations', requireAuth, checkTokenBlacklist, acetoneVaporiserCalibrationRoutes);
-    app.use('/acetone-vaporiser-calibrations', requireAuth, checkTokenBlacklist, acetoneVaporiserCalibrationRoutes);
+    mountCalibrationRoutes('/api/acetone-vaporiser-calibrations', acetoneVaporiserCalibrationRoutes);
+    mountCalibrationRoutes('/acetone-vaporiser-calibrations', acetoneVaporiserCalibrationRoutes);
     
-    app.use('/api/ri-liquid-calibrations', requireAuth, checkTokenBlacklist, riLiquidCalibrationRoutes);
-    app.use('/ri-liquid-calibrations', requireAuth, checkTokenBlacklist, riLiquidCalibrationRoutes);
+    mountCalibrationRoutes('/api/ri-liquid-calibrations', riLiquidCalibrationRoutes);
+    mountCalibrationRoutes('/ri-liquid-calibrations', riLiquidCalibrationRoutes);
     
     app.use('/api/calibration-frequency', requireAuth, checkTokenBlacklist, calibrationFrequencyRoutes);
     app.use('/calibration-frequency', requireAuth, checkTokenBlacklist, calibrationFrequencyRoutes);
@@ -358,6 +400,8 @@ connectDB()
     app.use('/feedback', requireAuth, checkTokenBlacklist, feedbackRoutes);
     app.use('/api/incidents', requireAuth, checkTokenBlacklist, incidentsRoutes);
     app.use('/incidents', requireAuth, checkTokenBlacklist, incidentsRoutes);
+    app.use('/api/calibration-canonical', requireAuth, checkTokenBlacklist, calibrationCanonicalRoutes);
+    app.use('/calibration-canonical', requireAuth, checkTokenBlacklist, calibrationCanonicalRoutes);
 
     
     // Error handling middleware

@@ -12,6 +12,10 @@ const {
 } = require("../services/reportAuthorisationNotificationService");
 const { formatDateSydney } = require("../utils/dateUtils");
 
+const notDeletedShiftFilter = {
+  $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
+};
+
 // Use same permission names as asbestos for role consistency
 const permView = "asbestos.view";
 const permCreate = "asbestos.create";
@@ -75,6 +79,119 @@ router.get("/", auth, checkPermission(permView), async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
+
+// Get lead monitoring shift reports for a project
+router.get(
+  "/air-monitoring-reports/:projectId",
+  auth,
+  checkPermission(permView),
+  async (req, res) => {
+    try {
+      const mongoose = require("mongoose");
+      const { projectId } = req.params;
+
+      if (!mongoose.Types.ObjectId.isValid(projectId)) {
+        return res.status(400).json({ message: "Invalid project ID" });
+      }
+      const projectObjectId = new mongoose.Types.ObjectId(projectId);
+      const Shift = require("../models/Shift");
+
+      const allJobs = await LeadRemovalJob.find({ projectId: projectObjectId })
+        .populate("projectId", "name projectID");
+
+      const airMonitoringReports = [];
+
+      for (const job of allJobs) {
+        const shifts = await Shift.find({
+          job: job._id,
+          jobModel: "LeadRemovalJob",
+          ...notDeletedShiftFilter,
+          $or: [
+            { status: "analysis_complete" },
+            { status: "shift_complete" },
+            { reportApprovedBy: { $exists: true, $ne: null } },
+          ],
+        })
+          .populate("supervisor", "firstName lastName")
+          .populate("defaultSampler", "firstName lastName");
+
+        shifts.forEach((shift) => {
+          airMonitoringReports.push({
+            _id: shift._id,
+            name: shift.name,
+            date: shift.date,
+            status: shift.status,
+            reportApprovedBy: shift.reportApprovedBy,
+            reportIssueDate: shift.reportIssueDate,
+            supervisor: shift.supervisor,
+            defaultSampler: shift.defaultSampler,
+            revision: shift.revision || 0,
+            jobName: job.projectName || "Lead Removal Job",
+            jobId: job._id,
+            projectName: job.projectId?.name,
+            projectId: job.projectId?._id,
+            leadAbatementContractor: job.leadAbatementContractor || null,
+          });
+        });
+      }
+
+      airMonitoringReports.sort((a, b) => new Date(b.date) - new Date(a.date));
+      res.json(airMonitoringReports);
+    } catch (error) {
+      console.error("Error fetching lead air monitoring reports:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  },
+);
+
+// Get lead monitoring shift reports for a specific lead removal job
+router.get(
+  "/air-monitoring-reports-by-job/:jobId",
+  auth,
+  checkPermission(permView),
+  async (req, res) => {
+    try {
+      const { jobId } = req.params;
+      const Shift = require("../models/Shift");
+
+      const leadRemovalJob = await LeadRemovalJob.findById(jobId);
+      if (!leadRemovalJob) {
+        return res.status(404).json({ message: "Lead removal job not found" });
+      }
+
+      const shifts = await Shift.find({
+        job: jobId,
+        jobModel: "LeadRemovalJob",
+        ...notDeletedShiftFilter,
+        $or: [
+          { status: "analysis_complete" },
+          { status: "shift_complete" },
+          { reportApprovedBy: { $exists: true, $ne: null } },
+        ],
+      }).populate("defaultSampler", "firstName lastName");
+
+      const leadMonitoringReports = shifts.map((shift) => ({
+        _id: shift._id,
+        name: shift.name,
+        date: shift.date,
+        status: shift.status,
+        reportApprovedBy: shift.reportApprovedBy,
+        reportIssueDate: shift.reportIssueDate,
+        leadAbatementContractor: leadRemovalJob.leadAbatementContractor,
+        defaultSampler: shift.defaultSampler,
+        descriptionOfWorks: shift.descriptionOfWorks,
+        revision: shift.revision || 0,
+        jobId,
+      }));
+
+      leadMonitoringReports.sort((a, b) => new Date(b.date) - new Date(a.date));
+      res.json(leadMonitoringReports);
+    } catch (error) {
+      console.error("Error fetching lead monitoring reports by job:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  },
+);
 
 // Get lead clearance by ID
 router.get("/:id", auth, checkPermission(permView), async (req, res) => {
@@ -212,6 +329,12 @@ router.put("/:id", auth, checkPermission(permEdit), async (req, res) => {
       vehicleEquipmentDescription,
       useComplexTemplate,
       items,
+      sitePlan,
+      sitePlanFile,
+      sitePlanSource,
+      sitePlanLegend,
+      sitePlanLegendTitle,
+      sitePlanFigureTitle,
     } = req.body;
 
     const clearance = await LeadClearance.findById(req.params.id);
@@ -247,6 +370,30 @@ router.put("/:id", auth, checkPermission(permEdit), async (req, res) => {
     if (useComplexTemplate !== undefined)
       clearance.useComplexTemplate = useComplexTemplate;
     if (items !== undefined) clearance.items = items;
+    if (sitePlan !== undefined) clearance.sitePlan = sitePlan;
+    if (sitePlanFile !== undefined) clearance.sitePlanFile = sitePlanFile;
+    if (sitePlanLegend !== undefined) {
+      clearance.sitePlanLegend = sitePlanLegend;
+      clearance.markModified("sitePlanLegend");
+    }
+    if (sitePlanLegendTitle !== undefined) {
+      clearance.sitePlanLegendTitle = sitePlanLegendTitle;
+    }
+    if (sitePlanFigureTitle !== undefined) {
+      clearance.sitePlanFigureTitle = sitePlanFigureTitle;
+    } else if (
+      (sitePlan !== undefined && sitePlan) ||
+      (sitePlanFile !== undefined && sitePlanFile)
+    ) {
+      if (!clearance.sitePlanFigureTitle) {
+        clearance.sitePlanFigureTitle = "Lead Clearance Site Plan";
+      }
+    }
+    if (sitePlanSource && ["uploaded", "drawn"].includes(sitePlanSource)) {
+      clearance.sitePlanSource = sitePlanSource;
+    } else if (sitePlanSource === null) {
+      clearance.sitePlanSource = undefined;
+    }
     clearance.updatedBy = req.user.id;
 
     clearClearancePdfFields(clearance);
@@ -266,6 +413,56 @@ router.put("/:id", auth, checkPermission(permEdit), async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
+
+// Upload lead monitoring report(s) - supports single or multiple reports
+router.post(
+  "/:id/lead-monitoring-report",
+  auth,
+  checkPermission(permEdit),
+  async (req, res) => {
+    try {
+      const { reports, leadMonitoring } = req.body;
+
+      const clearance = await LeadClearance.findById(req.params.id);
+      if (!clearance) {
+        return res.status(404).json({ message: "Lead clearance not found" });
+      }
+
+      if (leadMonitoring !== undefined) {
+        clearance.leadMonitoring = leadMonitoring;
+      }
+      clearance.updatedBy = req.user.id;
+
+      if (Array.isArray(reports) && reports.length > 0) {
+        const sorted = [...reports].sort(
+          (a, b) => new Date(a.shiftDate || 0) - new Date(b.shiftDate || 0),
+        );
+        clearance.leadMonitoringReports = sorted.map((r) => ({
+          reportData: r.reportData,
+          shiftDate: r.shiftDate,
+          shiftId: r.shiftId,
+        }));
+      }
+
+      clearClearancePdfFields(clearance);
+      const updatedClearance = await clearance.save();
+
+      const populatedClearance = await LeadClearance.findById(updatedClearance._id)
+        .populate({
+          path: "projectId",
+          select: "projectID name client",
+          populate: { path: "client", select: "name" },
+        })
+        .populate("createdBy", "firstName lastName")
+        .populate("updatedBy", "firstName lastName");
+
+      res.json(populatedClearance);
+    } catch (error) {
+      console.error("Error uploading lead monitoring report:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  },
+);
 
 // PATCH - report viewed
 router.patch("/:id", auth, checkPermission(permEdit), async (req, res) => {

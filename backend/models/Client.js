@@ -46,6 +46,10 @@ const clientSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  notes: {
+    type: String,
+    default: ''
+  },
   isActive: {
     type: Boolean,
     default: true

@@ -1,4 +1,8 @@
 import axios from "axios";
+import {
+  isNotificationCentreMutationRequest,
+  requestNotificationCentreRefresh,
+} from "./notificationCentreEvents";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
 
@@ -36,7 +40,12 @@ axiosInstance.interceptors.request.use(
 
 // Add a response interceptor
 axiosInstance.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    if (isNotificationCentreMutationRequest(response.config)) {
+      requestNotificationCentreRefresh();
+    }
+    return response;
+  },
   (error) => {
     if (error.response?.status === 401) {
       // Handle unauthorized error (e.g., redirect to login)

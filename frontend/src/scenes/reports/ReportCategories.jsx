@@ -10,6 +10,7 @@ import {
 import {
   Assessment as AssessmentIcon,
   Construction as AsbestosRemovalIcon,
+  Dangerous as LeadRemovalIcon,
   Science as FibreIcon,
 } from "@mui/icons-material";
 const categories = [
@@ -22,11 +23,19 @@ const categories = [
   },
   {
     id: "asbestos-removal-jobs",
-    title: "Air Monitoring and Clearances",
+    title: "Air Monitoring and Clearances - Asbestos",
     icon: AsbestosRemovalIcon,
     description:
       "Access air monitoring shifts and clearance reports for asbestos removal",
     color: "#ff9800", // orange-500
+  },
+  {
+    id: "lead-removal-jobs",
+    title: "Lead Monitoring and Clearances",
+    icon: LeadRemovalIcon,
+    description:
+      "Access lead monitoring shifts and clearance reports for lead removal",
+    color: "#5c6bc0", // indigo-400
   },
   {
     id: "fibre-id",

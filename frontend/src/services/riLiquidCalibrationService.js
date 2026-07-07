@@ -54,9 +54,9 @@ export const riLiquidCalibrationService = {
   },
 
   // Get RI Liquid calibrations by bottle ID
-  getByBottle: async (bottleId) => {
+  getByBottle: async (bottleId, params = {}) => {
     try {
-      const response = await api.get(`${BASE_URL}/bottle/${bottleId}`);
+      const response = await api.get(`${BASE_URL}/bottle/${encodeURIComponent(bottleId)}`, { params });
       return response.data;
     } catch (error) {
       throw error;

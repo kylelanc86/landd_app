@@ -12,8 +12,6 @@ import {
   Button,
   useTheme,
   CircularProgress,
-  Breadcrumbs,
-  Link,
   Alert,
   FormControl,
   InputLabel,
@@ -22,9 +20,14 @@ import {
   Chip,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { formatDate } from "../../../utils/dateFormat";
 import { graticuleService } from "../../../services/graticuleService";
+import {
+  CALIBRATION_TABS,
+} from "./calibrationsNavigationUtils";
+import CalibrationPageHeader, {
+  CALIBRATION_PAGE_PADDING,
+} from "./CalibrationPageHeader";
 
 const GraticuleHistoryPage = () => {
   const navigate = useNavigate();
@@ -62,63 +65,24 @@ const GraticuleHistoryPage = () => {
     navigate("/records/laboratory/calibrations/graticule");
   };
 
-  const handleBackToCalibrations = () => {
-    navigate("/records/laboratory/calibrations");
-  };
-
-  const handleBackToHome = () => {
-    navigate("/records");
-  };
-
   // Get unique graticule IDs for filter
   const uniqueGraticuleIds = [
     ...new Set(historicalData.map((cal) => cal.graticuleId).filter(Boolean)),
   ];
 
   return (
-    <Box sx={{ p: 3 }}>
-      {/* Breadcrumbs */}
-      <Breadcrumbs sx={{ mb: 3 }}>
-        <Link
-          component="button"
-          variant="body1"
-          onClick={handleBackToHome}
-          sx={{ textDecoration: "none" }}
-        >
-          Records
-        </Link>
-        <Link
-          component="button"
-          variant="body1"
-          onClick={handleBackToCalibrations}
-          sx={{ textDecoration: "none" }}
-        >
-          Laboratory Calibrations
-        </Link>
-        <Link
-          component="button"
-          variant="body1"
-          onClick={handleBackToGraticules}
-          sx={{ textDecoration: "none" }}
-        >
-          Graticule Calibrations
-        </Link>
-        <Typography color="text.primary">Historical Data</Typography>
-      </Breadcrumbs>
-
-      {/* Header */}
-      <Box sx={{ display: "flex", alignItems: "center", mb: 3 }}>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={handleBackToGraticules}
-          sx={{ mr: 2 }}
-        >
-          Back to Graticules
-        </Button>
-        <Typography variant="h4" component="h1">
-          Historical Graticule Calibrations
-        </Typography>
-      </Box>
+    <Box sx={{ p: CALIBRATION_PAGE_PADDING }}>
+      <CalibrationPageHeader
+        title="Historical Graticule Calibrations"
+        breadcrumbCurrent="Historical Data"
+        calibrationTab={CALIBRATION_TABS.INTERNAL}
+        parents={[
+          {
+            label: "Graticule Calibrations",
+            onClick: handleBackToGraticules,
+          },
+        ]}
+      />
 
       {/* Error Alert */}
       {error && (

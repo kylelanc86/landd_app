@@ -19,6 +19,12 @@ const reportService = {
     return response.data;
   },
 
+  // Lead Clearance Reports
+  getLeadClearanceReports: async (projectId) => {
+    const response = await api.get(`/reports/lead-clearance/${projectId}`);
+    return response.data;
+  },
+
   // Fibre ID Reports
   getFibreIdReports: async (projectId) => {
     const response = await api.get(`/reports/fibre-id/${projectId}`);

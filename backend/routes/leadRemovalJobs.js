@@ -17,6 +17,8 @@ const permView = "asbestos.view";
 const permCreate = "asbestos.create";
 const permEdit = "asbestos.edit";
 const permDelete = "asbestos.delete";
+const CLEARANCE_TABLE_SELECT =
+  "_id clearanceDate status descriptionOfWorks reportApprovedBy reportIssueDate reportViewedAt authorisationRequestedBy pdfDownloadUrl pdfJobId pdfReadyAt pdfFilename";
 
 // Get all lead removal jobs with filtering and pagination
 router.get("/", auth, checkPermission(permView), async (req, res) => {
@@ -210,11 +212,7 @@ router.get(
         clearances = await LeadClearance.find({
           leadRemovalJobId: job._id,
         })
-          .select("_id projectId clearanceDate status inspectionTime leadAbatementContractor consultant secondaryHeader descriptionOfWorks vehicleEquipmentDescription notes jobSpecificExclusions reportApprovedBy reportIssueDate reportViewedAt authorisationRequestedBy pdfDownloadUrl pdfJobId pdfReadyAt pdfFilename")
-          .populate({
-            path: "projectId",
-            select: "projectID name",
-          })
+          .select(CLEARANCE_TABLE_SELECT)
           .lean();
       }
 
@@ -291,11 +289,7 @@ router.get(
       const clearances = await LeadClearance.find({
         leadRemovalJobId: req.params.id,
       })
-        .select("_id projectId clearanceDate status inspectionTime leadAbatementContractor consultant secondaryHeader descriptionOfWorks vehicleEquipmentDescription notes jobSpecificExclusions reportApprovedBy reportIssueDate reportViewedAt authorisationRequestedBy pdfDownloadUrl pdfJobId pdfReadyAt pdfFilename")
-        .populate({
-          path: "projectId",
-          select: "projectID name",
-        })
+        .select(CLEARANCE_TABLE_SELECT)
         .lean();
       res.json({ clearances });
     } catch (error) {

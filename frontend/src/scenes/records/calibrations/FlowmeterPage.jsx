@@ -44,6 +44,10 @@ import {
   equipmentOptionsFromList,
   buildEquipmentDisplayLabel,
 } from "../../../utils/lookupOptions";
+import {
+  CALIBRATION_TABS,
+  getCalibrationsListPath,
+} from "./calibrationsNavigationUtils";
 
 const FlowmeterPage = () => {
   const theme = useTheme();
@@ -546,7 +550,7 @@ const FlowmeterPage = () => {
   };
 
   const handleBackToCalibrations = () => {
-    navigate("/records/laboratory/calibrations/list");
+    navigate(getCalibrationsListPath(CALIBRATION_TABS.INTERNAL));
   };
 
   const handleViewHistory = async (flowmeter) => {

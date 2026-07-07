@@ -355,6 +355,14 @@ const IndoorAirQuality = () => {
           } lab signatory user(s)`,
         "success",
       );
+      const recordId = record._id || record.id;
+      setRecords((prev) =>
+        prev.map((r) =>
+          (r._id || r.id) === recordId
+            ? { ...r, authorisationRequestedBy: currentUser?._id ?? true }
+            : r,
+        ),
+      );
     } catch (error) {
       console.error("Error sending authorisation request emails:", error);
       showSnackbar(

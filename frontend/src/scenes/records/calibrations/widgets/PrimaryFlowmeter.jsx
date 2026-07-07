@@ -1,8 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { Box, CircularProgress, useTheme } from "@mui/material";
 import BaseCalibrationWidget from "./BaseCalibrationWidget";
-import { flowmeterCalibrationService } from "../../../../services/flowmeterCalibrationService";
+import primaryFlowmeterService from "../../../../services/primaryFlowmeterService";
 import { equipmentService } from "../../../../services/equipmentService";
+import {
+  getCachedCalibrationData,
+  setCachedCalibrationData,
+} from "../../../../utils/calibrationCache";
+import { computePrimaryFlowmeterWidgetStats } from "../primaryFlowmeterUtils";
+
+const CACHE_KEY = "primary-flowmeter";
 
 const PrimaryFlowmeter = ({ viewCalibrationsPath }) => {
   const theme = useTheme();
@@ -14,54 +21,59 @@ const PrimaryFlowmeter = ({ viewCalibrationsPath }) => {
     fetchPrimaryFlowmeterData();
   }, []);
 
+  const applyStats = ({ nextCalibrationDue: nextDue, itemsDueInNextMonth: dueCount }) => {
+    setNextCalibrationDue(nextDue);
+    setItemsDueInNextMonth(dueCount);
+  };
+
+  const fetchFreshData = async () => {
+    const [calibrations, equipmentResponse] = await Promise.all([
+      primaryFlowmeterService.getAll(),
+      equipmentService.getAll({
+        equipmentType: "Bubble flowmeter",
+        limit: 1000,
+      }),
+    ]);
+
+    const equipment = equipmentResponse.equipment || [];
+    const stats = computePrimaryFlowmeterWidgetStats(
+      Array.isArray(calibrations) ? calibrations : [],
+      equipment
+    );
+
+    applyStats(stats);
+    setCachedCalibrationData(CACHE_KEY, stats);
+  };
+
   const fetchPrimaryFlowmeterData = async () => {
     try {
       setLoading(true);
 
-      // Fetch all flowmeter calibrations (Primary Flowmeters may be included)
-      const response = await flowmeterCalibrationService.getAll({
-        limit: 1000,
-      });
-      const calibrations = response.data || [];
-
-      // Filter for primary flowmeters if there's a way to distinguish them
-      // For now, use all flowmeter calibrations
-      if (calibrations.length === 0) {
-        setNextCalibrationDue(null);
-        setItemsDueInNextMonth(0);
+      const cached = getCachedCalibrationData(CACHE_KEY);
+      if (cached) {
+        applyStats({
+          nextCalibrationDue: cached.nextCalibrationDue
+            ? new Date(cached.nextCalibrationDue)
+            : null,
+          itemsDueInNextMonth: cached.itemsDueInNextMonth || 0,
+        });
+        setLoading(false);
+        fetchFreshData().catch((error) => {
+          console.error(
+            "Error refreshing Primary Flowmeter calibration data:",
+            error
+          );
+        });
         return;
       }
 
-      // Calculate the next calibration due date (soonest nextCalibration date)
-      const validNextCalibrations = calibrations
-        .filter((cal) => cal.nextCalibration)
-        .map((cal) => new Date(cal.nextCalibration))
-        .sort((a, b) => a - b);
-
-      if (validNextCalibrations.length > 0) {
-        setNextCalibrationDue(validNextCalibrations[0]);
-      }
-
-      // Calculate items due in next month (next 30 days)
-      const now = new Date();
-      const thirtyDaysFromNow = new Date(
-        now.getTime() + 30 * 24 * 60 * 60 * 1000
-      );
-
-      const dueInNextMonth = calibrations.filter((cal) => {
-        if (!cal.nextCalibration) return false;
-        const nextCalDate = new Date(cal.nextCalibration);
-        return nextCalDate >= now && nextCalDate <= thirtyDaysFromNow;
-      }).length;
-
-      setItemsDueInNextMonth(dueInNextMonth);
+      await fetchFreshData();
     } catch (error) {
       console.error(
         "Error fetching Primary Flowmeter calibration data:",
         error
       );
-      setNextCalibrationDue(null);
-      setItemsDueInNextMonth(0);
+      applyStats({ nextCalibrationDue: null, itemsDueInNextMonth: 0 });
     } finally {
       setLoading(false);
     }

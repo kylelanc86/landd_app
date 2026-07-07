@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Box,
   Grid,
@@ -12,7 +12,6 @@ import {
 import { tokens } from "../../../theme/tokens";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import ListAltIcon from "@mui/icons-material/ListAlt";
 import ScheduleIcon from "@mui/icons-material/Schedule";
 import { useAuth } from "../../../context/AuthContext";
 import { hasPermission } from "../../../config/permissions";
@@ -30,13 +29,30 @@ import PureAsbestos from "./widgets/PureAsbestos";
 import RiLiquid from "./widgets/RiLiquid";
 import Sieves from "./widgets/Sieves";
 import Furnace from "./widgets/Furnace";
+import PneumaticTester from "./widgets/PneumaticTester";
+import MassBalances from "./widgets/MassBalances";
+import Micrometer from "./widgets/Micrometer";
+import FumeHoods from "./widgets/FumeHoods";
+import Calipers from "./widgets/Calipers";
+import {
+  resolveCalibrationsTab,
+  storeCalibrationsTab,
+} from "./calibrationsNavigationUtils";
 
 const Calibrations = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const view = searchParams.get("view") || "laboratory";
   const { currentUser } = useAuth();
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTab, setActiveTab] = useState(() =>
+    resolveCalibrationsTab(searchParams.get("tab"))
+  );
+
+  useEffect(() => {
+    const resolvedTab = resolveCalibrationsTab(searchParams.get("tab"));
+    setActiveTab(resolvedTab);
+    storeCalibrationsTab(resolvedTab);
+  }, [searchParams]);
 
   const handleBackToHome = () => {
     navigate(`/records?view=${view}`);
@@ -44,6 +60,18 @@ const Calibrations = () => {
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
+    storeCalibrationsTab(newValue);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("tab", newValue === 1 ? "external" : "internal");
+        if (!next.get("view")) {
+          next.set("view", view);
+        }
+        return next;
+      },
+      { replace: true }
+    );
   };
 
   // Check if user has admin access
@@ -99,23 +127,6 @@ const Calibrations = () => {
               Calibration Frequency
             </Button>
           )}
-          <Button
-            variant="contained"
-            startIcon={<ListAltIcon />}
-            onClick={() => navigate("/records/laboratory/equipment")}
-            sx={{
-              backgroundColor: tokens.primary[700],
-              color: tokens.grey[100],
-              fontSize: "14px",
-              fontWeight: "bold",
-              padding: "10px 20px",
-              "&:hover": {
-                backgroundColor: tokens.primary[800],
-              },
-            }}
-          >
-            Equipment List
-          </Button>
         </Box>
       </Box>
 
@@ -159,6 +170,30 @@ const Calibrations = () => {
 
       {activeTab === 1 && (
         <Grid container spacing={3}>
+          {/* Calipers */}
+          <Grid item xs={12} md={6} lg={3}>
+            <Calipers viewCalibrationsPath="/records/laboratory/calibrations/calipers" />
+          </Grid>
+          {/* Fume Hoods */}
+          <Grid item xs={12} md={6} lg={3}>
+            <FumeHoods viewCalibrationsPath="/records/laboratory/calibrations/fume-hoods" />
+          </Grid>
+          {/* Furnace */}
+          <Grid item xs={12} md={6} lg={3}>
+            <Furnace viewCalibrationsPath="/records/laboratory/calibrations/furnace" />
+          </Grid>
+          {/* HSE Test Slide */}
+          <Grid item xs={12} md={6} lg={3}>
+            <HSETestSlideCalibration viewCalibrationsPath="/records/laboratory/calibrations/hse-test-slide" />
+          </Grid>
+          {/* Mass Balances */}
+          <Grid item xs={12} md={6} lg={3}>
+            <MassBalances viewCalibrationsPath="/records/laboratory/calibrations/mass-balances" />
+          </Grid>
+          {/* Micrometer */}
+          <Grid item xs={12} md={6} lg={3}>
+            <Micrometer viewCalibrationsPath="/records/laboratory/calibrations/micrometer" />
+          </Grid>
           {/* PCM Microscope */}
           <Grid item xs={12} md={6} lg={3}>
             <MicroscopeCalibration viewCalibrationsPath="/records/laboratory/calibrations/microscope" />
@@ -167,29 +202,25 @@ const Calibrations = () => {
           <Grid item xs={12} md={6} lg={3}>
             <PLMMicroscopeCalibration viewCalibrationsPath="/records/laboratory/calibrations/plm-microscope" />
           </Grid>
-          {/* Stereomicroscope */}
+          {/* Pneumatic Tester */}
           <Grid item xs={12} md={6} lg={3}>
-            <StereomicroscopeCalibration viewCalibrationsPath="/records/laboratory/calibrations/stereomicroscope" />
-          </Grid>
-          {/* HSE Test Slide */}
-          <Grid item xs={12} md={6} lg={3}>
-            <HSETestSlideCalibration viewCalibrationsPath="/records/laboratory/calibrations/hse-test-slide" />
+            <PneumaticTester viewCalibrationsPath="/records/laboratory/calibrations/pneumatic-tester" />
           </Grid>
           {/* Primary Flowmeter */}
           <Grid item xs={12} md={6} lg={3}>
             <PrimaryFlowmeter viewCalibrationsPath="/records/laboratory/calibrations/primary-flowmeter" />
           </Grid>
-          {/* Sieves */}
-          <Grid item xs={12} md={6} lg={3}>
-            <Sieves viewCalibrationsPath="/records/laboratory/calibrations/sieves" />
-          </Grid>
           {/* Pure Asbestos */}
           <Grid item xs={12} md={6} lg={3}>
             <PureAsbestos viewCalibrationsPath="/records/laboratory/calibrations/pure-asbestos" />
           </Grid>
-          {/* Furnace */}
+          {/* Sieves */}
           <Grid item xs={12} md={6} lg={3}>
-            <Furnace viewCalibrationsPath="/records/laboratory/calibrations/furnace" />
+            <Sieves viewCalibrationsPath="/records/laboratory/calibrations/sieves" />
+          </Grid>
+          {/* Stereomicroscope */}
+          <Grid item xs={12} md={6} lg={3}>
+            <StereomicroscopeCalibration viewCalibrationsPath="/records/laboratory/calibrations/stereomicroscope" />
           </Grid>
         </Grid>
       )}

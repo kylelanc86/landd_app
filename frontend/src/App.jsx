@@ -4,6 +4,7 @@ import { ColorModeContext, useMode } from "./theme";
 import { AuthProvider } from "./context/AuthContext";
 import { PermissionDeniedProvider } from "./context/PermissionDeniedContext";
 import { ProjectStatusesProvider } from "./context/ProjectStatusesContext";
+import { NotificationCentreProvider } from "./context/NotificationCentreContext";
 import { UserListsProvider } from "./context/UserListsContext";
 import { SnackbarProvider } from "./context/SnackbarContext";
 
@@ -43,6 +44,21 @@ import RiLiquidHistoryPage from "./scenes/records/calibrations/RiLiquidHistoryPa
 import GraticulePage from "./scenes/records/calibrations/GraticulePage.jsx";
 import GraticuleHistoryPage from "./scenes/records/calibrations/GraticuleHistoryPage.jsx";
 import PrimaryFlowmeterPage from "./scenes/records/calibrations/PrimaryFlowmeterPage.jsx";
+import PrimaryFlowmeterCalibrationPage from "./scenes/records/calibrations/PrimaryFlowmeterCalibrationPage.jsx";
+import FurnacePage from "./scenes/records/calibrations/FurnacePage.jsx";
+import FurnaceCalibrationPage from "./scenes/records/calibrations/FurnaceCalibrationPage.jsx";
+import PneumaticTesterPage from "./scenes/records/calibrations/PneumaticTesterPage.jsx";
+import PneumaticTesterCalibrationPage from "./scenes/records/calibrations/PneumaticTesterCalibrationPage.jsx";
+import SievesPage from "./scenes/records/calibrations/SievesPage.jsx";
+import SieveCalibrationPage from "./scenes/records/calibrations/SieveCalibrationPage.jsx";
+import MassBalancesPage from "./scenes/records/calibrations/MassBalancesPage.jsx";
+import MassBalancesCalibrationPage from "./scenes/records/calibrations/MassBalancesCalibrationPage.jsx";
+import MicrometerPage from "./scenes/records/calibrations/MicrometerPage.jsx";
+import MicrometerCalibrationPage from "./scenes/records/calibrations/MicrometerCalibrationPage.jsx";
+import CalipersPage from "./scenes/records/calibrations/CalipersPage.jsx";
+import CalipersCalibrationPage from "./scenes/records/calibrations/CalipersCalibrationPage.jsx";
+import FumeHoodsPage from "./scenes/records/calibrations/FumeHoodsPage.jsx";
+import FumeHoodsCalibrationPage from "./scenes/records/calibrations/FumeHoodsCalibrationPage.jsx";
 import EquipmentList from "./scenes/records/EquipmentList.jsx";
 import ArchivedEquipmentList from "./scenes/records/ArchivedEquipmentList.jsx";
 import FibreIdIndex from "./scenes/fibreID/index.jsx";
@@ -53,6 +69,7 @@ import ClientSuppliedFibreCountAnalysis from "./scenes/fibreID/ClientSuppliedFib
 import ClientSuppliedFibreIDAnalysis from "./scenes/fibreID/ClientSuppliedFibreIDAnalysis.jsx";
 import LDsuppliedAnalysisPage from "./scenes/fibreID/LDsuppliedAnalysisPage.jsx";
 import UserManual from "./scenes/userManual/UserManual";
+import NotificationCentre from "./scenes/notifications/NotificationCentre.jsx";
 
 // Lazy loaded components
 const Projects = lazy(() => import("./scenes/projects"));
@@ -238,6 +255,7 @@ function App() {
                       <ProtectedRoute>
                         <UserListsProvider>
                           <ProjectStatusesProvider>
+                            <NotificationCentreProvider>
                             <Layout>
                               <Routes>
                                 <Route path="/" element={<Dashboard />} />
@@ -505,6 +523,10 @@ function App() {
                                   path="/user-manual"
                                   element={<UserManual />}
                                 />
+                                <Route
+                                  path="/notifications"
+                                  element={<NotificationCentre />}
+                                />
 
                                 {isFeatureEnabled("ADVANCED.SURVEYS") && (
                                   <Route
@@ -738,8 +760,9 @@ function App() {
                                 {isFeatureEnabled(
                                   "ADVANCED.ASBESTOS_REMOVAL",
                                 ) && (
+
                                   <Route
-                                    path="/clearances/:clearanceId/enclosure-inspection"
+                                    path="/asbestos-removal/jobs/:jobId/enclosure-inspection/:clearanceId"
                                     element={
                                       <PermissionRoute
                                         requiredPermissions={["asbestos.view"]}
@@ -941,6 +964,18 @@ function App() {
                                   }
                                 />
                                 <Route
+                                  path="/records/laboratory/calibrations/ri-liquid/:bottleId"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <RiLiquidHistoryPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
                                   path="/records/laboratory/calibrations/graticule"
                                   element={
                                     <ProtectedRoute
@@ -975,6 +1010,138 @@ function App() {
                                   }
                                 />
                                 <Route
+                                  path="/records/laboratory/calibrations/furnace/new"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <FurnaceCalibrationPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/furnace/edit/:calibrationId"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <FurnaceCalibrationPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/furnace"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <FurnacePage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/pneumatic-tester/new"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <PneumaticTesterCalibrationPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/pneumatic-tester/edit/:calibrationId"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <PneumaticTesterCalibrationPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/pneumatic-tester"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <PneumaticTesterPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/sieves/new"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <SieveCalibrationPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/sieves/edit/:calibrationId"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <SieveCalibrationPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/sieves"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <SievesPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/primary-flowmeter/new"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <PrimaryFlowmeterCalibrationPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/primary-flowmeter/edit/:calibrationId"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <PrimaryFlowmeterCalibrationPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
                                   path="/records/laboratory/calibrations/primary-flowmeter"
                                   element={
                                     <ProtectedRoute
@@ -983,6 +1150,150 @@ function App() {
                                       ]}
                                     >
                                       <PrimaryFlowmeterPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/mass-balances/new"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <MassBalancesCalibrationPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/mass-balances/edit/:calibrationId"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <MassBalancesCalibrationPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/mass-balances"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <MassBalancesPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/micrometer/new"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <MicrometerCalibrationPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/micrometer/edit/:calibrationId"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <MicrometerCalibrationPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/micrometer"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <MicrometerPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/calipers/new"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <CalipersCalibrationPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/calipers/edit/:calibrationId"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <CalipersCalibrationPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/calipers"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <CalipersPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/fume-hoods/new"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <FumeHoodsCalibrationPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/fume-hoods/edit/:calibrationId"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <FumeHoodsCalibrationPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/fume-hoods"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <FumeHoodsPage />
                                     </ProtectedRoute>
                                   }
                                 />
@@ -1837,6 +2148,7 @@ function App() {
                                 )}
                               </Routes>
                             </Layout>
+                            </NotificationCentreProvider>
                           </ProjectStatusesProvider>
                         </UserListsProvider>
                       </ProtectedRoute>

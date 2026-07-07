@@ -95,6 +95,7 @@ const SampleList = () => {
   const [previewDescriptionOfWorks, setPreviewDescriptionOfWorks] = useState("");
   const [editablePreviewSamples, setEditablePreviewSamples] = useState([]);
   const [duplicateInProgress, setDuplicateInProgress] = useState(false);
+  const [savingNotes, setSavingNotes] = useState(false);
 
   const SAMPLE_TYPE_OPTIONS = ["Background", "Clearance", "Exposure", "-"];
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -833,6 +834,21 @@ const SampleList = () => {
       console.error("Error saving description of works:", err);
       setDescSaveStatus("Error");
       return false;
+    }
+  };
+
+  const handleNotesBlur = async () => {
+    if (!shiftId || savingNotes || isReportAuthorized) return;
+    try {
+      setSavingNotes(true);
+      await shiftService.update(shiftId, {
+        notes: shift?.notes || "",
+      });
+    } catch (err) {
+      console.error("Error saving notes:", err);
+      showSnackbar("Failed to save notes", "error");
+    } finally {
+      setSavingNotes(false);
     }
   };
 
@@ -1604,6 +1620,25 @@ const SampleList = () => {
           </TableBody>
         </Table>
       </TableContainer>
+
+      <Box sx={{ mt: 2 }}>
+        <TextField
+          fullWidth
+          label="Notes"
+          value={shift?.notes || ""}
+          onChange={(e) =>
+            setShift((prev) => ({
+              ...prev,
+              notes: e.target.value,
+            }))
+          }
+          onBlur={handleNotesBlur}
+          multiline
+          rows={3}
+          disabled={savingNotes || isReportAuthorized}
+          placeholder="Optional notes"
+        />
+      </Box>
 
       <Box
         sx={{

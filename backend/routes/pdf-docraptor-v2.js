@@ -119,13 +119,13 @@ const formatSecondaryHeaderHtml = (value = "") => {
  * Enclosure certificate: use only bullet lines from friable legislativeRequirementsContent so
  * template intros/closings (e.g. "Friable Clearance Certificates should be written…",
  * "These regulations require…") are not shown—agreed intro + list only.
- * If template uses {LEGISLATION} only, returns trimmed raw for replacePlaceholders.
+ * With legislationOnly, {LEGISLATION} templates yield only the placeholder (no clearance intro).
  */
-function legislativeTemplateBulletsOnly(rawContent) {
+function legislativeTemplateBulletsOnly(rawContent, { legislationOnly = false } = {}) {
   if (!rawContent || typeof rawContent !== "string") return "";
   const trimmed = rawContent.trim();
   if (/\{LEGISLATION\}|\[LEGISLATION\]/.test(trimmed)) {
-    return trimmed;
+    return legislationOnly ? "{LEGISLATION}" : trimmed;
   }
   const normalized = trimmed.replace(/\[BR\]/gi, "\n").replace(/\{BR\}/gi, "\n");
   const bulletLines = [];
@@ -146,6 +146,31 @@ function legislativeTemplateBulletsOnly(rawContent) {
   }
   if (bulletLines.length === 0) return trimmed;
   return bulletLines.join("\n");
+}
+
+/** Strip friable/clearance legislative intro and closing paragraphs from processed HTML (enclosure PDFs only). */
+function stripEnclosureLegislativeTemplateIntro(html) {
+  if (!html || typeof html !== "string") return "";
+  let result = html;
+  const introPatterns = [
+    /<div class="paragraph">\s*Friable Clearance Certificates should be written in general accordance with and with reference to:\s*<\/div>/gi,
+    /<div class="paragraph">\s*Friable \(Non-Friable Conditions\) Clearance Certificates should be written in general accordance with and with reference to:\s*<\/div>/gi,
+    /<div class="paragraph">\s*Non-?Friable Clearance Certificates should be written in general accordance with and with reference to:\s*<\/div>/gi,
+    /<div class="paragraph">\s*The clearance inspection (?:was|is) conducted in accordance with the following legislative requirements:\s*<\/div>/gi,
+    /Friable Clearance Certificates should be written in general accordance with and with reference to:\s*/gi,
+    /Friable \(Non-Friable Conditions\) Clearance Certificates should be written in general accordance with and with reference to:\s*/gi,
+    /Non-?Friable Clearance Certificates should be written in general accordance with and with reference to:\s*/gi,
+    /The clearance inspection (?:was|is) conducted in accordance with the following legislative requirements:\s*/gi,
+  ];
+  for (const pattern of introPatterns) {
+    result = result.replace(pattern, "");
+  }
+  result = result.replace(
+    /\s*(?:<br\s*\/?>\s*)*<div class="paragraph">\s*These regulations require[\s\S]*$/i,
+    "",
+  );
+  result = result.replace(/\s*These regulations require[\s\S]*$/i, "");
+  return result.trim();
 }
 
 /**
@@ -1362,18 +1387,6 @@ const generateEnclosureCertificateHTML = async (
     clearanceData?.projectId ||
     "Unknown";
   const footerText = `Enclosure Inspection Certificate: ${siteAddress}`;
-  const clearanceDateLabel = formatClearanceDate(clearanceData?.clearanceDate);
-  const issueDate = todaySydney();
-  const inspectedByTrimmed = (clearanceData?.enclosureInspectedBy || "").trim();
-  const laaName = inspectedByTrimmed
-    ? inspectedByTrimmed
-    : clearanceData?.createdBy?.firstName && clearanceData?.createdBy?.lastName
-      ? `${clearanceData.createdBy.firstName} ${clearanceData.createdBy.lastName}`
-      : clearanceData?.LAA || "Unknown LAA";
-  const enclosureDescription = (enclosureData?.description || "").trim();
-  const enclosurePhotos = Array.isArray(enclosureData?.photos)
-    ? enclosureData.photos.filter((p) => p && p.data)
-    : [];
   let clearanceDateForPlaceholders = clearanceData?.clearanceDate;
   let inspectionTimeForPlaceholders = clearanceData?.inspectionTime || "";
   const enclosureIso = clearanceData?.enclosureInspectionDateTime;
@@ -1392,6 +1405,19 @@ const generateEnclosureCertificateHTML = async (
       inspectionTimeForPlaceholders = `${hh}:${mm}`;
     }
   }
+  const clearanceDateLabel = formatClearanceDate(clearanceDateForPlaceholders);
+  const inspectionDateLabel = clearanceDateLabel;
+  const issueDate = formatClearanceDate(new Date());
+  const inspectedByTrimmed = (clearanceData?.enclosureInspectedBy || "").trim();
+  const laaName = inspectedByTrimmed
+    ? inspectedByTrimmed
+    : clearanceData?.createdBy?.firstName && clearanceData?.createdBy?.lastName
+      ? `${clearanceData.createdBy.firstName} ${clearanceData.createdBy.lastName}`
+      : clearanceData?.LAA || "Unknown LAA";
+  const enclosureDescription = (enclosureData?.description || "").trim();
+  const enclosurePhotos = Array.isArray(enclosureData?.photos)
+    ? enclosureData.photos.filter((p) => p && p.data)
+    : [];
 
   const resolvedLegislation = await resolveSelectedLegislation(
     friableTemplate?.selectedLegislation,
@@ -1411,7 +1437,7 @@ const generateEnclosureCertificateHTML = async (
 
   const enclosureIntroTemplate =
     "Following discussions with {CLIENT_NAME}, Lancaster and Dickenson Consulting (L & D) were contracted to undertake a visual inspection and smoke test of the friable asbestos removal enclosure(s) located at {SITE_NAME} (herein referred to as 'the Site').\n\n" +
-    "This enclosure was constructed by {ASBESTOS_REMOVALIST}.  {LAA_NAME} ({LAA_STATE} Licenced Asbestos Assessor - {LAA_LICENSE}) from L&D visited the Site at {INSPECTION_TIME} on {INSPECTION_DATE}.";
+    `This enclosure was constructed by {ASBESTOS_REMOVALIST}.  {LAA_NAME} ({LAA_STATE} Licenced Asbestos Assessor - {LAA_LICENSE}) from L&D visited the Site at {INSPECTION_TIME} on ${inspectionDateLabel}.`;
 
   const introProcessed = await replacePlaceholders(
     enclosureIntroTemplate,
@@ -1424,9 +1450,11 @@ const generateEnclosureCertificateHTML = async (
   const rawLegislative =
     friableTemplate?.standardSections?.legislativeRequirementsContent || "";
   const legislativeFromFriableTemplate = rawLegislative
-    ? await replacePlaceholders(
-        legislativeTemplateBulletsOnly(rawLegislative),
-        enclosureTemplateData,
+    ? stripEnclosureLegislativeTemplateIntro(
+        await replacePlaceholders(
+          legislativeTemplateBulletsOnly(rawLegislative, { legislationOnly: true }),
+          enclosureTemplateData,
+        ),
       )
     : "";
   const limitationsTitle = "LIMITATIONS";
@@ -1457,7 +1485,13 @@ const generateEnclosureCertificateHTML = async (
   }
   const attachmentsText = attachmentsTextParts.join(" ");
 
-  const enclosureCertificateApprovedBy = "Jordan Smith";
+  let enclosureCertificateApprovedBy;
+  if (clearanceData?.enclosureCertificateApprovedBy) {
+    enclosureCertificateApprovedBy = clearanceData.enclosureCertificateApprovedBy;
+  } else {
+    enclosureCertificateApprovedBy =
+      '<span style="color: red;">Awaiting Authorisation</span>';
+  }
   const enclosureSitePlanFigureTitle = (() => {
     const t = (clearanceData?.sitePlanFigureTitle || "").trim();
     if (!t || t === "Asbestos Removal Site Plan") {
@@ -2543,7 +2577,7 @@ const getLeadClearanceAppendices = (clearanceData) => {
   const hasPhotographs = clearanceData.items && clearanceData.items.some(item =>
     item.photographs && item.photographs.some(photo => photo.includeInReport !== false)
   );
-  const hasSitePlan = !!(clearanceData.sitePlan && clearanceData.sitePlanFile);
+  const hasSitePlan = !!clearanceData.sitePlanFile;
   const hasPreWorks = !!(clearanceData.sampling && Array.isArray(clearanceData.sampling.preWorksSamples) && clearanceData.sampling.preWorksSamples.length > 0);
   const hasValidation = !!(clearanceData.sampling && Array.isArray(clearanceData.sampling.validationSamples) && clearanceData.sampling.validationSamples.length > 0);
   const hasAirMonitoring = !!(clearanceData.leadMonitoringReports && clearanceData.leadMonitoringReports.length > 0);
@@ -2711,6 +2745,84 @@ const generateLeadClearancePhotographsHTML = (clearanceData, options) => {
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><title>Photographs</title><style>${fontFaces}${pageStyles}</style></head><body>${pages.join('')}</body></html>`;
 };
 
+function getLeadSitePlanPageStyles(frontendUrl) {
+  const A4_LANDSCAPE_HEIGHT = '210mm';
+  const A4_LANDSCAPE_WIDTH = '297mm';
+  return `
+    @font-face { font-family: "Gothic"; src: url("${frontendUrl}/fonts/static/Gothic-Regular.ttf") format("truetype"); font-weight: normal; font-style: normal; }
+    @font-face { font-family: "Gothic"; src: url("${frontendUrl}/fonts/static/Gothic-Bold.ttf") format("truetype"); font-weight: bold; font-style: normal; }
+    @page appendix-landscape { size: A4 landscape; margin: 0; }
+    @page { size: A4 landscape; margin: 0; }
+    * { box-sizing: border-box; hyphens: none !important; -webkit-hyphens: none !important; word-break: keep-all !important; overflow-wrap: normal !important; }
+    html, body { margin: 0; padding: 0; font-family: "Gothic", Arial, sans-serif; background: #fff; }
+    .single-doc-site-plan-section {
+      width: ${A4_LANDSCAPE_WIDTH};
+      min-width: ${A4_LANDSCAPE_WIDTH};
+      height: ${A4_LANDSCAPE_HEIGHT};
+      min-height: ${A4_LANDSCAPE_HEIGHT};
+      page: appendix-landscape;
+      box-sizing: border-box;
+    }
+    .single-doc-site-plan-section .site-plan-page {
+      page: appendix-landscape;
+      width: 100% !important;
+      height: 100% !important;
+      min-height: 100% !important;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+      page-break-after: avoid;
+      page-break-inside: avoid;
+      box-sizing: border-box;
+    }
+    .site-plan-page .header { flex-shrink: 0; display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 48px 0 48px; margin: 0; font-family: "Gothic", Arial, sans-serif; }
+    .site-plan-page .green-line { flex-shrink: 0; width: calc(100% - 96px); height: 1.5px; background: #16b12b; margin: 8px auto 0 auto; border-radius: 0; }
+    .site-plan-page .content { flex: 1; min-height: 0; overflow: hidden; padding: 5px 48px 10px 48px; display: flex; flex-direction: column; }
+    .site-plan-page .footer { flex-shrink: 0; position: relative; left: 0; right: 0; bottom: 0; width: 100%; padding: 0 48px 16px 48px; text-align: justify; font-size: 0.75rem; color: #222; font-family: "Gothic", Arial, sans-serif; }
+    .logo { width: 243px; height: auto; display: block; background: #fff; margin: 0; }
+    .company-details { text-align: right; font-size: 0.75rem; color: #222; line-height: 1.5; margin-top: 8px; margin: 0; }
+    .company-details .website { color: #16b12b; font-weight: 500; }
+    .footer-border-line { width: 100%; height: 1.5px; background: #16b12b; margin-bottom: 6px; border-radius: 0; }
+    .footer-content { width: 100%; display: flex; justify-content: space-between; align-items: flex-end; }
+    .footer-text { flex: 1; }
+    .site-plan-layout { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: row; justify-content: flex-start; gap: 10px; align-items: flex-start; margin: 0; width: 100%; padding: 0 8px 0 0; }
+    .site-plan-container { flex: 1 1 auto; width: auto; max-width: none; min-width: 0; overflow: hidden; display: flex; flex-direction: column; padding: 0; margin: 12px 0 0 0; border: none; background: transparent; border-radius: 0; box-shadow: none; }
+    .site-plan-container .site-plan-image-wrapper { flex: 0 0 auto; width: fit-content; max-width: 100%; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+    .site-plan-container .site-plan-image { display: block; width: auto; height: auto; max-width: 100%; max-height: 72vh; object-fit: contain; border: 1.5px solid #999; box-sizing: border-box; margin: 0; padding: 0; background: transparent; }
+    .site-plan-container .site-plan-figure-caption { flex-shrink: 0; font-size: 14px; font-weight: 400; color: #222; text-align: left; margin-top: 8px; font-family: "Gothic", Arial, sans-serif; }
+    .site-plan-legend-container { flex: 0 0 280px; max-width: 280px; min-width: 260px; font-family: "Gothic", Arial, sans-serif; }
+  `;
+}
+
+const isLeadClearanceSitePlanImage = (file) =>
+  typeof file === 'string' &&
+  (file.startsWith('/9j/') || file.startsWith('iVBORw0KGgo') || file.startsWith('data:image/'));
+
+/**
+ * Generate HTML for lead clearance site plan appendix content page (drawn/uploaded image site plans).
+ */
+const generateLeadClearanceSitePlanHTML = async (clearanceData, options) => {
+  const { logoBase64, footerText, frontendUrl, appendixLetter } = options;
+  const file = clearanceData.sitePlanFile;
+  if (!file || !isLeadClearanceSitePlanImage(file)) return '';
+
+  const trimmedSitePlan = await trimSitePlanImage(file);
+  const trimmedData = { ...clearanceData, sitePlanFile: trimmedSitePlan };
+  const figureTitle = clearanceData.sitePlanFigureTitle || 'Lead Clearance Site Plan';
+  const pageContent = generateSitePlanContentPage(
+    trimmedData,
+    appendixLetter || 'B',
+    logoBase64,
+    footerText,
+    'sitePlanFile',
+    'SITE PLAN',
+    figureTitle
+  );
+
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><title>Site Plan</title><style>${getLeadSitePlanPageStyles(frontendUrl)}</style></head><body><div class="single-doc-site-plan-section" style="page: appendix-landscape">${pageContent}</div></body></html>`;
+};
+
 function getLeadPhotoPageStyles(frontendUrl) {
   return `
   @page { size: A4; margin: 0; }
@@ -2853,7 +2965,7 @@ router.post("/generate-enclosure-certificate", async (req, res) => {
     const siteName =
       clearanceData.projectId?.name || clearanceData.project?.name || "Unknown";
     const dateStr = clearanceData.clearanceDate
-      ? formatDateSydney(clearanceData.clearanceDate)
+      ? formatClearanceDate(clearanceData.clearanceDate)
       : "Unknown";
     const filename = `${projectId}_Enclosure Inspection Certificate - ${siteName} (${dateStr}).pdf`;
 
@@ -3194,13 +3306,32 @@ router.get('/download-by-clearance/:clearanceId', async (req, res) => {
  * Used by download/:jobId (lead-clearance) and download-by-lead-clearance/:clearanceId.
  */
 async function mergeLeadClearanceAppendices(pdfBuffer, leadClearanceData) {
-  const appendices = getLeadClearanceAppendices(leadClearanceData);
+  let data = leadClearanceData;
+  const clearanceId = leadClearanceData?._id;
+  if (clearanceId) {
+    try {
+      const fresh = await LeadClearance.findById(clearanceId)
+        .populate({
+          path: 'projectId',
+          select: 'projectID name client',
+          populate: { path: 'client', select: 'name' },
+        })
+        .lean();
+      if (fresh) {
+        data = { ...data, ...fresh };
+      }
+    } catch (reloadErr) {
+      console.warn('Could not reload lead clearance for appendix merge:', reloadErr.message);
+    }
+  }
+
+  const appendices = getLeadClearanceAppendices(data);
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const logoPath = path.join(__dirname, '../assets/logo.png');
   const logoBase64 = fs.existsSync(logoPath) ? fs.readFileSync(logoPath).toString('base64') : '';
   const watermarkPath = path.join(__dirname, '../assets/logo_small hi-res.png');
   const watermarkBase64 = fs.existsSync(watermarkPath) ? fs.readFileSync(watermarkPath).toString('base64') : '';
-  const siteNameForFooter = leadClearanceData.projectId?.name || leadClearanceData.project?.name || leadClearanceData.siteName || 'Unknown';
+  const siteNameForFooter = data.projectId?.name || data.project?.name || data.siteName || 'Unknown';
   const appendixFooterText = `Lead Removal Clearance Certificate: ${siteNameForFooter}`;
 
   let finalPdfBuffer = pdfBuffer;
@@ -3218,7 +3349,7 @@ async function mergeLeadClearanceAppendices(pdfBuffer, leadClearanceData) {
     finalPdfBuffer = await mergePDFs(finalPdfBuffer, coverPdf);
 
     if (app.key === 'photographs') {
-      const photosHtml = generateLeadClearancePhotographsHTML(leadClearanceData, {
+      const photosHtml = generateLeadClearancePhotographsHTML(data, {
         logoBase64,
         footerText: appendixFooterText,
         frontendUrl,
@@ -3228,17 +3359,36 @@ async function mergeLeadClearanceAppendices(pdfBuffer, leadClearanceData) {
         prince_options: { page_margin: '0.5in', media: 'print', html_mode: 'quirks' },
       });
       finalPdfBuffer = await mergePDFs(finalPdfBuffer, photosPdf);
-    } else if (app.key === 'sitePlan' && leadClearanceData.sitePlan && leadClearanceData.sitePlanFile) {
-      const file = leadClearanceData.sitePlanFile;
-      if (!file.startsWith('/9j/') && !file.startsWith('iVBORw0KGgo') && !file.startsWith('data:image/')) {
+    } else if (app.key === 'sitePlan' && data.sitePlanFile) {
+      const file = data.sitePlanFile;
+      if (isLeadClearanceSitePlanImage(file)) {
+        try {
+          const sitePlanHtml = await generateLeadClearanceSitePlanHTML(data, {
+            logoBase64,
+            footerText: appendixFooterText,
+            frontendUrl,
+            appendixLetter: app.letter,
+          });
+          if (sitePlanHtml) {
+            const sitePlanPdf = await docRaptorService.generatePDF(sitePlanHtml, {
+              page_size: 'A4 landscape',
+              page_margin: '0in',
+              prince_options: { page_margin: '0', media: 'print', html_mode: 'quirks' },
+            });
+            finalPdfBuffer = await mergePDFs(finalPdfBuffer, sitePlanPdf);
+          }
+        } catch (err) {
+          console.error('Error generating lead clearance site plan PDF:', err);
+        }
+      } else {
         try {
           finalPdfBuffer = await mergePDFs(finalPdfBuffer, file);
         } catch (err) {
           console.error('Error merging lead clearance site plan PDF:', err);
         }
       }
-    } else if (app.key === 'airMonitoringReports' && leadClearanceData.leadMonitoringReports && leadClearanceData.leadMonitoringReports.length > 0) {
-      const leadReports = [...leadClearanceData.leadMonitoringReports].sort(
+    } else if (app.key === 'airMonitoringReports' && data.leadMonitoringReports && data.leadMonitoringReports.length > 0) {
+      const leadReports = [...data.leadMonitoringReports].sort(
         (a, b) => new Date(a.shiftDate || 0) - new Date(b.shiftDate || 0)
       );
       for (const report of leadReports) {

@@ -121,7 +121,7 @@ const BaseCalibrationWidget = ({
             component="h2"
             gutterBottom
             sx={{
-              fontSize: isTablet ? "1.25rem" : "1.5rem",
+              fontSize: isTablet ? "1rem" : "1.25rem",
               marginBottom: isTablet ? "10px" : "12px",
               fontWeight: 600,
               color: "#1a1a1a",
@@ -133,14 +133,14 @@ const BaseCalibrationWidget = ({
           {!hideNextCalibrationDue && (
             <Box mb={2}>
               <Typography
-                variant="body2"
+                variant="body4"
                 color="text.secondary"
                 sx={{
-                  fontSize: isTablet ? "0.875rem" : "0.9375rem",
+                  fontSize: isTablet ? "0.8rem" : "0.85rem",
                   lineHeight: 1.6,
                 }}
               >
-                Next Calibration Due:{" "}
+                Calibration Due:{" "}
                 {nextCalibrationDue
                   ? formatDate(nextCalibrationDue)
                   : "Not scheduled"}

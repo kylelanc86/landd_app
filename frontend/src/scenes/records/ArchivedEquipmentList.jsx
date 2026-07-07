@@ -44,6 +44,9 @@ import plmMicroscopeService from "../../services/plmMicroscopeService";
 import stereomicroscopeService from "../../services/stereomicroscopeService";
 import { graticuleService } from "../../services/graticuleService";
 import hseTestSlideService from "../../services/hseTestSlideService";
+import furnaceCalibrationService from "../../services/furnaceCalibrationService";
+import pneumaticTesterCalibrationService from "../../services/pneumaticTesterCalibrationService";
+import primaryFlowmeterService from "../../services/primaryFlowmeterService";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
 
@@ -73,6 +76,7 @@ const ArchivedEquipmentList = () => {
     equipmentType: "",
     section: "",
     brandModel: "",
+    serialNumber: "",
   });
 
   const [filters, setFilters] = useState({
@@ -116,234 +120,6 @@ const ArchivedEquipmentList = () => {
     }
   };
 
-  // Helper function to process pump calibrations (extracted for reuse)
-  const processPumpCalibrations = useCallback((pump, calibrations) => {
-    // Calculate lastCalibration (most recent calibration date)
-    const lastCalibration =
-      calibrations.length > 0
-        ? new Date(
-            Math.max(
-              ...calibrations.map((cal) =>
-                new Date(cal.calibrationDate || cal.date).getTime(),
-              ),
-            ),
-          )
-        : null;
-
-    // Calculate calibrationDue (most recent nextCalibrationDue date)
-    const calibrationDue =
-      calibrations.length > 0
-        ? new Date(
-            Math.max(
-              ...calibrations
-                .filter((cal) => cal.nextCalibrationDue || cal.calibrationDue)
-                .map((cal) =>
-                  new Date(
-                    cal.nextCalibrationDue || cal.calibrationDue,
-                  ).getTime(),
-                ),
-            ),
-          )
-        : null;
-
-    // Get the most recent calibration for status checking
-    const mostRecentCalibration =
-      calibrations.length > 0
-        ? calibrations.sort(
-            (a, b) =>
-              new Date(b.calibrationDate || b.date) -
-              new Date(a.calibrationDate || a.date),
-          )[0]
-        : null;
-
-    return {
-      ...pump,
-      lastCalibration,
-      calibrationDue,
-      mostRecentCalibration, // Store for status calculation
-      allCalibrations: calibrations, // Store all calibrations for status calculation
-    };
-  }, []);
-
-  // Helper function to fetch calibration data for an equipment item
-  const fetchCalibrationDataForEquipment = async (equipmentItem) => {
-    try {
-      let calibrations = [];
-      const equipmentReference = equipmentItem.equipmentReference;
-      const equipmentType = equipmentItem.equipmentType;
-
-      switch (equipmentType) {
-        case "Site flowmeter":
-        case "Bubble flowmeter":
-          try {
-            const response =
-              await flowmeterCalibrationService.getByFlowmeter(
-                equipmentReference,
-              );
-            calibrations = response.data || response || [];
-          } catch (err) {
-            console.error(
-              `Error fetching flowmeter calibrations for ${equipmentReference}:`,
-              err,
-            );
-          }
-          break;
-
-        case "Graticule":
-          try {
-            const allData = await graticuleService.getAll();
-            // Handle response structure: { data: [...], pagination: {...} } or direct array
-            const calibrationsArray = Array.isArray(allData?.data)
-              ? allData.data
-              : Array.isArray(allData)
-                ? allData
-                : [];
-            const filtered = calibrationsArray.filter(
-              (cal) =>
-                cal.graticuleId === equipmentReference ||
-                cal.graticuleReference === equipmentReference,
-            );
-            calibrations = filtered;
-          } catch (err) {
-            console.error(
-              `Error fetching graticule calibrations for ${equipmentReference}:`,
-              err,
-            );
-          }
-          break;
-
-        case "Effective Filter Area":
-          try {
-            const efaData = await efaService.getByEquipment(equipmentReference);
-            calibrations = efaData.calibrations || efaData || [];
-          } catch (err) {
-            console.error(
-              `Error fetching EFA calibrations for ${equipmentReference}:`,
-              err,
-            );
-          }
-          break;
-
-        case "Phase Contrast Microscope":
-          try {
-            const pcmData =
-              await pcmMicroscopeService.getByEquipment(equipmentReference);
-            calibrations = pcmData.calibrations || pcmData || [];
-          } catch (err) {
-            console.error(
-              `Error fetching PCM calibrations for ${equipmentReference}:`,
-              err,
-            );
-          }
-          break;
-
-        case "Polarised Light Microscope":
-          try {
-            const plmData =
-              await plmMicroscopeService.getByEquipment(equipmentReference);
-            calibrations = plmData.calibrations || plmData || [];
-          } catch (err) {
-            console.error(
-              `Error fetching PLM calibrations for ${equipmentReference}:`,
-              err,
-            );
-          }
-          break;
-
-        case "Stereomicroscope":
-          try {
-            const stereoData =
-              await stereomicroscopeService.getByEquipment(equipmentReference);
-            calibrations = stereoData.calibrations || stereoData || [];
-          } catch (err) {
-            console.error(
-              `Error fetching Stereomicroscope calibrations for ${equipmentReference}:`,
-              err,
-            );
-          }
-          break;
-
-        case "HSE Test Slide":
-          try {
-            const hseData =
-              await hseTestSlideService.getByEquipment(equipmentReference);
-            calibrations = hseData.data || hseData || [];
-          } catch (err) {
-            console.error(
-              `Error fetching HSE Test Slide calibrations for ${equipmentReference}:`,
-              err,
-            );
-          }
-          break;
-
-        case "Air pump":
-          // Air pump calibrations are now fetched in bulk in fetchEquipment
-          // This case should not be reached during initial load
-          // If reached, it means the equipment wasn't processed in bulk fetch
-          // Return empty array to avoid individual fetch (bulk fetch should handle all pumps)
-          calibrations = [];
-          console.warn(
-            `Air pump ${equipmentReference} not found in bulk fetch results. This should not happen during initial load.`,
-          );
-          break;
-
-        default:
-          // For other equipment types, no calibration data
-          calibrations = [];
-          break;
-      }
-
-      // Calculate lastCalibration and calibrationDue from calibrations
-      let lastCalibration = null;
-      let calibrationDue = null;
-
-      if (calibrations.length > 0) {
-        // Get most recent calibration date
-        const calibrationDates = calibrations
-          .map((cal) => new Date(cal.date || cal.calibrationDate))
-          .filter((date) => !isNaN(date.getTime()));
-        if (calibrationDates.length > 0) {
-          lastCalibration = new Date(
-            Math.max(...calibrationDates.map((d) => d.getTime())),
-          );
-        }
-
-        // Get most recent nextCalibration or calibrationDue date
-        const dueDates = calibrations
-          .map((cal) => {
-            const dueDate =
-              cal.nextCalibration ||
-              cal.calibrationDue ||
-              cal.nextCalibrationDue;
-            return dueDate ? new Date(dueDate) : null;
-          })
-          .filter((date) => date && !isNaN(date.getTime()));
-        if (dueDates.length > 0) {
-          calibrationDue = new Date(
-            Math.max(...dueDates.map((d) => d.getTime())),
-          );
-        }
-      }
-
-      return {
-        ...equipmentItem,
-        lastCalibration,
-        calibrationDue,
-      };
-    } catch (err) {
-      console.error(
-        `Error fetching calibration data for ${equipmentItem.equipmentReference}:`,
-        err,
-      );
-      // Return equipment without calibration data if fetch fails
-      return {
-        ...equipmentItem,
-        lastCalibration: null,
-        calibrationDue: null,
-      };
-    }
-  };
-
   // Fetch full equipment list and cache it (only fetch once or when explicitly needed)
   const fetchEquipment = useCallback(
     async (forceRefresh = false) => {
@@ -373,91 +149,10 @@ const ArchivedEquipmentList = () => {
           `ArchivedEquipmentList: Fetched ${baseEquipment.length} archived equipment items`,
         );
 
-        // Separate air pumps from other equipment for bulk fetching
-        const airPumps = baseEquipment.filter(
-          (eq) => eq.equipmentType === "Air pump",
-        );
-        const otherEquipment = baseEquipment.filter(
-          (eq) => eq.equipmentType !== "Air pump",
-        );
-
-        // Bulk fetch calibrations for all air pumps at once
-        let pumpCalibrationsMap = {};
-        if (airPumps.length > 0) {
-          try {
-            console.log(
-              `EquipmentList: Bulk fetching calibrations for ${airPumps.length} air pumps`,
-            );
-            const pumpIds = airPumps.map(
-              (pump) => pump._id?.toString() || pump._id,
-            );
-            console.log("EquipmentList: Pump IDs:", pumpIds);
-            const bulkCalibrations =
-              await airPumpCalibrationService.getBulkPumpCalibrations(
-                pumpIds,
-                1000,
-              );
-            console.log(
-              "EquipmentList: Bulk calibrations response:",
-              bulkCalibrations,
-            );
-            // Convert to map keyed by pump _id string
-            if (bulkCalibrations && typeof bulkCalibrations === "object") {
-              Object.keys(bulkCalibrations).forEach((pumpId) => {
-                pumpCalibrationsMap[pumpId] = bulkCalibrations[pumpId];
-              });
-              console.log(
-                `EquipmentList: Mapped calibrations for ${Object.keys(pumpCalibrationsMap).length} pumps`,
-              );
-            }
-          } catch (err) {
-            console.error(
-              "EquipmentList: Error bulk fetching pump calibrations:",
-              err,
-            );
-            console.error(
-              "EquipmentList: Error details:",
-              err.response?.data || err.message,
-            );
-            // Continue with empty map - individual fetches will handle errors
-          }
-        } else {
-          console.log("EquipmentList: No air pumps found, skipping bulk fetch");
-        }
-
-        // Process air pumps with bulk-fetched calibrations
-        const airPumpsWithCalibrations = await Promise.all(
-          airPumps.map(async (pump) => {
-            // Convert pump._id to string to match backend response keys
-            const pumpIdString = pump._id?.toString() || pump._id;
-            const calibrations = pumpCalibrationsMap[pumpIdString] || [];
-            if (calibrations.length === 0) {
-              console.log(
-                `EquipmentList: No calibrations found for pump ${pump.equipmentReference} (ID: ${pumpIdString})`,
-              );
-            } else {
-              console.log(
-                `EquipmentList: Found ${calibrations.length} calibrations for pump ${pump.equipmentReference}`,
-              );
-            }
-            return processPumpCalibrations(pump, calibrations);
-          }),
-        );
-
-        // Process other equipment types (individual fetches as before)
-        const otherEquipmentWithCalibrations = await Promise.all(
-          otherEquipment.map((equipmentItem) =>
-            fetchCalibrationDataForEquipment(equipmentItem),
-          ),
-        );
-
-        // Combine and cache the full equipment list
-        const equipmentWithCalibrations = [
-          ...airPumpsWithCalibrations,
-          ...otherEquipmentWithCalibrations,
-        ];
+        // Keep table load fast: do not fetch calibration data here.
+        const equipmentWithCalibrations = baseEquipment;
         console.log(
-          `EquipmentList: Caching ${equipmentWithCalibrations.length} equipment items (${airPumpsWithCalibrations.length} air pumps, ${otherEquipmentWithCalibrations.length} other)`,
+          `EquipmentList: Caching ${equipmentWithCalibrations.length} equipment items`,
         );
         setCachedEquipment(equipmentWithCalibrations);
         hasLoadedRef.current = true;
@@ -468,7 +163,7 @@ const ArchivedEquipmentList = () => {
         setLoading(false);
       }
     },
-    [processPumpCalibrations],
+    [],
   ); // Stable callback - uses ref to track load state
 
   const handleFilterChange = (field, value) => {
@@ -508,6 +203,7 @@ const ArchivedEquipmentList = () => {
       equipmentType: equipment.equipmentType,
       section: equipment.section,
       brandModel: equipment.brandModel,
+      serialNumber: equipment.serialNumber || "",
     });
     setReferenceError(null);
     setEditDialog(true);
@@ -529,6 +225,7 @@ const ArchivedEquipmentList = () => {
         equipmentType: form.equipmentType,
         section: form.section,
         brandModel: form.brandModel,
+        serialNumber: form.serialNumber?.trim() || "",
         status: form.status || "active",
       };
 
@@ -544,6 +241,7 @@ const ArchivedEquipmentList = () => {
         equipmentType: "",
         section: "",
         brandModel: "",
+        serialNumber: "",
       });
 
       // Refresh the equipment list cache
@@ -643,7 +341,6 @@ const ArchivedEquipmentList = () => {
           }
           break;
 
-        case "Bubble flowmeter":
         case "Site flowmeter":
           try {
             const flowmeterData =
@@ -664,6 +361,29 @@ const ArchivedEquipmentList = () => {
           }
           break;
 
+        case "Bubble flowmeter":
+          try {
+            const primaryFlowmeterData =
+              await primaryFlowmeterService.getByEquipment(equipmentReference);
+            history = (
+              primaryFlowmeterData.data ||
+              primaryFlowmeterData ||
+              []
+            ).map((cal) => ({
+              date: cal.date,
+              calibrationId: cal.calibrationId || cal._id,
+              notes: cal.notes || "",
+              calibratedBy: cal.calibratedBy?.name || "N/A",
+              type: "Primary Flowmeter Calibration",
+            }));
+          } catch (err) {
+            console.error(
+              "Error fetching primary flowmeter calibrations:",
+              err,
+            );
+          }
+          break;
+
         case "Effective Filter Area":
           try {
             const efaData = await efaService.getByEquipment(equipmentReference);
@@ -676,6 +396,34 @@ const ArchivedEquipmentList = () => {
             }));
           } catch (err) {
             console.error("Error fetching EFA calibrations:", err);
+          }
+          break;
+
+        case "Filter Holder":
+          try {
+            const [efaData, archivedEfaData] = await Promise.all([
+              efaService.getByEquipment(equipmentReference),
+              efaService.getAllArchivedCalibrations({
+                filterHolderModel: equipmentReference,
+                limit: 1000,
+              }),
+            ]);
+            const activeCalibrations =
+              efaData.data || efaData.calibrations || efaData || [];
+            const archivedCalibrations = Array.isArray(archivedEfaData?.data)
+              ? archivedEfaData.data
+              : [];
+            history = [...activeCalibrations, ...archivedCalibrations].map(
+              (cal) => ({
+                date: cal.date,
+                calibrationId: cal.calibrationId || cal._id,
+                notes: cal.notes || "",
+                calibratedBy: cal.calibratedBy?.name || cal.technician || "N/A",
+                type: "EFA Calibration",
+              }),
+            );
+          } catch (err) {
+            console.error("Error fetching filter holder calibrations:", err);
           }
           break;
 
@@ -726,6 +474,42 @@ const ArchivedEquipmentList = () => {
             );
           } catch (err) {
             console.error("Error fetching Stereomicroscope calibrations:", err);
+          }
+          break;
+
+        case "Furnace":
+          try {
+            const furnaceData =
+              await furnaceCalibrationService.getByEquipment(equipmentReference);
+            history = (furnaceData.data || furnaceData || []).map((cal) => ({
+              date: cal.date,
+              calibrationId: cal.calibrationId || cal._id,
+              notes: cal.notes || "",
+              calibratedBy: cal.calibratedBy?.name || "N/A",
+              type: "Furnace Calibration",
+            }));
+          } catch (err) {
+            console.error("Error fetching furnace calibrations:", err);
+          }
+          break;
+
+        case "Pneumatic tester":
+          try {
+            const pneumaticTesterData =
+              await pneumaticTesterCalibrationService.getByEquipment(
+                equipmentReference
+              );
+            history = (pneumaticTesterData.data || pneumaticTesterData || []).map(
+              (cal) => ({
+                date: cal.date,
+                calibrationId: cal.calibrationId || cal._id,
+                notes: cal.notes || "",
+                calibratedBy: cal.calibratedBy?.name || "N/A",
+                type: "Pneumatic Tester Calibration",
+              })
+            );
+          } catch (err) {
+            console.error("Error fetching pneumatic tester calibrations:", err);
           }
           break;
 
@@ -801,65 +585,15 @@ const ArchivedEquipmentList = () => {
     fetchCalibrationHistory(equipment);
   };
 
-  // Calculate days until calibration is due
-  const calculateDaysUntilCalibration = (calibrationDue) => {
-    if (!calibrationDue) return null;
-
-    const today = new Date();
-    const dueDate = new Date(calibrationDue);
-
-    // Reset time to start of day for accurate day calculation
-    today.setHours(0, 0, 0, 0);
-    dueDate.setHours(0, 0, 0, 0);
-
-    const timeDiff = dueDate.getTime() - today.getTime();
-    const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
-
-    return daysDiff;
-  };
-
-  // Calculate the actual status based on calibration data and stored status
+  // Calculate status from stored equipment status only.
   const calculateStatus = useCallback((equipment) => {
-    // Handle null/undefined equipment
-    if (!equipment) {
-      return "Out-of-Service";
-    }
-
-    // If explicitly marked as out-of-service, return that
-    if (equipment.status === "out-of-service") {
-      return "Out-of-Service";
-    }
-
-    // If no calibration data (no lastCalibration or no calibrationDue), return out-of-service
-    if (!equipment.lastCalibration || !equipment.calibrationDue) {
-      return "Out-of-Service";
-    }
-
-    // For Air pumps, check if the most recent calibration has all flowrates failing
-    // If all test results failed, the pump should be Out-of-Service
-    // This check must happen BEFORE checking if calibration is overdue
-    if (
-      equipment.equipmentType === "Air pump" &&
-      equipment.mostRecentCalibration
-    ) {
-      const mostRecentCal = equipment.mostRecentCalibration;
-      if (mostRecentCal.testResults && mostRecentCal.testResults.length > 0) {
-        const allFailed = mostRecentCal.testResults.every(
-          (result) => !result.passed,
-        );
-        if (allFailed) {
-          return "Out-of-Service";
-        }
-      }
-    }
-
-    // Check if calibration is overdue
-    const daysUntil = calculateDaysUntilCalibration(equipment.calibrationDue);
-    if (daysUntil !== null && daysUntil < 0) {
-      return "Calibration Overdue";
-    }
-
-    // If calibrated and not yet due, return active
+    if (!equipment) return "Out-of-Service";
+    if (equipment.dueState === "out_of_service") return "Out-of-Service";
+    if (equipment.dueState === "overdue") return "Calibration Overdue";
+    if (equipment.dueState === "due") return "Calibration Overdue";
+    if (equipment.dueState === "active") return "Active";
+    if (equipment.status === "out-of-service") return "Out-of-Service";
+    if (equipment.status === "calibration due") return "Calibration Overdue";
     return "Active";
   }, []);
 
@@ -1198,68 +932,6 @@ const ArchivedEquipmentList = () => {
               },
             },
             {
-              field: "lastCalibration",
-              headerName: "Last Calibration",
-              flex: 1,
-              minWidth: 150,
-              renderCell: (params) => {
-                if (!params.row.lastCalibration) {
-                  return "-";
-                }
-                return formatDate(params.row.lastCalibration);
-              },
-            },
-            {
-              field: "calibrationDue",
-              headerName: "Calibration Due",
-              flex: 1,
-              minWidth: 150,
-              renderCell: (params) => {
-                if (!params.row.calibrationDue) {
-                  return "-";
-                }
-                const daysUntil = calculateDaysUntilCalibration(
-                  params.row.calibrationDue,
-                );
-
-                let daysText;
-                let daysColor;
-
-                if (daysUntil === 0) {
-                  daysText = "Due Today";
-                  daysColor = theme.palette.warning.main;
-                } else if (daysUntil < 0) {
-                  daysText = `${Math.abs(daysUntil)} days overdue`;
-                  daysColor = theme.palette.error.main;
-                } else {
-                  daysText = `${daysUntil} days`;
-                  daysColor =
-                    daysUntil <= 30
-                      ? theme.palette.warning.main
-                      : theme.palette.success.main;
-                }
-
-                return (
-                  <Box>
-                    <Typography
-                      variant="body2"
-                      fontWeight="medium"
-                      sx={{ color: daysColor }}
-                    >
-                      {daysText}
-                    </Typography>
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{ fontSize: "0.7rem" }}
-                    >
-                      {formatDate(params.row.calibrationDue)}
-                    </Typography>
-                  </Box>
-                );
-              },
-            },
-            {
               field: "actions",
               headerName: "Actions",
               flex: 1.5,
@@ -1341,6 +1013,7 @@ const ArchivedEquipmentList = () => {
             equipmentType: "",
             section: "",
             brandModel: "",
+            serialNumber: "",
           });
         }}
         maxWidth="md"
@@ -1362,6 +1035,7 @@ const ArchivedEquipmentList = () => {
                   equipmentType: "",
                   section: "",
                   brandModel: "",
+                  serialNumber: "",
                 });
               }}
             >
@@ -1435,6 +1109,14 @@ const ArchivedEquipmentList = () => {
                 required
                 fullWidth
               />
+              <TextField
+                label="Serial number (optional)"
+                value={form.serialNumber}
+                onChange={(e) =>
+                  setForm({ ...form, serialNumber: e.target.value })
+                }
+                fullWidth
+              />
             </Stack>
           </DialogContent>
           <DialogActions>
@@ -1447,6 +1129,7 @@ const ArchivedEquipmentList = () => {
                   equipmentType: "",
                   section: "",
                   brandModel: "",
+                  serialNumber: "",
                 });
               }}
             >

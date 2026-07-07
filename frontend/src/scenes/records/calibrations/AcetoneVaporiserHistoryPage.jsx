@@ -13,16 +13,19 @@ import {
   Button,
   useTheme,
   CircularProgress,
-  Breadcrumbs,
-  Link,
   Chip,
 } from "@mui/material";
 import { useNavigate, useParams } from "react-router-dom";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { formatDate } from "../../../utils/dateFormat";
 import { acetoneVaporiserCalibrationService } from "../../../services/acetoneVaporiserCalibrationService";
 import { equipmentService } from "../../../services/equipmentService";
+import {
+  CALIBRATION_TABS,
+} from "./calibrationsNavigationUtils";
+import CalibrationPageHeader, {
+  CALIBRATION_PAGE_PADDING,
+} from "./CalibrationPageHeader";
 
 const AcetoneVaporiserHistoryPage = () => {
   const theme = useTheme();
@@ -78,14 +81,6 @@ const AcetoneVaporiserHistoryPage = () => {
     navigate("/records/laboratory/calibrations/acetone-vaporiser");
   };
 
-  const handleBackToCalibrations = () => {
-    navigate("/records/laboratory/calibrations/list");
-  };
-
-  const handleBackToHome = () => {
-    navigate("/records");
-  };
-
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this calibration record?")) {
       return;
@@ -124,50 +119,23 @@ const AcetoneVaporiserHistoryPage = () => {
   }
 
   return (
-    <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Box>
-          <Typography variant="h4" component="h1" gutterBottom>
-            Acetone Vaporiser Calibration History
-          </Typography>
-          {equipment && (
-            <Typography variant="h6" color="text.secondary">
-              {equipment.equipmentReference}
-            </Typography>
-          )}
-        </Box>
-      </Box>
-
-      <Box mb={3}>
-        <Breadcrumbs>
-          <Link
-            component="button"
-            variant="body1"
-            onClick={handleBackToHome}
-            sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
-          >
-            <ArrowBackIcon sx={{ mr: 1 }} />
-            Records Home
-          </Link>
-          <Link
-            component="button"
-            variant="body1"
-            onClick={handleBackToCalibrations}
-            sx={{ cursor: "pointer" }}
-          >
-            Calibrations
-          </Link>
-          <Link
-            component="button"
-            variant="body1"
-            onClick={handleBackToVaporisers}
-            sx={{ cursor: "pointer" }}
-          >
-            Acetone Vaporiser
-          </Link>
-          <Typography color="text.primary">History</Typography>
-        </Breadcrumbs>
-      </Box>
+    <Box sx={{ p: CALIBRATION_PAGE_PADDING }}>
+      <CalibrationPageHeader
+        title="Acetone Vaporiser Calibration History"
+        breadcrumbCurrent="History"
+        calibrationTab={CALIBRATION_TABS.INTERNAL}
+        parents={[
+          {
+            label: "Acetone Vaporiser Calibrations",
+            onClick: handleBackToVaporisers,
+          },
+        ]}
+      />
+      {equipment && (
+        <Typography variant="h6" color="text.secondary" sx={{ mb: 2 }}>
+          {equipment.equipmentReference}
+        </Typography>
+      )}
 
       {calibrations.length === 0 ? (
         <Paper sx={{ p: 4, textAlign: "center" }}>

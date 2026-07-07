@@ -993,6 +993,20 @@ const ResidentialAsbestosAssessment = () => {
           } report proofer user(s)`,
         "success",
       );
+      setJobs((prev) =>
+        prev.map((j) =>
+          String(j.id) === String(job.id)
+            ? {
+                ...j,
+                authorisationRequestedBy: currentUser?._id ?? true,
+                originalData: {
+                  ...(j.originalData || {}),
+                  authorisationRequestedBy: currentUser?._id ?? true,
+                },
+              }
+            : j,
+        ),
+      );
       clearJobsCache();
       await fetchJobs({ force: true });
     } catch (err) {

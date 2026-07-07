@@ -630,7 +630,13 @@ const LDsuppliedJobs = () => {
           } report proofer user(s)`,
         "success",
       );
-      await fetchAsbestosAssessments();
+      setAssessments((prev) =>
+        prev.map((a) =>
+          a._id === assessment._id
+            ? { ...a, authorisationRequestedBy: currentUser?._id ?? true }
+            : a,
+        ),
+      );
     } catch (error) {
       console.error("Error sending authorisation request emails:", error);
       showSnackbar(
@@ -748,7 +754,13 @@ const LDsuppliedJobs = () => {
         "Authorisation request emails sent successfully to report proofer user(s).",
         "success",
       );
-      await fetchStandaloneLDJobs();
+      setStandaloneJobs((prev) =>
+        prev.map((j) =>
+          j._id === job._id
+            ? { ...j, authorisationRequestedBy: currentUser?._id ?? true }
+            : j,
+        ),
+      );
     } catch (error) {
       console.error("Error sending authorisation request emails:", error);
       showSnackbar(

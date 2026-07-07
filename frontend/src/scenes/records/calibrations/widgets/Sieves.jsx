@@ -1,30 +1,68 @@
 import React, { useState, useEffect } from "react";
 import { Box, CircularProgress, useTheme } from "@mui/material";
 import BaseCalibrationWidget from "./BaseCalibrationWidget";
+import sieveCalibrationService from "../../../../services/sieveCalibrationService";
 import { equipmentService } from "../../../../services/equipmentService";
+import {
+  getCachedCalibrationData,
+  setCachedCalibrationData,
+} from "../../../../utils/calibrationCache";
+import { computeSieveWidgetStats } from "../sieveCalibrationUtils";
+
+const CACHE_KEY = "sieves";
 
 const Sieves = ({ viewCalibrationsPath }) => {
   const theme = useTheme();
   const [loading, setLoading] = useState(true);
-  const [nextCalibrationDue, setNextCalibrationDue] = useState(null);
   const [itemsDueInNextMonth, setItemsDueInNextMonth] = useState(0);
 
   useEffect(() => {
     fetchSievesData();
   }, []);
 
+  const applyStats = ({ itemsDueInNextMonth: dueCount }) => {
+    setItemsDueInNextMonth(dueCount);
+  };
+
+  const fetchFreshData = async () => {
+    const [calibrations, equipmentResponse] = await Promise.all([
+      sieveCalibrationService.getAll(),
+      equipmentService.getAll({
+        equipmentType: "Sieves",
+        limit: 1000,
+      }),
+    ]);
+
+    const equipment = equipmentResponse.equipment || [];
+    const stats = computeSieveWidgetStats(
+      Array.isArray(calibrations) ? calibrations : [],
+      equipment
+    );
+
+    applyStats(stats);
+    setCachedCalibrationData(CACHE_KEY, stats);
+  };
+
   const fetchSievesData = async () => {
     try {
       setLoading(true);
 
-      // For now, set defaults until calibration service is available
-      // TODO: Implement calibration service for Sieves
-      setNextCalibrationDue(null);
-      setItemsDueInNextMonth(0);
+      const cached = getCachedCalibrationData(CACHE_KEY);
+      if (cached) {
+        applyStats({
+          itemsDueInNextMonth: cached.itemsDueInNextMonth || 0,
+        });
+        setLoading(false);
+        fetchFreshData().catch((error) => {
+          console.error("Error refreshing Sieves calibration data:", error);
+        });
+        return;
+      }
+
+      await fetchFreshData();
     } catch (error) {
-      console.error("Error fetching Sieves data:", error);
-      setNextCalibrationDue(null);
-      setItemsDueInNextMonth(0);
+      console.error("Error fetching Sieves calibration data:", error);
+      applyStats({ itemsDueInNextMonth: 0 });
     } finally {
       setLoading(false);
     }
@@ -52,7 +90,7 @@ const Sieves = ({ viewCalibrationsPath }) => {
   return (
     <BaseCalibrationWidget
       title="Sieves"
-      nextCalibrationDue={nextCalibrationDue}
+      hideNextCalibrationDue
       itemsDueInNextMonth={itemsDueInNextMonth}
       viewCalibrationsPath={
         viewCalibrationsPath || "/records/laboratory/calibrations/sieves"

@@ -24,11 +24,8 @@ import {
   MenuItem,
   Alert,
   Stack,
-  Breadcrumbs,
-  Link,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -41,6 +38,12 @@ import userService from "../../../services/userService";
 import { riLiquidCalibrationService } from "../../../services/riLiquidCalibrationService";
 import LookupField from "../../../components/LookupField";
 import { userOptionsFromList } from "../../../utils/lookupOptions";
+import {
+  CALIBRATION_TABS,
+} from "./calibrationsNavigationUtils";
+import CalibrationPageHeader, {
+  CALIBRATION_PAGE_PADDING,
+} from "./CalibrationPageHeader";
 
 const RiLiquidPage = () => {
   const theme = useTheme();
@@ -457,71 +460,40 @@ const RiLiquidPage = () => {
     // Navigate to history page for this bottle
     const bottleId = calibration.bottleId;
     if (bottleId) {
-      navigate(`/records/laboratory/calibrations/ri-liquid/${bottleId}`);
+      navigate(
+        `/records/laboratory/calibrations/ri-liquid/${encodeURIComponent(bottleId)}`,
+      );
     }
   };
 
-  const handleBackToCalibrations = () => {
-    navigate("/records/laboratory/calibrations/list");
-  };
-
-  const handleBackToRecords = () => {
-    navigate("/records?view=laboratory");
-  };
 
   return (
-    <Box m="20px">
-      <Box
-        display="flex"
-        justifyContent="space-between"
-        alignItems="center"
-        flexWrap="wrap"
-        gap={2}
-        mb="20px"
-      >
-        <Breadcrumbs>
-          <Link
-            component="button"
-            variant="body1"
-            onClick={handleBackToRecords}
-            sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
-          >
-            <ArrowBackIcon sx={{ mr: 1 }} />
-            Laboratory Records
-          </Link>
-          <Link
-            component="button"
-            variant="body1"
-            onClick={handleBackToCalibrations}
-            sx={{ cursor: "pointer" }}
-          >
-            Calibrations
-          </Link>
-  
-        </Breadcrumbs>
-        <Box display="flex" gap={2}>
-          <Button
-            variant="outlined"
-            color="primary"
-            startIcon={<HistoryIcon />}
-            onClick={() =>
-              navigate("/records/laboratory/calibrations/ri-liquid/history")
-            }
-          >
-            Historical Records
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={handleAdd}
-          >
-            Add Calibration
-          </Button>
-        </Box>
-      </Box>
-      <Typography color="text.primary" variant="h4" mb="20px" component="h1">
-            RI Liquid Calibrations
-          </Typography>
+    <Box sx={{ p: CALIBRATION_PAGE_PADDING }}>
+      <CalibrationPageHeader
+        title="RI Liquid Calibrations"
+        calibrationTab={CALIBRATION_TABS.INTERNAL}
+        action={
+          <Box display="flex" gap={2}>
+            <Button
+              variant="outlined"
+              color="primary"
+              startIcon={<HistoryIcon />}
+              onClick={() =>
+                navigate("/records/laboratory/calibrations/ri-liquid/history")
+              }
+            >
+              Historical Records
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleAdd}
+            >
+              Add Calibration
+            </Button>
+          </Box>
+        }
+      />
       <Box mb="20px">
         <Typography variant="h6" component="h2">
           Active RI Liquid Bottles

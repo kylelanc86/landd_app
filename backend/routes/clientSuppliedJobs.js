@@ -560,6 +560,7 @@ router.post('/:id/authorise', auth, checkPermission('clientSup.edit'), async (re
 
     job.reportApprovedBy = approver;
     job.reportIssueDate = new Date();
+    job.status = 'Completed';
     job.updatedAt = new Date();
 
     const updatedJob = await job.save();

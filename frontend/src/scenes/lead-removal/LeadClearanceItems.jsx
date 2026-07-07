@@ -50,6 +50,7 @@ import {
   RotateRight as RotateRightIcon,
   Hd as HdIcon,
   Download as DownloadIcon,
+  Assessment as AssessmentIcon,
 } from "@mui/icons-material";
 import leadClearanceService from "../../services/leadClearanceService";
 import {
@@ -58,6 +59,7 @@ import {
   saveFileToDevice,
 } from "../../utils/imageCompression";
 import { rotateDataUrl90Cw } from "../../utils/rotateImageDataUrl";
+import { formatDate } from "../../utils/dateUtils";
 import leadRemovalJobService from "../../services/leadRemovalJobService";
 import PermissionGate from "../../components/PermissionGate";
 import { usePermissions } from "../../hooks/usePermissions";
@@ -96,6 +98,7 @@ const LeadClearanceItems = () => {
   const [itemToDelete, setItemToDelete] = useState(null);
   const [jobExclusionsModalOpen, setJobExclusionsModalOpen] = useState(false);
   const [sitePlanDialogOpen, setSitePlanDialogOpen] = useState(false);
+  const [removingSitePlan, setRemovingSitePlan] = useState(false);
   const [photoGalleryDialogOpen, setPhotoGalleryDialogOpen] = useState(false);
   const [selectedItemForPhotos, setSelectedItemForPhotos] = useState(null);
   const [localPhotoChanges, setLocalPhotoChanges] = useState({});
@@ -111,6 +114,22 @@ const LeadClearanceItems = () => {
   const [stream, setStream] = useState(null);
   const [videoRef, setVideoRef] = useState(null);
   const [rotatingPhotoId, setRotatingPhotoId] = useState(null);
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [leadMonitoringReportsDialogOpen, setLeadMonitoringReportsDialogOpen] =
+    useState(false);
+  const [leadMonitoringReports, setLeadMonitoringReports] = useState([]);
+  const [loadingReports, setLoadingReports] = useState(false);
+  const [selectedReports, setSelectedReports] = useState([]);
+  const [generatingLeadMonitoringPDF, setGeneratingLeadMonitoringPDF] =
+    useState(false);
+
+  const formatStatus = (status) => {
+    if (!status) return "Unknown";
+    return status
+      .split("_")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
+  };
 
   const [preWorksSamples, setPreWorksSamples] = useState([]);
   const [validationSamples, setValidationSamples] = useState([]);
@@ -226,6 +245,21 @@ const LeadClearanceItems = () => {
       notes: "",
     });
     setShowLevelFloor(false);
+  };
+
+  const handleNotesBlur = async () => {
+    if (!clearanceId || savingNotes) return;
+    try {
+      setSavingNotes(true);
+      await leadClearanceService.update(clearanceId, {
+        notes: clearance?.notes || "",
+      });
+    } catch (error) {
+      console.error("Error saving notes:", error);
+      showSnackbar("Failed to save notes", "error");
+    } finally {
+      setSavingNotes(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -380,20 +414,195 @@ const LeadClearanceItems = () => {
             description: e.description,
           }))
         : [];
-      await leadClearanceService.update(clearanceId, {
+      const legendTitle =
+        sitePlanData?.legendTitle && sitePlanData.legendTitle.trim()
+          ? sitePlanData.legendTitle.trim()
+          : "Key";
+      const figureTitle =
+        sitePlanData?.figureTitle && sitePlanData.figureTitle.trim()
+          ? sitePlanData.figureTitle.trim()
+          : "Lead Clearance Site Plan";
+
+      if (!imageData) {
+        showSnackbar("No site plan image data was provided", "error");
+        return;
+      }
+
+      const sitePlanPayload = {
         sitePlan: true,
         sitePlanFile: imageData,
         sitePlanLegend: legendEntries,
-        sitePlanLegendTitle: sitePlanData?.legendTitle || "Key",
-        sitePlanFigureTitle:
-          sitePlanData?.figureTitle || "Lead Clearance Site Plan",
+        sitePlanLegendTitle: legendTitle,
+        sitePlanFigureTitle: figureTitle,
         sitePlanSource: "drawn",
-      });
+      };
+
+      await leadClearanceService.update(clearanceId, sitePlanPayload);
+      setClearance((prev) => ({ ...prev, ...sitePlanPayload }));
       showSnackbar("Site plan saved successfully!", "success");
       setSitePlanDialogOpen(false);
-      await fetchData();
     } catch (err) {
       showSnackbar("Failed to save site plan", "error");
+    }
+  };
+
+  const handleRemoveSitePlan = async () => {
+    if (!window.confirm("Are you sure you want to remove the site plan?")) return;
+    try {
+      setRemovingSitePlan(true);
+      await leadClearanceService.update(clearanceId, {
+        sitePlan: false,
+        sitePlanFile: null,
+        sitePlanSource: null,
+        sitePlanLegend: [],
+        sitePlanLegendTitle: null,
+        sitePlanFigureTitle: null,
+      });
+      setClearance((prev) => ({
+        ...prev,
+        sitePlan: false,
+        sitePlanFile: null,
+        sitePlanSource: null,
+        sitePlanLegend: [],
+        sitePlanLegendTitle: null,
+        sitePlanFigureTitle: null,
+      }));
+      showSnackbar("Site plan removed successfully", "success");
+    } catch (err) {
+      showSnackbar("Failed to remove site plan", "error");
+    } finally {
+      setRemovingSitePlan(false);
+    }
+  };
+
+  const fetchLeadMonitoringReports = async () => {
+    if (!clearance?.projectId?._id) {
+      showSnackbar("No project found for this clearance", "error");
+      return;
+    }
+
+    if (!leadRemovalJobId) {
+      showSnackbar(
+        "Unable to identify lead removal job for this clearance. Please ensure the clearance is properly linked to a lead removal job.",
+        "error",
+      );
+      return;
+    }
+
+    try {
+      setLoadingReports(true);
+      const reports =
+        await leadClearanceService.getLeadMonitoringReportsByJob(
+          leadRemovalJobId,
+        );
+      setLeadMonitoringReports(reports);
+    } catch (error) {
+      console.error("Error fetching lead monitoring reports:", error);
+      showSnackbar("Failed to fetch lead monitoring reports", "error");
+    } finally {
+      setLoadingReports(false);
+    }
+  };
+
+  const handleOpenLeadMonitoringReportsDialog = () => {
+    setLeadMonitoringReportsDialogOpen(true);
+    fetchLeadMonitoringReports();
+  };
+
+  const handleSelectLeadMonitoringReport = async (reportsToAttach) => {
+    const list = Array.isArray(reportsToAttach)
+      ? reportsToAttach
+      : [reportsToAttach];
+    if (list.length === 0) return;
+
+    try {
+      setGeneratingLeadMonitoringPDF(true);
+
+      const { generateLeadMonitoringShiftReport } = await import(
+        "../../utils/generateLeadMonitoringShiftReport"
+      );
+      const { shiftService, projectService, clientService, leadAirSampleService } =
+        await import("../../services/api");
+
+      const reportsPayload = [];
+      for (const report of list) {
+        const shiftResponse = await shiftService.getById(report._id);
+        const shift = shiftResponse.data;
+        const jobResponse = await leadRemovalJobService.getById(report.jobId);
+        const job = jobResponse.data;
+        const samplesResponse = await leadAirSampleService.getByShift(
+          report._id,
+        );
+        const samples = samplesResponse.data || [];
+
+        let project = job.projectId;
+        if (project && typeof project === "string") {
+          const projectResponse = await projectService.getById(project);
+          project = projectResponse.data;
+        }
+        if (project && project.client && typeof project.client === "string") {
+          const clientResponse = await clientService.getById(project.client);
+          project.client = clientResponse.data;
+        }
+
+        const pdfDataUrl = await generateLeadMonitoringShiftReport({
+          shift,
+          job,
+          samples,
+          project: project || {},
+          returnPdfData: true,
+          openInNewTab: false,
+        });
+        const base64Data = pdfDataUrl.split(",")[1];
+        reportsPayload.push({
+          reportData: base64Data,
+          shiftDate: shift.date,
+          shiftId: shift._id,
+        });
+      }
+
+      await leadClearanceService.uploadLeadMonitoringReport(clearanceId, {
+        reports: reportsPayload,
+        leadMonitoring: true,
+      });
+
+      showSnackbar(
+        list.length === 1
+          ? "Lead monitoring report attached successfully"
+          : `${list.length} lead monitoring reports attached successfully`,
+        "success",
+      );
+
+      setLeadMonitoringReportsDialogOpen(false);
+      setSelectedReports([]);
+      fetchData();
+    } catch (error) {
+      console.error("Error selecting lead monitoring report(s):", error);
+      showSnackbar("Failed to attach lead monitoring report(s)", "error");
+    } finally {
+      setGeneratingLeadMonitoringPDF(false);
+    }
+  };
+
+  const handleRemoveLeadMonitoringReport = async () => {
+    if (
+      !window.confirm(
+        "Are you sure you want to remove the lead monitoring report?",
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await leadClearanceService.update(clearanceId, {
+        leadMonitoringReports: [],
+        leadMonitoring: false,
+      });
+      showSnackbar("Lead monitoring report removed successfully", "success");
+      fetchData();
+    } catch (error) {
+      console.error("Error removing lead monitoring report:", error);
+      showSnackbar("Failed to remove lead monitoring report", "error");
     }
   };
 
@@ -804,39 +1013,65 @@ const LeadClearanceItems = () => {
           flexWrap="wrap"
           gap={2}
         >
-          <Box display="flex" gap={2} flexWrap="wrap">
+          <Box display="flex" gap={2} flexWrap="wrap" alignItems="center">
             <Button
               variant="outlined"
-              color="secondary"
-              onClick={() => setSitePlanDialogOpen(true)}
-              startIcon={<MapIcon />}
+              color="primary"
+              onClick={handleOpenLeadMonitoringReportsDialog}
+              startIcon={<AssessmentIcon />}
             >
-              {clearance?.sitePlanFile ? "Edit Site Plan" : "Site Plan"}
+              Lead Monitoring Report
             </Button>
-            <Button
-              variant="contained"
-              onClick={() => setJobExclusionsModalOpen(true)}
-              startIcon={<DescriptionIcon />}
-              sx={{
-                backgroundColor: "#9c27b0",
-                "&:hover": { backgroundColor: "#7b1fa2" },
-              }}
-            >
-              Job Specific Exclusions
-            </Button>
-            {isSuperAdmin && (
-              <Button
-                variant="contained"
-                sx={{
-                  backgroundColor: "#FF8B00",
-                  "&:hover": { backgroundColor: "#CD7000" },
-                }}
-                onClick={() =>
-                  navigate(`/lead-clearances/${clearanceId}/sampling`)
-                }
+            {(clearance?.leadMonitoringReports?.length > 0) && (
+              <Box display="flex" alignItems="center" gap={2}>
+                <Button
+                  variant="outlined"
+                  color="error"
+                  onClick={handleRemoveLeadMonitoringReport}
+                  startIcon={<DeleteIcon />}
+                  size="small"
+                  sx={{
+                    borderColor: "#d32f2f",
+                    color: "#d32f2f",
+                    "&:hover": {
+                      borderColor: "#b71c1c",
+                      backgroundColor: "rgba(211, 47, 47, 0.04)",
+                    },
+                  }}
+                >
+                  Remove Attachment
+                </Button>
+                <Typography
+                  variant="body2"
+                  color="success.main"
+                  sx={{ fontWeight: "medium" }}
+                >
+                  ✓ Lead Monitoring Report
+                  {(clearance.leadMonitoringReports?.length ?? 0) > 1 ? "s" : ""}{" "}
+                  Attached
+                  <Box component="span" sx={{ ml: 1 }}>
+                    (
+                    {clearance.leadMonitoringReports
+                      .slice()
+                      .sort(
+                        (a, b) =>
+                          new Date(a.shiftDate || 0) - new Date(b.shiftDate || 0),
+                      )
+                      .map((r) => formatDate(r.shiftDate))
+                      .join(", ")}
+                    )
+                  </Box>
+                </Typography>
+              </Box>
+            )}
+            {!(clearance?.leadMonitoringReports?.length > 0) && (
+              <Typography
+                variant="body2"
+                color="warning.main"
+                sx={{ fontWeight: "medium" }}
               >
-                Dust/Soil Sampling
-              </Button>
+                ⚠ No Lead Monitoring Report Attached
+              </Typography>
             )}
           </Box>
           <Button
@@ -853,7 +1088,66 @@ const LeadClearanceItems = () => {
           </Button>
         </Box>
 
-        <Box display="flex" gap={2} sx={{ mt: 2, mb: 2 }}>
+        <Box
+          display="flex"
+          gap={2}
+          sx={{ mt: 2, mb: 2 }}
+          flexWrap="wrap"
+          alignItems="center"
+        >
+          <Button
+            variant="outlined"
+            color="secondary"
+            onClick={() => setSitePlanDialogOpen(true)}
+            startIcon={<MapIcon />}
+          >
+            {clearance?.sitePlanFile ? "Edit Site Plan" : "Site Plan"}
+          </Button>
+          {clearance?.sitePlanFile && (
+            <Button
+              variant="outlined"
+              color="error"
+              onClick={handleRemoveSitePlan}
+              disabled={removingSitePlan}
+              startIcon={
+                removingSitePlan ? (
+                  <CircularProgress size={18} color="inherit" />
+                ) : (
+                  <DeleteIcon />
+                )
+              }
+              sx={{
+                borderColor: "#d32f2f",
+                color: "#d32f2f",
+                "&:hover": {
+                  borderColor: "#b71c1c",
+                  backgroundColor: "rgba(211, 47, 47, 0.04)",
+                },
+              }}
+            >
+              Delete Site Plan
+            </Button>
+          )}
+          {clearance?.sitePlanFile ? (
+            <Typography
+              variant="body2"
+              color="success.main"
+              sx={{ fontWeight: "medium" }}
+            >
+              ✓ Site Plan Attached
+            </Typography>
+          ) : (
+            <Typography
+              variant="body2"
+              color="warning.main"
+              sx={{ fontWeight: "medium" }}
+            >
+              ⚠ No Site Plan
+            </Typography>
+          )}
+        </Box>
+
+        <Box display="flex" gap={2} sx={{ mt: 2, mb: 2 }} flexWrap="wrap">
           <Button
             variant="contained"
             color="secondary"
@@ -866,6 +1160,31 @@ const LeadClearanceItems = () => {
           >
             Add Item
           </Button>
+          <Button
+            variant="contained"
+            onClick={() => setJobExclusionsModalOpen(true)}
+            startIcon={<DescriptionIcon />}
+            sx={{
+              backgroundColor: "#9c27b0",
+              "&:hover": { backgroundColor: "#7b1fa2" },
+            }}
+          >
+            Job Specific Exclusions
+          </Button>
+          {isSuperAdmin && (
+            <Button
+              variant="contained"
+              sx={{
+                backgroundColor: "#FF8B00",
+                "&:hover": { backgroundColor: "#CD7000" },
+              }}
+              onClick={() =>
+                navigate(`/lead-clearances/${clearanceId}/sampling`)
+              }
+            >
+              Dust/Soil Sampling
+            </Button>
+          )}
         </Box>
 
         <Card sx={{ mt: 3 }}>
@@ -1045,6 +1364,25 @@ const LeadClearanceItems = () => {
             </TableContainer>
           </CardContent>
         </Card>
+
+        <Box sx={{ mt: 2 }}>
+          <TextField
+            fullWidth
+            label="Notes"
+            value={clearance?.notes || ""}
+            onChange={(e) =>
+              setClearance((prev) => ({
+                ...prev,
+                notes: e.target.value,
+              }))
+            }
+            onBlur={handleNotesBlur}
+            multiline
+            rows={3}
+            disabled={savingNotes}
+            placeholder="Optional notes"
+          />
+        </Box>
 
         {/* Add/Edit Item Dialog */}
         <Dialog
@@ -1289,6 +1627,247 @@ const LeadClearanceItems = () => {
               onCancel={() => setJobExclusionsModalOpen(false)}
             />
           </DialogContent>
+        </Dialog>
+
+        {/* Lead Monitoring Reports Selection Dialog */}
+        <Dialog
+          open={leadMonitoringReportsDialogOpen}
+          onClose={() => {
+            setLeadMonitoringReportsDialogOpen(false);
+            setSelectedReports([]);
+          }}
+          maxWidth="md"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              pb: 2,
+              px: 3,
+              pt: 3,
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                bgcolor: "info.main",
+                color: "white",
+              }}
+            >
+              <DescriptionIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
+              Select Lead Monitoring Report(s)
+            </Typography>
+          </DialogTitle>
+          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Select one or more lead monitoring reports from the list below.
+                They will be included in the clearance PDF in chronological order
+                (earliest to most recent).
+              </Typography>
+
+              {loadingReports ? (
+                <Box
+                  display="flex"
+                  justifyContent="center"
+                  alignItems="center"
+                  height="200px"
+                >
+                  <CircularProgress />
+                </Box>
+              ) : leadMonitoringReports.length === 0 ? (
+                <Alert severity="info">
+                  No lead monitoring reports found for this job. Reports must be
+                  completed and authorised to appear here.
+                </Alert>
+              ) : (
+                <Box sx={{ maxHeight: 400, overflow: "auto" }}>
+                  {leadMonitoringReports.map((report) => {
+                    const isSelected = selectedReports.some(
+                      (r) => r._id === report._id,
+                    );
+                    const isAuthorised = !!report.reportApprovedBy;
+                    return (
+                      <Card
+                        key={report._id}
+                        sx={{
+                          mb: 2,
+                          cursor: isAuthorised ? "pointer" : "not-allowed",
+                          transition: "all 0.2s ease-in-out",
+                          opacity: isAuthorised ? 1 : 0.6,
+                          "&:hover": isAuthorised
+                            ? {
+                                backgroundColor: isSelected
+                                  ? "rgba(25, 118, 210, 0.15)"
+                                  : "action.hover",
+                                transform: "translateY(-2px)",
+                                boxShadow: 2,
+                              }
+                            : {},
+                          border: isSelected ? 3 : 1,
+                          borderColor: isSelected ? "primary.main" : "divider",
+                          backgroundColor: isSelected
+                            ? "rgba(25, 118, 210, 0.12)"
+                            : "background.paper",
+                          boxShadow: isSelected
+                            ? "0 4px 12px rgba(25, 118, 210, 0.3)"
+                            : "none",
+                        }}
+                        onClick={() => {
+                          if (isAuthorised) {
+                            setSelectedReports((prev) =>
+                              isSelected
+                                ? prev.filter((r) => r._id !== report._id)
+                                : [...prev, report],
+                            );
+                          }
+                        }}
+                      >
+                        <CardContent sx={{ py: 2 }}>
+                          <Box
+                            display="flex"
+                            justifyContent="space-between"
+                            alignItems="flex-start"
+                          >
+                            <Box flex={1}>
+                              <Box
+                                display="flex"
+                                alignItems="center"
+                                gap={1}
+                                mb={1}
+                              >
+                                {isSelected && (
+                                  <CheckIcon
+                                    sx={{
+                                      color: "primary.main",
+                                      fontSize: 20,
+                                    }}
+                                  />
+                                )}
+                                <Typography
+                                  variant="subtitle1"
+                                  fontWeight="medium"
+                                >
+                                  {formatDate(report.date)}
+                                </Typography>
+                                <Chip
+                                  label={
+                                    report.reportApprovedBy
+                                      ? "Authorised"
+                                      : formatStatus(report.status)
+                                  }
+                                  color={
+                                    report.reportApprovedBy
+                                      ? "success"
+                                      : "default"
+                                  }
+                                  size="small"
+                                />
+                              </Box>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                mb={!isAuthorised ? 1 : 0}
+                              >
+                                <Box component="span" fontWeight="bold">
+                                  Description of Works:{" "}
+                                </Box>
+                                {report.descriptionOfWorks ||
+                                  "No description provided"}
+                              </Typography>
+                              {!isAuthorised && (
+                                <Alert
+                                  severity="error"
+                                  sx={{
+                                    mt: 1,
+                                    py: 0.5,
+                                    "& .MuiAlert-message": {
+                                      fontSize: "0.875rem",
+                                      padding: 0,
+                                    },
+                                  }}
+                                >
+                                  Report requires authorisation before attachment
+                                </Alert>
+                              )}
+                            </Box>
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </Box>
+              )}
+            </Box>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <Button
+              onClick={() => {
+                setLeadMonitoringReportsDialogOpen(false);
+                setSelectedReports([]);
+              }}
+              variant="outlined"
+              sx={{
+                minWidth: 100,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                const authorised = selectedReports.filter(
+                  (r) => r.reportApprovedBy,
+                );
+                if (authorised.length > 0) {
+                  handleSelectLeadMonitoringReport(authorised);
+                }
+              }}
+              variant="contained"
+              disabled={
+                selectedReports.length === 0 ||
+                selectedReports.some((r) => !r.reportApprovedBy) ||
+                generatingLeadMonitoringPDF
+              }
+              startIcon={
+                generatingLeadMonitoringPDF ? (
+                  <CircularProgress size={16} color="inherit" />
+                ) : (
+                  <CheckIcon />
+                )
+              }
+              sx={{
+                minWidth: 120,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: 500,
+              }}
+            >
+              {generatingLeadMonitoringPDF
+                ? "Attaching..."
+                : selectedReports.length > 1
+                  ? `Attach ${selectedReports.length} Reports`
+                  : "Attach Report"}
+            </Button>
+          </DialogActions>
         </Dialog>
 
         {/* Site Plan Dialog */}

@@ -38,6 +38,10 @@ import hseTestSlideService from "../../../services/hseTestSlideService";
 import { useAuth } from "../../../context/AuthContext";
 import LookupField from "../../../components/LookupField";
 import { equipmentOptionsFromList, buildEquipmentDisplayLabel } from "../../../utils/lookupOptions";
+import {
+  CALIBRATION_TABS,
+  getCalibrationsListPath,
+} from "./calibrationsNavigationUtils";
 
 const HSETestSlidePage = () => {
   const theme = useTheme();
@@ -412,7 +416,7 @@ const HSETestSlidePage = () => {
   };
 
   const handleBackToCalibrations = () => {
-    navigate("/records/laboratory/calibrations/list");
+    navigate(getCalibrationsListPath(CALIBRATION_TABS.EXTERNAL));
   };
 
   const handleViewHistory = async (testSlide) => {

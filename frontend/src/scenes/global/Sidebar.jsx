@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import "react-pro-sidebar/dist/css/styles.css";
 import { ProSidebar, Menu, MenuItem } from "react-pro-sidebar";
 import {
@@ -28,11 +28,13 @@ import DangerousIcon from "@mui/icons-material/Dangerous";
 import SearchIcon from "@mui/icons-material/Search";
 import FolderCopyIcon from "@mui/icons-material/FolderCopy";
 import BiotechIcon from "@mui/icons-material/Biotech";
+import NotificationsActiveOutlinedIcon from "@mui/icons-material/NotificationsActiveOutlined";
 import { tokens } from "../../theme/tokens";
 import { useAuth } from "../../context/AuthContext";
 import { usePermissions } from "../../hooks/usePermissions";
 import PermissionGate from "../../components/PermissionGate";
 import { isFeatureEnabled } from "../../config/featureFlags";
+import { useNotificationCentre } from "../../context/NotificationCentreContext";
 
 const getRandomColor = (user) => {
   const colors = [
@@ -77,7 +79,7 @@ const getRandomColor = (user) => {
   return colors[index];
 };
 
-const Item = ({ title, to, icon }) => {
+const Item = ({ title, to, icon, badgeCount = null }) => {
   const theme = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
@@ -160,14 +162,16 @@ const Item = ({ title, to, icon }) => {
         alignItems: "center",
         justifyContent: "flex-start",
         color: isActive ? "#000000" : tokens.grey[600],
-        backgroundColor: isActive ? tokens.primary[50] : "transparent",
+        backgroundColor: "transparent",
+        border: isActive ? "2px solid #2e7d32" : "2px solid transparent",
         borderRadius: "4px",
         margin: "1px 8px",
-        padding: "12px 10px",
+        padding: "10px 8px",
         cursor: "pointer",
-        transition: "background-color 0.2s",
+        transition: "background-color 0.2s, border-color 0.2s",
         "&:hover": {
-          backgroundColor: isActive ? tokens.primary[100] : tokens.grey[50],
+          backgroundColor: tokens.grey[50],
+          borderColor: isActive ? "#2e7d32" : tokens.grey[300],
         },
       }}
     >
@@ -199,6 +203,27 @@ const Item = ({ title, to, icon }) => {
       >
         {title}
       </Typography>
+
+      {badgeCount !== null && badgeCount > 0 && (
+        <Box
+          sx={{
+            minWidth: "22px",
+            height: "22px",
+            borderRadius: "11px",
+            backgroundColor: "#d32f2f",
+            color: "#ffffff",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: "0.75rem",
+            fontWeight: 700,
+            px: 0.75,
+            ml: 1,
+          }}
+        >
+          {badgeCount > 99 ? "99+" : badgeCount}
+        </Box>
+      )}
     </Box>
   );
 
@@ -321,20 +346,15 @@ const CollapsibleSection = ({ title, to, icon, defaultExpanded = true }) => {
           : theme.palette.mode === "dark"
             ? tokens.grey[100]
             : tokens.grey[700],
-        backgroundColor: isActive
-          ? theme.palette.mode === "dark"
-            ? tokens.primary[900]
-            : tokens.primary[100]
-          : "transparent",
-        transition: "background-color 0.2s",
+        backgroundColor: "transparent",
+        border: isActive ? "2px solid #2e7d32" : "2px solid transparent",
+        transition: "background-color 0.2s, border-color 0.2s",
         "&:hover": {
-          backgroundColor: isActive
-            ? theme.palette.mode === "dark"
-              ? tokens.primary[800]
-              : tokens.primary[200]
-            : theme.palette.mode === "dark"
+          backgroundColor:
+            theme.palette.mode === "dark"
               ? "rgba(255, 255, 255, 0.08)"
               : "rgba(0, 0, 0, 0.04)",
+          borderColor: isActive ? "#2e7d32" : tokens.grey[300],
         },
       }}
     >
@@ -374,6 +394,7 @@ const Sidebar = () => {
   const theme = useTheme();
   const { isAdmin, isSuperAdmin } = usePermissions();
   const { currentUser } = useAuth();
+  const { urgentCount: notificationBadgeCount } = useNotificationCentre();
 
   // Detect tablet and mobile screens - hide sidebar completely
   // iPads in landscape can be up to ~1366px wide (iPad Pro 12.9"), so we use 1280px breakpoint
@@ -628,7 +649,15 @@ const Sidebar = () => {
             backgroundColor: "#ffffff",
             marginTop: "auto",
           }}
-        ></Box>
+        >
+          <SectionDivider />
+          <Item
+            title="Notification Centre"
+            to="/notifications"
+            icon={<NotificationsActiveOutlinedIcon />}
+            badgeCount={notificationBadgeCount}
+          />
+        </Box>
       </Menu>
     </ProSidebar>
   );

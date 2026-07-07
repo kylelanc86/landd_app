@@ -22,7 +22,6 @@ import {
   Stack,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -39,6 +38,13 @@ import {
   equipmentOptionsFromList,
   buildEquipmentDisplayLabel,
 } from "../../../utils/lookupOptions";
+import {
+  CALIBRATION_TABS,
+} from "./calibrationsNavigationUtils";
+import CalibrationPageHeader, {
+  CALIBRATION_PAGE_PADDING,
+} from "./CalibrationPageHeader";
+import { clearCachedCalibrationData } from "../../../utils/calibrationCache";
 
 const AcetoneVaporiserPage = () => {
   const theme = useTheme();
@@ -368,6 +374,7 @@ const AcetoneVaporiserPage = () => {
       }
 
       handleDialogClose();
+      clearCachedCalibrationData("acetone-vaporiser");
       fetchData();
     } catch (error) {
       console.error("Error submitting calibration:", error);
@@ -412,6 +419,7 @@ const AcetoneVaporiserPage = () => {
 
     try {
       await acetoneVaporiserCalibrationService.delete(id);
+      clearCachedCalibrationData("acetone-vaporiser");
       fetchData();
     } catch (error) {
       console.error("Error deleting calibration:", error);
@@ -435,23 +443,16 @@ const AcetoneVaporiserPage = () => {
   };
 
   return (
-    <Box m="20px">
-      <Box display="flex" alignItems="center" mb="20px">
-        <IconButton
-          onClick={() => navigate("/records/laboratory/calibrations/list")}
-        >
-          <ArrowBackIcon />
-        </IconButton>
-        <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
-          Acetone Vaporiser Calibrations
-        </Typography>
-      </Box>
-
-      <Box display="flex" justifyContent="flex-end" mb="20px">
-        <Button variant="contained" startIcon={<AddIcon />} onClick={handleAdd}>
-          Add Calibration
-        </Button>
-      </Box>
+    <Box sx={{ p: CALIBRATION_PAGE_PADDING }}>
+      <CalibrationPageHeader
+        title="Acetone Vaporiser Calibrations"
+        calibrationTab={CALIBRATION_TABS.INTERNAL}
+        action={
+          <Button variant="contained" startIcon={<AddIcon />} onClick={handleAdd}>
+            Add Calibration
+          </Button>
+        }
+      />
 
       {loading ? (
         <Box display="flex" justifyContent="center" alignItems="center" p={4}>
@@ -462,7 +463,7 @@ const AcetoneVaporiserPage = () => {
           <Table>
             <TableHead>
               <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
-                <TableCell>Vaporiser ID</TableCell>
+                <TableCell>Equipment Ref</TableCell>
                 <TableCell>Calibration Date</TableCell>
                 <TableCell>Temperature</TableCell>
                 <TableCell>Status</TableCell>

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import api from './axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
 
@@ -67,12 +68,7 @@ const pcmMicroscopeService = {
   // Create new PCM microscope calibration
   create: async (calibrationData) => {
     try {
-      const response = await axios.post(`${API_URL}/pcm-microscope-calibrations`, calibrationData, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await api.post('/pcm-microscope-calibrations', calibrationData);
       return response.data;
     } catch (error) {
       console.error('Error creating PCM microscope calibration:', error);
@@ -83,12 +79,7 @@ const pcmMicroscopeService = {
   // Update PCM microscope calibration
   update: async (id, calibrationData) => {
     try {
-      const response = await axios.put(`${API_URL}/pcm-microscope-calibrations/${id}`, calibrationData, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await api.put(`/pcm-microscope-calibrations/${id}`, calibrationData);
       return response.data;
     } catch (error) {
       console.error('Error updating PCM microscope calibration:', error);
@@ -99,11 +90,7 @@ const pcmMicroscopeService = {
   // Delete PCM microscope calibration
   delete: async (id) => {
     try {
-      const response = await axios.delete(`${API_URL}/pcm-microscope-calibrations/${id}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      const response = await api.delete(`/pcm-microscope-calibrations/${id}`);
       return response.data;
     } catch (error) {
       console.error('Error deleting PCM microscope calibration:', error);

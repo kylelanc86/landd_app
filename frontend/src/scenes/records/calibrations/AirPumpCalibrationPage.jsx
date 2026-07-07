@@ -32,7 +32,6 @@ import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  ArrowBack as ArrowBackIcon,
   Close as CloseIcon,
   Visibility as VisibilityIcon,
 } from "@mui/icons-material";
@@ -44,6 +43,9 @@ import { flowmeterCalibrationService } from "../../../services/flowmeterCalibrat
 import { formatDate, formatDateForInput } from "../../../utils/dateFormat";
 import userService from "../../../services/userService";
 import LookupField from "../../../components/LookupField";
+import CalibrationPageHeader, {
+  CALIBRATION_PAGE_PADDING,
+} from "./CalibrationPageHeader";
 import {
   userOptionsFromList,
   equipmentOptionsFromList,
@@ -688,19 +690,22 @@ const AirPumpCalibrationPage = () => {
   }
 
   return (
-    <Box p={3}>
-      {/* Header */}
-      <Box display="flex" alignItems="center" mb={3}>
-        <IconButton
-          onClick={() => navigate("/records/laboratory/calibrations/air-pump")}
-          sx={{ mr: 2 }}
-        >
-          <ArrowBackIcon />
-        </IconButton>
-        <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
-          Air Pump Calibrations
-        </Typography>
-      </Box>
+    <Box sx={{ p: CALIBRATION_PAGE_PADDING }}>
+      <CalibrationPageHeader
+        title="Air Pump Calibrations"
+        breadcrumbCurrent={pump?.equipmentReference || "Pump Details"}
+        parents={[
+          {
+            label: "Air Pump Calibrations",
+            onClick: () => navigate("/records/laboratory/calibrations/air-pump"),
+          },
+        ]}
+        action={
+          <Button variant="contained" startIcon={<AddIcon />} onClick={handleAdd}>
+            Add Calibration
+          </Button>
+        }
+      />
 
       {/* Equipment Reference */}
       {pump && (
@@ -719,13 +724,6 @@ const AirPumpCalibrationPage = () => {
         mb={2}
       >
         <Typography variant="h6">Calibration Records</Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={handleAdd}
-        >
-          Add Calibration
-        </Button>
       </Box>
 
       {/* Calibrations Table */}

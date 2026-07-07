@@ -13,19 +13,21 @@ import {
   Button,
   useTheme,
   CircularProgress,
-  Breadcrumbs,
-  Link,
   Chip,
 } from "@mui/material";
-import { useNavigate } from "react-router-dom";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import { useNavigate, useParams } from "react-router-dom";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { formatDate } from "../../../utils/dateFormat";
 import { riLiquidCalibrationService } from "../../../services/riLiquidCalibrationService";
+import { CALIBRATION_TABS } from "./calibrationsNavigationUtils";
+import CalibrationPageHeader, {
+  CALIBRATION_PAGE_PADDING,
+} from "./CalibrationPageHeader";
 
 const RiLiquidHistoryPage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const { bottleId } = useParams();
 
   const [calibrations, setCalibrations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,20 +36,23 @@ const RiLiquidHistoryPage = () => {
   useEffect(() => {
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [bottleId]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Fetch all calibrations including empty bottles
-      const calibrationResponse = await riLiquidCalibrationService.getAll({
-        limit: 1000,
-        sortBy: 'date',
-        sortOrder: 'desc',
-        includeEmpty: 'true'
-      });
+      const calibrationResponse = bottleId
+        ? await riLiquidCalibrationService.getByBottle(bottleId, {
+            limit: 1000,
+          })
+        : await riLiquidCalibrationService.getAll({
+            limit: 1000,
+            sortBy: "date",
+            sortOrder: "desc",
+            includeEmpty: "true",
+          });
 
       const calibrationData = calibrationResponse.data || [];
       
@@ -70,10 +75,6 @@ const RiLiquidHistoryPage = () => {
 
   const handleBackToCalibrations = () => {
     navigate("/records/laboratory/calibrations/ri-liquid");
-  };
-
-  const handleBackToHome = () => {
-    navigate("/records");
   };
 
   const handleDelete = async (id) => {
@@ -114,40 +115,30 @@ const RiLiquidHistoryPage = () => {
   }
 
   return (
-    <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4" component="h1" gutterBottom>
-          RI Liquid Calibration History
+    <Box sx={{ p: CALIBRATION_PAGE_PADDING }}>
+      <CalibrationPageHeader
+        title="RI Liquid Calibration History"
+        breadcrumbCurrent={bottleId ? bottleId : "History"}
+        calibrationTab={CALIBRATION_TABS.INTERNAL}
+        parents={[
+          {
+            label: "RI Liquid Calibrations",
+            onClick: handleBackToCalibrations,
+          },
+        ]}
+      />
+      {bottleId && (
+        <Typography variant="h6" color="text.secondary" sx={{ mb: 2 }}>
+          Refractive Index Bottle: {bottleId}
         </Typography>
-      </Box>
-
-      <Box mb={3}>
-        <Breadcrumbs>
-          <Link
-            component="button"
-            variant="body1"
-            onClick={handleBackToHome}
-            sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
-          >
-            <ArrowBackIcon sx={{ mr: 1 }} />
-            Records Home
-          </Link>
-          <Link
-            component="button"
-            variant="body1"
-            onClick={handleBackToCalibrations}
-            sx={{ cursor: "pointer" }}
-          >
-            RI Liquid Calibrations
-          </Link>
-          <Typography color="text.primary">History</Typography>
-        </Breadcrumbs>
-      </Box>
+      )}
 
       {calibrations.length === 0 ? (
         <Paper sx={{ p: 4, textAlign: "center" }}>
           <Typography variant="body1" color="text.secondary">
-            No calibration records found.
+            {bottleId
+              ? "No calibration records found for this bottle."
+              : "No calibration records found."}
           </Typography>
         </Paper>
       ) : (
@@ -155,7 +146,7 @@ const RiLiquidHistoryPage = () => {
           <Table>
             <TableHead>
               <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
-                <TableCell>Bottle ID</TableCell>
+                {!bottleId && <TableCell>Bottle ID</TableCell>}
                 <TableCell>Batch Number</TableCell>
                 <TableCell>Date Opened</TableCell>
                 <TableCell>Calibration Date</TableCell>
@@ -171,7 +162,7 @@ const RiLiquidHistoryPage = () => {
             <TableBody>
               {calibrations.map((calibration) => (
                 <TableRow key={calibration._id}>
-                  <TableCell>{calibration.bottleId}</TableCell>
+                  {!bottleId && <TableCell>{calibration.bottleId}</TableCell>}
                   <TableCell>{calibration.batchNumber || "-"}</TableCell>
                   <TableCell>
                     {calibration.dateOpened ? formatDate(calibration.dateOpened) : "-"}

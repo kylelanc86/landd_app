@@ -584,8 +584,8 @@ const ClientSuppliedJobs = () => {
       fileExtension = mimeToExt[file.type] || "file";
     }
 
-    // Generate filename: {ProjectID}-Chain of Custody-{SampleReceiptDate}.{ext}
-    return `${projectID}-Chain of Custody-${dateStr}.${fileExtension}`;
+    // Generate filename: {ProjectID}-Scanned Chain of Custody-{SampleReceiptDate}.{ext}
+    return `${projectID}-Scanned Chain of Custody-${dateStr}.${fileExtension}`;
   };
 
   const handleCOCUpload = async (event, jobId) => {
@@ -1060,6 +1060,13 @@ const ClientSuppliedJobs = () => {
             response.data?.recipients?.length || 0
           } lab signatory user(s)`,
         "success",
+      );
+      setJobs((prev) =>
+        prev.map((j) =>
+          j._id === job._id
+            ? { ...j, authorisationRequestedBy: currentUser?._id ?? true }
+            : j,
+        ),
       );
     } catch (error) {
       console.error("Error sending authorisation request emails:", error);

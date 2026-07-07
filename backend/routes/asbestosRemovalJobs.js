@@ -16,6 +16,15 @@ const notDeletedShiftFilter = {
 const notDeletedClearanceFilter = {
   $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
 };
+/** Standard clearances only — enclosure certificates are managed on a separate tab. */
+const notEnclosureCertificateFilter = {
+  $or: [
+    { isEnclosureCertificate: false },
+    { isEnclosureCertificate: { $exists: false } },
+  ],
+};
+const JOB_CLEARANCE_LIST_FIELDS =
+  "_id projectId clearanceDate clearanceType status inspectionTime asbestosRemovalist LAA jurisdiction secondaryHeader vehicleEquipmentDescription notes useComplexTemplate jobSpecificExclusions reportApprovedBy reportIssueDate reportViewedAt authorisationRequestedBy pdfDownloadUrl pdfJobId pdfReadyAt pdfFilename mergedPdfPath updatedAt isEnclosureCertificate enclosureInspectionDateTime enclosureInspectedBy enclosureCertificatePdfReadyAt enclosureCertificateMergedPdfPath enclosureCertificateApprovedBy enclosureCertificateAuthorisationRequestedBy enclosureCertificateViewedAt";
 const checkPermission = require("../middleware/checkPermission");
 const { formatDateSydney } = require("../utils/dateUtils");
 const { buildContentDispositionAttachment } = require("../utils/contentDisposition");
@@ -727,7 +736,7 @@ router.get(
           asbestosRemovalJobId: job._id,
           ...notDeletedClearanceFilter,
         })
-          .select("_id projectId clearanceDate clearanceType status inspectionTime asbestosRemovalist LAA jurisdiction secondaryHeader vehicleEquipmentDescription notes useComplexTemplate jobSpecificExclusions reportApprovedBy reportIssueDate reportViewedAt authorisationRequestedBy pdfDownloadUrl pdfJobId pdfReadyAt pdfFilename updatedAt")
+          .select(JOB_CLEARANCE_LIST_FIELDS)
           .populate({
             path: "projectId",
             select: "projectID name",
@@ -853,7 +862,7 @@ router.get(
         asbestosRemovalJobId: req.params.id,
         ...notDeletedClearanceFilter,
       })
-        .select("_id projectId clearanceDate clearanceType status inspectionTime asbestosRemovalist LAA jurisdiction secondaryHeader vehicleEquipmentDescription notes useComplexTemplate jobSpecificExclusions reportApprovedBy reportIssueDate reportViewedAt authorisationRequestedBy pdfDownloadUrl pdfJobId pdfReadyAt pdfFilename updatedAt")
+        .select(JOB_CLEARANCE_LIST_FIELDS)
         .populate({
           path: "projectId",
           select: "projectID name",
@@ -988,6 +997,7 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
         const clearances = await AsbestosClearance.find({
           projectId: projectIdToCheck,
           ...notDeletedClearanceFilter,
+          ...notEnclosureCertificateFilter,
         })
           .select("status reportApprovedBy").lean();
 
@@ -1084,6 +1094,7 @@ router.patch("/:id/status", auth, checkPermission("asbestos.edit"), async (req, 
         const clearances = await AsbestosClearance.find({
           projectId: projectIdToCheck,
           ...notDeletedClearanceFilter,
+          ...notEnclosureCertificateFilter,
         })
           .select("status reportApprovedBy").lean();
 

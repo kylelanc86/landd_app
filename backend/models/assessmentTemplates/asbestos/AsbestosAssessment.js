@@ -229,6 +229,7 @@ const AsbestosAssessmentSchema = new mongoose.Schema({
   leadDiscussionConclusionsByType: { type: mongoose.Schema.Types.Mixed },
   jobSpecificExclusions: { type: String }, // Job-specific exclusions/caveats for the assessment report
   discussionConclusions: { type: String }, // Discussion and conclusions text for the assessment report
+  notes: { type: String }, // Optional internal notes for the assessment
   analysisCertificate: { type: Boolean, default: false },
   analysisCertificateFile: { type: String },
   sitePlan: { type: Boolean, default: false },

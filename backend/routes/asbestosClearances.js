@@ -53,6 +53,31 @@ function clearEnclosureCertificatePdfFields(clearance) {
   });
 }
 
+function clearEnclosureCertificateApprovalFields(clearance) {
+  [
+    "enclosureCertificateApprovedBy",
+    "enclosureCertificateIssueDate",
+    "enclosureCertificateAuthorisationRequestedBy",
+    "enclosureCertificateAuthorisationRequestedByEmail",
+  ].forEach((field) => {
+    clearance[field] = undefined;
+    clearance.markModified(field);
+  });
+}
+
+const ENCLOSURE_ONLY_UPDATE_KEYS = new Set([
+  "enclosureInspectionDateTime",
+  "enclosureInspectedBy",
+  "enclosureDescription",
+  "enclosurePhotos",
+  "enclosureCertificateViewedAt",
+]);
+
+function isEnclosureOnlyUpdate(body) {
+  const keys = Object.keys(body || {}).filter((k) => body[k] !== undefined);
+  return keys.length > 0 && keys.every((k) => ENCLOSURE_ONLY_UPDATE_KEYS.has(k));
+}
+
 /** Clear persisted PDF fields when clearance content changes so the UI shows Generate instead of Download. */
 function clearClearancePdfFields(clearance) {
   removeAsbestosClearanceMergedPdfFileIfExists(clearance.mergedPdfPath);
@@ -170,7 +195,18 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
       jobSpecificExclusions,
       notes,
       vehicleEquipmentDescription,
+      isEnclosureCertificate,
     } = req.body;
+
+    if (isEnclosureCertificate) {
+      const friableTypes = ["Friable", "Friable (Non-Friable Conditions)"];
+      if (!friableTypes.includes(clearanceType)) {
+        return res.status(400).json({
+          message:
+            "Enclosure certificates must use a friable clearance type",
+        });
+      }
+    }
 
     // Calculate sequence number for clearances of the same type, project, and date
     let sequenceNumber = 1;
@@ -251,6 +287,7 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
       notes,
       vehicleEquipmentDescription,
       sequenceNumber,
+      isEnclosureCertificate: Boolean(isEnclosureCertificate),
       createdBy: req.user.id,
     });
 
@@ -318,6 +355,7 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
       revisionReasons,
       vehicleEquipmentDescription,
       reportViewedAt,
+      enclosureCertificateViewedAt,
     } = req.body;
 
     const clearance = await AsbestosClearance.findById(req.params.id);
@@ -410,7 +448,9 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
       clearance.markModified("enclosurePhotos");
     }
     clearance.jobSpecificExclusions = jobSpecificExclusions !== undefined ? jobSpecificExclusions : clearance.jobSpecificExclusions;
-    clearance.notes = notes || clearance.notes;
+    if (notes !== undefined) {
+      clearance.notes = notes;
+    }
     clearance.vehicleEquipmentDescription = vehicleEquipmentDescription !== undefined ? vehicleEquipmentDescription : clearance.vehicleEquipmentDescription;
     clearance.updatedBy = req.user._id || req.user.id;
     
@@ -423,6 +463,9 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
     }
     if (reportViewedAt !== undefined) {
       clearance.reportViewedAt = reportViewedAt;
+    }
+    if (enclosureCertificateViewedAt !== undefined) {
+      clearance.enclosureCertificateViewedAt = enclosureCertificateViewedAt;
     }
 
     // If jurisdiction (or clearance type) changes, refresh the legislation snapshot so PDFs show the right state.
@@ -453,15 +496,26 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
       }
     }
 
-    // Revising the report invalidates the PDF; require re-approval so the job can't complete until the revised report is authorised again.
-    if (clearance.reportApprovedBy) {
-      clearance.reportApprovedBy = undefined;
-      clearance.reportIssueDate = undefined;
-      clearance.authorisationRequestedBy = undefined;
-      clearance.authorisationRequestedByEmail = undefined;
-    }
+    const enclosureOnlyUpdate = isEnclosureOnlyUpdate(req.body);
 
-    clearClearancePdfFields(clearance);
+    if (enclosureOnlyUpdate) {
+      if (clearance.enclosureCertificateApprovedBy) {
+        clearEnclosureCertificateApprovalFields(clearance);
+      }
+      clearEnclosureCertificatePdfFields(clearance);
+    } else {
+      // Revising the report invalidates the PDF; require re-approval so the job can't complete until the revised report is authorised again.
+      if (clearance.reportApprovedBy) {
+        clearance.reportApprovedBy = undefined;
+        clearance.reportIssueDate = undefined;
+        clearance.authorisationRequestedBy = undefined;
+        clearance.authorisationRequestedByEmail = undefined;
+      }
+      if (clearance.enclosureCertificateApprovedBy) {
+        clearEnclosureCertificateApprovalFields(clearance);
+      }
+      clearClearancePdfFields(clearance);
+    }
     const updatedClearance = await clearance.save();
     
     const populatedClearance = await AsbestosClearance.findById(updatedClearance._id)
@@ -516,21 +570,34 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
 // PATCH clearance - report viewed (persist so Send/Authorise buttons stay visible)
 router.patch("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
   try {
-    const { reportViewedAt } = req.body;
-    if (reportViewedAt === undefined) {
-      return res.status(400).json({ message: "reportViewedAt is required" });
+    const { reportViewedAt, enclosureCertificateViewedAt } = req.body;
+    if (reportViewedAt === undefined && enclosureCertificateViewedAt === undefined) {
+      return res.status(400).json({
+        message: "reportViewedAt or enclosureCertificateViewedAt is required",
+      });
     }
+
+    const updates = {};
+    if (reportViewedAt !== undefined) {
+      updates.reportViewedAt = reportViewedAt ? new Date(reportViewedAt) : null;
+    }
+    if (enclosureCertificateViewedAt !== undefined) {
+      updates.enclosureCertificateViewedAt = enclosureCertificateViewedAt
+        ? new Date(enclosureCertificateViewedAt)
+        : null;
+    }
+
     const clearance = await AsbestosClearance.findByIdAndUpdate(
       req.params.id,
-      { reportViewedAt: reportViewedAt ? new Date(reportViewedAt) : null },
-      { new: true }
+      updates,
+      { new: true },
     );
     if (!clearance) {
       return res.status(404).json({ message: "Asbestos clearance not found" });
     }
     res.json(clearance);
   } catch (error) {
-    console.error("Error updating clearance reportViewedAt:", error);
+    console.error("Error updating clearance viewed timestamps:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -1645,6 +1712,217 @@ Review the report at: ${emailPayload.clearanceUrl}
     });
   } catch (error) {
     console.error("Error sending authorisation request emails:", error);
+    return res.status(500).json({
+      message: "Failed to send authorisation request emails",
+      error: error.message,
+    });
+  }
+});
+
+// Authorise enclosure inspection certificate
+router.post("/:id/authorise-enclosure-certificate", auth, checkPermission("asbestos.edit"), async (req, res) => {
+  try {
+    const clearance = await AsbestosClearance.findById(req.params.id)
+      .populate({
+        path: "projectId",
+        select: "projectID name client",
+        populate: { path: "client", select: "name" },
+      });
+
+    if (!clearance) {
+      return res.status(404).json({ message: "Asbestos clearance not found" });
+    }
+
+    if (clearance.enclosureCertificateApprovedBy) {
+      return res.status(400).json({
+        message: "Enclosure certificate has already been authorised",
+      });
+    }
+
+    const wasAlreadyAuthorised = Boolean(clearance.enclosureCertificateApprovedBy);
+    const approver =
+      req.user?.firstName && req.user?.lastName
+        ? `${req.user.firstName} ${req.user.lastName}`
+        : req.user?.email || "Unknown";
+
+    clearance.enclosureCertificateApprovedBy = approver;
+    clearance.enclosureCertificateIssueDate = new Date();
+    clearance.updatedBy = req.user.id;
+    clearEnclosureCertificatePdfFields(clearance);
+
+    const updatedClearance = await clearance.save();
+    const populatedForEmail = await AsbestosClearance.findById(updatedClearance._id)
+      .populate({
+        path: "projectId",
+        select: "projectID name client",
+        populate: { path: "client", select: "name" },
+      });
+
+    await notifyClearanceAuthorisationRequesterOnApproval({
+      clearance: populatedForEmail || updatedClearance,
+      wasAlreadyAuthorised,
+      approverName: approver,
+      reportTypeLabel: "Enclosure Inspection Certificate",
+      resolveJobUrl: resolveAsbestosClearanceJobUrl,
+      authorisationRequestedByField: "enclosureCertificateAuthorisationRequestedBy",
+      authorisationRequestedByEmailField: "enclosureCertificateAuthorisationRequestedByEmail",
+      isAuthorisedField: "enclosureCertificateApprovedBy",
+    });
+
+    const populatedClearance = await AsbestosClearance.findById(updatedClearance._id)
+      .populate({
+        path: "projectId",
+        select: "projectID name client",
+        populate: { path: "client", select: "name" },
+      })
+      .populate("createdBy", "firstName lastName")
+      .populate("updatedBy", "firstName lastName");
+
+    res.json(populatedClearance);
+  } catch (error) {
+    console.error("Error authorising enclosure certificate:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Send enclosure inspection certificate for authorisation
+router.post("/:id/send-enclosure-certificate-for-authorisation", auth, checkPermission("asbestos.edit"), async (req, res) => {
+  try {
+    const { sendMail } = require("../services/mailer");
+    const User = require("../models/User");
+    const AsbestosRemovalJob = require("../models/AsbestosRemovalJob");
+
+    const clearance = await AsbestosClearance.findById(req.params.id)
+      .populate({
+        path: "projectId",
+        select: "projectID name client",
+        populate: { path: "client", select: "name" },
+      })
+      .populate("createdBy", "firstName lastName");
+
+    if (!clearance) {
+      return res.status(404).json({ message: "Asbestos clearance not found" });
+    }
+
+    if (clearance.enclosureCertificateApprovedBy) {
+      return res.status(400).json({
+        message: "Enclosure certificate has already been authorised",
+      });
+    }
+
+    const reportProoferUsers = await User.find({
+      reportProofer: true,
+      isActive: true,
+    }).select("firstName lastName email");
+
+    if (reportProoferUsers.length === 0) {
+      return res.status(400).json({
+        message: "No report proofer users found",
+      });
+    }
+
+    const projectName = clearance.projectId?.name || "Unknown Project";
+    const projectID = clearance.projectId?.projectID || "N/A";
+    const clientName = clearance.projectId?.client?.name || "the client";
+    const requesterName =
+      req.user?.firstName && req.user?.lastName
+        ? `${req.user.firstName} ${req.user.lastName}`
+        : req.user?.email || "A user";
+
+    clearance.enclosureCertificateAuthorisationRequestedBy = req.user._id;
+    clearance.enclosureCertificateAuthorisationRequestedByEmail = req.user.email;
+    await clearance.save();
+
+    const inspectionDate = clearance.enclosureInspectionDateTime
+      ? formatDateSydney(clearance.enclosureInspectionDateTime)
+      : clearance.clearanceDate
+        ? formatDateSydney(clearance.clearanceDate)
+        : "N/A";
+
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    let jobId = clearance.asbestosRemovalJobId?.toString() || null;
+    if (!jobId && clearance.projectId) {
+      const projectId =
+        clearance.projectId?._id?.toString() || clearance.projectId?.toString();
+      const job = await AsbestosRemovalJob.findOne({ projectId })
+        .select("_id")
+        .sort({ createdAt: -1 })
+        .lean();
+      jobId = job?._id?.toString() || null;
+    }
+
+    const enclosureUrl = jobId
+      ? `${frontendUrl}/asbestos-removal/jobs/${jobId}/details?tab=enclosure`
+      : `${frontendUrl}/projects`;
+
+    const emailPayload = {
+      sendMail,
+      reportProoferUsers,
+      projectID,
+      projectName,
+      clientName,
+      inspectionDate,
+      requesterName,
+      enclosureUrl,
+    };
+
+    setImmediate(() => {
+      Promise.all(
+        emailPayload.reportProoferUsers.map(async (user) => {
+          await emailPayload.sendMail({
+            to: user.email,
+            subject: `Report Authorisation Required - ${emailPayload.projectID}: Enclosure Inspection Certificate`,
+            text: `
+An enclosure inspection certificate is ready for authorisation.
+
+Project: ${emailPayload.projectName} (${emailPayload.projectID})
+Client: ${emailPayload.clientName}
+Inspection Date: ${emailPayload.inspectionDate}
+Requested by: ${emailPayload.requesterName}
+
+Review the certificate at: ${emailPayload.enclosureUrl}
+            `.trim(),
+            html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+              <div style="margin-bottom: 30px;">
+                <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
+              </div>
+              <div style="color: #333; line-height: 1.6;">
+                <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Enclosure Certificate Authorisation Required</h2>
+                <p>Hello ${user.firstName},</p>
+                <p>An enclosure inspection certificate is ready for your authorisation:</p>
+                <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
+                  <p style="margin: 5px 0;"><strong>Project:</strong> ${emailPayload.projectName}</p>
+                  <p style="margin: 5px 0;"><strong>Project ID:</strong> ${emailPayload.projectID}</p>
+                  <p style="margin: 5px 0;"><strong>Client:</strong> ${emailPayload.clientName}</p>
+                  <p style="margin: 5px 0;"><strong>Inspection Date:</strong> ${emailPayload.inspectionDate}</p>
+                  <p style="margin: 5px 0;"><strong>Requested by:</strong> ${emailPayload.requesterName}</p>
+                </div>
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="${emailPayload.enclosureUrl}" style="background-color: rgb(25, 138, 44); color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Review Certificate</a>
+                </div>
+                <p>Please review and authorise the certificate at your earliest convenience.</p>
+                <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;">
+                <p style="color: #666; font-size: 12px;">This is an automated message, please do not reply to this email.</p>
+              </div>
+            </div>
+          `,
+          });
+        }),
+      ).catch((err) => {
+        console.error("Background send enclosure authorisation emails failed:", err);
+      });
+    });
+
+    return res.json({
+      message: `Authorisation request emails are being sent to ${reportProoferUsers.length} report proofer user(s)`,
+      recipients: reportProoferUsers.map((user) => ({
+        email: user.email,
+        name: `${user.firstName} ${user.lastName}`,
+      })),
+    });
+  } catch (error) {
+    console.error("Error sending enclosure authorisation request emails:", error);
     return res.status(500).json({
       message: "Failed to send authorisation request emails",
       error: error.message,

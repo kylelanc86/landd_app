@@ -143,6 +143,7 @@ const ClearanceItems = () => {
   const [loadingReports, setLoadingReports] = useState(false);
   const [selectedReports, setSelectedReports] = useState([]);
   const [savingExclusions, setSavingExclusions] = useState(false);
+  const [savingNotes, setSavingNotes] = useState(false);
   const [exclusionsLastSaved, setExclusionsLastSaved] = useState(null);
   const [isDictating, setIsDictating] = useState(false);
   const [dictationError, setDictationError] = useState("");
@@ -694,6 +695,21 @@ const ClearanceItems = () => {
         totalDuration: `${(loadingEndTime - fetchStartTime).toFixed(2)}ms`,
         timestamp: new Date().toISOString(),
       });
+    }
+  };
+
+  const handleNotesBlur = async () => {
+    if (!clearanceId || savingNotes) return;
+    try {
+      setSavingNotes(true);
+      await asbestosClearanceService.update(clearanceId, {
+        notes: clearance?.notes || "",
+      });
+    } catch (error) {
+      console.error("Error saving notes:", error);
+      showSnackbar("Failed to save notes", "error");
+    } finally {
+      setSavingNotes(false);
     }
   };
 
@@ -2411,10 +2427,6 @@ const ClearanceItems = () => {
     timestamp: new Date().toISOString(),
   });
 
-  const isFriableClearance =
-    clearance?.clearanceType === "Friable" ||
-    clearance?.clearanceType === "Friable (Non-Friable Conditions)";
-
   return (
     <PermissionGate requiredPermissions={["asbestos.view"]}>
       <Box m="20px" sx={{ position: "relative" }}>
@@ -2670,24 +2682,6 @@ const ClearanceItems = () => {
           >
             Job Specific Exclusions
           </Button>
-          {isFriableClearance && (
-            <Button
-              variant="contained"
-              onClick={() =>
-                navigate(`/clearances/${clearanceId}/enclosure-inspection`)
-              }
-              startIcon={<DescriptionIcon />}
-              sx={{
-                backgroundColor: "#2e7d32",
-                color: "white",
-                "&:hover": {
-                  backgroundColor: "#1b5e20",
-                },
-              }}
-            >
-              Enclosure Certificate
-            </Button>
-          )}
         </Box>
 
         <Card sx={{ mt: 3 }}>
@@ -2927,6 +2921,25 @@ const ClearanceItems = () => {
             </TableContainer>
           </CardContent>
         </Card>
+
+        <Box sx={{ mt: 2 }}>
+          <TextField
+            fullWidth
+            label="Notes"
+            value={clearance?.notes || ""}
+            onChange={(e) => {
+              setClearance((prev) => ({
+                ...prev,
+                notes: e.target.value,
+              }));
+            }}
+            onBlur={handleNotesBlur}
+            multiline
+            rows={3}
+            disabled={savingNotes}
+            placeholder="Optional notes"
+          />
+        </Box>
 
         {/* Add/Edit Dialog */}
         <Dialog

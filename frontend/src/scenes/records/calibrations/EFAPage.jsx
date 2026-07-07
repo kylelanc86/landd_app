@@ -23,11 +23,8 @@ import {
   MenuItem,
   Alert,
   CircularProgress,
-  Breadcrumbs,
-  Link,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -38,6 +35,12 @@ import { efaService } from "../../../services/efaService";
 import userService from "../../../services/userService";
 import LookupField from "../../../components/LookupField";
 import { userOptionsFromList } from "../../../utils/lookupOptions";
+import {
+  CALIBRATION_TABS,
+} from "./calibrationsNavigationUtils";
+import CalibrationPageHeader, {
+  CALIBRATION_PAGE_PADDING,
+} from "./CalibrationPageHeader";
 
 const EFAPage = () => {
   const theme = useTheme();
@@ -180,7 +183,7 @@ const EFAPage = () => {
     status: "Pass",
     technicianId: "",
     technicianName: "",
-    nextCalibration: "On change of Cowl model",
+    nextCalibration: "On change of Filter Holder model",
   });
 
   const handleAdd = () => {
@@ -199,7 +202,7 @@ const EFAPage = () => {
       status: "Pass",
       technicianId: "",
       technicianName: "",
-      nextCalibration: "On change of Cowl model",
+      nextCalibration: "On change of Filter Holder model",
     });
     setOpenDialog(true);
   };
@@ -231,7 +234,7 @@ const EFAPage = () => {
         status: calibration.status,
         technicianId: matchingTechnician?._id || calibration.technicianId || "",
         technicianName: technicianName,
-        nextCalibration: "On change of Cowl model",
+        nextCalibration: "On change of Filter Holder model",
       });
       setOpenDialog(true);
     }
@@ -313,7 +316,7 @@ const EFAPage = () => {
         filter3Diameter2: parseFloat(formData.filter3Diameter2) || null,
         status: formData.status,
         technician: formData.technicianName, // Send technician name instead of ID
-        nextCalibration: "On change of Cowl model",
+        nextCalibration: "On change of Filter Holder model",
         // notes: formData.notes || "", // Remove notes field if it doesn't exist in form
       };
 
@@ -518,74 +521,34 @@ const EFAPage = () => {
     return validateFilterAverages(formData);
   };
 
-  const handleBackToCalibrations = () => {
-    navigate("/records/laboratory/calibrations");
-  };
-
-  const handleBackToHome = () => {
-    navigate("/records");
-  };
-
   return (
-    <Box m="20px">
-      <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
-        EFA Calibrations
-      </Typography>
-
-      <Box
-        display="flex"
-        justifyContent="space-between"
-        alignItems="center"
-        mb="20px"
-      >
-        <Breadcrumbs>
-          <Link
-            component="button"
-            variant="body1"
-            onClick={handleBackToHome}
-            sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
-          >
-            <ArrowBackIcon sx={{ mr: 1 }} />
-            Records Home
-          </Link>
-          <Link
-            component="button"
-            variant="body1"
-            onClick={handleBackToCalibrations}
-            sx={{ cursor: "pointer" }}
-          >
-            Calibrations
-          </Link>
-          <Typography color="text.primary">EFA Calibrations</Typography>
-        </Breadcrumbs>
-      </Box>
+    <Box sx={{ p: CALIBRATION_PAGE_PADDING }}>
+      <CalibrationPageHeader
+        title="EFA Calibrations"
+        calibrationTab={CALIBRATION_TABS.INTERNAL}
+        action={
+          <Box display="flex" gap={2}>
+            <Button
+              variant="outlined"
+              startIcon={<HistoryIcon />}
+              onClick={() =>
+                navigate("/records/laboratory/calibrations/efa/history")
+              }
+            >
+              Historical Data
+            </Button>
+            <Button variant="contained" startIcon={<AddIcon />} onClick={handleAdd}>
+              Add Calibration
+            </Button>
+          </Box>
+        }
+      />
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
           {error}
         </Alert>
       )}
-
-      <Box
-        display="flex"
-        justifyContent="flex-end"
-        alignItems="center"
-        mb="20px"
-        gap={2}
-      >
-        <Button
-          variant="outlined"
-          startIcon={<HistoryIcon />}
-          onClick={() =>
-            navigate("/records/laboratory/calibrations/efa/history")
-          }
-        >
-          Historical Data
-        </Button>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={handleAdd}>
-          Add Calibration
-        </Button>
-      </Box>
 
       <TableContainer component={Paper}>
         <Table>
@@ -702,7 +665,7 @@ const EFAPage = () => {
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2" fontWeight="medium">
-                      {item.nextCalibration || "On change of Cowl model"}
+                      {item.nextCalibration || "On change of Filter Holder model"}
                     </Typography>
                   </TableCell>
                   <TableCell>

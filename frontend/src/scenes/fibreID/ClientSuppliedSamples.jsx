@@ -360,8 +360,8 @@ const ClientSuppliedSamples = () => {
       fileExtension = mimeToExt[file.type] || "file";
     }
     
-    // Generate filename: {ProjectID}-Chain of Custody-{SampleReceiptDate}.{ext}
-    return `${projectID}-Chain of Custody-${dateStr}.${fileExtension}`;
+    // Generate filename: {ProjectID}-Scanned Chain of Custody-{SampleReceiptDate}.{ext}
+    return `${projectID}-Scanned Chain of Custody-${dateStr}.${fileExtension}`;
   };
 
   /** Normalize chainOfCustody to array (supports legacy single object). */

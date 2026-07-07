@@ -134,6 +134,28 @@ const leadClearanceService = {
     );
     return response.data;
   },
+
+  uploadLeadMonitoringReport: async (id, reportData) => {
+    const response = await axios.post(
+      `${API_BASE_URL}/${id}/lead-monitoring-report`,
+      reportData
+    );
+    return response.data;
+  },
+
+  getLeadMonitoringReports: async (projectId) => {
+    const response = await axios.get(
+      `${API_BASE_URL}/air-monitoring-reports/${projectId}`
+    );
+    return response.data;
+  },
+
+  getLeadMonitoringReportsByJob: async (jobId) => {
+    const response = await axios.get(
+      `${API_BASE_URL}/air-monitoring-reports-by-job/${jobId}`
+    );
+    return response.data;
+  },
 };
 
 export default leadClearanceService;

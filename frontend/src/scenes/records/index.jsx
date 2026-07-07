@@ -266,6 +266,12 @@ const Records = () => {
   ];
 
   const laboratoryRecordWidgets = [
+    {
+      title: "Laboratory Equipment",
+      icon: <ScienceIcon />,
+      color: "#1976d2",
+      onClick: () => navigate("/records/laboratory/equipment?view=laboratory"),
+    },
     // {
     //   title: "Equipment List",
     //   icon: <ScienceIcon />,

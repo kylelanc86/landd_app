@@ -104,7 +104,7 @@ const ArchivedDataDialog = ({ open, onClose, projectId }) => {
     <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
       <DialogTitle>
         <Box display="flex" justifyContent="space-between" alignItems="center">
-          <Typography variant="h6">Deleted / Archived Data</Typography>
+          <Typography variant="h6">Deleted Data</Typography>
           <IconButton onClick={onClose} size="small">
             <CloseIcon />
           </IconButton>
@@ -119,7 +119,7 @@ const ArchivedDataDialog = ({ open, onClose, projectId }) => {
           <Alert severity="error">{error}</Alert>
         ) : items.length === 0 ? (
           <Typography color="text.secondary">
-            No archived data found.
+            No deleted data found.
           </Typography>
         ) : (
           <TableContainer component={Paper} variant="outlined">

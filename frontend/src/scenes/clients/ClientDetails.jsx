@@ -68,6 +68,7 @@ const ClientDetails = () => {
     contact2Email: "",
     paymentTerms: "Standard (30 days)",
     written_off: false,
+    notes: "",
   });
 
   useEffect(() => {
@@ -131,6 +132,7 @@ const ClientDetails = () => {
             contact2Email: "",
             paymentTerms: "Standard (30 days)",
             written_off: false,
+            notes: "",
           };
           setOriginalForm(JSON.parse(JSON.stringify(initialForm)));
           setLoading(false);
@@ -149,6 +151,7 @@ const ClientDetails = () => {
               contact2Email: response.data.contact2Email || "",
               paymentTerms: response.data.paymentTerms || "Standard (30 days)",
               written_off: response.data.written_off || false,
+              notes: response.data.notes || "",
             };
             setForm(clientData);
             // Store original form values for change tracking
@@ -829,6 +832,20 @@ const ClientDetails = () => {
                 />
               </Grid>
             )}
+
+            <Grid item xs={12}>
+              <TextField
+                label="Notes"
+                name="notes"
+                value={form.notes}
+                onChange={handleChange}
+                fullWidth
+                multiline
+                rows={4}
+                autoComplete="new-password"
+                placeholder="Optional notes about this client"
+              />
+            </Grid>
 
             <Grid item xs={12}>
               <Box display="flex" gap={2} justifyContent="flex-end">

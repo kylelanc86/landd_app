@@ -37,6 +37,121 @@ async function loadImageAsBase64(imagePath) {
   }
 }
 
+const PT_TO_PX = 96 / 72;
+const ptToPx = (pt) => pt * PT_TO_PX;
+
+let gothicFontsLoadedForMeasurement = false;
+
+async function ensureGothicFontsForMeasurement(baseUrl) {
+  if (gothicFontsLoadedForMeasurement || typeof FontFace === 'undefined') {
+    return;
+  }
+
+  const regular = new FontFace(
+    'Gothic',
+    `url(${baseUrl}/fonts/static/Gothic-Regular.ttf)`,
+    { weight: '400', style: 'normal' }
+  );
+  const bold = new FontFace(
+    'Gothic',
+    `url(${baseUrl}/fonts/static/Gothic-Bold.ttf)`,
+    { weight: '700', style: 'normal' }
+  );
+
+  await Promise.all([regular.load(), bold.load()]);
+  document.fonts.add(regular);
+  document.fonts.add(bold);
+  await document.fonts.ready;
+  gothicFontsLoadedForMeasurement = true;
+}
+
+function createPdfTextMeasurer() {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  let measureWordWidth = null;
+
+  const setFont = (fontSizePt, bold) => {
+    ctx.font = `${bold ? 'bold' : 'normal'} ${fontSizePt}pt Gothic, sans-serif`;
+    measureWordWidth = (word) => ctx.measureText(word).width;
+  };
+
+  const wrapParagraph = (paragraph, maxWidthPx, fontSizePt, bold) => {
+    setFont(fontSizePt, bold);
+    const spaceWidth = measureWordWidth(' ');
+    const words = paragraph.split(/\s+/).filter(Boolean);
+    let lines = 1;
+    let lineWidth = 0;
+
+    words.forEach((word) => {
+      const wordWidth = measureWordWidth(word);
+
+      if (wordWidth > maxWidthPx) {
+        if (lineWidth > 0) {
+          lines += 1;
+          lineWidth = 0;
+        }
+
+        let chunk = '';
+        for (const char of word) {
+          const nextChunk = chunk + char;
+          if (measureWordWidth(nextChunk) > maxWidthPx && chunk) {
+            lines += 1;
+            chunk = char;
+          } else {
+            chunk = nextChunk;
+          }
+        }
+        lineWidth = measureWordWidth(chunk);
+        return;
+      }
+
+      const nextWidth = lineWidth > 0 ? lineWidth + spaceWidth + wordWidth : wordWidth;
+      if (lineWidth > 0 && nextWidth > maxWidthPx) {
+        lines += 1;
+        lineWidth = wordWidth;
+      } else {
+        lineWidth = nextWidth;
+      }
+    });
+
+    return lines;
+  };
+
+  const getLineHeightPx = (fontSizePt, bold) => {
+    setFont(fontSizePt, bold);
+    const metrics = ctx.measureText('Agypq');
+    return (
+      metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent
+      || metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent
+      || fontSizePt * PT_TO_PX * 1.15
+    );
+  };
+
+  return {
+    countLines(text, maxWidthPt, fontSizePt, bold = false) {
+      if (!text || typeof text !== 'string') {
+        return 1;
+      }
+
+      const maxWidthPx = ptToPx(maxWidthPt);
+      let totalLines = 0;
+
+      text.split('\n').forEach((paragraph) => {
+        if (!paragraph || !paragraph.trim()) {
+          totalLines += 1;
+          return;
+        }
+        totalLines += wrapParagraph(paragraph, maxWidthPx, fontSizePt, bold);
+      });
+
+      return Math.max(totalLines, 1);
+    },
+    getLineHeightPt(fontSizePt, bold = false) {
+      return getLineHeightPx(fontSizePt, bold) / PT_TO_PX;
+    },
+  };
+}
+
 export async function generateFibreIDReport({ assessment, sampleItems, analyst, openInNewTab, returnPdfData = false, reportApprovedBy = null, reportIssueDate = null }) {
   // Detect if this is a client-supplied job (has jobType but no assessorId)
   const isClientSupplied = assessment?.jobType === "Fibre ID" && !assessment?.assessorId;
@@ -72,6 +187,11 @@ pdfMake.fonts = {
   if (!nataLogo) {
     console.warn('Failed to load NATA logo, proceeding without it');
   }
+
+  await ensureGothicFontsForMeasurement(baseUrl).catch((error) => {
+    console.warn('Could not load Gothic fonts for PDF line measurement; row heights may be approximate.', error);
+  });
+  const textMeasurer = createPdfTextMeasurer();
 
   // Sort sample items by lab reference (numeric order: Lab1, Lab2, ..., Lab9, Lab10, not text order)
   const sortedSampleItems = [...sampleItems].sort(compareLabReference);
@@ -122,7 +242,7 @@ pdfMake.fonts = {
     },
     
     
-    content: (function() {
+    content: (function(measurer) {
       return [
       // Page 1 Content
       {
@@ -412,74 +532,72 @@ pdfMake.fonts = {
             margin: [0, 0, 0, 12]
           },
           
-          // Sample Analysis Table with fixed row heights
-          // Build all rows first to calculate max lines per row
+          // Sample Analysis Table — centred content; row height from pdfMake, top offset for shorter cells
           (function() {
             // Table column widths in percentage: ['16%', '11%', '11%', '19%', '11%', '13%', '19%']
             // A4 page width: 595pt, margins: 40pt each side = 515pt usable width
             const usablePageWidth = 515; // A4 width (595pt) - left margin (40pt) - right margin (40pt)
             const columnWidths = [0.16, 0.11, 0.11, 0.19, 0.11, 0.13, 0.19];
-            
-            const VERTICAL_CENTERING_ADJUSTMENT_PT = 2; // Move slightly upward for optical centering
+            const CELL_FONT_SIZE = 8;
+            const CELL_VERTICAL_PADDING = 4;
+            const CELL_HORIZONTAL_PADDING = 8; // layout paddingLeft + paddingRight
+            const CELL_BORDER_WIDTH = 1; // 0.5pt left + 0.5pt right cell borders
+            const WRAP_WIDTH_SAFETY_PT = 2; // pdfMake vs canvas measurement fudge
+            const LINE_HEIGHT_PT = measurer.getLineHeightPt(CELL_FONT_SIZE, false);
+            const FIBRE_ITEM_GAP_PT = LINE_HEIGHT_PT / 2; // half a line between stacked fibre results
+            const MIN_ROW_LINES = 2;
 
-            // Helper function to estimate how many lines text will wrap to
-            // Based on column width, font size, and text length
-            const estimateWrappedLines = (text, columnIndex) => {
-              if (!text || typeof text !== 'string') {
-                return 1;
-              }
-              
-              // Respect explicit line breaks, including blank spacer lines (e.g. "\n\n").
-              // Using "\n" preserves empty lines so multi-result cells get correct height.
-              const explicitLines = text.split('\n').length;
-              
-              // Estimate character width: for 8pt font, actual rendered width varies
-              // Using 0.8pt as a conservative estimate to better detect wrapping
-              // This accounts for:
-              // - Variable character widths (M, W are wider than i, l)
-              // - Word spacing
-              // - Font metrics (actual width may be larger than font size)
-              // - Padding and cell constraints
-              const avgCharWidth = 0.8;
-              
-              // Calculate column width in points
-              const columnWidthPt = columnWidths[columnIndex] * usablePageWidth;
-              
-              // Estimate characters per line
-              // Use 80% of available width to account for:
-              // - Word boundaries (can't break in middle of words)
-              // - Variable character widths (some chars wider than average)
-              // - Padding and spacing
-              // - Font rendering differences
-              const charsPerLine = Math.floor(columnWidthPt / avgCharWidth * 0.8);
-              
-              // Calculate wrapped lines per explicit line. Empty explicit lines still count.
-              let wrappedLines = 0;
-              const explicitLineParts = text.split('\n');
-              explicitLineParts.forEach((part) => {
-                if (!part || !part.trim()) {
-                  wrappedLines += 1;
-                  return;
+            const getColumnInnerWidthPt = (columnIndex) =>
+              (columnWidths[columnIndex] * usablePageWidth)
+              - CELL_HORIZONTAL_PADDING
+              - CELL_BORDER_WIDTH
+              - WRAP_WIDTH_SAFETY_PT;
+
+            const estimateWrappedLines = (text, columnIndex, { bold = false } = {}) =>
+              measurer.countLines(
+                text,
+                getColumnInnerWidthPt(columnIndex),
+                CELL_FONT_SIZE,
+                bold
+              );
+
+            const buildSampleCell = ({ text, bold = false }) => ({
+              text,
+              fontSize: CELL_FONT_SIZE,
+              bold,
+              alignment: 'center',
+            });
+
+            const countFibreStackLines = (items, columnIndex, bold = false) => {
+              if (!items?.length) return 1;
+              const textLines = items.reduce(
+                (sum, item) => sum + estimateWrappedLines(item, columnIndex, { bold }),
+                0
+              );
+              const gapLines = Math.max(0, items.length - 1) * 0.5;
+              return Math.max(textLines + gapLines, 1);
+            };
+
+            const buildFibreStackCell = (items, bold = false) => {
+              if (!items?.length) return buildSampleCell({ text: 'None', bold });
+              if (items.length === 1) return buildSampleCell({ text: items[0], bold });
+
+              const stack = [];
+              items.forEach((item, itemIndex) => {
+                if (itemIndex > 0) {
+                  stack.push({
+                    text: '',
+                    margin: [0, FIBRE_ITEM_GAP_PT / 2, 0, FIBRE_ITEM_GAP_PT / 2],
+                  });
                 }
-                const words = part.split(/\s+/);
-                let currentLineLength = 0;
-                let partLines = 1;
-                words.forEach(word => {
-                  const wordLength = word.length;
-                  if (currentLineLength > 0 && currentLineLength + wordLength + 1 > charsPerLine) {
-                    partLines++;
-                    currentLineLength = wordLength;
-                  } else {
-                    currentLineLength += (currentLineLength > 0 ? 1 : 0) + wordLength;
-                  }
+                stack.push({
+                  text: item,
+                  fontSize: CELL_FONT_SIZE,
+                  bold,
+                  alignment: 'center',
                 });
-                wrappedLines += partLines;
               });
-              
-              // Use the maximum of explicit lines or wrapped lines
-              const totalLines = Math.max(explicitLines, wrappedLines, 1);
-              
-              return totalLines;
+              return { stack };
             };
             
             const tableRows = sortedSampleItems.map((item, index) => {
@@ -570,11 +688,11 @@ pdfMake.fonts = {
                         asbestosResult = isNoAsbestos ? "No Asbestos Detected" : finalResult;
                       } else if (asbestosResultsFromFibres.length > 0) {
                         // Fall back to fibre analysis results if no trace analysis
-                        asbestosResult = asbestosResultsFromFibres.join('\n\n');
+                        asbestosResult = asbestosResultsFromFibres;
                       }
                     } else if (asbestosResultsFromFibres.length > 0) {
                       // Use fibre analysis results if no finalResult
-                      asbestosResult = asbestosResultsFromFibres.join('\n\n');
+                      asbestosResult = asbestosResultsFromFibres;
                     }
                     // Non-asbestos fibres identified but no asbestos: report "No Asbestos Detected"
                     if (asbestosResult === '[Result not set]' && nonAsbestosResults.length > 0 && asbestosResultsFromFibres.length === 0) {
@@ -586,13 +704,15 @@ pdfMake.fonts = {
                     }
                     
                     const result = {
-                      nonAsbestos: nonAsbestosResults.length > 0 ? nonAsbestosResults.join('\n\n') : 'None',
-                      asbestos: asbestosResult
+                      nonAsbestosItems: nonAsbestosResults.length > 0 ? nonAsbestosResults : ['None'],
+                      asbestosItems: Array.isArray(asbestosResult)
+                        ? asbestosResult
+                        : [asbestosResult],
                     };
                     
                     // Ensure we never return undefined values
-                    if (!result.nonAsbestos) result.nonAsbestos = 'None';
-                    if (!result.asbestos) result.asbestos = '[Result not set]';
+                    if (!result.nonAsbestosItems?.length) result.nonAsbestosItems = ['None'];
+                    if (!result.asbestosItems?.length) result.asbestosItems = ['[Result not set]'];
                     
                     return result;
                   };
@@ -623,11 +743,11 @@ pdfMake.fonts = {
                   const safeDescription = (item.analysisData?.sampleDescription || item.locationDescription || item.clientReference) ? 
                     (item.analysisData?.sampleDescription || item.locationDescription || item.clientReference) : 'No description';
                   const safeSampleMass = (sampleMass && sampleMass !== 'undefined' && sampleMass !== 'null') ? sampleMass : 'Unknown';
-                  const safeNonAsbestos = (fibreResults.nonAsbestos && fibreResults.nonAsbestos !== 'undefined' && fibreResults.nonAsbestos !== 'null') ? fibreResults.nonAsbestos : 'None';
-                  const safeAsbestos = (fibreResults.asbestos && fibreResults.asbestos !== 'undefined' && fibreResults.asbestos !== 'null') ? fibreResults.asbestos : '[Result not set]';
+                  const safeNonAsbestosItems = fibreResults.nonAsbestosItems;
+                  const safeAsbestosItems = fibreResults.asbestosItems;
                   
                   // Check for any problematic values
-                  const allValues = [safeProjectID, safeSampleRef, safeAnalysisDate, safeDescription, safeSampleMass, safeNonAsbestos, safeAsbestos];
+                  const allValues = [safeProjectID, safeSampleRef, safeAnalysisDate, safeDescription, safeSampleMass, ...safeNonAsbestosItems, ...safeAsbestosItems];
                   allValues.forEach((value, i) => {
                     if (value === null || value === undefined || value === 'null' || value === 'undefined' || value === 'NaN' || value.includes('NaN')) {
                       console.error(`PROBLEMATIC VALUE FOUND at index ${i}:`, value);
@@ -636,72 +756,62 @@ pdfMake.fonts = {
                   
                   // L&D ID Reference format: {projectID}-Lab{x} where x starts at 1 and increments for each sample
                   const safeLabRef = `${safeProjectID}-Lab${index + 1}`;
+
+                  const lineCounts = [
+                    estimateWrappedLines(safeLabRef, 0),
+                    estimateWrappedLines(safeSampleRef, 1),
+                    estimateWrappedLines(safeAnalysisDate, 2),
+                    estimateWrappedLines(safeDescription, 3),
+                    estimateWrappedLines(safeSampleMass, 4),
+                    countFibreStackLines(safeNonAsbestosItems, 5, false),
+                    countFibreStackLines(safeAsbestosItems, 6, true),
+                  ];
                   
-                  // Return row data with text values for line counting
-                  // Note: valign is not supported by pdfMake, we'll use margins instead
                   return {
                     cells: [
-                      { text: safeLabRef, fontSize: 8, alignment: 'left' },
-                      { text: safeSampleRef, fontSize: 8, alignment: 'left' },
-                      { text: safeAnalysisDate, fontSize: 8, alignment: 'left' },
-                      { text: safeDescription, fontSize: 8, alignment: 'left' },
-                      { text: safeSampleMass, fontSize: 8, alignment: 'left' },
-                      { text: safeNonAsbestos, fontSize: 8, alignment: 'left' },
-                      { text: safeAsbestos, fontSize: 8, bold: true, alignment: 'left' }
+                      buildSampleCell({ text: safeLabRef }),
+                      buildSampleCell({ text: safeSampleRef }),
+                      buildSampleCell({ text: safeAnalysisDate }),
+                      buildSampleCell({ text: safeDescription }),
+                      buildSampleCell({ text: safeSampleMass }),
+                      buildFibreStackCell(safeNonAsbestosItems, false),
+                      buildFibreStackCell(safeAsbestosItems, true),
                     ],
-                    // Store text values for line counting
-                    textValues: [safeLabRef, safeSampleRef, safeAnalysisDate, safeDescription, safeSampleMass, safeNonAsbestos, safeAsbestos]
+                    lineCounts,
                   };
                 });
-          
-          // Calculate max lines for each row and apply margins for vertical centering.
-          // Use top offset only: symmetric top/bottom margins in pdfMake can expand row height
-          // and produce the "between top and center" look when adjacent cells wrap.
-          const rowsWithMargins = tableRows.map((row, rowIndex) => {
-            // Find the maximum number of lines in this row, estimating wrapping for each column
-            const lineCounts = row.textValues.map((text, colIndex) => estimateWrappedLines(text, colIndex));
-            const maxLines = Math.max(...lineCounts);
-            
-            // Apply a top margin offset to shorter cells (pdfMake has no valign for table cells).
-            const cellsWithMargins = row.cells.map((cell, cellIndex) => {
-              const cellLines = lineCounts[cellIndex];
-              const missingLines = Math.max(0, maxLines - cellLines);
-              // ~9.6pt line height + spacing/padding effects in this table.
-              // Using 5.5 keeps short cells visually centered beside multi-line results.
-              const topMargin = Math.max(0, (missingLines * 5.5) - VERTICAL_CENTERING_ADJUSTMENT_PT);
-              
-              // Apply margins directly to the cell
-              const cellWithMargins = {
-                text: cell.text,
-                fontSize: cell.fontSize || 8,
-                bold: cell.bold || false,
-                alignment: cell.alignment || 'left',
-                margin: [0, topMargin, 0, 0] // top-offset only to avoid changing computed row height
+
+          const dataRows = tableRows.map((row) => {
+            const maxLines = Math.max(...row.lineCounts, 1);
+            const needsMinRowHeight = maxLines < MIN_ROW_LINES;
+            const layoutLines = Math.max(maxLines, MIN_ROW_LINES);
+
+            return row.cells.map((cell, cellIndex) => {
+              const cellLines = row.lineCounts[cellIndex];
+              const verticalMargin = Math.max(0, ((layoutLines - cellLines) * LINE_HEIGHT_PT) / 2);
+
+              return {
+                ...cell,
+                margin: needsMinRowHeight
+                  ? [0, verticalMargin, 0, verticalMargin]
+                  : [0, verticalMargin, 0, 0],
               };
-              
-              return cellWithMargins;
             });
-            
-            return cellsWithMargins;
           });
-          
-          // Build the final table body with header row + data rows
-          // Header row doesn't need margins since it's typically single-line
+
           const tableBody = [
             [
-              { text: 'L&D ID Reference', style: 'tableHeader', fontSize: 8, alignment: 'left' },
-              { text: 'Sample Reference', style: 'tableHeader', fontSize: 8, alignment: 'left' },
-              { text: 'Analysis Date', style: 'tableHeader', fontSize: 8, alignment: 'left' },
-              { text: 'Sample Description', style: 'tableHeader', fontSize: 8, alignment: 'left' },
-              { text: 'Mass/Dimensions', style: 'tableHeader', fontSize: 8, alignment: 'left' },
-              { text: 'Non-Asbestos Fibres', style: 'tableHeader', fontSize: 8, alignment: 'left' },
-              { text: 'Reported Result', style: 'tableHeader', fontSize: 8, alignment: 'left' }
+              { text: 'L&D ID Reference', style: 'tableHeader', fontSize: CELL_FONT_SIZE, alignment: 'center' },
+              { text: 'Sample Reference', style: 'tableHeader', fontSize: CELL_FONT_SIZE, alignment: 'center' },
+              { text: 'Analysis Date', style: 'tableHeader', fontSize: CELL_FONT_SIZE, alignment: 'center' },
+              { text: 'Sample Description', style: 'tableHeader', fontSize: CELL_FONT_SIZE, alignment: 'center' },
+              { text: 'Mass/Dimensions', style: 'tableHeader', fontSize: CELL_FONT_SIZE, alignment: 'center' },
+              { text: 'Non-Asbestos Fibres', style: 'tableHeader', fontSize: CELL_FONT_SIZE, alignment: 'center' },
+              { text: 'Reported Result', style: 'tableHeader', fontSize: CELL_FONT_SIZE, alignment: 'center' }
             ],
-            ...rowsWithMargins
+            ...dataRows
           ];
-          
-          
-          // Sample Analysis Table with fixed row heights
+
           const tableDefinition = {
             table: {
               headerRows: 1,
@@ -723,16 +833,11 @@ pdfMake.fonts = {
               },
               paddingLeft: function(i, node) { return 4; },
               paddingRight: function(i, node) { return 4; },
-              paddingTop: function(i, node) { 
-                // Equal padding top and bottom for all cells to ensure vertical centering
-                return 8; 
-              },
-              paddingBottom: function(i, node) { 
-                // Equal padding top and bottom for all cells to ensure vertical centering
-                return 8; 
-              },
+              paddingTop: function(i, node) { return CELL_VERTICAL_PADDING; },
+              paddingBottom: function(i, node) { return CELL_VERTICAL_PADDING; },
               fillColor: function (rowIndex, node, columnIndex) {
-                return (rowIndex % 2 === 0) ? '#f9f9f9' : 'white';
+                if (rowIndex === 0) return '#f0f0f0';
+                return (rowIndex % 2 === 1) ? '#f9f9f9' : 'white';
               }
             }
           };
@@ -743,7 +848,7 @@ pdfMake.fonts = {
         ]
       }
     ];
-    })(),
+    })(textMeasurer),
     
     footer: (function(nataLogo) {
       return function(currentPage, pageCount) {

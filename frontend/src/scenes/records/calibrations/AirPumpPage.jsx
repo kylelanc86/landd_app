@@ -51,6 +51,10 @@ import {
   equipmentOptionsFromList,
   buildEquipmentDisplayLabel,
 } from "../../../utils/lookupOptions";
+import {
+  CALIBRATION_TABS,
+  getCalibrationsListPath,
+} from "./calibrationsNavigationUtils";
 
 const AirPumpPage = () => {
   const theme = useTheme();
@@ -837,7 +841,7 @@ const AirPumpPage = () => {
   };
 
   const handleBackToCalibrations = () => {
-    navigate("/records/laboratory/calibrations/list");
+    navigate(getCalibrationsListPath(CALIBRATION_TABS.INTERNAL));
   };
 
   // Filter pumps based on showOutOfService toggle

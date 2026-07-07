@@ -53,6 +53,14 @@ const asbestosClearanceService = {
     return response.data;
   },
 
+  // Mark enclosure certificate as viewed
+  markEnclosureCertificateViewed: async (id) => {
+    const response = await axios.patch(`${API_BASE_URL}/${id}`, {
+      enclosureCertificateViewedAt: new Date().toISOString(),
+    });
+    return response.data;
+  },
+
   // Get statistics
   getStats: async () => {
     const response = await axios.get(`${API_BASE_URL}/stats/overview`);
@@ -230,7 +238,19 @@ const asbestosClearanceService = {
   sendForAuthorisation: async (id) => {
     const response = await axios.post(`${API_BASE_URL}/${id}/send-for-authorisation`);
     return response.data;
-  }
+  },
+
+  // Authorise enclosure inspection certificate
+  authoriseEnclosureCertificate: async (id) => {
+    const response = await axios.post(`${API_BASE_URL}/${id}/authorise-enclosure-certificate`);
+    return response.data;
+  },
+
+  // Send enclosure inspection certificate for authorisation
+  sendEnclosureCertificateForAuthorisation: async (id) => {
+    const response = await axios.post(`${API_BASE_URL}/${id}/send-enclosure-certificate-for-authorisation`);
+    return response.data;
+  },
 };
 
 export default asbestosClearanceService; 

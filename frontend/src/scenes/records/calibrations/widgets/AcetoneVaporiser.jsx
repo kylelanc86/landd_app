@@ -2,6 +2,17 @@ import React, { useState, useEffect } from "react";
 import { Box, CircularProgress, useTheme } from "@mui/material";
 import BaseCalibrationWidget from "./BaseCalibrationWidget";
 import { equipmentService } from "../../../../services/equipmentService";
+import { acetoneVaporiserCalibrationService } from "../../../../services/acetoneVaporiserCalibrationService";
+import {
+  getCachedCalibrationData,
+  setCachedCalibrationData,
+} from "../../../../utils/calibrationCache";
+import {
+  computeAcetoneVaporiserWidgetStats,
+  normalizeAcetoneVaporiserCalibrations,
+} from "../acetoneVaporiserCalibrationUtils";
+
+const CACHE_KEY = "acetone-vaporiser";
 
 const AcetoneVaporiser = ({ viewCalibrationsPath }) => {
   const theme = useTheme();
@@ -13,25 +24,63 @@ const AcetoneVaporiser = ({ viewCalibrationsPath }) => {
     fetchAcetoneVaporiserData();
   }, []);
 
+  const applyStats = ({
+    nextCalibrationDue: nextDue,
+    itemsDueInNextMonth: dueCount,
+  }) => {
+    setNextCalibrationDue(nextDue);
+    setItemsDueInNextMonth(dueCount);
+  };
+
+  const fetchFreshData = async () => {
+    const [calibrationResponse, equipmentResponse] = await Promise.all([
+      acetoneVaporiserCalibrationService.getAll({
+        limit: 1000,
+        sortBy: "date",
+        sortOrder: "desc",
+      }),
+      equipmentService.getAll({
+        equipmentType: "Acetone Vaporiser",
+        limit: 1000,
+      }),
+    ]);
+
+    const calibrations = normalizeAcetoneVaporiserCalibrations(
+      calibrationResponse
+    );
+    const equipment = equipmentResponse.equipment || [];
+    const stats = computeAcetoneVaporiserWidgetStats(calibrations, equipment);
+
+    applyStats(stats);
+    setCachedCalibrationData(CACHE_KEY, stats);
+  };
+
   const fetchAcetoneVaporiserData = async () => {
     try {
       setLoading(true);
 
-      // Fetch equipment of type Acetone Vaporiser
-      const response = await equipmentService.getAll({
-        equipmentType: "Acetone Vaporiser",
-        limit: 1000,
-      });
-      const equipment = response.equipment || [];
+      const cached = getCachedCalibrationData(CACHE_KEY);
+      if (cached) {
+        applyStats({
+          nextCalibrationDue: cached.nextCalibrationDue
+            ? new Date(cached.nextCalibrationDue)
+            : null,
+          itemsDueInNextMonth: cached.itemsDueInNextMonth || 0,
+        });
+        setLoading(false);
+        fetchFreshData().catch((error) => {
+          console.error(
+            "Error refreshing Acetone Vaporiser calibration data:",
+            error
+          );
+        });
+        return;
+      }
 
-      // For now, set defaults until calibration service is available
-      // TODO: Implement calibration service for Acetone Vaporiser
-      setNextCalibrationDue(null);
-      setItemsDueInNextMonth(0);
+      await fetchFreshData();
     } catch (error) {
       console.error("Error fetching acetone vaporiser data:", error);
-      setNextCalibrationDue(null);
-      setItemsDueInNextMonth(0);
+      applyStats({ nextCalibrationDue: null, itemsDueInNextMonth: 0 });
     } finally {
       setLoading(false);
     }

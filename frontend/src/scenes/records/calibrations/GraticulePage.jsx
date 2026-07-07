@@ -43,6 +43,10 @@ import {
   equipmentOptionsFromList,
   buildEquipmentDisplayLabel,
 } from "../../../utils/lookupOptions";
+import {
+  CALIBRATION_TABS,
+  getCalibrationsListPath,
+} from "./calibrationsNavigationUtils";
 
 const GraticulePage = () => {
   const theme = useTheme();
@@ -862,7 +866,7 @@ const GraticulePage = () => {
   };
 
   const handleBackToCalibrations = () => {
-    navigate("/records/laboratory/calibrations");
+    navigate(getCalibrationsListPath(CALIBRATION_TABS.INTERNAL));
   };
 
   const handleBackToHome = () => {

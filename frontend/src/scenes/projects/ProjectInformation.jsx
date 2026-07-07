@@ -178,6 +178,7 @@ const ProjectInformation = () => {
     contact2Email: "",
     paymentTerms: "Standard (30 days)",
     written_off: false,
+    notes: "",
   });
 
   const [form, setForm] = useState({
@@ -1535,6 +1536,7 @@ const ProjectInformation = () => {
         contact2Email: "",
         paymentTerms: "Standard (30 days)",
         written_off: false,
+        notes: "",
       });
       showSnackbar("Client created successfully!", "success");
     } catch (err) {
@@ -2677,6 +2679,17 @@ const ProjectInformation = () => {
                   </Typography>
                 </Box>
               )}
+              <TextField
+                label="Notes"
+                name="notes"
+                value={newClientForm.notes}
+                onChange={handleNewClientChange}
+                fullWidth
+                multiline
+                rows={4}
+                autoComplete="new-password"
+                placeholder="Optional notes about this client"
+              />
             </Stack>
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
@@ -3385,6 +3398,19 @@ const ProjectInformation = () => {
                         variant="filled"
                         sx={{ fontWeight: "bold" }}
                       />
+                    </Grid>
+                  )}
+                  {clientDetails.notes && (
+                    <Grid item xs={12}>
+                      <Typography variant="body2" color="text.secondary">
+                        Notes
+                      </Typography>
+                      <Typography
+                        variant="body1"
+                        sx={{ fontWeight: 500, whiteSpace: "pre-wrap" }}
+                      >
+                        {clientDetails.notes}
+                      </Typography>
                     </Grid>
                   )}
                 </Grid>

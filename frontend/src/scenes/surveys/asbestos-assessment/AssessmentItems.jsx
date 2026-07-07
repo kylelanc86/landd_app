@@ -505,6 +505,7 @@ const AssessmentItems = () => {
   // Job Specific Exclusions state
   const [jobExclusionsModalOpen, setJobExclusionsModalOpen] = useState(false);
   const [savingExclusions, setSavingExclusions] = useState(false);
+  const [savingNotes, setSavingNotes] = useState(false);
   const [exclusionsLastSaved, setExclusionsLastSaved] = useState(null);
   const [isDictatingExclusions, setIsDictatingExclusions] = useState(false);
   const [dictationErrorExclusions, setDictationErrorExclusions] = useState("");
@@ -1485,6 +1486,23 @@ const AssessmentItems = () => {
       assessment.assessmentScope.some(
         (item) => item && String(item).trim() !== "",
       ));
+
+  const handleNotesBlur = async () => {
+    if (!id || !assessment || savingNotes || isReportLocked) return;
+    try {
+      setSavingNotes(true);
+      await asbestosAssessmentService.update(id, {
+        projectId: assessment.projectId?._id || assessment.projectId,
+        assessmentDate: assessment.assessmentDate,
+        notes: assessment.notes || "",
+      });
+    } catch (error) {
+      console.error("Error saving notes:", error);
+      showSnackbar("Failed to save notes", "error");
+    } finally {
+      setSavingNotes(false);
+    }
+  };
 
   // Complete assessment handler
   const handleCompleteAssessment = () => {
@@ -3428,6 +3446,25 @@ const AssessmentItems = () => {
             </TableContainer>
           </CardContent>
         </Card>
+
+        <Box sx={{ mt: 2 }}>
+          <TextField
+            fullWidth
+            label="Notes"
+            value={assessment?.notes || ""}
+            onChange={(e) => {
+              setAssessment((prev) => ({
+                ...prev,
+                notes: e.target.value,
+              }));
+            }}
+            onBlur={handleNotesBlur}
+            multiline
+            rows={3}
+            disabled={savingNotes || isReportLocked}
+            placeholder="Optional notes"
+          />
+        </Box>
 
         {/* Assessment Complete Button */}
         <Box

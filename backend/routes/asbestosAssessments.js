@@ -601,6 +601,7 @@ router.put('/:id', async (req, res) => {
       labSamplesStatus,
       jobSpecificExclusions,
       discussionConclusions,
+      notes,
       sitePlan,
       sitePlanFile,
       sitePlanLegend,
@@ -665,6 +666,9 @@ router.put('/:id', async (req, res) => {
     }
     if (discussionConclusions !== undefined) {
       updateData.discussionConclusions = discussionConclusions;
+    }
+    if (notes !== undefined) {
+      updateData.notes = notes;
     }
     if (sitePlan !== undefined) updateData.sitePlan = sitePlan;
     if (sitePlanFile !== undefined) updateData.sitePlanFile = sitePlanFile;

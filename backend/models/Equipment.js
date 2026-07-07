@@ -21,12 +21,15 @@ const equipmentSchema = new mongoose.Schema(
         "Furnace",
         "Graticule",
         "HSE Test Slide",
+        "Mass Balance",
         "Micrometer",
+        "Caliper",
         "Phase Contrast Microscope",
         "Pneumatic tester",
         "Polarised Light Microscope",
         "RI Liquids",
         "Site flowmeter",
+        "Sieves",
         "Stereomicroscope"
       ],
     },
@@ -38,6 +41,11 @@ const equipmentSchema = new mongoose.Schema(
     brandModel: {
       type: String,
       required: true,
+      trim: true,
+    },
+    serialNumber: {
+      type: String,
+      required: false,
       trim: true,
     },
     status: {

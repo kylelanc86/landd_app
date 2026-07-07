@@ -69,6 +69,11 @@ import {
   generateHTMLTemplatePDF,
 } from "../../utils/templatePDFGenerator";
 import { generateShiftReport } from "../../utils/generateShiftReport";
+import {
+  buildShiftChainOfCustodyFilename,
+  getAxiosDownloadFilename,
+  triggerBlobDownload,
+} from "../../utils/downloadFilename";
 import { generateLeadMonitoringShiftReport } from "../../utils/generateLeadMonitoringShiftReport";
 import { useAuth } from "../../context/AuthContext";
 import { formatDate } from "../../utils/dateFormat";
@@ -77,7 +82,7 @@ import { hasPermission } from "../../config/permissions";
 import PermissionGate from "../../components/PermissionGate";
 
 const TIMING_LOG_PREFIX = "[LeadRemovalJobDetails]";
-const TIMING_ENABLED = true;
+const TIMING_ENABLED = false;
 
 function calculateDurationMinutes(startTime, endTime) {
   if (!startTime || !endTime) return 0;
@@ -173,9 +178,13 @@ const LeadRemovalJobDetails = () => {
   const [clearancePdfJobId, setClearancePdfJobId] = useState(null);
   const [clearancePdfStatus, setClearancePdfStatus] = useState("idle");
   const [clearancePdfStartingId, setClearancePdfStartingId] = useState(null);
-  const [clearancePdfGeneratingForClearanceId, setClearancePdfGeneratingForClearanceId] = useState(null);
+  const [
+    clearancePdfGeneratingForClearanceId,
+    setClearancePdfGeneratingForClearanceId,
+  ] = useState(null);
   const clearancePdfCompletionHandledRef = useRef(null); // guard against double-download when poll runs twice
-  const [clearanceDownloadDialogOpen, setClearanceDownloadDialogOpen] = useState(false);
+  const [clearanceDownloadDialogOpen, setClearanceDownloadDialogOpen] =
+    useState(false);
   const [sendingAuthorisationRequests, setSendingAuthorisationRequests] =
     useState({});
   const [
@@ -292,7 +301,9 @@ const LeadRemovalJobDetails = () => {
         });
         const requestDuration = Math.round(getTimestamp() - requestStart);
 
-        const responseDataSize = JSON.stringify(jobResponse.data || {}).length;
+        const responseDataSize = TIMING_ENABLED
+          ? JSON.stringify(jobResponse.data || {}).length
+          : 0;
         logTiming("job details response received", {
           requestDurationMs: requestDuration,
           responseDataSizeBytes: responseDataSize,
@@ -311,7 +322,9 @@ const LeadRemovalJobDetails = () => {
         }
 
         // Log job data size
-        const jobDataSize = JSON.stringify(jobPayload.job || {}).length;
+        const jobDataSize = TIMING_ENABLED
+          ? JSON.stringify(jobPayload.job || {}).length
+          : 0;
         const jobStart = getTimestamp();
         setJob(jobPayload.job || null);
         const jobSetDuration = Math.round(getTimestamp() - jobStart);
@@ -329,7 +342,9 @@ const LeadRemovalJobDetails = () => {
         const shiftsPayload = Array.isArray(jobPayload.shifts)
           ? jobPayload.shifts
           : [];
-        const shiftsPayloadSize = JSON.stringify(shiftsPayload).length;
+        const shiftsPayloadSize = TIMING_ENABLED
+          ? JSON.stringify(shiftsPayload).length
+          : 0;
         const shiftsPayloadDuration = Math.round(
           getTimestamp() - shiftsPayloadStart,
         );
@@ -343,9 +358,9 @@ const LeadRemovalJobDetails = () => {
         let enrichedShifts = shiftsPayload;
 
         if (Array.isArray(jobPayload.sampleNumbers)) {
-          const sampleNumbersSize = JSON.stringify(
-            jobPayload.sampleNumbers,
-          ).length;
+          const sampleNumbersSize = TIMING_ENABLED
+            ? JSON.stringify(jobPayload.sampleNumbers).length
+            : 0;
           logTiming("sample numbers array found", {
             sampleNumberEntries: jobPayload.sampleNumbers.length,
             sampleNumbersDataSizeBytes: sampleNumbersSize,
@@ -397,7 +412,9 @@ const LeadRemovalJobDetails = () => {
         });
         setAirMonitoringShifts(sortedShifts);
         const shiftsSetDuration = Math.round(getTimestamp() - shiftsSetStart);
-        const enrichedShiftsSize = JSON.stringify(enrichedShifts).length;
+        const enrichedShiftsSize = TIMING_ENABLED
+          ? JSON.stringify(enrichedShifts).length
+          : 0;
         logTiming(`shifts set (${enrichedShifts.length})`, {
           setStateDurationMs: shiftsSetDuration,
           enrichedShiftsDataSizeBytes: enrichedShiftsSize,
@@ -414,7 +431,9 @@ const LeadRemovalJobDetails = () => {
           const clearancesPayload = Array.isArray(jobPayload.clearances)
             ? jobPayload.clearances
             : [];
-          const clearancesSize = JSON.stringify(clearancesPayload).length;
+          const clearancesSize = TIMING_ENABLED
+            ? JSON.stringify(clearancesPayload).length
+            : 0;
 
           // Analyze clearance structure to identify large fields
           if (clearancesPayload.length > 0 && TIMING_ENABLED) {
@@ -422,7 +441,9 @@ const LeadRemovalJobDetails = () => {
             const fieldSizes = {};
             Object.keys(sampleClearance || {}).forEach((key) => {
               const fieldValue = sampleClearance[key];
-              const fieldSize = JSON.stringify(fieldValue || {}).length;
+              const fieldSize = TIMING_ENABLED
+                ? JSON.stringify(fieldValue || {}).length
+                : 0;
               fieldSizes[key] = {
                 sizeBytes: fieldSize,
                 sizeKB: Math.round((fieldSize / 1024) * 100) / 100,
@@ -480,7 +501,9 @@ const LeadRemovalJobDetails = () => {
           const clearancesPayload = Array.isArray(jobPayload.clearances)
             ? jobPayload.clearances
             : [];
-          const clearancesSize = JSON.stringify(clearancesPayload).length;
+          const clearancesSize = TIMING_ENABLED
+            ? JSON.stringify(clearancesPayload).length
+            : 0;
           const totalDataSize = responseDataSize;
           const clearancesPercentage = Math.round(
             (clearancesSize / totalDataSize) * 100,
@@ -565,7 +588,7 @@ const LeadRemovalJobDetails = () => {
         "asbestos_removalist",
       );
       const requestDuration = Math.round(getTimestamp() - requestStart);
-      const dataSize = JSON.stringify(data || []).length;
+      const dataSize = TIMING_ENABLED ? JSON.stringify(data || []).length : 0;
       logDebug("fetchAsbestosRemovalists - response received", {
         removalistCount: Array.isArray(data) ? data.length : 0,
         dataSizeBytes: dataSize,
@@ -603,6 +626,25 @@ const LeadRemovalJobDetails = () => {
       setAsbestosRemovalists([]);
     }
   }, [asbestosRemovalists.length, logDebug]);
+
+  const fetchActiveUsers = useCallback(async () => {
+    if (activeUsers.length > 0) return;
+    try {
+      const res = await userService.getAll(false);
+      if (Array.isArray(res?.data)) {
+        const sorted = [...res.data].sort((a, b) => {
+          const nameA =
+            `${a.firstName || ""} ${a.lastName || ""}`.toLowerCase();
+          const nameB =
+            `${b.firstName || ""} ${b.lastName || ""}`.toLowerCase();
+          return nameA.localeCompare(nameB);
+        });
+        setActiveUsers(sorted);
+      }
+    } catch (err) {
+      console.error("Error fetching active users:", err);
+    }
+  }, [activeUsers.length]);
 
   useEffect(() => {
     if (jobId) {
@@ -653,6 +695,7 @@ const LeadRemovalJobDetails = () => {
   }, [activeTab, clearancesLoaded]);
 
   useEffect(() => {
+    if (!TIMING_ENABLED) return;
     const shiftsSize = JSON.stringify(airMonitoringShifts).length;
     logDebug("airMonitoringShifts state updated", {
       shiftCount: airMonitoringShifts.length,
@@ -663,6 +706,7 @@ const LeadRemovalJobDetails = () => {
   }, [airMonitoringShifts, logDebug]);
 
   useEffect(() => {
+    if (!TIMING_ENABLED) return;
     const clearancesSize = JSON.stringify(clearances).length;
     logDebug("clearances state updated", {
       clearanceCount: clearances.length,
@@ -698,11 +742,12 @@ const LeadRemovalJobDetails = () => {
             prev.map((c) =>
               String(c._id) === String(clearanceId)
                 ? { ...c, pdfReadyAt: now, updatedAt: now }
-                : c
-            )
+                : c,
+            ),
           );
           try {
-            const { filename } = await downloadLeadClearancePDFByClearanceId(clearanceId);
+            const { filename } =
+              await downloadLeadClearancePDFByClearanceId(clearanceId);
             showSnackbar(`Downloaded: ${filename}`, "success");
             setReportViewedClearanceIds((prev) =>
               new Set(prev).add(clearanceId),
@@ -755,6 +800,7 @@ const LeadRemovalJobDetails = () => {
   }, [loading, logDebug]);
 
   useEffect(() => {
+    if (!TIMING_ENABLED) return;
     const jobSize = JSON.stringify(job).length;
     logDebug("job state updated", {
       hasJob: Boolean(job),
@@ -763,31 +809,6 @@ const LeadRemovalJobDetails = () => {
       timestamp: new Date().toISOString(),
     });
   }, [job, logDebug]);
-
-  // Fetch active users for consultant dropdown
-  useEffect(() => {
-    let cancelled = false;
-    userService
-      .getAll(false)
-      .then((res) => {
-        if (!cancelled && Array.isArray(res?.data)) {
-          const sorted = [...res.data].sort((a, b) => {
-            const nameA =
-              `${a.firstName || ""} ${a.lastName || ""}`.toLowerCase();
-            const nameB =
-              `${b.firstName || ""} ${b.lastName || ""}`.toLowerCase();
-            return nameA.localeCompare(nameB);
-          });
-          setActiveUsers(sorted);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) console.error("Error fetching active users:", err);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // Open clearance edit dialog once users are loaded
   useEffect(() => {
@@ -1440,6 +1461,7 @@ const LeadRemovalJobDetails = () => {
 
   const handleCreateClearance = () => {
     fetchAsbestosRemovalists();
+    fetchActiveUsers();
     if (clearances.length === 0 && !clearancesLoadingRef.current) {
       fetchClearances();
     }
@@ -1635,20 +1657,14 @@ const LeadRemovalJobDetails = () => {
         },
       );
 
-      // Create a blob URL from the response
-      const blob = new Blob([response.data], { type: "application/pdf" });
-      const url = window.URL.createObjectURL(blob);
-
-      // Create a temporary link and trigger download
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `Chain_of_Custody_${shift._id}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-
-      // Clean up
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      const filename = getAxiosDownloadFilename(
+        response,
+        buildShiftChainOfCustodyFilename(job?.projectId?.projectID, shift.date),
+      );
+      triggerBlobDownload(
+        new Blob([response.data], { type: "application/pdf" }),
+        filename,
+      );
 
       showSnackbar("Chain of Custody downloaded successfully", "success");
     } catch (error) {
@@ -1693,7 +1709,10 @@ const LeadRemovalJobDetails = () => {
     if (clearancePdfStartingId) return;
     setClearancePdfStartingId(clearance._id);
     setClearancePdfGeneratingForClearanceId(clearance._id);
-    showSnackbar("PDF generation has started. You will be notified when it is ready.", "info");
+    showSnackbar(
+      "PDF generation has started. You will be notified when it is ready.",
+      "info",
+    );
     setClearancePdfStatus("generating");
     setClearancePdfJobId(null);
     clearancePdfCompletionHandledRef.current = null;
@@ -1722,11 +1741,11 @@ const LeadRemovalJobDetails = () => {
       const dialogOpenedAt = Date.now();
       const minDialogMs = 500;
       try {
-        const { filename } = await downloadLeadClearancePDFByClearanceId(clearance._id);
-        showSnackbar(`Downloaded: ${filename}`, "success");
-        setReportViewedClearanceIds((prev) =>
-          new Set(prev).add(clearance._id),
+        const { filename } = await downloadLeadClearancePDFByClearanceId(
+          clearance._id,
         );
+        showSnackbar(`Downloaded: ${filename}`, "success");
+        setReportViewedClearanceIds((prev) => new Set(prev).add(clearance._id));
         try {
           await leadClearanceService.markReportViewed(clearance._id);
         } catch (e) {
@@ -1735,7 +1754,8 @@ const LeadRemovalJobDetails = () => {
       } catch (err) {
         console.error("Error downloading lead clearance PDF:", err);
         const msg = err.message || "";
-        const isNoPdf = /no pdf|not available|retention|generate the pdf first/i.test(msg);
+        const isNoPdf =
+          /no pdf|not available|retention|generate the pdf first/i.test(msg);
         if (isNoPdf) {
           showSnackbar("No PDF available. Starting generation…", "info");
           handleOpenLeadClearancePdfDialog(clearance, event);
@@ -1745,7 +1765,10 @@ const LeadRemovalJobDetails = () => {
       } finally {
         const elapsed = Date.now() - dialogOpenedAt;
         if (elapsed < minDialogMs) {
-          setTimeout(() => setClearanceDownloadDialogOpen(false), minDialogMs - elapsed);
+          setTimeout(
+            () => setClearanceDownloadDialogOpen(false),
+            minDialogMs - elapsed,
+          );
         } else {
           setClearanceDownloadDialogOpen(false);
         }
@@ -1906,6 +1929,7 @@ const LeadRemovalJobDetails = () => {
 
     // Lazy load removalists only when needed (assessors come from UserListsContext)
     await fetchAsbestosRemovalists();
+    await fetchActiveUsers();
   };
 
   const handleDeleteClearance = (clearance, event) => {
@@ -2214,9 +2238,7 @@ const LeadRemovalJobDetails = () => {
         <DialogContent>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2, py: 2 }}>
             <CircularProgress size={24} />
-            <Typography>
-              The report is downloading. Please wait.
-            </Typography>
+            <Typography>The report is downloading. Please wait.</Typography>
           </Box>
         </DialogContent>
       </Dialog>
@@ -2917,7 +2939,8 @@ const LeadRemovalJobDetails = () => {
                               <Tooltip
                                 title={
                                   clearancePdfStartingId === clearance._id ||
-                                  clearancePdfGeneratingForClearanceId === clearance._id
+                                  clearancePdfGeneratingForClearanceId ===
+                                    clearance._id
                                     ? "PDF is generating..."
                                     : hasRetainedValidPdf(clearance)
                                       ? "Download report"
@@ -2927,23 +2950,37 @@ const LeadRemovalJobDetails = () => {
                                 <span>
                                   <IconButton
                                     size="small"
-                                    color={hasRetainedValidPdf(clearance) ? "success" : "warning"}
+                                    color={
+                                      hasRetainedValidPdf(clearance)
+                                        ? "success"
+                                        : "warning"
+                                    }
                                     onClick={(e) =>
-                                      handleDownloadOrGenerateClearanceReport(clearance, e)
+                                      handleDownloadOrGenerateClearanceReport(
+                                        clearance,
+                                        e,
+                                      )
                                     }
                                     disabled={
-                                      clearancePdfStartingId === clearance._id ||
-                                      clearancePdfGeneratingForClearanceId === clearance._id
+                                      clearancePdfStartingId ===
+                                        clearance._id ||
+                                      clearancePdfGeneratingForClearanceId ===
+                                        clearance._id
                                     }
                                     sx={{
                                       mr: 1,
-                                      ...((clearancePdfStartingId === clearance._id ||
-                                        clearancePdfGeneratingForClearanceId === clearance._id) && {
+                                      ...((clearancePdfStartingId ===
+                                        clearance._id ||
+                                        clearancePdfGeneratingForClearanceId ===
+                                          clearance._id) && {
                                         "@keyframes pdfSyncSpin": {
                                           "0%": { transform: "rotate(0deg)" },
-                                          "100%": { transform: "rotate(360deg)" },
+                                          "100%": {
+                                            transform: "rotate(360deg)",
+                                          },
                                         },
-                                        animation: "pdfSyncSpin 1s linear infinite",
+                                        animation:
+                                          "pdfSyncSpin 1s linear infinite",
                                       }),
                                     }}
                                   >
@@ -2951,109 +2988,109 @@ const LeadRemovalJobDetails = () => {
                                   </IconButton>
                                 </span>
                               </Tooltip>
-                              {(reportViewedClearanceIds.has(
-                                    clearance._id,
-                                  ) ||
-                                    !!clearance.reportViewedAt) && (
-                                    <>
-                                      {currentUser?.reportProofer &&
-                                        !clearance.reportApprovedBy && (
-                                          <Button
-                                            variant="contained"
-                                            size="small"
-                                            color="success"
-                                            onClick={(e) =>
-                                              handleAuthoriseClearanceReport(
-                                                clearance,
-                                                e,
-                                              )
-                                            }
-                                            disabled={
-                                              authorisingClearanceReports[
-                                                clearance._id
-                                              ] ||
-                                              clearancePdfStartingId === clearance._id ||
-                                              clearancePdfGeneratingForClearanceId === clearance._id
-                                            }
-                                            startIcon={
-                                              authorisingClearanceReports[
-                                                clearance._id
-                                              ] ? (
-                                                <CircularProgress
-                                                  size={16}
-                                                  color="inherit"
-                                                />
-                                              ) : null
-                                            }
-                                            sx={{
-                                              backgroundColor:
-                                                theme.palette.success.main,
-                                              color: theme.palette.common.white,
-                                              "&:hover": {
-                                                backgroundColor:
-                                                  theme.palette.success.dark,
-                                              },
-                                              "&:disabled": {
-                                                backgroundColor:
-                                                  theme.palette.success.main,
-                                                opacity: 0.7,
-                                              },
-                                              mr: 1,
-                                            }}
-                                          >
-                                            {authorisingClearanceReports[
+                              {!clearance.reportApprovedBy &&
+                                (reportViewedClearanceIds.has(clearance._id) ||
+                                  !!clearance.reportViewedAt) && (
+                                  <>
+                                    {currentUser?.reportProofer && (
+                                      <Button
+                                        variant="contained"
+                                        size="small"
+                                        color="success"
+                                        onClick={(e) =>
+                                          handleAuthoriseClearanceReport(
+                                            clearance,
+                                            e,
+                                          )
+                                        }
+                                        disabled={
+                                          authorisingClearanceReports[
+                                            clearance._id
+                                          ] ||
+                                          clearancePdfStartingId ===
+                                            clearance._id ||
+                                          clearancePdfGeneratingForClearanceId ===
+                                            clearance._id
+                                        }
+                                        startIcon={
+                                          authorisingClearanceReports[
+                                            clearance._id
+                                          ] ? (
+                                            <CircularProgress
+                                              size={16}
+                                              color="inherit"
+                                            />
+                                          ) : null
+                                        }
+                                        sx={{
+                                          backgroundColor:
+                                            theme.palette.success.main,
+                                          color: theme.palette.common.white,
+                                          "&:hover": {
+                                            backgroundColor:
+                                              theme.palette.success.dark,
+                                          },
+                                          "&:disabled": {
+                                            backgroundColor:
+                                              theme.palette.success.main,
+                                            opacity: 0.7,
+                                          },
+                                          mr: 1,
+                                        }}
+                                      >
+                                        {authorisingClearanceReports[
+                                          clearance._id
+                                        ]
+                                          ? "Authorising..."
+                                          : "Authorise Report"}
+                                      </Button>
+                                    )}
+                                    {!currentUser?.reportProofer &&
+                                      hasPermission(
+                                        currentUser,
+                                        "asbestos.edit",
+                                      ) && (
+                                        <Button
+                                          variant="outlined"
+                                          size="small"
+                                          color={
+                                            clearance.authorisationRequestedBy
+                                              ? "inherit"
+                                              : "primary"
+                                          }
+                                          startIcon={<MailIcon />}
+                                          onClick={(e) =>
+                                            handleSendClearanceForAuthorisation(
+                                              clearance,
+                                              e,
+                                            )
+                                          }
+                                          disabled={Boolean(
+                                            sendingClearanceAuthorisationRequests[
                                               clearance._id
-                                            ]
-                                              ? "Authorising..."
-                                              : "Authorise Report"}
-                                          </Button>
-                                        )}
-                                      {!currentUser?.reportProofer &&
-                                        hasPermission(
-                                          currentUser,
-                                          "asbestos.edit",
-                                        ) && (
-                                          <Button
-                                            variant="outlined"
-                                            size="small"
-                                            color={
-                                              clearance.authorisationRequestedBy
-                                                ? "inherit"
-                                                : "primary"
-                                            }
-                                            startIcon={<MailIcon />}
-                                            onClick={(e) =>
-                                              handleSendClearanceForAuthorisation(
-                                                clearance,
-                                                e,
-                                              )
-                                            }
-                                            disabled={Boolean(
-                                              sendingClearanceAuthorisationRequests[
-                                                clearance._id
-                                              ],
-                                            )}
-                                            sx={
-                                              clearance.authorisationRequestedBy
-                                                ? {
-                                                    mr: 1,
-                                                    color: "text.secondary",
-                                                    borderColor: "grey.400",
-                                                  }
-                                                : { mr: 1 }
-                                            }
-                                          >
-                                            {sendingClearanceAuthorisationRequests[
-                                              clearance._id
-                                            ]
-                                              ? "Sending..."
-                                              : clearance.authorisationRequestedBy
-                                                ? "Re-send for Authorisation"
-                                                : "Send for Authorisation"}
-                                          </Button>
-                                        )}
-                                    </>
-                                  )}
+                                            ],
+                                          )}
+                                          sx={
+                                            clearance.authorisationRequestedBy
+                                              ? {
+                                                  mr: 1,
+                                                  color: "text.secondary",
+                                                  borderColor: "grey.400",
+                                                }
+                                              : { mr: 1 }
+                                          }
+                                        >
+                                          {sendingClearanceAuthorisationRequests[
+                                            clearance._id
+                                          ]
+                                            ? "Sending..."
+                                            : clearance.authorisationRequestedBy
+                                              ? "Re-send for Authorisation"
+                                              : "Send for Authorisation"}
+                                        </Button>
+                                      )}
+                                  </>
+                                )}
                             </>
                           )}
                         </TableCell>

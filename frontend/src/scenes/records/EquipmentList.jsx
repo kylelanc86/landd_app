@@ -25,6 +25,8 @@ import {
   MenuItem,
   Breadcrumbs,
   Link,
+  Checkbox,
+  FormControlLabel,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import AddIcon from "@mui/icons-material/Add";
@@ -43,6 +45,10 @@ import plmMicroscopeService from "../../services/plmMicroscopeService";
 import stereomicroscopeService from "../../services/stereomicroscopeService";
 import { graticuleService } from "../../services/graticuleService";
 import hseTestSlideService from "../../services/hseTestSlideService";
+import furnaceCalibrationService from "../../services/furnaceCalibrationService";
+import pneumaticTesterCalibrationService from "../../services/pneumaticTesterCalibrationService";
+import primaryFlowmeterService from "../../services/primaryFlowmeterService";
+import sieveCalibrationService from "../../services/sieveCalibrationService";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
 
@@ -63,16 +69,26 @@ const EquipmentList = () => {
   const [archiveDialog, setArchiveDialog] = useState(false);
   const [equipmentToArchive, setEquipmentToArchive] = useState(null);
   const [archiving, setArchiving] = useState(false);
+  const [outOfServiceDialog, setOutOfServiceDialog] = useState(false);
+  const [equipmentToMarkOutOfService, setEquipmentToMarkOutOfService] =
+    useState(null);
+  const [markingOutOfService, setMarkingOutOfService] = useState(false);
+  const [outOfServiceLabellingConfirmed, setOutOfServiceLabellingConfirmed] =
+    useState(false);
   const [selectedEquipment, setSelectedEquipment] = useState(null);
   const [calibrationHistory, setCalibrationHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [calibrationFrequencies, setCalibrationFrequencies] = useState([]);
   const [referenceError, setReferenceError] = useState(null);
+  const [duplicateReferenceDialog, setDuplicateReferenceDialog] = useState(false);
+  const [duplicateExistingEquipment, setDuplicateExistingEquipment] =
+    useState(null);
   const [form, setForm] = useState({
     equipmentReference: "",
     equipmentType: "",
     section: "",
     brandModel: "",
+    serialNumber: "",
   });
 
   const [filters, setFilters] = useState({
@@ -117,234 +133,6 @@ const EquipmentList = () => {
     }
   };
 
-  // Helper function to process pump calibrations (extracted for reuse)
-  const processPumpCalibrations = useCallback((pump, calibrations) => {
-    // Calculate lastCalibration (most recent calibration date)
-    const lastCalibration =
-      calibrations.length > 0
-        ? new Date(
-            Math.max(
-              ...calibrations.map((cal) =>
-                new Date(cal.calibrationDate || cal.date).getTime(),
-              ),
-            ),
-          )
-        : null;
-
-    // Calculate calibrationDue (most recent nextCalibrationDue date)
-    const calibrationDue =
-      calibrations.length > 0
-        ? new Date(
-            Math.max(
-              ...calibrations
-                .filter((cal) => cal.nextCalibrationDue || cal.calibrationDue)
-                .map((cal) =>
-                  new Date(
-                    cal.nextCalibrationDue || cal.calibrationDue,
-                  ).getTime(),
-                ),
-            ),
-          )
-        : null;
-
-    // Get the most recent calibration for status checking
-    const mostRecentCalibration =
-      calibrations.length > 0
-        ? calibrations.sort(
-            (a, b) =>
-              new Date(b.calibrationDate || b.date) -
-              new Date(a.calibrationDate || a.date),
-          )[0]
-        : null;
-
-    return {
-      ...pump,
-      lastCalibration,
-      calibrationDue,
-      mostRecentCalibration, // Store for status calculation
-      allCalibrations: calibrations, // Store all calibrations for status calculation
-    };
-  }, []);
-
-  // Helper function to fetch calibration data for an equipment item
-  const fetchCalibrationDataForEquipment = async (equipmentItem) => {
-    try {
-      let calibrations = [];
-      const equipmentReference = equipmentItem.equipmentReference;
-      const equipmentType = equipmentItem.equipmentType;
-
-      switch (equipmentType) {
-        case "Site flowmeter":
-        case "Bubble flowmeter":
-          try {
-            const response =
-              await flowmeterCalibrationService.getByFlowmeter(
-                equipmentReference,
-              );
-            calibrations = response.data || response || [];
-          } catch (err) {
-            console.error(
-              `Error fetching flowmeter calibrations for ${equipmentReference}:`,
-              err,
-            );
-          }
-          break;
-
-        case "Graticule":
-          try {
-            const allData = await graticuleService.getAll();
-            // Handle response structure: { data: [...], pagination: {...} } or direct array
-            const calibrationsArray = Array.isArray(allData?.data)
-              ? allData.data
-              : Array.isArray(allData)
-                ? allData
-                : [];
-            const filtered = calibrationsArray.filter(
-              (cal) =>
-                cal.graticuleId === equipmentReference ||
-                cal.graticuleReference === equipmentReference,
-            );
-            calibrations = filtered;
-          } catch (err) {
-            console.error(
-              `Error fetching graticule calibrations for ${equipmentReference}:`,
-              err,
-            );
-          }
-          break;
-
-        case "Effective Filter Area":
-          try {
-            const efaData = await efaService.getByEquipment(equipmentReference);
-            calibrations = efaData.calibrations || efaData || [];
-          } catch (err) {
-            console.error(
-              `Error fetching EFA calibrations for ${equipmentReference}:`,
-              err,
-            );
-          }
-          break;
-
-        case "Phase Contrast Microscope":
-          try {
-            const pcmData =
-              await pcmMicroscopeService.getByEquipment(equipmentReference);
-            calibrations = pcmData.calibrations || pcmData || [];
-          } catch (err) {
-            console.error(
-              `Error fetching PCM calibrations for ${equipmentReference}:`,
-              err,
-            );
-          }
-          break;
-
-        case "Polarised Light Microscope":
-          try {
-            const plmData =
-              await plmMicroscopeService.getByEquipment(equipmentReference);
-            calibrations = plmData.calibrations || plmData || [];
-          } catch (err) {
-            console.error(
-              `Error fetching PLM calibrations for ${equipmentReference}:`,
-              err,
-            );
-          }
-          break;
-
-        case "Stereomicroscope":
-          try {
-            const stereoData =
-              await stereomicroscopeService.getByEquipment(equipmentReference);
-            calibrations = stereoData.calibrations || stereoData || [];
-          } catch (err) {
-            console.error(
-              `Error fetching Stereomicroscope calibrations for ${equipmentReference}:`,
-              err,
-            );
-          }
-          break;
-
-        case "HSE Test Slide":
-          try {
-            const hseData =
-              await hseTestSlideService.getByEquipment(equipmentReference);
-            calibrations = hseData.data || hseData || [];
-          } catch (err) {
-            console.error(
-              `Error fetching HSE Test Slide calibrations for ${equipmentReference}:`,
-              err,
-            );
-          }
-          break;
-
-        case "Air pump":
-          // Air pump calibrations are now fetched in bulk in fetchEquipment
-          // This case should not be reached during initial load
-          // If reached, it means the equipment wasn't processed in bulk fetch
-          // Return empty array to avoid individual fetch (bulk fetch should handle all pumps)
-          calibrations = [];
-          console.warn(
-            `Air pump ${equipmentReference} not found in bulk fetch results. This should not happen during initial load.`,
-          );
-          break;
-
-        default:
-          // For other equipment types, no calibration data
-          calibrations = [];
-          break;
-      }
-
-      // Calculate lastCalibration and calibrationDue from calibrations
-      let lastCalibration = null;
-      let calibrationDue = null;
-
-      if (calibrations.length > 0) {
-        // Get most recent calibration date
-        const calibrationDates = calibrations
-          .map((cal) => new Date(cal.date || cal.calibrationDate))
-          .filter((date) => !isNaN(date.getTime()));
-        if (calibrationDates.length > 0) {
-          lastCalibration = new Date(
-            Math.max(...calibrationDates.map((d) => d.getTime())),
-          );
-        }
-
-        // Get most recent nextCalibration or calibrationDue date
-        const dueDates = calibrations
-          .map((cal) => {
-            const dueDate =
-              cal.nextCalibration ||
-              cal.calibrationDue ||
-              cal.nextCalibrationDue;
-            return dueDate ? new Date(dueDate) : null;
-          })
-          .filter((date) => date && !isNaN(date.getTime()));
-        if (dueDates.length > 0) {
-          calibrationDue = new Date(
-            Math.max(...dueDates.map((d) => d.getTime())),
-          );
-        }
-      }
-
-      return {
-        ...equipmentItem,
-        lastCalibration,
-        calibrationDue,
-      };
-    } catch (err) {
-      console.error(
-        `Error fetching calibration data for ${equipmentItem.equipmentReference}:`,
-        err,
-      );
-      // Return equipment without calibration data if fetch fails
-      return {
-        ...equipmentItem,
-        lastCalibration: null,
-        calibrationDue: null,
-      };
-    }
-  };
-
   // Fetch full equipment list and cache it (only fetch once or when explicitly needed)
   const fetchEquipment = useCallback(
     async (forceRefresh = false) => {
@@ -374,91 +162,10 @@ const EquipmentList = () => {
           `EquipmentList: Fetched ${baseEquipment.length} equipment items`,
         );
 
-        // Separate air pumps from other equipment for bulk fetching
-        const airPumps = baseEquipment.filter(
-          (eq) => eq.equipmentType === "Air pump",
-        );
-        const otherEquipment = baseEquipment.filter(
-          (eq) => eq.equipmentType !== "Air pump",
-        );
-
-        // Bulk fetch calibrations for all air pumps at once
-        let pumpCalibrationsMap = {};
-        if (airPumps.length > 0) {
-          try {
-            console.log(
-              `EquipmentList: Bulk fetching calibrations for ${airPumps.length} air pumps`,
-            );
-            const pumpIds = airPumps.map(
-              (pump) => pump._id?.toString() || pump._id,
-            );
-            console.log("EquipmentList: Pump IDs:", pumpIds);
-            const bulkCalibrations =
-              await airPumpCalibrationService.getBulkPumpCalibrations(
-                pumpIds,
-                1000,
-              );
-            console.log(
-              "EquipmentList: Bulk calibrations response:",
-              bulkCalibrations,
-            );
-            // Convert to map keyed by pump _id string
-            if (bulkCalibrations && typeof bulkCalibrations === "object") {
-              Object.keys(bulkCalibrations).forEach((pumpId) => {
-                pumpCalibrationsMap[pumpId] = bulkCalibrations[pumpId];
-              });
-              console.log(
-                `EquipmentList: Mapped calibrations for ${Object.keys(pumpCalibrationsMap).length} pumps`,
-              );
-            }
-          } catch (err) {
-            console.error(
-              "EquipmentList: Error bulk fetching pump calibrations:",
-              err,
-            );
-            console.error(
-              "EquipmentList: Error details:",
-              err.response?.data || err.message,
-            );
-            // Continue with empty map - individual fetches will handle errors
-          }
-        } else {
-          console.log("EquipmentList: No air pumps found, skipping bulk fetch");
-        }
-
-        // Process air pumps with bulk-fetched calibrations
-        const airPumpsWithCalibrations = await Promise.all(
-          airPumps.map(async (pump) => {
-            // Convert pump._id to string to match backend response keys
-            const pumpIdString = pump._id?.toString() || pump._id;
-            const calibrations = pumpCalibrationsMap[pumpIdString] || [];
-            if (calibrations.length === 0) {
-              console.log(
-                `EquipmentList: No calibrations found for pump ${pump.equipmentReference} (ID: ${pumpIdString})`,
-              );
-            } else {
-              console.log(
-                `EquipmentList: Found ${calibrations.length} calibrations for pump ${pump.equipmentReference}`,
-              );
-            }
-            return processPumpCalibrations(pump, calibrations);
-          }),
-        );
-
-        // Process other equipment types (individual fetches as before)
-        const otherEquipmentWithCalibrations = await Promise.all(
-          otherEquipment.map((equipmentItem) =>
-            fetchCalibrationDataForEquipment(equipmentItem),
-          ),
-        );
-
-        // Combine and cache the full equipment list
-        const equipmentWithCalibrations = [
-          ...airPumpsWithCalibrations,
-          ...otherEquipmentWithCalibrations,
-        ];
+        // Keep table load fast: do not fetch calibration data here.
+        const equipmentWithCalibrations = baseEquipment;
         console.log(
-          `EquipmentList: Caching ${equipmentWithCalibrations.length} equipment items (${airPumpsWithCalibrations.length} air pumps, ${otherEquipmentWithCalibrations.length} other)`,
+          `EquipmentList: Caching ${equipmentWithCalibrations.length} equipment items`,
         );
         setCachedEquipment(equipmentWithCalibrations);
         hasLoadedRef.current = true;
@@ -469,7 +176,7 @@ const EquipmentList = () => {
         setLoading(false);
       }
     },
-    [processPumpCalibrations],
+    [],
   ); // Stable callback - uses ref to track load state
 
   const handleFilterChange = (field, value) => {
@@ -502,17 +209,93 @@ const EquipmentList = () => {
     };
   }, []); // Empty deps - fetchEquipment is stable
 
+  const findExistingByReference = (reference, excludeId = null) => {
+    if (!reference || !reference.trim()) return null;
+
+    const trimmedReference = reference.trim();
+    return (
+      cachedEquipment.find(
+        (item) =>
+          item.equipmentReference?.toLowerCase() ===
+            trimmedReference.toLowerCase() &&
+          (!excludeId || item._id !== excludeId),
+      ) || null
+    );
+  };
+
+  const getEquipmentHiddenFilterReasons = (item) => {
+    if (!item) return [];
+
+    const reasons = [];
+    const itemStatus = item.calculatedStatus || calculateStatus(item);
+
+    if (filters.status && filters.status !== itemStatus) {
+      reasons.push(
+        `Status filter is "${filters.status}" but this equipment is "${itemStatus}"`,
+      );
+    }
+    if (
+      filters.equipmentType &&
+      filters.equipmentType !== "All Types" &&
+      item.equipmentType !== filters.equipmentType
+    ) {
+      reasons.push(
+        `Equipment type filter is set to "${filters.equipmentType}"`,
+      );
+    }
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      const matchesSearch =
+        item.equipmentReference?.toLowerCase().includes(searchLower) ||
+        item.brandModel?.toLowerCase().includes(searchLower);
+      if (!matchesSearch) {
+        reasons.push(`Search filter "${filters.search}" does not match`);
+      }
+    }
+
+    return reasons;
+  };
+
+  const showDuplicateReferenceDialog = (existing) => {
+    const itemWithStatus = {
+      ...existing,
+      calculatedStatus: existing.calculatedStatus || calculateStatus(existing),
+    };
+    setDuplicateExistingEquipment(itemWithStatus);
+    setDuplicateReferenceDialog(true);
+  };
+
+  const handleCloseDuplicateReferenceDialog = () => {
+    setDuplicateReferenceDialog(false);
+    setDuplicateExistingEquipment(null);
+  };
+
+  const handleShowDuplicateInList = () => {
+    if (!duplicateExistingEquipment) return;
+
+    setFilters({
+      search: duplicateExistingEquipment.equipmentReference || "",
+      equipmentType: "All Types",
+      status: "",
+    });
+    setAddDialog(false);
+    setReferenceError(null);
+    handleCloseDuplicateReferenceDialog();
+  };
+
   const handleAddEquipment = async (e) => {
     e.preventDefault();
 
-    // Check uniqueness before submitting
-    if (!checkReferenceUniqueness(form.equipmentReference)) {
+    const existing = findExistingByReference(form.equipmentReference);
+    if (existing) {
+      showDuplicateReferenceDialog(existing);
       return;
     }
 
     try {
       const formData = {
         ...form,
+        status: "active",
       };
 
       await equipmentService.create(formData);
@@ -526,13 +309,26 @@ const EquipmentList = () => {
         equipmentType: "",
         section: "",
         brandModel: "",
+        serialNumber: "",
       });
 
-      // Refresh the equipment list cache
       fetchEquipment(true);
     } catch (err) {
       console.error("Error adding equipment:", err);
-      setError(err.message || "Failed to add equipment");
+      const serverMessage = err.response?.data?.message || "";
+      if (
+        serverMessage.toLowerCase().includes("already exists") ||
+        serverMessage.toLowerCase().includes("duplicate")
+      ) {
+        const existingFromCache = findExistingByReference(
+          form.equipmentReference,
+        );
+        if (existingFromCache) {
+          showDuplicateReferenceDialog(existingFromCache);
+          return;
+        }
+      }
+      setError(serverMessage || err.message || "Failed to add equipment");
     }
   };
 
@@ -543,6 +339,7 @@ const EquipmentList = () => {
       equipmentType: equipment.equipmentType,
       section: equipment.section,
       brandModel: equipment.brandModel,
+      serialNumber: equipment.serialNumber || "",
     });
     setReferenceError(null);
     setEditDialog(true);
@@ -564,7 +361,8 @@ const EquipmentList = () => {
         equipmentType: form.equipmentType,
         section: form.section,
         brandModel: form.brandModel,
-        status: form.status || "active",
+        serialNumber: form.serialNumber?.trim() || "",
+        status: form.status || selectedEquipment?.status || "active",
       };
 
       await equipmentService.update(selectedEquipment._id, formData);
@@ -579,6 +377,7 @@ const EquipmentList = () => {
         equipmentType: "",
         section: "",
         brandModel: "",
+        serialNumber: "",
       });
 
       // Refresh the equipment list cache
@@ -622,6 +421,51 @@ const EquipmentList = () => {
     setArchiveDialog(false);
     setEquipmentToArchive(null);
     setError(null);
+  };
+
+  const handleOutOfServiceClick = (equipment) => {
+    setEquipmentToMarkOutOfService(equipment);
+    setOutOfServiceLabellingConfirmed(false);
+    setOutOfServiceDialog(true);
+    setError(null);
+  };
+
+  const handleOutOfServiceCancel = () => {
+    setOutOfServiceDialog(false);
+    setEquipmentToMarkOutOfService(null);
+    setOutOfServiceLabellingConfirmed(false);
+    setError(null);
+  };
+
+  const handleOutOfServiceConfirm = async () => {
+    if (!equipmentToMarkOutOfService?._id) {
+      setError("Equipment information not available");
+      return;
+    }
+
+    try {
+      setMarkingOutOfService(true);
+      setError(null);
+      await equipmentService.update(equipmentToMarkOutOfService._id, {
+        status: "out-of-service",
+      });
+
+      setOutOfServiceDialog(false);
+      setEquipmentToMarkOutOfService(null);
+      setOutOfServiceLabellingConfirmed(false);
+      fetchEquipment(true);
+
+      window.dispatchEvent(
+        new CustomEvent("equipmentDataUpdated", {
+          detail: { equipmentId: equipmentToMarkOutOfService._id },
+        }),
+      );
+    } catch (err) {
+      console.error("Error marking equipment out of service:", err);
+      setError(err.message || "Failed to mark equipment as out of service");
+    } finally {
+      setMarkingOutOfService(false);
+    }
   };
 
   const fetchCalibrationHistory = async (equipment) => {
@@ -678,7 +522,6 @@ const EquipmentList = () => {
           }
           break;
 
-        case "Bubble flowmeter":
         case "Site flowmeter":
           try {
             const flowmeterData =
@@ -699,6 +542,29 @@ const EquipmentList = () => {
           }
           break;
 
+        case "Bubble flowmeter":
+          try {
+            const primaryFlowmeterData =
+              await primaryFlowmeterService.getByEquipment(equipmentReference);
+            history = (
+              primaryFlowmeterData.data ||
+              primaryFlowmeterData ||
+              []
+            ).map((cal) => ({
+              date: cal.date,
+              calibrationId: cal.calibrationId || cal._id,
+              notes: cal.notes || "",
+              calibratedBy: cal.calibratedBy?.name || "N/A",
+              type: "Primary Flowmeter Calibration",
+            }));
+          } catch (err) {
+            console.error(
+              "Error fetching primary flowmeter calibrations:",
+              err,
+            );
+          }
+          break;
+
         case "Effective Filter Area":
           try {
             const efaData = await efaService.getByEquipment(equipmentReference);
@@ -711,6 +577,34 @@ const EquipmentList = () => {
             }));
           } catch (err) {
             console.error("Error fetching EFA calibrations:", err);
+          }
+          break;
+
+        case "Filter Holder":
+          try {
+            const [efaData, archivedEfaData] = await Promise.all([
+              efaService.getByEquipment(equipmentReference),
+              efaService.getAllArchivedCalibrations({
+                filterHolderModel: equipmentReference,
+                limit: 1000,
+              }),
+            ]);
+            const activeCalibrations =
+              efaData.data || efaData.calibrations || efaData || [];
+            const archivedCalibrations = Array.isArray(archivedEfaData?.data)
+              ? archivedEfaData.data
+              : [];
+            history = [...activeCalibrations, ...archivedCalibrations].map(
+              (cal) => ({
+                date: cal.date,
+                calibrationId: cal.calibrationId || cal._id,
+                notes: cal.notes || "",
+                calibratedBy: cal.calibratedBy?.name || cal.technician || "N/A",
+                type: "EFA Calibration",
+              }),
+            );
+          } catch (err) {
+            console.error("Error fetching filter holder calibrations:", err);
           }
           break;
 
@@ -761,6 +655,58 @@ const EquipmentList = () => {
             );
           } catch (err) {
             console.error("Error fetching Stereomicroscope calibrations:", err);
+          }
+          break;
+
+        case "Furnace":
+          try {
+            const furnaceData =
+              await furnaceCalibrationService.getByEquipment(equipmentReference);
+            history = (furnaceData.data || furnaceData || []).map((cal) => ({
+              date: cal.date,
+              calibrationId: cal.calibrationId || cal._id,
+              notes: cal.notes || "",
+              calibratedBy: cal.calibratedBy?.name || "N/A",
+              type: "Furnace Calibration",
+            }));
+          } catch (err) {
+            console.error("Error fetching furnace calibrations:", err);
+          }
+          break;
+
+        case "Pneumatic tester":
+          try {
+            const pneumaticTesterData =
+              await pneumaticTesterCalibrationService.getByEquipment(
+                equipmentReference
+              );
+            history = (pneumaticTesterData.data || pneumaticTesterData || []).map(
+              (cal) => ({
+                date: cal.date,
+                calibrationId: cal.calibrationId || cal._id,
+                notes: cal.notes || "",
+                calibratedBy: cal.calibratedBy?.name || "N/A",
+                type: "Pneumatic Tester Calibration",
+              })
+            );
+          } catch (err) {
+            console.error("Error fetching pneumatic tester calibrations:", err);
+          }
+          break;
+
+        case "Sieves":
+          try {
+            const sieveData =
+              await sieveCalibrationService.getByEquipment(equipmentReference);
+            history = (sieveData.data || sieveData || []).map((cal) => ({
+              date: cal.date,
+              calibrationId: cal.calibrationId || cal._id,
+              notes: cal.notes || "",
+              calibratedBy: cal.calibratedBy?.name || "N/A",
+              type: "Sieves Calibration",
+            }));
+          } catch (err) {
+            console.error("Error fetching sieve calibrations:", err);
           }
           break;
 
@@ -836,65 +782,15 @@ const EquipmentList = () => {
     fetchCalibrationHistory(equipment);
   };
 
-  // Calculate days until calibration is due
-  const calculateDaysUntilCalibration = (calibrationDue) => {
-    if (!calibrationDue) return null;
-
-    const today = new Date();
-    const dueDate = new Date(calibrationDue);
-
-    // Reset time to start of day for accurate day calculation
-    today.setHours(0, 0, 0, 0);
-    dueDate.setHours(0, 0, 0, 0);
-
-    const timeDiff = dueDate.getTime() - today.getTime();
-    const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
-
-    return daysDiff;
-  };
-
-  // Calculate the actual status based on calibration data and stored status
+  // Calculate status from stored equipment status only.
   const calculateStatus = useCallback((equipment) => {
-    // Handle null/undefined equipment
-    if (!equipment) {
-      return "Out-of-Service";
-    }
-
-    // If explicitly marked as out-of-service, return that
-    if (equipment.status === "out-of-service") {
-      return "Out-of-Service";
-    }
-
-    // If no calibration data (no lastCalibration or no calibrationDue), return out-of-service
-    if (!equipment.lastCalibration || !equipment.calibrationDue) {
-      return "Out-of-Service";
-    }
-
-    // For Air pumps, check if the most recent calibration has all flowrates failing
-    // If all test results failed, the pump should be Out-of-Service
-    // This check must happen BEFORE checking if calibration is overdue
-    if (
-      equipment.equipmentType === "Air pump" &&
-      equipment.mostRecentCalibration
-    ) {
-      const mostRecentCal = equipment.mostRecentCalibration;
-      if (mostRecentCal.testResults && mostRecentCal.testResults.length > 0) {
-        const allFailed = mostRecentCal.testResults.every(
-          (result) => !result.passed,
-        );
-        if (allFailed) {
-          return "Out-of-Service";
-        }
-      }
-    }
-
-    // Check if calibration is overdue
-    const daysUntil = calculateDaysUntilCalibration(equipment.calibrationDue);
-    if (daysUntil !== null && daysUntil < 0) {
-      return "Calibration Overdue";
-    }
-
-    // If calibrated and not yet due, return active
+    if (!equipment) return "Out-of-Service";
+    if (equipment.dueState === "out_of_service") return "Out-of-Service";
+    if (equipment.dueState === "overdue") return "Calibration Overdue";
+    if (equipment.dueState === "due") return "Calibration Overdue";
+    if (equipment.dueState === "active") return "Active";
+    if (equipment.status === "out-of-service") return "Out-of-Service";
+    if (equipment.status === "calibration due") return "Calibration Overdue";
     return "Active";
   }, []);
 
@@ -932,21 +828,15 @@ const EquipmentList = () => {
       return true;
     }
 
-    const trimmedReference = reference.trim();
-    const existing = equipment.find(
-      (item) =>
-        item.equipmentReference?.toLowerCase() ===
-          trimmedReference.toLowerCase() &&
-        (!excludeId || item._id !== excludeId),
-    );
+    const existing = findExistingByReference(reference, excludeId);
 
     if (existing) {
       setReferenceError("Equipment reference already exists");
       return false;
-    } else {
-      setReferenceError(null);
-      return true;
     }
+
+    setReferenceError(null);
+    return true;
   };
 
   // Handle equipment reference change with uniqueness check
@@ -1063,6 +953,7 @@ const EquipmentList = () => {
                 equipmentType: "",
                 section: "",
                 brandModel: "",
+                serialNumber: "",
               });
               setReferenceError(null);
               setAddDialog(true);
@@ -1278,74 +1169,13 @@ const EquipmentList = () => {
               },
             },
             {
-              field: "lastCalibration",
-              headerName: "Last Calibration",
-              flex: 1,
-              minWidth: 150,
-              renderCell: (params) => {
-                if (!params.row.lastCalibration) {
-                  return "-";
-                }
-                return formatDate(params.row.lastCalibration);
-              },
-            },
-            {
-              field: "calibrationDue",
-              headerName: "Calibration Due",
-              flex: 1,
-              minWidth: 150,
-              renderCell: (params) => {
-                if (!params.row.calibrationDue) {
-                  return "-";
-                }
-                const daysUntil = calculateDaysUntilCalibration(
-                  params.row.calibrationDue,
-                );
-
-                let daysText;
-                let daysColor;
-
-                if (daysUntil === 0) {
-                  daysText = "Due Today";
-                  daysColor = theme.palette.warning.main;
-                } else if (daysUntil < 0) {
-                  daysText = `${Math.abs(daysUntil)} days overdue`;
-                  daysColor = theme.palette.error.main;
-                } else {
-                  daysText = `${daysUntil} days`;
-                  daysColor =
-                    daysUntil <= 30
-                      ? theme.palette.warning.main
-                      : theme.palette.success.main;
-                }
-
-                return (
-                  <Box>
-                    <Typography
-                      variant="body2"
-                      fontWeight="medium"
-                      sx={{ color: daysColor }}
-                    >
-                      {daysText}
-                    </Typography>
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{ fontSize: "0.7rem" }}
-                    >
-                      {formatDate(params.row.calibrationDue)}
-                    </Typography>
-                  </Box>
-                );
-              },
-            },
-            {
               field: "actions",
               headerName: "Actions",
               flex: 1.5,
-              minWidth: 200,
+              minWidth: 240,
               renderCell: ({ row }) => {
                 const isAirPump = row.equipmentType === "Air pump";
+                const isExplicitlyOutOfService = row.status === "out-of-service";
 
                 return (
                   <Box display="flex" alignItems="center" gap={1}>
@@ -1380,6 +1210,16 @@ const EquipmentList = () => {
                     >
                       <EditIcon fontSize="small" />
                     </IconButton>
+                    {!isExplicitlyOutOfService && (
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOutOfServiceClick(row)}
+                        title="Set as Out of Service"
+                        sx={{ color: theme.palette.error.main }}
+                      >
+                        <CloseIcon fontSize="small" />
+                      </IconButton>
+                    )}
                     <IconButton
                       size="small"
                       onClick={() => handleDeleteClick(row)}
@@ -1421,6 +1261,7 @@ const EquipmentList = () => {
             equipmentType: "",
             section: "",
             brandModel: "",
+            serialNumber: "",
           });
         }}
         maxWidth="md"
@@ -1442,6 +1283,7 @@ const EquipmentList = () => {
                   equipmentType: "",
                   section: "",
                   brandModel: "",
+                  serialNumber: "",
                 });
               }}
             >
@@ -1515,6 +1357,14 @@ const EquipmentList = () => {
                 required
                 fullWidth
               />
+              <TextField
+                label="Serial number (optional)"
+                value={form.serialNumber}
+                onChange={(e) =>
+                  setForm({ ...form, serialNumber: e.target.value })
+                }
+                fullWidth
+              />
             </Stack>
           </DialogContent>
           <DialogActions>
@@ -1527,6 +1377,7 @@ const EquipmentList = () => {
                   equipmentType: "",
                   section: "",
                   brandModel: "",
+                  serialNumber: "",
                 });
               }}
             >
@@ -1560,6 +1411,7 @@ const EquipmentList = () => {
             equipmentType: "",
             section: "",
             brandModel: "",
+            serialNumber: "",
           });
         }}
         maxWidth="md"
@@ -1581,6 +1433,7 @@ const EquipmentList = () => {
                   equipmentType: "",
                   section: "",
                   brandModel: "",
+                  serialNumber: "",
                 });
               }}
             >
@@ -1654,6 +1507,14 @@ const EquipmentList = () => {
                 required
                 fullWidth
               />
+              <TextField
+                label="Serial number (optional)"
+                value={form.serialNumber}
+                onChange={(e) =>
+                  setForm({ ...form, serialNumber: e.target.value })
+                }
+                fullWidth
+              />
             </Stack>
           </DialogContent>
           <DialogActions>
@@ -1666,6 +1527,7 @@ const EquipmentList = () => {
                   equipmentType: "",
                   section: "",
                   brandModel: "",
+                  serialNumber: "",
                 });
               }}
             >
@@ -1949,6 +1811,182 @@ const EquipmentList = () => {
             startIcon={archiving ? <CircularProgress size={20} /> : null}
           >
             {archiving ? "Archiving..." : "Archive Equipment"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Out-of-Service Confirmation Dialog */}
+      <Dialog
+        open={outOfServiceDialog}
+        onClose={handleOutOfServiceCancel}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+          >
+            <Typography variant="h6">Set Equipment as Out-of-Service</Typography>
+            <IconButton onClick={handleOutOfServiceCancel}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            Are you sure you want to place{" "}
+            <strong>
+              {equipmentToMarkOutOfService?.equipmentReference || "this equipment"}
+            </strong>{" "}
+            out of service?
+          </Typography>
+          {equipmentToMarkOutOfService && (
+            <Box
+              sx={{
+                p: 2,
+                backgroundColor: theme.palette.grey[100],
+                borderRadius: 1,
+                mb: 2,
+              }}
+            >
+              <Typography variant="body2" sx={{ fontWeight: "bold", mb: 1 }}>
+                Equipment Type:
+              </Typography>
+              <Typography variant="body1" sx={{ mb: 1 }}>
+                {equipmentToMarkOutOfService.equipmentType}
+              </Typography>
+              {equipmentToMarkOutOfService.brandModel && (
+                <>
+                  <Typography variant="body2" sx={{ fontWeight: "bold", mb: 1 }}>
+                    Brand/Model:
+                  </Typography>
+                  <Typography variant="body1">
+                    {equipmentToMarkOutOfService.brandModel}
+                  </Typography>
+                </>
+              )}
+            </Box>
+          )}
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            <Typography variant="body2">
+              Out-of-service equipment must not be used until it is returned to
+              service. Confirm only if the item has been suitably labelled and
+              stored.
+            </Typography>
+          </Alert>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={outOfServiceLabellingConfirmed}
+                onChange={(e) => setOutOfServiceLabellingConfirmed(e.target.checked)}
+                color="error"
+              />
+            }
+            label="I confirm this equipment has been suitably labelled and stored"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleOutOfServiceCancel} disabled={markingOutOfService}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleOutOfServiceConfirm}
+            variant="contained"
+            color="error"
+            disabled={markingOutOfService || !outOfServiceLabellingConfirmed}
+            startIcon={markingOutOfService ? <CircularProgress size={20} /> : null}
+          >
+            {markingOutOfService ? "Updating..." : "Confirm Out-of-Service"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Duplicate Reference Dialog */}
+      <Dialog
+        open={duplicateReferenceDialog}
+        onClose={handleCloseDuplicateReferenceDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+          >
+            <Typography variant="h6">Equipment Reference Already Exists</Typography>
+            <IconButton onClick={handleCloseDuplicateReferenceDialog}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            An item with reference{" "}
+            <strong>{duplicateExistingEquipment?.equipmentReference}</strong>{" "}
+            already exists in the equipment database. Each reference must be
+            unique.
+          </Typography>
+          {duplicateExistingEquipment && (
+            <Box
+              sx={{
+                p: 2,
+                backgroundColor: theme.palette.grey[100],
+                borderRadius: 1,
+                mb: 2,
+              }}
+            >
+              <Typography variant="body2" sx={{ fontWeight: "bold", mb: 1 }}>
+                Existing Equipment
+              </Typography>
+              <Typography variant="body2">
+                <strong>Type:</strong> {duplicateExistingEquipment.equipmentType}
+              </Typography>
+              <Typography variant="body2">
+                <strong>Section:</strong> {duplicateExistingEquipment.section}
+              </Typography>
+              <Typography variant="body2">
+                <strong>Brand/Model:</strong>{" "}
+                {duplicateExistingEquipment.brandModel || "—"}
+              </Typography>
+              <Typography variant="body2">
+                <strong>Status:</strong>{" "}
+                {duplicateExistingEquipment.calculatedStatus ||
+                  calculateStatus(duplicateExistingEquipment)}
+              </Typography>
+            </Box>
+          )}
+          {duplicateExistingEquipment &&
+            getEquipmentHiddenFilterReasons(duplicateExistingEquipment).length >
+              0 && (
+              <Alert severity="info">
+                <Typography variant="body2" sx={{ fontWeight: "bold", mb: 0.5 }}>
+                  This equipment may be hidden from the list
+                </Typography>
+                <Typography variant="body2" component="div">
+                  It is not visible with your current filters:
+                  <ul style={{ margin: "4px 0 0 0", paddingLeft: "20px" }}>
+                    {getEquipmentHiddenFilterReasons(
+                      duplicateExistingEquipment,
+                    ).map((reason) => (
+                      <li key={reason}>{reason}</li>
+                    ))}
+                  </ul>
+                </Typography>
+              </Alert>
+            )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDuplicateReferenceDialog}>Close</Button>
+          <Button variant="contained" onClick={handleShowDuplicateInList}>
+            Show in List
           </Button>
         </DialogActions>
       </Dialog>

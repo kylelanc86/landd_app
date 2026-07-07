@@ -144,12 +144,15 @@ export const equipmentService = {
     "Furnace",
     "Graticule",
     "HSE Test Slide",
+    "Mass Balance",
     "Micrometer",
+    "Caliper",
     "Phase Contrast Microscope",
     "Pneumatic tester",
     "Polarised Light Microscope",
     "RI Liquids",
     "Site flowmeter",
+    "Sieves",
     "Stereomicroscope"
   ],
 

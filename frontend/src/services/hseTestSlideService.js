@@ -1,4 +1,5 @@
 import axios from 'axios';
+import api from './axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
 
@@ -37,12 +38,7 @@ const hseTestSlideService = {
   // Create new HSE Test Slide calibration
   create: async (calibrationData) => {
     try {
-      const response = await axios.post(`${API_URL}/hse-test-slide-calibrations`, calibrationData, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await api.post('/hse-test-slide-calibrations', calibrationData);
       return response.data;
     } catch (error) {
       console.error('Error creating HSE Test Slide calibration:', error);
@@ -53,12 +49,7 @@ const hseTestSlideService = {
   // Update HSE Test Slide calibration
   update: async (id, calibrationData) => {
     try {
-      const response = await axios.put(`${API_URL}/hse-test-slide-calibrations/${id}`, calibrationData, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await api.put(`/hse-test-slide-calibrations/${id}`, calibrationData);
       return response.data;
     } catch (error) {
       console.error('Error updating HSE Test Slide calibration:', error);
@@ -69,11 +60,7 @@ const hseTestSlideService = {
   // Delete HSE Test Slide calibration
   delete: async (id) => {
     try {
-      const response = await axios.delete(`${API_URL}/hse-test-slide-calibrations/${id}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      const response = await api.delete(`/hse-test-slide-calibrations/${id}`);
       return response.data;
     } catch (error) {
       console.error('Error deleting HSE Test Slide calibration:', error);

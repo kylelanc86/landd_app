@@ -110,6 +110,11 @@ const asbestosClearanceSchema = new mongoose.Schema(
         description: { type: String, required: false },
       },
     ],
+    /** True when created from the job Enclosure Inspection tab (not a standard clearance). */
+    isEnclosureCertificate: {
+      type: Boolean,
+      default: false,
+    },
     jobSpecificExclusions: {
       type: String, // Job-specific exclusions text
     },
@@ -264,6 +269,18 @@ const asbestosClearanceSchema = new mongoose.Schema(
     enclosureCertificatePdfReadyAt: { type: Date, required: false },
     enclosureCertificatePdfFilename: { type: String, required: false },
     enclosureCertificateMergedPdfPath: { type: String, required: false },
+    enclosureCertificateApprovedBy: { type: String, required: false },
+    enclosureCertificateIssueDate: { type: Date, required: false },
+    enclosureCertificateAuthorisationRequestedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: false,
+    },
+    enclosureCertificateAuthorisationRequestedByEmail: {
+      type: String,
+      required: false,
+    },
+    enclosureCertificateViewedAt: { type: Date, required: false },
     deletedAt: { type: Date, required: false, default: null },
   },
   {

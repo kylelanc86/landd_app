@@ -8,6 +8,9 @@ const GraticuleCalibration = require('../models/GraticuleCalibration');
 const HSETestSlideCalibration = require('../models/HSETestSlideCalibration');
 const AirPumpCalibration = require('../models/AirPumpCalibration');
 const AirPump = require('../models/AirPump');
+const FurnaceCalibration = require('../models/FurnaceCalibration');
+const PneumaticTesterCalibration = require('../models/PneumaticTesterCalibration');
+const PrimaryFlowmeterCalibration = require('../models/PrimaryFlowmeterCalibration');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 
@@ -94,6 +97,61 @@ const recalculateCalibrationDates = async (equipmentReference, newCalibrationFre
           );
           updatedCount++;
         }
+      }
+    }
+
+    // Recalculate FurnaceCalibration records
+    const furnaceCalibrations = await FurnaceCalibration.find({
+      furnaceReference: equipmentReference,
+    });
+    console.log(`Found ${furnaceCalibrations.length} FurnaceCalibration records`);
+    for (const cal of furnaceCalibrations) {
+      if (cal.date) {
+        const nextDue = new Date(cal.date);
+        nextDue.setMonth(nextDue.getMonth() + newCalibrationFrequency);
+        await FurnaceCalibration.updateOne(
+          { _id: cal._id },
+          { $set: { nextCalibration: nextDue } }
+        );
+        updatedCount++;
+      }
+    }
+
+    // Recalculate PneumaticTesterCalibration records
+    const pneumaticTesterCalibrations = await PneumaticTesterCalibration.find({
+      pneumaticTesterReference: equipmentReference,
+    });
+    console.log(
+      `Found ${pneumaticTesterCalibrations.length} PneumaticTesterCalibration records`
+    );
+    for (const cal of pneumaticTesterCalibrations) {
+      if (cal.date) {
+        const nextDue = new Date(cal.date);
+        nextDue.setMonth(nextDue.getMonth() + newCalibrationFrequency);
+        await PneumaticTesterCalibration.updateOne(
+          { _id: cal._id },
+          { $set: { nextCalibration: nextDue } }
+        );
+        updatedCount++;
+      }
+    }
+
+    // Recalculate PrimaryFlowmeterCalibration records
+    const primaryFlowmeterCalibrations = await PrimaryFlowmeterCalibration.find({
+      flowmeterReference: equipmentReference,
+    });
+    console.log(
+      `Found ${primaryFlowmeterCalibrations.length} PrimaryFlowmeterCalibration records`
+    );
+    for (const cal of primaryFlowmeterCalibrations) {
+      if (cal.date) {
+        const nextDue = new Date(cal.date);
+        nextDue.setMonth(nextDue.getMonth() + newCalibrationFrequency);
+        await PrimaryFlowmeterCalibration.updateOne(
+          { _id: cal._id },
+          { $set: { nextCalibration: nextDue } }
+        );
+        updatedCount++;
       }
     }
 

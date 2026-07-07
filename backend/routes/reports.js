@@ -30,6 +30,53 @@ function hasFinalAuthorisation(doc) {
   return v != null && String(v).trim() !== '';
 }
 
+function hasClientSuppliedReportApproval(doc) {
+  const v = doc.reportApprovedBy;
+  return v != null && String(v).trim() !== '';
+}
+
+/** Completed client/L&D supplied jobs: explicit Completed status or lab sign-off recorded. */
+const completedClientSuppliedJobFilter = {
+  $or: [
+    { status: 'Completed' },
+    { reportApprovedBy: { $exists: true, $nin: [null, ''] } },
+  ],
+};
+
+function mapClientSuppliedJobToReport(job, reportType, defaultDescription) {
+  const isLdSupplied = job.supplyType === 'ld';
+  const isStandaloneLd =
+    isLdSupplied &&
+    (job.linkedAssessmentId == null || job.linkedAssessmentId === undefined);
+
+  let description = defaultDescription;
+  if (isStandaloneLd) {
+    const label = defaultDescription.replace(/ Report$/, '');
+    description = job.jobNumber
+      ? `L&D Supplied ${label} (${job.jobNumber})`
+      : `L&D Supplied ${label}`;
+  } else if (job.jobNumber) {
+    description = `${defaultDescription} (${job.jobNumber})`;
+  }
+
+  return {
+    id: job._id,
+    date: job.reportIssueDate || job.analysisDate || job.updatedAt,
+    type: reportType,
+    reference: job.projectId?.projectID || job._id.toString(),
+    description,
+    status: job.status,
+    analyst: job.analyst || 'Unknown',
+    sampleCount: job.sampleCount,
+    revision: job.revision || 0,
+    chainOfCustody: job.chainOfCustody || null,
+    supplyType: job.supplyType || 'client',
+    jobNumber: job.jobNumber || null,
+    reportApprovedBy: job.reportApprovedBy || null,
+    reportIssueDate: job.reportIssueDate || null,
+  };
+}
+
 // Get Asbestos Assessment Reports (final-authorised jobs only — in-progress work is surfaced under Project Reports active jobs)
 router.get('/asbestos-assessment/:projectId', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
@@ -140,29 +187,52 @@ router.get('/clearance/:projectId', auth, checkPermission(['projects.view']), as
   }
 });
 
+// Get Lead Clearance Reports
+router.get('/lead-clearance/:projectId', auth, checkPermission(['projects.view']), async (req, res) => {
+  try {
+    const LeadClearance = require('../models/clearanceTemplates/lead/LeadClearance');
+
+    const clearances = await LeadClearance.find({
+      projectId: req.params.projectId,
+      status: { $in: ['complete', 'Site Work Complete'] },
+    })
+      .populate('projectId', 'name projectID')
+      .populate('createdBy', 'firstName lastName')
+      .sort({ clearanceDate: -1 });
+
+    const reports = clearances.map(clearance => ({
+      id: clearance._id,
+      date: clearance.clearanceDate,
+      type: 'lead_clearance',
+      reference: clearance.projectId?.projectID || 'Unknown',
+      description: 'Lead Clearance Report',
+      status: clearance.status,
+      consultant: clearance.consultant,
+      leadAbatementContractor: clearance.leadAbatementContractor,
+      additionalInfo: `${clearance.consultant} • ${clearance.leadAbatementContractor}`,
+      revision: clearance.revision || 0,
+    }));
+
+    res.json(reports);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Get Fibre ID Reports
 router.get('/fibre-id/:projectId', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
     const ClientSuppliedJob = require('../models/ClientSuppliedJob');
     
-    const jobs = await ClientSuppliedJob.find({ 
+    const jobs = await ClientSuppliedJob.find({
       projectId: req.params.projectId,
-      status: 'Completed',
-      jobType: 'Fibre ID'
+      jobType: 'Fibre ID',
+      ...completedClientSuppliedJobFilter,
     }).populate('projectId');
 
-    const reports = jobs.map(job => ({
-      id: job._id,
-      date: job.analysisDate || job.updatedAt,
-      type: 'fibre_id',
-      reference: job.projectId?.projectID || job._id.toString(),
-      description: 'Fibre ID Analysis Report',
-      status: job.status,
-      analyst: job.analyst || 'Unknown',
-      sampleCount: job.sampleCount,
-      revision: job.revision || 0,
-      chainOfCustody: job.chainOfCustody || null
-    }));
+    const reports = jobs
+      .filter((job) => job.status === 'Completed' || hasClientSuppliedReportApproval(job))
+      .map((job) => mapClientSuppliedJobToReport(job, 'fibre_id', 'Fibre ID Analysis Report'));
 
     res.json(reports);
   } catch (error) {
@@ -175,24 +245,17 @@ router.get('/fibre-count/:projectId', auth, checkPermission(['projects.view']), 
   try {
     const ClientSuppliedJob = require('../models/ClientSuppliedJob');
     
-    const jobs = await ClientSuppliedJob.find({ 
+    const jobs = await ClientSuppliedJob.find({
       projectId: req.params.projectId,
-      status: 'Completed',
-      jobType: 'Fibre Count'
+      jobType: 'Fibre Count',
+      ...completedClientSuppliedJobFilter,
     }).populate('projectId');
 
-    const reports = jobs.map(job => ({
-      id: job._id,
-      date: job.analysisDate || job.updatedAt,
-      type: 'fibre_count',
-      reference: job.projectId?.projectID || job._id.toString(),
-      description: 'Fibre Count Analysis Report',
-      status: job.status,
-      analyst: job.analyst || 'Unknown',
-      sampleCount: job.sampleCount,
-      revision: job.revision || 0,
-      chainOfCustody: job.chainOfCustody || null
-    }));
+    const reports = jobs
+      .filter((job) => job.status === 'Completed' || hasClientSuppliedReportApproval(job))
+      .map((job) =>
+        mapClientSuppliedJobToReport(job, 'fibre_count', 'Fibre Count Analysis Report'),
+      );
 
     res.json(reports);
   } catch (error) {

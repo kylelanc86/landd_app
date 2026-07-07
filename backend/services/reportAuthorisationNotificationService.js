@@ -294,6 +294,9 @@ async function notifyClearanceAuthorisationRequesterOnApproval({
   approverName,
   reportTypeLabel,
   resolveJobUrl,
+  authorisationRequestedByField = "authorisationRequestedBy",
+  authorisationRequestedByEmailField = "authorisationRequestedByEmail",
+  isAuthorisedField = "reportApprovedBy",
 }) {
   const projectName = clearance.projectId?.name || "Unknown Project";
   const projectID = clearance.projectId?.projectID || "N/A";
@@ -304,12 +307,18 @@ async function notifyClearanceAuthorisationRequesterOnApproval({
   const clearanceType =
     clearance.clearanceType || reportTypeLabel.replace(/ report$/i, "");
 
-  const viewUrl = await resolveJobUrl(clearance);
+  let viewUrl = await resolveJobUrl(clearance);
+  if (authorisationRequestedByField === "enclosureCertificateAuthorisationRequestedBy") {
+    const jobId = clearance.asbestosRemovalJobId?.toString();
+    if (jobId) {
+      viewUrl = `${getFrontendUrl()}/asbestos-removal/jobs/${jobId}/details?tab=enclosure`;
+    }
+  }
 
   return notifyAuthorisationRequesterOnApproval({
-    authorisationRequestedBy: clearance.authorisationRequestedBy,
+    authorisationRequestedBy: clearance[authorisationRequestedByField],
     wasAlreadyAuthorised,
-    isNowAuthorised: Boolean(clearance.reportApprovedBy),
+    isNowAuthorised: Boolean(clearance[isAuthorisedField]),
     approverName,
     reportTypeLabel,
     subjectIdentifier: projectID,

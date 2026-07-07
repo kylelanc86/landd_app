@@ -49,9 +49,11 @@ import api, {
   clientService,
   clientSuppliedJobsService,
   asbestosAssessmentService,
+  leadAirSampleService,
 } from "../../services/api";
 import reportService from "../../services/reportService";
 import { generateShiftReport } from "../../utils/generateShiftReport";
+import { generateLeadMonitoringShiftReport } from "../../utils/generateLeadMonitoringShiftReport";
 import { generateFibreIDReport } from "../../utils/generateFibreIDReport";
 import ProjectLogModalWrapper from "./ProjectLogModalWrapper";
 import { useProjectStatuses } from "../../context/ProjectStatusesContext";
@@ -461,7 +463,40 @@ const ProjectReports = () => {
         console.log("No asbestos removal job reports found");
       }
 
-      // Check fibre ID reports (client supplied jobs)
+      // Check lead removal jobs (lead monitoring + clearances)
+      try {
+        let hasLeadMonitoring = false;
+        try {
+          const res = await api.get(
+            `/lead-clearances/air-monitoring-reports/${projectId}`,
+          );
+          const raw = res?.data;
+          const list = Array.isArray(raw) ? raw : raw?.data ?? raw?.reports ?? [];
+          hasLeadMonitoring = list.length > 0;
+        } catch (leadMonitoringError) {
+          console.log("No lead monitoring reports found");
+        }
+
+        let hasLeadClearances = false;
+        try {
+          const leadClearanceReports =
+            await reportService.getLeadClearanceReports(projectId);
+          hasLeadClearances =
+            leadClearanceReports &&
+            Array.isArray(leadClearanceReports) &&
+            leadClearanceReports.length > 0;
+        } catch (leadClearanceError) {
+          console.log("No lead clearance reports found");
+        }
+
+        if (hasLeadMonitoring || hasLeadClearances) {
+          available.push("lead-removal-jobs");
+        }
+      } catch (error) {
+        console.log("No lead removal job reports found");
+      }
+
+      // Check fibre ID reports (client supplied and standalone L&D supplied jobs)
       try {
         // Check for completed fibre ID reports
         const fibreIdReports = await reportService.getFibreIdReports(projectId);
@@ -704,6 +739,88 @@ const ProjectReports = () => {
 
           break;
 
+        case "lead-removal-jobs":
+          try {
+            const res = await api.get(
+              `/lead-clearances/air-monitoring-reports/${projectId}`,
+            );
+            const raw = res?.data;
+            const leadMonitoringReports = Array.isArray(raw)
+              ? raw
+              : raw?.data ?? raw?.reports ?? [];
+
+            if (leadMonitoringReports.length > 0) {
+              const shiftReports = leadMonitoringReports.map((report) => ({
+                id: report._id,
+                date: report.date,
+                reference: `${report.jobName}-${report.name}`,
+                description: "Lead Monitoring Report",
+                leadAbatementContractor: report.leadAbatementContractor || "N/A",
+                additionalInfo: `${report.name} (${report.jobName})`,
+                status: report.status,
+                revision: report.revision || 0,
+                type: "lead_shift",
+                data: {
+                  shift: {
+                    _id: report._id,
+                    name: report.name,
+                    date: report.date,
+                    status: report.status,
+                    reportApprovedBy: report.reportApprovedBy,
+                    reportIssueDate: report.reportIssueDate,
+                    revision: report.revision || 0,
+                  },
+                  job: {
+                    _id: report.jobId,
+                    name: report.jobName,
+                    projectId: {
+                      _id: report.projectId,
+                      name: report.projectName,
+                    },
+                  },
+                },
+              }));
+
+              reportsData.push(...shiftReports);
+            }
+          } catch (error) {
+            console.error("Error fetching lead monitoring reports:", error);
+          }
+
+          try {
+            const leadClearanceReports =
+              await reportService.getLeadClearanceReports(projectId);
+
+            if (
+              leadClearanceReports &&
+              Array.isArray(leadClearanceReports) &&
+              leadClearanceReports.length > 0
+            ) {
+              const mappedClearanceReports = leadClearanceReports.map(
+                (clearance) => ({
+                  id: clearance.id,
+                  date: clearance.date,
+                  reference: clearance.reference,
+                  description: clearance.description,
+                  leadAbatementContractor:
+                    clearance.leadAbatementContractor || "N/A",
+                  additionalInfo:
+                    clearance.additionalInfo || "Lead Clearance",
+                  status: clearance.status || "Unknown",
+                  revision: clearance.revision || 0,
+                  type: "lead_clearance",
+                  data: clearance,
+                }),
+              );
+
+              reportsData.push(...mappedClearanceReports);
+            }
+          } catch (leadClearanceError) {
+            console.error("Error fetching lead clearances:", leadClearanceError);
+          }
+
+          break;
+
         case "fibre-id":
           const fibreIdReports =
             await reportService.getFibreIdReports(projectId);
@@ -711,6 +828,8 @@ const ProjectReports = () => {
             id: report.id,
             date: report.date,
             description: report.description,
+            additionalInfo:
+              report.supplyType === "ld" ? "L&D Supplied" : undefined,
             status: report.status,
             revision: report.revision || 0,
             type: "fibre_id",
@@ -726,6 +845,8 @@ const ProjectReports = () => {
             id: report.id,
             date: report.date,
             description: report.description,
+            additionalInfo:
+              report.supplyType === "ld" ? "L&D Supplied" : undefined,
             status: report.status,
             revision: report.revision || 0,
             type: "fibre_count",
@@ -802,8 +923,7 @@ const ProjectReports = () => {
 
   const handleExportCSV = async (report) => {
     try {
-      // Only handle shift (air monitoring) reports
-      if (report.type !== "shift") {
+      if (report.type !== "shift" && report.type !== "lead_shift") {
         showSnackbar(
           "CSV export is only available for air monitoring reports",
           "info",
@@ -816,6 +936,143 @@ const ProjectReports = () => {
       showSnackbar("Exporting air monitoring shift data to CSV...", "info");
 
       const { shift, job } = report.data;
+
+      if (report.type === "lead_shift") {
+        const samplesResponse = await leadAirSampleService.getByShift(shift._id);
+        const samplesWithAnalysis = await Promise.all(
+          (samplesResponse.data || []).map(async (sample) => {
+            if (!sample.analysis) {
+              const completeSample = await leadAirSampleService.getById(
+                sample._id,
+              );
+              return completeSample.data;
+            }
+            return sample;
+          }),
+        );
+
+        let projectData = job.projectId;
+        if (projectData && typeof projectData === "string") {
+          const projectResponse = await projectService.getById(projectData);
+          projectData = projectResponse.data;
+        }
+
+        const { default: leadRemovalJobService } =
+          await import("../../services/leadRemovalJobService");
+        const fullJobDataResponse = await leadRemovalJobService.getById(
+          job._id,
+        );
+        const fullJobData = fullJobDataResponse.data;
+
+        const escapeCsvCell = (value) => {
+          if (value === null || value === undefined) return "";
+          return `"${String(value).replace(/"/g, '""')}"`;
+        };
+
+        const formatDate = (dateStr) => {
+          if (!dateStr) return "";
+          const d = new Date(dateStr);
+          return d.toLocaleDateString("en-AU");
+        };
+
+        const formatPersonName = (value) => {
+          if (!value) return "";
+          if (typeof value === "string") return value;
+          if (typeof value === "object") {
+            const { firstName, lastName } = value;
+            if (firstName || lastName) {
+              return [firstName, lastName].filter(Boolean).join(" ").trim();
+            }
+          }
+          return "";
+        };
+
+        const csvRows = [
+          ["Project ID", projectData?.projectID || ""],
+          ["Project Name", projectData?.name || fullJobData?.projectName || ""],
+          ["Shift Name", shift?.name || ""],
+          ["Sample Date", shift?.date ? formatDate(shift.date) : ""],
+          [
+            "Description of Works",
+            shift?.descriptionOfWorks || fullJobData?.description || "",
+          ],
+          [
+            "Lead Abatement Contractor",
+            fullJobData?.leadAbatementContractor || "",
+          ],
+          [
+            "Supervisor",
+            shift?.supervisor
+              ? formatPersonName(shift.supervisor)
+              : shift?.defaultSampler
+                ? formatPersonName(shift.defaultSampler)
+                : "",
+          ],
+          [],
+          [],
+        ];
+
+        const sampleHeaders = [
+          "L&D Sample Ref",
+          "Sample Location",
+          "Sample Type",
+          "Time On",
+          "Time Off",
+          "Ave Flow (L/min)",
+          "Lead Content (μg/filter)",
+          "Sampler",
+        ];
+
+        csvRows.push(sampleHeaders);
+
+        samplesWithAnalysis.forEach((sample) => {
+          csvRows.push([
+            sample.fullSampleID || sample.sampleID || "",
+            sample.location || "N/A",
+            sample.type || "",
+            sample.startTime
+              ? sample.startTime.split(":").slice(0, 2).join(":")
+              : "",
+            sample.endTime
+              ? sample.endTime.split(":").slice(0, 2).join(":")
+              : "",
+            sample.averageFlowrate ?? "",
+            sample.analysis?.leadContent ?? "",
+            sample.sampler
+              ? formatPersonName(sample.sampler)
+              : sample.collectedBy
+                ? formatPersonName(sample.collectedBy)
+                : "",
+          ]);
+        });
+
+        const csvContent = csvRows
+          .map((row) =>
+            row.length ? row.map((cell) => escapeCsvCell(cell)).join(",") : "",
+          )
+          .join("\r\n");
+
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+
+        const projectID = projectData?.projectID || "";
+        const shiftName = shift?.name || "shift";
+        const shiftDate = shift?.date
+          ? formatDate(shift.date).replace(/\//g, "")
+          : "";
+        link.setAttribute("download", `${projectID}_${shiftName}_${shiftDate}.csv`);
+
+        link.style.visibility = "hidden";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        showSnackbar("CSV file downloaded successfully", "success");
+        return;
+      }
 
       // Fetch samples for this shift
       const samplesResponse = await sampleService.getByShift(shift._id);
@@ -1041,8 +1298,12 @@ const ProjectReports = () => {
       const reportTypeName =
         report.type === "shift"
           ? "Air Monitoring"
+          : report.type === "lead_shift"
+            ? "Lead Monitoring"
           : report.type === "clearance"
             ? "Clearance"
+            : report.type === "lead_clearance"
+              ? "Lead Clearance"
             : report.type === "fibre_id"
               ? "Fibre ID"
               : report.type === "fibre_count"
@@ -1051,7 +1312,48 @@ const ProjectReports = () => {
                   ? "Asbestos Assessment"
                   : "Report";
       showSnackbar(`Downloading ${reportTypeName} report...`, "info");
-      if (report.type === "shift") {
+      if (report.type === "lead_shift") {
+        const { shift, job } = report.data;
+        const samplesResponse = await leadAirSampleService.getByShift(shift._id);
+        const samplesWithAnalysis = samplesResponse.data || [];
+
+        let projectData = job.projectId;
+        if (projectData && typeof projectData === "string") {
+          const projectResponse = await projectService.getById(projectData);
+          projectData = projectResponse.data;
+        }
+        if (
+          projectData &&
+          projectData.client &&
+          typeof projectData.client === "string"
+        ) {
+          const clientResponse = await clientService.getById(projectData.client);
+          projectData.client = clientResponse.data;
+        }
+
+        const { default: leadRemovalJobService } =
+          await import("../../services/leadRemovalJobService");
+        const fullJobDataResponse = await leadRemovalJobService.getById(
+          job._id,
+        );
+        const fullJobData = fullJobDataResponse.data;
+
+        const projectForReport = {
+          ...(projectData || {}),
+          name:
+            fullJobData?.projectName ||
+            projectData?.name ||
+            job.projectId?.name,
+        };
+
+        await generateLeadMonitoringShiftReport({
+          shift,
+          job: fullJobData,
+          samples: samplesWithAnalysis,
+          project: projectForReport,
+          openInNewTab: false,
+        });
+      } else if (report.type === "shift") {
         const { shift, job } = report.data;
         const samplesResponse = await sampleService.getByShift(shift._id);
 
@@ -1195,6 +1497,26 @@ const ProjectReports = () => {
 
         // Generate and download the PDF
         await generateHTMLTemplatePDF("asbestos-clearance", enhancedClearance, {
+          openInNewTab: false,
+        });
+      } else if (report.type === "lead_clearance") {
+        const { generateHTMLTemplatePDF } =
+          await import("../../utils/templatePDFGenerator");
+        const { default: leadClearanceService } =
+          await import("../../services/leadClearanceService");
+        const clearanceId = report.id || report.data?.id || report.data?._id;
+        const fullClearance = await leadClearanceService.getById(clearanceId);
+
+        const enhancedClearance = {
+          ...fullClearance,
+          consultant:
+            fullClearance.createdBy?.firstName &&
+            fullClearance.createdBy?.lastName
+              ? `${fullClearance.createdBy.firstName} ${fullClearance.createdBy.lastName}`
+              : fullClearance.consultant,
+        };
+
+        await generateHTMLTemplatePDF("lead-clearance", enhancedClearance, {
           openInNewTab: false,
         });
       } else if (report.type === "asbestos_assessment") {
@@ -1455,6 +1777,13 @@ const ProjectReports = () => {
       const clearance = await asbestosClearanceService.getById(reportId);
       return collectImagesFromItems(clearance?.items || []);
     }
+    if (report.type === "lead_clearance") {
+      const { default: leadClearanceService } = await import(
+        "../../services/leadClearanceService"
+      );
+      const clearance = await leadClearanceService.getById(reportId);
+      return collectImagesFromItems(clearance?.items || []);
+    }
     if (report.type === "asbestos_assessment") {
       const { default: asbestosAssessmentService } = await import(
         "../../services/asbestosAssessmentService"
@@ -1597,7 +1926,10 @@ const ProjectReports = () => {
     const report = reviseDialog.report;
 
     // Validate revision reason for clearance reports only
-    if (report?.type === "clearance" && !revisionReason.trim()) {
+    if (
+      (report?.type === "clearance" || report?.type === "lead_clearance") &&
+      !revisionReason.trim()
+    ) {
       showSnackbar(
         "Please provide a reason for revising this clearance report.",
         "error",
@@ -1606,7 +1938,37 @@ const ProjectReports = () => {
     }
 
     try {
-      if (report.type === "shift") {
+      if (report.type === "lead_shift") {
+        const { shift, job } = report.data;
+
+        if (shift && shift._id && job && job._id) {
+          const { shiftService } = await import("../../services/api");
+          const { default: leadRemovalJobService } =
+            await import("../../services/leadRemovalJobService");
+
+          const currentShift = await shiftService.getById(shift._id);
+          const currentRevision = currentShift.data.revision || 0;
+          const newRevision = currentRevision + 1;
+
+          await shiftService.update(shift._id, {
+            status: "ongoing",
+            reportApprovedBy: null,
+            reportIssueDate: null,
+            revision: newRevision,
+          });
+
+          await leadRemovalJobService.update(job._id, {
+            status: "in_progress",
+          });
+
+          showSnackbar(
+            "Report and job status reset to in progress. You can now revise the report.",
+            "success",
+          );
+
+          loadReports();
+        }
+      } else if (report.type === "shift") {
         // For air monitoring reports, we need to reset both the shift status AND the job status
         const { shift, job } = report.data;
 
@@ -1642,6 +2004,68 @@ const ProjectReports = () => {
           // Reload reports to reflect the change
           loadReports();
         }
+      } else if (report.type === "lead_clearance") {
+        const { default: leadClearanceService } =
+          await import("../../services/leadClearanceService");
+        const { default: leadRemovalJobService } =
+          await import("../../services/leadRemovalJobService");
+
+        const clearanceId = report.id || report.data?.id || report.data?._id;
+
+        const currentClearance =
+          await leadClearanceService.getById(clearanceId);
+        const currentRevision = currentClearance.revision || 0;
+        const newRevision = currentRevision + 1;
+
+        const newRevisionReason = {
+          revisionNumber: newRevision,
+          reason: revisionReason.trim(),
+          revisedBy: currentUser._id,
+          revisedAt: new Date(),
+        };
+
+        const existingRevisionReasons = currentClearance.revisionReasons || [];
+        const updatedRevisionReasons = [
+          ...existingRevisionReasons,
+          newRevisionReason,
+        ];
+
+        await leadClearanceService.update(clearanceId, {
+          status: "in progress",
+          revision: newRevision,
+          revisionReasons: updatedRevisionReasons,
+        });
+
+        try {
+          const jobsResponse = await leadRemovalJobService.getAll({
+            projectId,
+          });
+          const jobs = jobsResponse.jobs || jobsResponse.data || [];
+          const projectJob = jobs.find(
+            (job) =>
+              (job.projectId === projectId ||
+                job.projectId?._id === projectId) &&
+              job.status === "completed",
+          );
+
+          if (projectJob) {
+            await leadRemovalJobService.update(projectJob._id, {
+              status: "in_progress",
+            });
+          }
+        } catch (jobError) {
+          console.error(
+            "Error updating associated lead removal job:",
+            jobError,
+          );
+        }
+
+        showSnackbar(
+          "Clearance and job status reset to in progress. You can now revise the report.",
+          "success",
+        );
+
+        loadReports();
       } else if (report.type === "clearance") {
         // For clearance reports, reset the clearance status and increment revision count
         const { default: asbestosClearanceService } =
@@ -2071,7 +2495,7 @@ const ProjectReports = () => {
                 variant="outlined"
                 startIcon={<ArchiveIcon />}
               >
-                Deleted / Archived Data
+                Deleted Data
               </Button>
             )}
             <Button
@@ -2362,10 +2786,18 @@ const ProjectReports = () => {
 
               if (reportType === "fibre_id" || reportType === "fibre_count") {
                 tableText = "the client supplied jobs table";
-              } else if (reportType === "clearance") {
-                tableText = "the clearances table";
+              } else if (
+                reportType === "clearance" ||
+                reportType === "lead_clearance"
+              ) {
+                tableText =
+                  reportType === "lead_clearance"
+                    ? "the lead clearances table"
+                    : "the clearances table";
               } else if (reportType === "shift") {
                 tableText = "the asbestos removal jobs table";
+              } else if (reportType === "lead_shift") {
+                tableText = "the lead removal jobs table";
               } else if (reportType === "asbestos_assessment") {
                 tableText =
                   "Surveys (Asbestos Assessment or Residential Asbestos Assessment)";
@@ -2374,7 +2806,9 @@ const ProjectReports = () => {
               return `Proceeding will enable editing of the report in ${tableText} and will increase the report's revision count.`;
             })()}
           </DialogContentText>
-          {reviseDialog.report?.type === "clearance" && (
+          {["clearance", "lead_clearance"].includes(
+            reviseDialog.report?.type,
+          ) && (
             <TextField
               autoFocus
               margin="dense"

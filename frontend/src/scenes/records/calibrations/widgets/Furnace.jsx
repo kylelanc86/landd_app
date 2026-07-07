@@ -1,7 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { Box, CircularProgress, useTheme } from "@mui/material";
 import BaseCalibrationWidget from "./BaseCalibrationWidget";
+import furnaceCalibrationService from "../../../../services/furnaceCalibrationService";
 import { equipmentService } from "../../../../services/equipmentService";
+import {
+  getCachedCalibrationData,
+  setCachedCalibrationData,
+} from "../../../../utils/calibrationCache";
+import { computeFurnaceWidgetStats } from "../furnaceCalibrationUtils";
+
+const CACHE_KEY = "furnace";
 
 const Furnace = ({ viewCalibrationsPath }) => {
   const theme = useTheme();
@@ -13,25 +21,56 @@ const Furnace = ({ viewCalibrationsPath }) => {
     fetchFurnaceData();
   }, []);
 
+  const applyStats = ({
+    nextCalibrationDue: nextDue,
+    itemsDueInNextMonth: dueCount,
+  }) => {
+    setNextCalibrationDue(nextDue);
+    setItemsDueInNextMonth(dueCount);
+  };
+
+  const fetchFreshData = async () => {
+    const [calibrations, equipmentResponse] = await Promise.all([
+      furnaceCalibrationService.getAll(),
+      equipmentService.getAll({
+        equipmentType: "Furnace",
+        limit: 1000,
+      }),
+    ]);
+
+    const equipment = equipmentResponse.equipment || [];
+    const stats = computeFurnaceWidgetStats(
+      Array.isArray(calibrations) ? calibrations : [],
+      equipment
+    );
+
+    applyStats(stats);
+    setCachedCalibrationData(CACHE_KEY, stats);
+  };
+
   const fetchFurnaceData = async () => {
     try {
       setLoading(true);
 
-      // Fetch equipment of type Furnace
-      const response = await equipmentService.getAll({
-        equipmentType: "Furnace",
-        limit: 1000,
-      });
-      const equipment = response.equipment || [];
+      const cached = getCachedCalibrationData(CACHE_KEY);
+      if (cached) {
+        applyStats({
+          nextCalibrationDue: cached.nextCalibrationDue
+            ? new Date(cached.nextCalibrationDue)
+            : null,
+          itemsDueInNextMonth: cached.itemsDueInNextMonth || 0,
+        });
+        setLoading(false);
+        fetchFreshData().catch((error) => {
+          console.error("Error refreshing Furnace calibration data:", error);
+        });
+        return;
+      }
 
-      // For now, set defaults until calibration service is available
-      // TODO: Implement calibration service for Furnace
-      setNextCalibrationDue(null);
-      setItemsDueInNextMonth(0);
+      await fetchFreshData();
     } catch (error) {
-      console.error("Error fetching Furnace data:", error);
-      setNextCalibrationDue(null);
-      setItemsDueInNextMonth(0);
+      console.error("Error fetching Furnace calibration data:", error);
+      applyStats({ nextCalibrationDue: null, itemsDueInNextMonth: 0 });
     } finally {
       setLoading(false);
     }
