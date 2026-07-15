@@ -830,7 +830,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
 
       if (wasApproved) {
         updateData.reportApprovedBy = null;
-        updateData.reportIssueDate = null;
+        // Preserve first reportIssueDate / reportReference for stable filenames.
       }
 
       const response = await clientSuppliedJobsService.update(
@@ -937,7 +937,7 @@ const ClientSuppliedFibreIDAnalysis = () => {
 
       if (wasApproved) {
         updateData.reportApprovedBy = null;
-        updateData.reportIssueDate = null;
+        // Preserve first reportIssueDate / reportReference for stable filenames.
       }
 
       const response = await clientSuppliedJobsService.update(

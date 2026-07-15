@@ -18,6 +18,7 @@ import MenuIcon from "@mui/icons-material/Menu";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { useTheme } from "@mui/material";
 import { useAuth } from "../../context/AuthContext";
+import { useNotificationCentre } from "../../context/NotificationCentreContext";
 import MobileDrawer from "../../components/MobileDrawer";
 
 const Topbar = () => {
@@ -27,11 +28,14 @@ const Topbar = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const navigate = useNavigate();
   const { currentUser, logout } = useAuth();
+  const { urgentCount: notificationBadgeCount } = useNotificationCentre();
 
   // Detect tablet and mobile screens - show hamburger menu
   // iPads in landscape can be up to ~1366px wide (iPad Pro 12.9"), so we use 1280px breakpoint
   const isMobileOrTablet = useMediaQuery("(max-width: 1280px)");
   const isMobile = useMediaQuery(theme.breakpoints.down("md")); // true below 900px (layout breakpoint)
+  const showTopbarNotificationBadge =
+    isMobileOrTablet && notificationBadgeCount > 0;
 
   // Check if sidebar is collapsed
   useEffect(() => {
@@ -153,7 +157,7 @@ const Topbar = () => {
               display: { xs: "none", md: "flex" },
               alignItems: "center",
               gap: 2,
-              mr: 2,
+              mr: showTopbarNotificationBadge ? 0 : 2,
             }}
           >
             <Typography
@@ -183,6 +187,40 @@ const Topbar = () => {
                 : "Guest"}
             </Typography>
           </Box>
+          {showTopbarNotificationBadge && (
+            <Tooltip title="Notification Centre">
+              <Box
+                component="button"
+                type="button"
+                aria-label={`${notificationBadgeCount} urgent notifications`}
+                onClick={() => navigate("/notifications")}
+                sx={{
+                  minWidth: "22px",
+                  height: "22px",
+                  borderRadius: "11px",
+                  backgroundColor: "#d32f2f",
+                  color: "#ffffff",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "0.75rem",
+                  fontWeight: 700,
+                  px: 0.75,
+                  ml: { xs: 0, md: 1 },
+                  mr: { xs: 0, md: 1 },
+                  border: "none",
+                  cursor: "pointer",
+                  lineHeight: 1,
+                  fontFamily: "inherit",
+                  "&:hover": {
+                    backgroundColor: "#b71c1c",
+                  },
+                }}
+              >
+                {notificationBadgeCount > 99 ? "99+" : notificationBadgeCount}
+              </Box>
+            </Tooltip>
+          )}
           <Divider
             orientation="vertical"
             flexItem

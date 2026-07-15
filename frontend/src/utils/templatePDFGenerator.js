@@ -1,3 +1,9 @@
+import { parseContentDispositionFilename } from "./downloadFilename";
+import {
+  buildAsbestosAssessmentFilename,
+  withRevisionAndExtension,
+} from "./reportFilenames";
+
 /**
  * Generate PDF from HTML templates using server-side Puppeteer
  * @param {string} templateType - Type of template (e.g., 'asbestos-clearance')
@@ -62,18 +68,29 @@ export const generateAssessmentPDF = async (assessmentData) => {
       const pdfBlob = await response.blob();
       console.log('Assessment PDF blob size:', pdfBlob.size, 'bytes');
 
-      // Create a download link
+      const isResidential = assessmentData?.jobType === 'residential-asbestos';
+      const fallbackFilename = assessmentData?.reportReference
+        ? withRevisionAndExtension(
+            assessmentData.reportReference,
+            assessmentData.revision,
+          )
+        : buildAsbestosAssessmentFilename({
+            projectId:
+              assessmentData.projectId?.projectID || assessmentData.jobReference,
+            siteName:
+              assessmentData.projectId?.name || assessmentData.siteName,
+            reportIssueDate: assessmentData.reportAuthorisedAt,
+            revision: assessmentData.revision,
+            isResidential,
+          });
+      const fileName =
+        parseContentDispositionFilename(
+          response.headers.get('Content-Disposition'),
+        ) || fallbackFilename;
+
       const url = window.URL.createObjectURL(pdfBlob);
       const link = document.createElement('a');
       link.href = url;
-      
-      // Generate filename
-      const projectId = assessmentData.projectId?.projectID || assessmentData.jobReference || 'Unknown';
-      const siteNameRaw = assessmentData.projectId?.name || assessmentData.siteName || 'Unknown';
-      const siteName = siteNameRaw.replace(/\//g, ', ');
-      const assessmentDate = assessmentData.assessmentDate ? new Date(assessmentData.assessmentDate).toLocaleDateString('en-GB').replace(/\//g, '-') : 'Unknown';
-      const fileName = `${projectId}: Asbestos Assessment Report - ${siteName} (${assessmentDate}).pdf`;
-      
       link.download = fileName;
       document.body.appendChild(link);
       link.click();
@@ -259,10 +276,7 @@ export async function downloadEnclosureCertificateByClearanceId(clearanceId, opt
   const blob = await res.blob();
   const contentDisposition = res.headers.get('Content-Disposition');
   let filename = `enclosure_certificate_${clearanceId}.pdf`;
-  if (contentDisposition) {
-    const m = contentDisposition.match(/filename="(.+)"/);
-    if (m) filename = m[1];
-  }
+  filename = parseContentDispositionFilename(contentDisposition) || filename;
   const blobUrl = window.URL.createObjectURL(blob);
   try {
     if (openInNewTab) {
@@ -288,6 +302,53 @@ export async function downloadEnclosureCertificateByClearanceId(clearanceId, opt
     window.URL.revokeObjectURL(blobUrl);
     throw e;
   }
+  return { filename };
+}
+
+/**
+ * Generate enclosure inspection certificate and immediately download it.
+ * Uses server-provided Content-Disposition filename when available.
+ * @param {Object} clearanceData - Full asbestos clearance document
+ * @returns {Promise<{ filename: string }>}
+ */
+export async function generateEnclosureCertificatePDF(clearanceData) {
+  const res = await fetch(`${API_BASE}/pdf-docraptor-v2/generate-enclosure-certificate`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify({
+      clearanceData,
+      enclosureData: {
+        description: clearanceData?.enclosureDescription || "",
+        photos: clearanceData?.enclosurePhotos || [],
+      },
+    }),
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Failed to generate enclosure certificate: ${res.status} - ${errText}`);
+  }
+
+  const blob = await res.blob();
+  const contentDisposition = res.headers.get("Content-Disposition");
+  const filename =
+    parseContentDispositionFilename(contentDisposition) ||
+    `enclosure_certificate_${clearanceData?._id || "certificate"}.pdf`;
+
+  const blobUrl = window.URL.createObjectURL(blob);
+  try {
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.download = filename;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
+  } catch (e) {
+    window.URL.revokeObjectURL(blobUrl);
+    throw e;
+  }
+
   return { filename };
 }
 
@@ -440,12 +501,9 @@ export async function downloadAssessmentPDFByAssessmentId(assessmentId, freshJob
     throw err;
   }
   const blob = await res.blob();
-  const contentDisposition = res.headers.get('Content-Disposition');
-  let filename = `assessment_${assessmentId}.pdf`;
-  if (contentDisposition) {
-    const m = contentDisposition.match(/filename="(.+)"/);
-    if (m) filename = m[1];
-  }
+  const filename =
+    parseContentDispositionFilename(res.headers.get('Content-Disposition')) ||
+    `assessment_${assessmentId}.pdf`;
   const blobUrl = window.URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = blobUrl;

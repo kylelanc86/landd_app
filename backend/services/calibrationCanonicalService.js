@@ -8,6 +8,7 @@ const MassBalanceCalibration = require("../models/MassBalanceCalibration");
 const MicrometerCalibration = require("../models/MicrometerCalibration");
 const FumeHoodCalibration = require("../models/FumeHoodCalibration");
 const CaliperCalibration = require("../models/CaliperCalibration");
+const MycometerCalibration = require("../models/MycometerCalibration");
 const SieveCalibration = require("../models/SieveCalibration");
 const AcetoneVaporiserCalibration = require("../models/AcetoneVaporiserCalibration");
 const RiLiquidCalibration = require("../models/RiLiquidCalibration");
@@ -36,6 +37,7 @@ const CANONICAL_CALIBRATION_CONTRACT = {
 
 let cache = {
   generatedAt: 0,
+  notificationsGeneratedAt: 0,
   events: [],
   latestEvents: [],
   notifications: [],
@@ -52,6 +54,7 @@ const calibrationConfigs = [
   { sourceType: "Micrometer Calibration", model: MicrometerCalibration, eventField: "date", dueField: "nextCalibration", refField: "micrometerReference", refKind: "equipmentReference" },
   { sourceType: "Fume Hood Calibration", model: FumeHoodCalibration, eventField: "date", dueField: "nextCalibration", refField: "fumeHoodReference", refKind: "equipmentReference" },
   { sourceType: "Caliper Calibration", model: CaliperCalibration, eventField: "date", dueField: "nextCalibration", refField: "caliperReference", refKind: "equipmentReference" },
+  { sourceType: "Mycometer Calibration", model: MycometerCalibration, eventField: "date", dueField: "nextCalibration", refField: "mycometerReference", refKind: "equipmentReference" },
   { sourceType: "Sieve Calibration", model: SieveCalibration, eventField: "date", dueField: null, refField: "sieveReference", refKind: "equipmentReference" },
   { sourceType: "Acetone Vaporiser Calibration", model: AcetoneVaporiserCalibration, eventField: "date", dueField: "nextCalibration", refField: "vaporiserId", refKind: "equipmentId" },
   { sourceType: "RI Liquid Calibration", model: RiLiquidCalibration, eventField: "date", dueField: "nextCalibration", refField: "bottleId", refKind: "equipmentReference" },
@@ -154,6 +157,7 @@ const CALIBRATION_RECORD_DESCRIPTIONS = {
   "Micrometer Calibration": "Micrometer",
   "Fume Hood Calibration": "Fume Hood",
   "Caliper Calibration": "Caliper",
+  "Mycometer Calibration": "Mycometer",
   "Sieve Calibration": "Sieve",
   "Acetone Vaporiser Calibration": "Acetone Vaporiser",
   "RI Liquid Calibration": "RI Liquid",
@@ -180,6 +184,80 @@ const buildIaqRecordDescription = (monitoringDate) => {
   return monthYear || "Indoor Air Quality";
 };
 
+const IAQ_NOTIFICATION_START_YEAR = 2026;
+const IAQ_NOTIFICATION_START_MONTH_INDEX = 2; // March (0-based)
+
+const createUtcDate = (year, monthIndex, day = 1) =>
+  new Date(Date.UTC(year, monthIndex, day));
+
+const normalizeToUtcMidnight = (date) =>
+  createUtcDate(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+
+const getLastDayOfMonthUtc = (year, monthIndex) =>
+  createUtcDate(year, monthIndex + 1, 0);
+
+const buildIaqMissingMonthRows = async ({ today, daysWindow }) => {
+  const records = await IAQRecord.find()
+    .select("_id monitoringDate reportApprovedBy")
+    .lean();
+  const presentMonths = new Set();
+
+  records.forEach((record) => {
+    if (!record.reportApprovedBy) {
+      return;
+    }
+    const monitoringDate = parseDate(record.monitoringDate);
+    if (!monitoringDate) return;
+    const year = monitoringDate.getUTCFullYear();
+    const monthIndex = monitoringDate.getUTCMonth();
+    presentMonths.add(`${year}-${monthIndex}`);
+  });
+
+  const rows = [];
+  const start = createUtcDate(
+    IAQ_NOTIFICATION_START_YEAR,
+    IAQ_NOTIFICATION_START_MONTH_INDEX,
+    1,
+  );
+  const end = createUtcDate(today.getUTCFullYear(), today.getUTCMonth(), 1);
+
+  for (
+    let cursor = new Date(start);
+    cursor.getTime() <= end.getTime();
+    cursor = createUtcDate(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1)
+  ) {
+    const year = cursor.getUTCFullYear();
+    const monthIndex = cursor.getUTCMonth();
+    const monthKey = `${year}-${monthIndex}`;
+
+    if (presentMonths.has(monthKey)) {
+      continue;
+    }
+
+    const dueDate = getLastDayOfMonthUtc(year, monthIndex);
+    const daysUntilDue = Math.floor(
+      (dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+    );
+
+    if (daysUntilDue > daysWindow) {
+      continue;
+    }
+
+    rows.push({
+      id: `IAQ-${year}-${monthIndex + 1}`,
+      recordType: "IAQ",
+      recordDescription: buildIaqRecordDescription(dueDate),
+      equipmentReference: null,
+      sourceType: "IAQ",
+      recordId: null,
+      dueDate: dueDate.toISOString(),
+      daysUntilDue,
+    });
+  }
+
+  return rows;
+};
+
 // TODO(audit-notifications): When audit notifications are added, populate auditRows
 // with recordDescription built from audit type + due month, e.g. "Internal Audit - July 2026".
 const buildAuditRecordDescription = (auditType, dueDate) => {
@@ -188,12 +266,13 @@ const buildAuditRecordDescription = (auditType, dueDate) => {
   return monthYear ? `${label} - ${monthYear}` : label;
 };
 
-const buildNotificationRows = (
+const buildNotificationRows = async (
   latestEvents,
   { daysWindow = 30, outOfServiceRefs = new Set() } = {},
 ) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const todayUtc = normalizeToUtcMidnight(today);
 
   const rows = latestEvents
     .filter((event) => event.nextCalibrationAt)
@@ -202,7 +281,7 @@ const buildNotificationRows = (
       const dueDate = new Date(event.nextCalibrationAt);
       dueDate.setHours(0, 0, 0, 0);
       const daysUntilDue = Math.floor(
-        (dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+        (dueDate.getTime() - todayUtc.getTime()) / (1000 * 60 * 60 * 24),
       );
       return {
         id: `${event.sourceType}-${event.recordId}`,
@@ -218,9 +297,7 @@ const buildNotificationRows = (
     })
     .filter((row) => row.daysUntilDue <= daysWindow);
 
-  // TODO(iaq-notifications): Load IAQ records due within daysWindow and map rows with:
-  // recordType: "IAQ", recordDescription: buildIaqRecordDescription(record.monitoringDate)
-  const iaqRows = [];
+  const iaqRows = await buildIaqMissingMonthRows({ today: todayUtc, daysWindow });
 
   // TODO(audit-notifications): Load audit records due within daysWindow and map rows with:
   // recordType: "Audit", recordDescription: buildAuditRecordDescription(auditType, dueDate)
@@ -250,10 +327,27 @@ const buildLatestByEquipmentReference = (latestEvents) => {
   return grouped;
 };
 
-const refreshCache = async () => {
+const buildCalibrationSelectFields = (config) => {
+  const fields = new Set([
+    config.eventField,
+    config.refField,
+    "isArchived",
+    "archivedAt",
+    "supersededAt",
+    "updatedAt",
+    "createdAt",
+  ]);
+  if (config.dueField) fields.add(config.dueField);
+  return Array.from(fields).join(" ");
+};
+
+const refreshEventsCache = async () => {
   const rawBySource = await Promise.all(
     calibrationConfigs.map(async (config) => {
-      const docs = await config.model.find().lean();
+      const docs = await config.model
+        .find()
+        .select(buildCalibrationSelectFields(config))
+        .lean();
       return { config, docs };
     }),
   );
@@ -291,6 +385,17 @@ const refreshCache = async () => {
     (event) => event.equipmentReference,
   );
 
+  cache = {
+    generatedAt: Date.now(),
+    events,
+    latestEvents,
+    notifications: [],
+    notificationsGeneratedAt: 0,
+    latestByEquipmentReference: buildLatestByEquipmentReference(latestEvents),
+  };
+};
+
+const refreshNotificationsCache = async () => {
   const outOfServiceEquipment = await Equipment.find({ status: "out-of-service" })
     .select("equipmentReference")
     .lean();
@@ -298,13 +403,10 @@ const refreshCache = async () => {
     outOfServiceEquipment.map((eq) => eq.equipmentReference),
   );
 
-  cache = {
-    generatedAt: Date.now(),
-    events,
-    latestEvents,
-    notifications: buildNotificationRows(latestEvents, { outOfServiceRefs }),
-    latestByEquipmentReference: buildLatestByEquipmentReference(latestEvents),
-  };
+  cache.notifications = await buildNotificationRows(cache.latestEvents, {
+    outOfServiceRefs,
+  });
+  cache.notificationsGeneratedAt = Date.now();
 };
 
 const ensureFresh = async ({ forceRefresh = false } = {}) => {
@@ -315,11 +417,25 @@ const ensureFresh = async ({ forceRefresh = false } = {}) => {
   ) {
     return;
   }
-  await refreshCache();
+  await refreshEventsCache();
+};
+
+const ensureNotificationsFresh = async ({ forceRefresh = false } = {}) => {
+  await ensureFresh({ forceRefresh });
+  if (
+    !forceRefresh &&
+    cache.notificationsGeneratedAt &&
+    cache.notificationsGeneratedAt >= cache.generatedAt &&
+    Date.now() - cache.notificationsGeneratedAt < CACHE_TTL_MS
+  ) {
+    return;
+  }
+  await refreshNotificationsCache();
 };
 
 const invalidateCanonicalCache = () => {
   cache.generatedAt = 0;
+  cache.notificationsGeneratedAt = 0;
 };
 
 const deriveDueState = (equipment, latestEventsForEquipment, dueSoonDays = 30) => {
@@ -380,27 +496,33 @@ const deriveDueState = (equipment, latestEventsForEquipment, dueSoonDays = 30) =
 
 const getEquipmentDueSnapshot = async (equipmentList, options = {}) => {
   await ensureFresh(options);
+  const includeLatestEvents = options.includeLatestEvents !== false;
   return equipmentList.map((equipment) => {
     const latestEventsForEquipment =
       cache.latestByEquipmentReference[equipment.equipmentReference] || [];
     const due = deriveDueState(equipment, latestEventsForEquipment);
-    return {
+    const snapshot = {
       ...equipment,
       ...due,
-      latestCalibrationEvents: latestEventsForEquipment.map((event) => ({
-        sourceType: event.sourceType,
-        calibrationAt: event.calibrationAt?.toISOString() || null,
-        nextCalibrationAt: event.nextCalibrationAt?.toISOString() || null,
-        recordId: event.recordId,
-      })),
     };
+    if (includeLatestEvents) {
+      snapshot.latestCalibrationEvents = latestEventsForEquipment.map(
+        (event) => ({
+          sourceType: event.sourceType,
+          calibrationAt: event.calibrationAt?.toISOString() || null,
+          nextCalibrationAt: event.nextCalibrationAt?.toISOString() || null,
+          recordId: event.recordId,
+        }),
+      );
+    }
+    return snapshot;
   });
 };
 
 const getNotificationSnapshot = async (options = {}) => {
-  await ensureFresh(options);
+  await ensureNotificationsFresh(options);
   return {
-    generatedAt: cache.generatedAt,
+    generatedAt: cache.notificationsGeneratedAt || cache.generatedAt,
     rows: cache.notifications,
     urgentCount: cache.notifications.filter(
       (row) => row.bucket === "overdue" || row.bucket === "dueSoon",

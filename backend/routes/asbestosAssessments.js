@@ -14,6 +14,12 @@ const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const { getLegislationForReportTemplate } = require('../services/templateService');
 const { buildContentDispositionAttachment } = require('../utils/contentDisposition');
+const {
+  buildAsbestosAssessmentFilename,
+  buildLDChainOfCustodyFilename,
+  buildFibreIDFilename,
+  toReportReference,
+} = require('../utils/reportFilenames');
 
 /** Assessment report PDF retention (days) – matches DocRaptor; after this, report is no longer offered for download. */
 const ASSESSMENT_PDF_RETENTION_DAYS = 7;
@@ -689,13 +695,122 @@ router.put('/:id', async (req, res) => {
       updateData.reportApprovedBy = reportApprovedBy;
     }
     if (reportIssueDate !== undefined) {
-      updateData.reportIssueDate = reportIssueDate;
+      // Preserve the first Fibre ID issue/authorisation date used for filenames.
+      if (!existingJob.reportIssueDate) {
+        updateData.reportIssueDate = reportIssueDate;
+      }
     }
     if (reportAuthorisedBy !== undefined) {
       updateData.reportAuthorisedBy = reportAuthorisedBy;
     }
     if (reportAuthorisedAt !== undefined) {
-      updateData.reportAuthorisedAt = reportAuthorisedAt;
+      // Preserve the first assessment authorisation date for filename continuity.
+      if (!existingJob.reportAuthorisedAt) {
+        updateData.reportAuthorisedAt = reportAuthorisedAt;
+      }
+    }
+
+    // Freeze Fibre ID report reference once (first Fibre ID approval).
+    const isBecomingFibreIdApproved =
+      reportApprovedBy !== undefined &&
+      reportApprovedBy &&
+      !existingJob.reportApprovedBy;
+    if (isBecomingFibreIdApproved && !existingJob.fibreIdReportReference) {
+      const issueDate =
+        existingJob.reportIssueDate ||
+        updateData.reportIssueDate ||
+        new Date();
+      if (!existingJob.reportIssueDate && !updateData.reportIssueDate) {
+        updateData.reportIssueDate = issueDate;
+      }
+      const projectIdValue = existingJob.projectId?._id || existingJob.projectId;
+      let projectID = 'Unknown';
+      let siteName = 'Unknown';
+      try {
+        const project = await Project.findById(projectIdValue).select('projectID name').lean();
+        if (project?.projectID) projectID = project.projectID;
+        if (project?.name) siteName = project.name;
+      } catch (_) {}
+
+      updateData.fibreIdReportReference = toReportReference(
+        buildFibreIDFilename({
+          projectId: projectID,
+          siteName,
+          reportIssueDate: issueDate,
+          includeRevision: false,
+          includeExtension: false,
+        }),
+      );
+    }
+
+    // Freeze assessment report reference once (first authorisation), based on authorised filename without revX.
+    const isBecomingAuthorised =
+      reportAuthorisedBy !== undefined &&
+      reportAuthorisedBy &&
+      !existingJob.reportAuthorisedBy;
+    if (isBecomingAuthorised && !existingJob.reportReference) {
+      const issueDate =
+        existingJob.reportAuthorisedAt ||
+        updateData.reportAuthorisedAt ||
+        new Date();
+      const projectIdValue = existingJob.projectId?._id || existingJob.projectId;
+      let sequenceNumber = 1;
+      try {
+        const parsedIssueDate = new Date(issueDate);
+        if (!Number.isNaN(parsedIssueDate.getTime()) && projectIdValue) {
+          const startOfDay = new Date(parsedIssueDate);
+          startOfDay.setHours(0, 0, 0, 0);
+          const endOfDay = new Date(parsedIssueDate);
+          endOfDay.setHours(23, 59, 59, 999);
+          const isResidential = existingJob.jobType === 'residential-asbestos';
+          const typeFilter = isResidential
+            ? { jobType: 'residential-asbestos' }
+            : { jobType: { $nin: ['residential-asbestos', 'lead-assessment'] } };
+          const sameDayAssessments = await AsbestosAssessment.find({
+            projectId: projectIdValue,
+            reportAuthorisedAt: { $gte: startOfDay, $lte: endOfDay },
+            ...typeFilter,
+            $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
+          })
+            .select('_id createdAt')
+            .sort({ createdAt: 1 })
+            .lean();
+          // Include current job if it is not yet in the result set.
+          const ids = sameDayAssessments.map((a) => String(a._id));
+          if (!ids.includes(String(existingJob._id))) {
+            sameDayAssessments.push({ _id: existingJob._id, createdAt: existingJob.createdAt });
+            sameDayAssessments.sort(
+              (a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0),
+            );
+          }
+          const idx = sameDayAssessments.findIndex(
+            (a) => String(a._id) === String(existingJob._id),
+          );
+          if (idx >= 0) sequenceNumber = idx + 1;
+        }
+      } catch (sequenceErr) {
+        console.error('Failed to calculate assessment sequence for report reference:', sequenceErr);
+      }
+
+      let projectID = 'Unknown';
+      let siteName = 'Unknown';
+      try {
+        const project = await Project.findById(projectIdValue).select('projectID name').lean();
+        if (project?.projectID) projectID = project.projectID;
+        if (project?.name) siteName = project.name;
+      } catch (_) {}
+
+      updateData.reportReference = toReportReference(
+        buildAsbestosAssessmentFilename({
+          projectId: projectID,
+          siteName,
+          reportIssueDate: issueDate,
+          sequenceNumber,
+          isResidential: existingJob.jobType === 'residential-asbestos',
+          includeRevision: false,
+          includeExtension: false,
+        }),
+      );
     }
     if (archived !== undefined) {
       updateData.archived = archived;
@@ -838,6 +953,23 @@ router.put('/:id', async (req, res) => {
     // Assessment report authorisation: notify the user who requested authorisation (separate from Fibre ID approval)
     const assessmentReportWasAuthorised = !!(existing && existing.reportAuthorisedBy);
     const assessmentReportNowAuthorised = !!job.reportAuthorisedBy;
+    if (existing && !assessmentReportWasAuthorised && assessmentReportNowAuthorised) {
+      try {
+        const {
+          addReportCategories,
+          REPORT_CATEGORIES,
+        } = require('../services/projectReportCategoriesService');
+        const jt = job.jobType || 'asbestos-assessment';
+        if (jt === 'asbestos-assessment' || jt === 'residential-asbestos') {
+          await addReportCategories(
+            job.projectId?._id || job.projectId,
+            REPORT_CATEGORIES.ASBESTOS_ASSESSMENT,
+          );
+        }
+      } catch (err) {
+        console.error('Error updating report categories for assessment:', err);
+      }
+    }
     if (existing && !assessmentReportWasAuthorised && assessmentReportNowAuthorised && job.authorisationRequestedBy) {
       const surveyPath =
         job.jobType === 'residential-asbestos'
@@ -1258,9 +1390,8 @@ router.patch('/:id/unlock', auth, checkPermission(['admin.update']), async (req,
     job.archived = false;
     job.markModified('archived');
     job.reportAuthorisedBy = undefined;
-    job.reportAuthorisedAt = undefined;
     job.markModified('reportAuthorisedBy');
-    job.markModified('reportAuthorisedAt');
+    // Preserve first authorisation date for stable filename date across revisions.
     job.updatedAt = new Date();
     clearAssessmentPdfFields(job);
     await job.save();
@@ -1310,9 +1441,8 @@ router.patch('/:id/revise-report', auth, checkPermission('asbestos.edit'), async
     job.archived = false;
     job.markModified('archived');
     job.reportAuthorisedBy = undefined;
-    job.reportAuthorisedAt = undefined;
     job.markModified('reportAuthorisedBy');
-    job.markModified('reportAuthorisedAt');
+    // Preserve first authorisation date for stable filename date across revisions.
     job.updatedAt = new Date();
     clearAssessmentPdfFields(job);
     await job.save();
@@ -2080,13 +2210,12 @@ router.put('/:id/items/:itemNumber/analysis', async (req, res) => {
       assessment.labSamplesStatus = 'analysis-complete'; // Keep Sample Analysis column in sync with LD supplied jobs
     }
 
-    // If fibre ID report was previously approved, editing analysis data invalidates that approval — require re-approval
+    // If fibre ID report was previously approved, editing analysis data invalidates that approval — require re-approval.
+    // Preserve first reportIssueDate / fibreIdReportReference for stable filenames across revisions.
     if (assessment.reportApprovedBy) {
       assessment.reportApprovedBy = undefined;
-      assessment.reportIssueDate = undefined;
       assessment.fibreAnalysisReport = undefined;
       assessment.markModified('reportApprovedBy');
-      assessment.markModified('reportIssueDate');
       assessment.markModified('fibreAnalysisReport');
       if (['report-ready-for-review', 'complete'].includes(assessment.status)) {
         assessment.status = 'sample-analysis-complete';
@@ -2167,7 +2296,9 @@ router.get('/:id/chain-of-custody', async (req, res) => {
     res.setHeader(
       'Content-Disposition',
       buildContentDispositionAttachment(
-        `${populatedAssessment.projectId?.projectID || 'Unknown'}: Chain of Custody - ${populatedAssessment.projectId?.name || 'Unknown'}.pdf`
+        buildLDChainOfCustodyFilename({
+          projectId: populatedAssessment.projectId?.projectID || 'Unknown',
+        })
       )
     );
     res.send(pdfBuffer);

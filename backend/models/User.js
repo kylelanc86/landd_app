@@ -47,17 +47,24 @@ const userSchema = new mongoose.Schema({
     type: [{
       state: {
         type: String,
-        required: true,
         trim: true
       },
       licenceNumber: {
         type: String,
-        required: true,
         trim: true
       },
       licenceType: {
         type: String,
         required: true,
+        trim: true
+      },
+      // Mycometer Certification: Surface / Air certificate numbers
+      surface: {
+        type: String,
+        trim: true
+      },
+      air: {
+        type: String,
         trim: true
       }
     }],

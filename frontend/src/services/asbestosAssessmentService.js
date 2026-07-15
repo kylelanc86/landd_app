@@ -1,4 +1,26 @@
 import api from './api';
+import { getAxiosDownloadFilename } from '../utils/downloadFilename';
+import {
+  buildAsbestosAssessmentFilename,
+  withRevisionAndExtension,
+} from '../utils/reportFilenames';
+
+function buildAssessmentDownloadFallback(assessmentData, isResidential = false) {
+  if (assessmentData?.reportReference) {
+    return withRevisionAndExtension(
+      assessmentData.reportReference,
+      assessmentData.revision,
+    );
+  }
+  return buildAsbestosAssessmentFilename({
+    projectId:
+      assessmentData?.projectId?.projectID || assessmentData?.jobReference,
+    siteName: assessmentData?.projectId?.name || assessmentData?.siteName,
+    reportIssueDate: assessmentData?.reportAuthorisedAt,
+    revision: assessmentData?.revision,
+    isResidential,
+  });
+}
 
 const asbestosAssessmentService = {
   // Get all asbestos assessments
@@ -219,16 +241,21 @@ const asbestosAssessmentService = {
   // Generate asbestos assessment PDF using DocRaptor templates (pdf-docraptor-v2)
   // options.isResidential: when true, cover/version control and footer use "Residential Asbestos Assessment Report" and filename includes "Residential"
   generateAsbestosAssessmentPdf: async (assessmentData, options = {}) => {
+    const isResidential = options.isResidential === true;
     const payload = {
       assessmentData,
-      ...(options.isResidential === true && { isResidential: true }),
+      ...(isResidential && { isResidential: true }),
     };
     const response = await api.post(
       '/pdf-docraptor-v2/generate-asbestos-assessment-v3',
       payload,
       { responseType: 'blob' }
     );
-    return response.data;
+    const filename = getAxiosDownloadFilename(
+      response,
+      buildAssessmentDownloadFallback(assessmentData, isResidential),
+    );
+    return { blob: response.data, filename };
   },
 };
 

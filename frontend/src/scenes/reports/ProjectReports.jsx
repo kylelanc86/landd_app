@@ -60,6 +60,7 @@ import { useProjectStatuses } from "../../context/ProjectStatusesContext";
 import { useAuth } from "../../context/AuthContext";
 import { getTodayInSydney } from "../../utils/dateUtils";
 import { saveFileToDevice } from "../../utils/imageCompression";
+import { triggerBlobDownload } from "../../utils/downloadFilename";
 
 const ProjectReports = () => {
   const { projectId } = useParams();
@@ -410,161 +411,12 @@ const ProjectReports = () => {
 
     const checkId = ++categoryCheckIdRef.current;
     setCheckingReports(true);
-    const available = [];
 
     try {
-      // Check asbestos assessment reports
-      try {
-        const assessmentReports =
-          await reportService.getAsbestosAssessmentReports(projectId);
-        if (
-          assessmentReports &&
-          Array.isArray(assessmentReports) &&
-          assessmentReports.length > 0
-        ) {
-          available.push("asbestos-assessment");
-        }
-      } catch (error) {
-        console.log("No asbestos assessment reports found");
-      }
-
-      // Check asbestos removal jobs (air monitoring + clearances)
-      try {
-        // Check air monitoring reports (same api as clearances)
-        let hasAirMonitoring = false;
-        try {
-          const res = await api.get(
-            `/asbestos-clearances/air-monitoring-reports/${projectId}`,
-          );
-          const raw = res?.data;
-          const list = Array.isArray(raw) ? raw : raw?.data ?? raw?.reports ?? [];
-          hasAirMonitoring = list.length > 0;
-        } catch (airMonitoringError) {
-          console.log("No air monitoring reports found");
-        }
-
-        // Check clearances using the dedicated endpoint
-        let hasClearances = false;
-        try {
-          const clearanceReports =
-            await reportService.getClearanceReports(projectId);
-          hasClearances =
-            clearanceReports &&
-            Array.isArray(clearanceReports) &&
-            clearanceReports.length > 0;
-        } catch (clearanceError) {
-          console.log("No asbestos clearance reports found");
-        }
-
-        if (hasAirMonitoring || hasClearances) {
-          available.push("asbestos-removal-jobs");
-        }
-      } catch (error) {
-        console.log("No asbestos removal job reports found");
-      }
-
-      // Check lead removal jobs (lead monitoring + clearances)
-      try {
-        let hasLeadMonitoring = false;
-        try {
-          const res = await api.get(
-            `/lead-clearances/air-monitoring-reports/${projectId}`,
-          );
-          const raw = res?.data;
-          const list = Array.isArray(raw) ? raw : raw?.data ?? raw?.reports ?? [];
-          hasLeadMonitoring = list.length > 0;
-        } catch (leadMonitoringError) {
-          console.log("No lead monitoring reports found");
-        }
-
-        let hasLeadClearances = false;
-        try {
-          const leadClearanceReports =
-            await reportService.getLeadClearanceReports(projectId);
-          hasLeadClearances =
-            leadClearanceReports &&
-            Array.isArray(leadClearanceReports) &&
-            leadClearanceReports.length > 0;
-        } catch (leadClearanceError) {
-          console.log("No lead clearance reports found");
-        }
-
-        if (hasLeadMonitoring || hasLeadClearances) {
-          available.push("lead-removal-jobs");
-        }
-      } catch (error) {
-        console.log("No lead removal job reports found");
-      }
-
-      // Check fibre ID reports (client supplied and standalone L&D supplied jobs)
-      try {
-        // Check for completed fibre ID reports
-        const fibreIdReports = await reportService.getFibreIdReports(projectId);
-        const hasCompletedReports =
-          fibreIdReports &&
-          Array.isArray(fibreIdReports) &&
-          fibreIdReports.length > 0;
-
-        // Show the category only when there are completed reports to display
-        if (hasCompletedReports) {
-          available.push("fibre-id");
-        }
-      } catch (error) {
-        console.log("No fibre ID reports found");
-      }
-
-      // Check fibre count reports (client supplied jobs)
-      try {
-        // Check for completed fibre count reports
-        const fibreCountReports =
-          await reportService.getFibreCountReports(projectId);
-        const hasCompletedReports =
-          fibreCountReports &&
-          Array.isArray(fibreCountReports) &&
-          fibreCountReports.length > 0;
-
-        // Show the category only when there are completed reports to display
-        if (hasCompletedReports) {
-          available.push("fibre-count");
-        }
-      } catch (error) {
-        console.log("No fibre count reports found");
-      }
-
-      // Check uploaded reports
-      try {
-        const uploadedReportsResponse = await fetch(
-          `${
-            process.env.REACT_APP_API_URL || "http://localhost:5000/api"
-          }/uploaded-reports/project/${projectId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem("token")}`,
-            },
-          },
-        );
-
-        if (uploadedReportsResponse.ok) {
-          const uploadedReports = await uploadedReportsResponse.json();
-
-          // Add categories based on uploaded report types
-          const uploadedCategories = uploadedReports.map(
-            (report) => report.reportType,
-          );
-          const uniqueUploadedCategories = [...new Set(uploadedCategories)];
-
-          uniqueUploadedCategories.forEach((category) => {
-            if (!available.includes(category)) {
-              available.push(category);
-            }
-          });
-        }
-      } catch (error) {
-        console.log("No uploaded reports found");
-      }
+      const available = await reportService.getAvailableCategories(projectId);
 
       if (categoryCheckIdRef.current === checkId) {
-        setAvailableCategories(available);
+        setAvailableCategories(Array.isArray(available) ? available : []);
       }
     } catch (error) {
       console.error("Error checking available categories:", error);
@@ -1529,32 +1381,12 @@ const ProjectReports = () => {
         );
         const isResidential =
           fullAssessment?.jobType === "residential-asbestos";
-        const pdfBlob = await asbestosAssessmentService.generateAsbestosAssessmentPdf(
-          fullAssessment,
-          { isResidential },
-        );
-        const url = window.URL.createObjectURL(pdfBlob);
-        const link = document.createElement("a");
-        link.href = url;
-        const projectId =
-          fullAssessment?.projectId?.projectID ||
-          fullAssessment?.jobReference ||
-          "Unknown";
-        const siteName =
-          fullAssessment?.projectId?.name ||
-          fullAssessment?.siteName ||
-          "Unknown";
-        const dateStr = fullAssessment?.assessmentDate
-          ? new Date(fullAssessment.assessmentDate)
-              .toLocaleDateString("en-GB")
-              .replace(/\//g, "-")
-          : "Unknown";
-        const prefix = isResidential ? "Residential " : "";
-        link.download = `${projectId}: ${prefix}Asbestos Assessment Report - ${siteName} (${dateStr}).pdf`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
+        const { blob: pdfBlob, filename } =
+          await asbestosAssessmentService.generateAsbestosAssessmentPdf(
+            fullAssessment,
+            { isResidential },
+          );
+        triggerBlobDownload(pdfBlob, filename);
         showSnackbar("Asbestos assessment report downloaded", "success");
       } else if (report.type === "fibre_id") {
         // Generate and download the fibre ID report PDF
@@ -1613,6 +1445,7 @@ const ProjectReports = () => {
           analysisDate: fullJob.analysisDate,
           sampleReceiptDate: fullJob.sampleReceiptDate,
           revision: fullJob.revision || 0,
+          reportReference: fullJob.reportReference || null,
         };
 
         // Generate and download the PDF
@@ -1690,6 +1523,8 @@ const ProjectReports = () => {
           analysisDate: fullJob.analysisDate || new Date(),
           reportApprovedBy: fullJob.reportApprovedBy || null,
           reportIssueDate: fullJob.reportIssueDate || null,
+          reportReference: fullJob.reportReference || null,
+          revision: fullJob.revision || 0,
         };
 
         // Create a job-like object with projectId populated
@@ -2352,9 +2187,42 @@ const ProjectReports = () => {
   };
 
   // Determine where user came from based on location state
-  const cameFromProjects = location.state?.from === "projects";
-  const backPath = cameFromProjects ? "/projects" : "/reports";
-  const backText = cameFromProjects ? "Back to Projects" : "Back to Reports";
+  const navigationSource = location.state?.from;
+  const cameFromProjects = navigationSource === "projects";
+  const cameFromProjectInfo = navigationSource === "project-info";
+  const backPath = cameFromProjects
+    ? "/projects"
+    : cameFromProjectInfo
+      ? `/projects/${location.state?.projectId || projectId}`
+      : "/reports";
+  const backText = cameFromProjects
+    ? "Back to Projects"
+    : cameFromProjectInfo
+      ? "Back to Project Information"
+      : "Back to Reports";
+
+  const handleBackNavigation = () => {
+    if (cameFromProjects) {
+      navigate("/projects", {
+        state: location.state?.projectsPagination
+          ? { paginationModel: location.state.projectsPagination }
+          : undefined,
+      });
+      return;
+    }
+    if (cameFromProjectInfo) {
+      navigate(`/projects/${location.state?.projectId || projectId}`, {
+        state: location.state?.projectsPagination
+          ? {
+              from: "projects",
+              projectsPagination: location.state.projectsPagination,
+            }
+          : undefined,
+      });
+      return;
+    }
+    navigate(backPath);
+  };
 
   return (
     <Box sx={{ p: 3, px: { xs: 1.5, sm: 3 } }}>
@@ -2362,7 +2230,7 @@ const ProjectReports = () => {
       <Box sx={{ mb: 4 }}>
         <Button
           startIcon={<ArrowBackIcon />}
-          onClick={() => navigate(backPath)}
+          onClick={handleBackNavigation}
           sx={{ mb: 2 }}
         >
           {backText}

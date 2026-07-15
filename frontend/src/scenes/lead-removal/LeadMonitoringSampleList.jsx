@@ -55,6 +55,12 @@ import PermissionGate from "../../components/PermissionGate";
 import { useAuth } from "../../context/AuthContext";
 import { generateLeadChainOfCustodyPDF } from "../../utils/generateLeadChainOfCustodyPDF";
 import SitePlanMap from "../../components/SitePlanMap";
+import AnalysisReportFileList from "./AnalysisReportFileList";
+import {
+  buildAnalysisReportItemsFromShift,
+  hasAnalysisReportChanges,
+  persistAnalysisReportItems,
+} from "./analysisReportFiles";
 
 const TURNAROUND_OPTIONS = [
   { value: "standard", label: "Standard (7 day)" },
@@ -183,7 +189,8 @@ const LeadMonitoringSampleList = () => {
   const [viewEditAnalysisSamples, setViewEditAnalysisSamples] = useState([]);
   const [viewEditAnalysisLeadContent, setViewEditAnalysisLeadContent] =
     useState({});
-  const [viewEditAnalysisFile, setViewEditAnalysisFile] = useState(null);
+  const [viewEditAnalysisReportItems, setViewEditAnalysisReportItems] =
+    useState([]);
   const [viewEditAnalysisSaving, setViewEditAnalysisSaving] = useState(false);
   const [viewEditAnalysisSamplesLoading, setViewEditAnalysisSamplesLoading] =
     useState(false);
@@ -321,7 +328,7 @@ const LeadMonitoringSampleList = () => {
     if (!shiftId || !shift) return;
     setViewEditAnalysisModalOpen(true);
     setViewEditAnalysisLeadContent({});
-    setViewEditAnalysisFile(null);
+    setViewEditAnalysisReportItems(buildAnalysisReportItemsFromShift(shift));
     setViewEditAnalysisSamplesLoading(true);
     setViewEditAnalysisSamples([]);
     try {
@@ -357,15 +364,24 @@ const LeadMonitoringSampleList = () => {
     setViewEditAnalysisModalOpen(false);
     setViewEditAnalysisSamples([]);
     setViewEditAnalysisLeadContent({});
-    setViewEditAnalysisFile(null);
+    setViewEditAnalysisReportItems([]);
   }, []);
 
   const handleSaveViewEditAnalysis = useCallback(async () => {
     if (!shift?._id) return;
     setViewEditAnalysisSaving(true);
     try {
-      if (viewEditAnalysisFile) {
-        await shiftService.uploadAnalysisReport(shift._id, viewEditAnalysisFile);
+      const reportsChanged = hasAnalysisReportChanges(
+        viewEditAnalysisReportItems,
+        shift,
+      );
+      if (reportsChanged) {
+        await persistAnalysisReportItems(
+          shift._id,
+          viewEditAnalysisReportItems,
+          shift,
+          shiftService,
+        );
       }
       for (const sample of viewEditAnalysisSamples) {
         const contentVal = viewEditAnalysisLeadContent[sample._id];
@@ -399,20 +415,24 @@ const LeadMonitoringSampleList = () => {
           });
         }
       }
-      if (viewEditAnalysisFile) {
-        const allEntered = viewEditAnalysisSamples.every(
-          (s) =>
-            String(viewEditAnalysisLeadContent[s._id] ?? "").trim() !== "",
-        );
-        await shiftService.update(shift._id, {
-          status: allEntered ? "shift_complete" : "analysis_complete",
-        });
-        showSnackbar(
-          allEntered
-            ? "Analysis report updated, lead content saved, and shift marked complete."
-            : "Analysis report updated - lead content incomplete.",
-          "success",
-        );
+      if (reportsChanged) {
+        if (viewEditAnalysisReportItems.length > 0) {
+          const allEntered = viewEditAnalysisSamples.every(
+            (s) =>
+              String(viewEditAnalysisLeadContent[s._id] ?? "").trim() !== "",
+          );
+          await shiftService.update(shift._id, {
+            status: allEntered ? "shift_complete" : "analysis_complete",
+          });
+          showSnackbar(
+            allEntered
+              ? "Analysis report(s) updated, lead content saved, and shift marked complete."
+              : "Analysis report(s) updated - lead content incomplete.",
+            "success",
+          );
+        } else {
+          showSnackbar("Analysis reports removed.", "success");
+        }
       } else {
         showSnackbar("Lead content saved.", "success");
       }
@@ -428,7 +448,7 @@ const LeadMonitoringSampleList = () => {
     shift,
     viewEditAnalysisSamples,
     viewEditAnalysisLeadContent,
-    viewEditAnalysisFile,
+    viewEditAnalysisReportItems,
     showSnackbar,
     refreshShiftAndSamples,
     handleCloseViewEditAnalysisModal,
@@ -1986,7 +2006,7 @@ const LeadMonitoringSampleList = () => {
       <Dialog
         open={viewEditAnalysisModalOpen}
         onClose={handleCloseViewEditAnalysisModal}
-        maxWidth="sm"
+        maxWidth="md"
         fullWidth
         PaperProps={{
           sx: {
@@ -2000,43 +2020,19 @@ const LeadMonitoringSampleList = () => {
         </DialogTitle>
         <DialogContent sx={{ px: 3, pt: 1, pb: 2 }}>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Update the PDF analysis report and/or lead content (μg/filter) for
-            each sample.
+            Update PDF analysis reports and/or lead content (μg/filter) for
+            each sample. Drag reports to set the order they appear in the shift
+            report appendix.
           </Typography>
           <Box sx={{ mb: 3 }}>
             <Typography variant="subtitle2" sx={{ mb: 1 }}>
-              PDF Report
+              PDF Reports
             </Typography>
-            {shift?.analysisReportPath && !viewEditAnalysisFile && (
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ mb: 1 }}
-              >
-                Current file: {shift.analysisReportOriginalName || "analysis-report.pdf"}
-              </Typography>
-            )}
-            <Button
-              variant="outlined"
-              component="label"
-              size="small"
-              sx={{ textTransform: "none" }}
-            >
-              {viewEditAnalysisFile
-                ? viewEditAnalysisFile.name
-                : shift?.analysisReportPath
-                  ? "Choose new file to replace"
-                  : "Choose PDF file"}
-              <input
-                type="file"
-                hidden
-                accept=".pdf,application/pdf"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) setViewEditAnalysisFile(f);
-                }}
-              />
-            </Button>
+            <AnalysisReportFileList
+              items={viewEditAnalysisReportItems}
+              onChange={setViewEditAnalysisReportItems}
+              disabled={viewEditAnalysisSaving || isReportAuthorized}
+            />
           </Box>
           <Typography variant="subtitle2" sx={{ mb: 1 }}>
             Lead content

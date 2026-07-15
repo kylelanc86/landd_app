@@ -159,6 +159,7 @@ const calculateDaysDifference = (dueDate) => {
 const Projects = ({ initialFilters = {} }) => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
   const { isAdmin, isManager, can } = usePermissions();
   const { currentUser } = useAuth();
 
@@ -320,10 +321,34 @@ const Projects = ({ initialFilters = {} }) => {
     }
     return "All";
   });
-  const [paginationModel, setPaginationModel] = useState({
-    pageSize: 50,
-    page: 0,
+  const [paginationModel, setPaginationModel] = useState(() => {
+    const savedPagination = location.state?.paginationModel;
+    if (
+      savedPagination &&
+      typeof savedPagination.page === "number" &&
+      savedPagination.pageSize
+    ) {
+      return savedPagination;
+    }
+    return { pageSize: 50, page: 0 };
   });
+
+  const getProjectsTableNavigationState = useCallback(
+    () => ({
+      from: "projects",
+      projectsPagination: paginationModel,
+    }),
+    [paginationModel],
+  );
+
+  const navigateToProjectInfo = useCallback(
+    (projectId) => {
+      navigate(`/projects/${projectId}`, {
+        state: getProjectsTableNavigationState(),
+      });
+    },
+    [navigate, getProjectsTableNavigationState],
+  );
 
   // Combine all filters into a single state object to prevent multiple useEffect triggers
   const [filters, setFilters] = useState(() => {
@@ -1874,7 +1899,7 @@ const Projects = ({ initialFilters = {} }) => {
               <Button
                 onClick={(e) => {
                   e.stopPropagation();
-                  navigate(`/projects/${params.row._id}`);
+                  navigateToProjectInfo(params.row._id);
                 }}
                 size="small"
                 variant="outlined"
@@ -1892,7 +1917,7 @@ const Projects = ({ initialFilters = {} }) => {
                 <IconButton
                   onClick={(e) => {
                     e.stopPropagation();
-                    navigate(`/projects/${params.row._id}`);
+                    navigateToProjectInfo(params.row._id);
                   }}
                   size="small"
                   color="primary"
@@ -1952,6 +1977,7 @@ const Projects = ({ initialFilters = {} }) => {
     ],
     [
       navigate,
+      navigateToProjectInfo,
       isAdmin,
       isManager,
       can,
@@ -2599,9 +2625,9 @@ const Projects = ({ initialFilters = {} }) => {
           // checkboxSelection
           onRowClick={(params) =>
             isMobileOrNarrow
-              ? navigate(`/projects/${params.row._id}`)
+              ? navigateToProjectInfo(params.row._id)
               : navigate(`/reports/project/${params.row._id}`, {
-                  state: { from: "projects" },
+                  state: getProjectsTableNavigationState(),
                 })
           }
           columnVisibilityModel={effectiveColumnVisibilityModel}

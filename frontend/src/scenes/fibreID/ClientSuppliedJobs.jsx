@@ -769,7 +769,7 @@ const ClientSuppliedJobs = () => {
     }
 
     // For Fibre Count jobs, check if all samples have fieldsCounted
-    // AND the job status is "Analysis Complete" (analysis has been finalized)
+    // AND the job status reflects finalized analysis (not still In Progress)
     if (job.jobType === "Fibre Count") {
       const allSamplesAnalysed = job.samples.every((sample) => {
         return (
@@ -779,8 +779,10 @@ const ClientSuppliedJobs = () => {
         );
       });
 
-      // Also require that the job status is "Analysis Complete" (finalized)
-      return allSamplesAnalysed && job.status === "Analysis Complete";
+      return (
+        allSamplesAnalysed &&
+        (job.status === "Analysis Complete" || job.status === "Completed")
+      );
     }
 
     // Fallback for other job types
@@ -856,6 +858,7 @@ const ClientSuppliedJobs = () => {
           analysisDate: fullJob.analysisDate,
           sampleReceiptDate: fullJob.sampleReceiptDate,
           revision: fullJob.revision || 0,
+          reportReference: fullJob.reportReference || null,
         };
 
         // Generate the Fibre ID report
@@ -863,7 +866,7 @@ const ClientSuppliedJobs = () => {
           assessment: assessmentForReport,
           sampleItems: sampleItemsForReport,
           analyst: analyst || "Unknown Analyst",
-          openInNewTab: !fullJob.reportApprovedBy, // open if not approved, download if approved
+          openInNewTab: true,
           returnPdfData: false,
           reportApprovedBy: fullJob.reportApprovedBy || null,
           reportIssueDate: fullJob.reportIssueDate || null,
@@ -915,6 +918,8 @@ const ClientSuppliedJobs = () => {
           analysisDate: fullJob.analysisDate || new Date(),
           reportApprovedBy: fullJob.reportApprovedBy || null,
           reportIssueDate: fullJob.reportIssueDate || null,
+          reportReference: fullJob.reportReference || null,
+          revision: fullJob.revision || 0,
         };
 
         // Create a job-like object with projectId populated
@@ -929,7 +934,7 @@ const ClientSuppliedJobs = () => {
           job: jobForPDF,
           samples: transformedSamples,
           project: fullJob.projectId,
-          openInNewTab: !fullJob.reportApprovedBy, // open if not approved, download if approved
+          openInNewTab: true,
           isClientSupplied: true, // Flag to indicate we want fibre count format
         });
         setReportViewedJobIds((prev) => new Set(prev).add(job._id));

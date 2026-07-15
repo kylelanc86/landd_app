@@ -1,6 +1,12 @@
 import api from './api';
 
 const reportService = {
+  // Lightweight: which report categories exist for a project
+  getAvailableCategories: async (projectId) => {
+    const response = await api.get(`/reports/project/${projectId}/categories`);
+    return response.data?.categories || [];
+  },
+
   // Asbestos Assessment Reports
   getAsbestosAssessmentReports: async (projectId) => {
     const response = await api.get(`/reports/asbestos-assessment/${projectId}`);

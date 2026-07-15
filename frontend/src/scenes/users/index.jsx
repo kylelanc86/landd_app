@@ -243,7 +243,15 @@ const Users = () => {
             <Box>
               {licences.map((licence, index) => (
                 <Typography key={index} variant="body2">
-                  {licence.licenceType}
+                  {licence.licenceType === "Mycometer Certification"
+                    ? [
+                        licence.licenceType,
+                        licence.surface ? `Surface: ${licence.surface}` : null,
+                        licence.air ? `Air: ${licence.air}` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")
+                    : licence.licenceType}
                 </Typography>
               ))}
             </Box>

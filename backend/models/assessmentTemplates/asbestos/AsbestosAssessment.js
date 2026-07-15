@@ -277,6 +277,10 @@ const AsbestosAssessmentSchema = new mongoose.Schema({
   reportIssueDate: { type: Date }, // Date when report was issued/approved
   reportAuthorisedBy: { type: String }, // Assessment report authorisation (final sign-off) - distinct from reportApprovedBy
   reportAuthorisedAt: { type: Date }, // Date when report was authorised
+  /** Frozen assessment report reference = first-authorisation filename (no .pdf, no revX). */
+  reportReference: { type: String },
+  /** Frozen Fibre ID report reference = first Fibre ID approval filename (no .pdf, no revX). */
+  fibreIdReportReference: { type: String },
   authorisationRequestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // User who requested authorisation (send-for-authorisation)
   reportViewedAt: { type: Date }, // When Fibre ID report was viewed (L&D Supplied Jobs – used to show Authorise / Send for Authorisation)
   archived: { type: Boolean, default: false }, // When true, job is removed from the assessment table (completed)

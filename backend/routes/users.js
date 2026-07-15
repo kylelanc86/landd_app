@@ -164,6 +164,30 @@ router.get('/fibre-identifiers', auth, checkPermission(['users.view']), async (r
   }
 });
 
+// Get active users with Mycometer Certification (sampler / analyst options)
+router.get('/mycometer-certified', auth, checkPermission(['users.view']), async (req, res) => {
+  try {
+    const startTime = Date.now();
+    const certified = await User.find({
+      isActive: true,
+      licences: {
+        $elemMatch: {
+          licenceType: { $regex: /^Mycometer Certification$/i }
+        }
+      }
+    })
+      .select('firstName lastName _id licences')
+      .sort({ lastName: 1, firstName: 1 })
+      .lean();
+    const queryTime = Date.now() - startTime;
+    console.log(`[USERS] Fetched ${certified.length} mycometer-certified users in ${queryTime}ms`);
+    res.json(certified);
+  } catch (err) {
+    console.error('Error fetching mycometer-certified users:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // Get user by ID
 router.get('/:id', auth, async (req, res) => {
   try {

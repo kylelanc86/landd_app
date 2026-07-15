@@ -6,21 +6,20 @@ import {
   formatIAQSampleDisplay,
   resolveAnalystName,
 } from './iaqReference';
+import {
+  buildIAQFilename,
+  toReportReference,
+  withRevisionAndExtension,
+} from './reportFilenames';
+import {
+  formatAnalysisDates,
+  getRecordAnalysisDates,
+} from './formatAnalysisDates';
 
 // Helper to format date as DD/MM/YYYY in Sydney timezone (for report authorisation, issue dates)
 function formatDate(dateStr) {
   if (!dateStr) return '';
   return formatDateInSydney(dateStr);
-}
-
-// Helper to format date as YYYYMMDD for filenames
-function formatDateForFilename(dateStr) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}${month}${day}`;
 }
 
 // Helper to format time as HH:mm
@@ -166,7 +165,20 @@ export async function generateIAQReport({ record, allRecords, samples, openInNew
     'N/A';
 
   // Get IAQ reference
-  const iaqReference = generateIAQReference(record, allRecords);
+  const iaqReference = generateIAQReference(record);
+  const issueDate = reportIssueDate || record?.reportIssueDate || null;
+  const revision = record?.revision || 0;
+  const reportReference =
+    toReportReference(record?.reportReference) ||
+    toReportReference(
+      buildIAQFilename({
+        monitoringDate: record?.monitoringDate,
+        reportIssueDate: issueDate,
+        includeRevision: false,
+        includeExtension: false,
+      }),
+    );
+  const filename = withRevisionAndExtension(reportReference, revision, true);
 
   // Document definition
   const docDefinition = {
@@ -324,7 +336,7 @@ export async function generateIAQReport({ record, allRecords, samples, openInNew
                 ],
                 [
                   {
-                    text: [{ text: 'L&D Reference: ', bold: true }, { text: iaqReference || 'N/A' }],
+                    text: [{ text: 'L&D Reference: ', bold: true }, { text: reportReference || 'N/A' }],
                     style: 'tableContent',
                     margin: [0, 0, 0, 2],
                   }
@@ -369,7 +381,7 @@ export async function generateIAQReport({ record, allRecords, samples, openInNew
                         width: '50%'
                       },
                       {
-                        text: [ { text: 'Analysis Date: ', bold: true }, { text: (record.analysisDate || record.updatedAt) ? formatDate(record.analysisDate || record.updatedAt) : 'N/A' } ],
+                        text: [ { text: 'Analysis Date: ', bold: true }, { text: formatAnalysisDates(getRecordAnalysisDates(record)) } ],
                         style: 'tableContent',
                         margin: [0, 0, 0, 2],
                         width: '50%'
@@ -384,7 +396,7 @@ export async function generateIAQReport({ record, allRecords, samples, openInNew
                         text: [ 
                           { text: 'Report Authorised by: ', bold: true }, 
                           { 
-                            text: reportApprovedBy || 'Pending authorization',
+                            text: reportApprovedBy || 'Pending authorisation',
                             color: (!reportApprovedBy) ? 'red' : 'black'
                           } 
                         ],
@@ -393,7 +405,13 @@ export async function generateIAQReport({ record, allRecords, samples, openInNew
                         width: '50%'
                       },
                       {
-                        text: [ { text: 'Report Issue Date: ', bold: true }, { text: reportIssueDate ? formatDate(reportIssueDate) : formatDate(new Date()) } ],
+                        text: [
+                          { text: 'Report Issue Date: ', bold: true },
+                          {
+                            text: issueDate ? formatDate(issueDate) : 'Pending authorisation',
+                            color: issueDate ? 'black' : 'red',
+                          },
+                        ],
                         style: 'tableContent',
                         margin: [0, 0, 0, 2],
                         width: '50%'
@@ -580,27 +598,24 @@ export async function generateIAQReport({ record, allRecords, samples, openInNew
           margin: [0, 0, 0, 8]
         });
         footerBlocks.push({
-            columns: [
-              {
-                stack: [
-                  { text: `Report Reference: ${generateIAQReference(record, [record]) || ''}`, fontSize: 8 }
-                ],
-                alignment: 'left',
-              width: '30%',
-              },
-              {
-              stack: nataLogo ? [ { image: nataLogo, fit: [180, 54], alignment: 'center' } ] : [],
-                alignment: 'center',
-              width: '40%'
-              },
-              {
-                stack: [
-                  { text: `Page ${currentPage} of ${pageCount}`, alignment: 'right', fontSize: 8 }
-                ],
-                alignment: 'right',
-              width: '30%',
-            }
-          ]
+          columns: [
+            {
+              stack: [
+                { text: `Report Reference: ${reportReference}`, fontSize: 8, margin: [0, 4, 0, 0] },
+                { text: `Revision: ${revision || 0}`, fontSize: 8, margin: [0, 8, 0, 0] },
+                { text: `Page ${currentPage} of ${pageCount}`, fontSize: 8, margin: [0, 8, 0, 4] },
+              ],
+              alignment: 'left',
+              width: '*',
+            },
+            {
+              stack: nataLogo
+                ? [{ image: nataLogo, fit: [180, 54], alignment: 'right' }]
+                : [],
+              alignment: 'right',
+              width: 190,
+            },
+          ],
         });
 
         return {
@@ -610,11 +625,6 @@ export async function generateIAQReport({ record, allRecords, samples, openInNew
       };
     })(nataLogo, record, sortedSamples, companyLogo)
   };
-
-  // Build filename
-  const iaqRef = generateIAQReference(record, allRecords || [record]);
-  const monitoringDate = record.monitoringDate ? formatDateForFilename(record.monitoringDate) : '';
-  const filename = `IAQ Report - ${iaqRef}${monitoringDate ? ` (${monitoringDate})` : ''}.pdf`;
 
   const pdfDoc = pdfMake.createPdf(docDefinition, undefined, undefined, {
     // Security options to prevent text selection/copying

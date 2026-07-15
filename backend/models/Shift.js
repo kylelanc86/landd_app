@@ -78,6 +78,17 @@ const shiftSchema = new mongoose.Schema({
     type: Date,
     required: false
   },
+  /** Frozen authorised filename without .pdf / revX (set on first authorisation). */
+  reportReference: {
+    type: String,
+    required: false
+  },
+  /** Option B same-day sequence among asbestos air monitoring reports for the project. */
+  sequenceNumber: {
+    type: Number,
+    required: false,
+    min: 1
+  },
   authorisationRequestedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -120,6 +131,16 @@ const shiftSchema = new mongoose.Schema({
   analysisReportOriginalName: {
     type: String,
     required: false
+  },
+  // Multiple lead analysis report PDFs (ordered); legacy single-report fields above are migrated on read.
+  analysisReports: {
+    type: [
+      {
+        originalName: { type: String, required: true },
+        data: { type: String, required: true, select: false },
+      },
+    ],
+    default: undefined,
   },
   revision: {
     type: Number,
@@ -206,6 +227,41 @@ shiftSchema.post('findOne', function(error, doc, next) {
     console.error('Error in Shift findOne:', error);
   }
   next(error);
+});
+
+function attachAnalysisReportFilesMetadata(ret) {
+  if (!ret || typeof ret !== 'object') return ret;
+  const reports = Array.isArray(ret.analysisReports) ? ret.analysisReports : [];
+  if (reports.length > 0) {
+    ret.analysisReportFiles = reports.map((r) => ({
+      id: r._id,
+      originalName: r.originalName,
+    }));
+  } else if (ret.analysisReportPath) {
+    ret.analysisReportFiles = [
+      {
+        id: 'legacy',
+        originalName: ret.analysisReportOriginalName || 'analysis-report.pdf',
+      },
+    ];
+  } else {
+    ret.analysisReportFiles = [];
+  }
+  delete ret.analysisReports;
+  delete ret.analysisReportData;
+  return ret;
+}
+
+shiftSchema.set('toJSON', {
+  transform(_doc, ret) {
+    return attachAnalysisReportFilesMetadata(ret);
+  },
+});
+
+shiftSchema.set('toObject', {
+  transform(_doc, ret) {
+    return attachAnalysisReportFilesMetadata(ret);
+  },
 });
 
 module.exports = mongoose.model('Shift', shiftSchema); 

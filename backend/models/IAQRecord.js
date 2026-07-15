@@ -22,6 +22,16 @@ const iaqRecordSchema = new mongoose.Schema({
     type: Date,
     required: false
   },
+  /** Frozen authorised filename without .pdf / revX (set on first authorisation). */
+  reportReference: {
+    type: String,
+    required: false
+  },
+  revision: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
   authorisationRequestedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -43,6 +53,10 @@ const iaqRecordSchema = new mongoose.Schema({
     type: Date,
     required: false
   },
+  analysisDates: [{
+    type: Date,
+    required: false
+  }],
   createdAt: {
     type: Date,
     default: Date.now

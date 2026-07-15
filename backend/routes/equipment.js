@@ -55,18 +55,21 @@ router.get("/", auth, checkPermission("equipment.view"), async (req, res) => {
     
     const skip = (page - 1) * limit;
     
-    const equipment = await Equipment.find(query)
-      .sort({ equipmentReference: 1 })
-      .skip(skip)
-      .limit(parseInt(limit))
-      .lean();
+    const [equipment, total] = await Promise.all([
+      Equipment.find(query)
+        .sort({ equipmentReference: 1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .lean(),
+      Equipment.countDocuments(query),
+    ]);
 
     const equipmentWithDueState =
       includeDueState === "false"
         ? equipment
-        : await getEquipmentDueSnapshot(equipment);
-    
-    const total = await Equipment.countDocuments(query);
+        : await getEquipmentDueSnapshot(equipment, {
+            includeLatestEvents: false,
+          });
     
     res.json({
       equipment: equipmentWithDueState,

@@ -11,6 +11,11 @@ const {
 const { getLegislationForReportTemplate } = require("../services/templateService");
 const { formatDateSydney } = require("../utils/dateUtils");
 const {
+  buildAsbestosClearanceFilename,
+  buildEnclosureCertificateFilename,
+  toReportReference,
+} = require("../utils/reportFilenames");
+const {
   notifyClearanceAuthorisationRequesterOnApproval,
   resolveAsbestosClearanceJobUrl,
 } = require("../services/reportAuthorisationNotificationService");
@@ -56,7 +61,6 @@ function clearEnclosureCertificatePdfFields(clearance) {
 function clearEnclosureCertificateApprovalFields(clearance) {
   [
     "enclosureCertificateApprovedBy",
-    "enclosureCertificateIssueDate",
     "enclosureCertificateAuthorisationRequestedBy",
     "enclosureCertificateAuthorisationRequestedByEmail",
   ].forEach((field) => {
@@ -507,7 +511,7 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
       // Revising the report invalidates the PDF; require re-approval so the job can't complete until the revised report is authorised again.
       if (clearance.reportApprovedBy) {
         clearance.reportApprovedBy = undefined;
-        clearance.reportIssueDate = undefined;
+        // Preserve the first-authorisation issue date for filename continuity across revisions.
         clearance.authorisationRequestedBy = undefined;
         clearance.authorisationRequestedByEmail = undefined;
       }
@@ -517,6 +521,21 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
       clearClearancePdfFields(clearance);
     }
     const updatedClearance = await clearance.save();
+
+    if (['complete', 'Site Work Complete'].includes(updatedClearance.status)) {
+      try {
+        const {
+          addReportCategories,
+          REPORT_CATEGORIES,
+        } = require('../services/projectReportCategoriesService');
+        await addReportCategories(
+          updatedClearance.projectId,
+          REPORT_CATEGORIES.ASBESTOS_REMOVAL,
+        );
+      } catch (err) {
+        console.error('Error updating report categories for clearance:', err);
+      }
+    }
     
     const populatedClearance = await AsbestosClearance.findById(updatedClearance._id)
       .populate({
@@ -617,6 +636,21 @@ router.patch("/:id/status", auth, checkPermission("asbestos.edit"), async (req, 
 
     clearClearancePdfFields(clearance);
     const updatedClearance = await clearance.save();
+
+    if (['complete', 'Site Work Complete'].includes(updatedClearance.status)) {
+      try {
+        const {
+          addReportCategories,
+          REPORT_CATEGORIES,
+        } = require('../services/projectReportCategoriesService');
+        await addReportCategories(
+          updatedClearance.projectId,
+          REPORT_CATEGORIES.ASBESTOS_REMOVAL,
+        );
+      } catch (err) {
+        console.error('Error updating report categories for clearance:', err);
+      }
+    }
     
     const populatedClearance = await AsbestosClearance.findById(updatedClearance._id)
       .populate({
@@ -1484,7 +1518,29 @@ router.post("/:id/authorise", auth, checkPermission("asbestos.edit"), async (req
         : req.user?.email || "Unknown";
 
     clearance.reportApprovedBy = approver;
-    clearance.reportIssueDate = new Date();
+    if (!clearance.reportIssueDate) {
+      clearance.reportIssueDate = new Date();
+    }
+    if (!clearance.reportReference) {
+      let siteName = clearance.projectId?.name || "Unknown";
+      if (
+        clearance.clearanceType === "Vehicle/Equipment" &&
+        clearance.vehicleEquipmentDescription
+      ) {
+        siteName = clearance.vehicleEquipmentDescription;
+      }
+      clearance.reportReference = toReportReference(
+        buildAsbestosClearanceFilename({
+          projectId: clearance.projectId?.projectID || "Unknown",
+          clearanceType: clearance.clearanceType,
+          siteName,
+          reportIssueDate: clearance.reportIssueDate,
+          sequenceNumber: clearance.sequenceNumber,
+          includeRevision: false,
+          includeExtension: false,
+        }),
+      );
+    }
     clearance.updatedBy = req.user.id;
 
     clearClearancePdfFields(clearance);
@@ -1746,7 +1802,47 @@ router.post("/:id/authorise-enclosure-certificate", auth, checkPermission("asbes
         : req.user?.email || "Unknown";
 
     clearance.enclosureCertificateApprovedBy = approver;
-    clearance.enclosureCertificateIssueDate = new Date();
+    if (!clearance.enclosureCertificateIssueDate) {
+      clearance.enclosureCertificateIssueDate = new Date();
+    }
+    if (!clearance.enclosureCertificateReportReference) {
+      let enclosureSequenceNumber = 1;
+      try {
+        const issueDate = new Date(clearance.enclosureCertificateIssueDate);
+        const startOfDay = new Date(issueDate);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(issueDate);
+        endOfDay.setHours(23, 59, 59, 999);
+        const sameDayCertificates = await AsbestosClearance.find({
+          projectId: clearance.projectId?._id || clearance.projectId,
+          isEnclosureCertificate: true,
+          enclosureCertificateIssueDate: { $gte: startOfDay, $lte: endOfDay },
+          $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
+        })
+          .select("_id createdAt")
+          .sort({ createdAt: 1 })
+          .lean();
+        const idx = sameDayCertificates.findIndex(
+          (c) => String(c._id) === String(clearance._id),
+        );
+        if (idx >= 0) enclosureSequenceNumber = idx + 1;
+      } catch (sequenceErr) {
+        console.error(
+          "Failed to calculate enclosure sequence number for report reference:",
+          sequenceErr,
+        );
+      }
+      clearance.enclosureCertificateReportReference = toReportReference(
+        buildEnclosureCertificateFilename({
+          projectId: clearance.projectId?.projectID || "Unknown",
+          siteName: clearance.projectId?.name || "Unknown",
+          reportIssueDate: clearance.enclosureCertificateIssueDate,
+          sequenceNumber: enclosureSequenceNumber,
+          includeRevision: false,
+          includeExtension: false,
+        }),
+      );
+    }
     clearance.updatedBy = req.user.id;
     clearEnclosureCertificatePdfFields(clearance);
 

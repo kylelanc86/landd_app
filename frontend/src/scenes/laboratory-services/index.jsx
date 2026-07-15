@@ -11,7 +11,6 @@ import {
 } from "@mui/material";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import { useNavigate } from "react-router-dom";
-import ScienceIcon from "@mui/icons-material/Science";
 import ContactsOutlinedIcon from "@mui/icons-material/ContactsOutlined";
 import BusinessIcon from "@mui/icons-material/Business";
 
@@ -23,7 +22,7 @@ const LaboratoryServices = () => {
   const laboratoryModules = [
     {
       id: "client-supplied",
-      title: "Client Supplied",
+      title: "Client Supplied Samples",
       description:
         "Manage and analyse client-supplied samples for fibre identification and fibre count analysis",
       icon: <ContactsOutlinedIcon />,
@@ -32,7 +31,7 @@ const LaboratoryServices = () => {
     },
     {
       id: "ld-supplied",
-      title: "L&D Supplied",
+      title: "L&D Supplied Samples",
       description:
         "Manage and analyse L&D supplied samples for fibre identification analysis",
       icon: <BusinessIcon />,

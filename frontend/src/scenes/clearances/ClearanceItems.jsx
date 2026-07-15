@@ -2158,7 +2158,7 @@ const ClearanceItems = () => {
           shift,
           job,
           samples,
-          projectId: project,
+          project,
           returnPdfData: true,
           sitePlanData: shift.sitePlan
             ? { sitePlan: shift.sitePlan, sitePlanData: shift.sitePlanData }

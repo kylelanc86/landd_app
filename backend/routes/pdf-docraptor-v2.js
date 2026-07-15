@@ -12,6 +12,14 @@ const CustomDataFieldGroup = require('../models/CustomDataFieldGroup');
 const LeadRemovalJob = require('../models/LeadRemovalJob');
 const LeadClearance = require('../models/clearanceTemplates/lead/LeadClearance');
 const { formatDateSydney, formatClearanceDateSydney, todaySydney, SYDNEY_TZ } = require('../utils/dateUtils');
+const {
+  buildAsbestosClearanceFilename,
+  buildLeadClearanceFilename,
+  buildEnclosureCertificateFilename,
+  buildAsbestosAssessmentFilename,
+  toReportReference,
+  withRevisionAndExtension,
+} = require('../utils/reportFilenames');
 const { buildContentDispositionAttachment } = require('../utils/contentDisposition');
 
 // Initialize DocRaptor service
@@ -60,6 +68,76 @@ function pruneOldJobs() {
 
 // Custom date formatting for CLEARANCE_DATE placeholder (Sydney timezone)
 const formatClearanceDate = (dateString) => formatClearanceDateSydney(dateString);
+
+function buildAssessmentReportFilename({
+  projectId,
+  siteName,
+  reportIssueDate,
+  sequenceNumber,
+  revision,
+  isResidential = false,
+  isLeadAssessment = false,
+  includeRevision = true,
+  includeExtension = true,
+}) {
+  if (isLeadAssessment) {
+    const safeProjectId = projectId || 'Unknown';
+    const safeSiteName = siteName || 'Unknown';
+    const dateStr = reportIssueDate ? formatDateSydney(reportIssueDate) : 'Unknown';
+    const baseName = `${safeProjectId}_Lead_Assessment_Report - ${safeSiteName} (${dateStr})`;
+    return includeExtension ? `${baseName}.pdf` : baseName;
+  }
+  return buildAsbestosAssessmentFilename({
+    projectId,
+    siteName,
+    reportIssueDate,
+    sequenceNumber,
+    revision,
+    isResidential,
+    includeRevision,
+    includeExtension,
+  });
+}
+
+function getAssessmentIssueDateValue(assessmentData) {
+  // Filename / report reference date must use final assessment authorisation only.
+  // Do not fall back to reportIssueDate — that field is also used for Fibre ID approval.
+  return assessmentData?.reportAuthorisedAt || null;
+}
+
+async function calculateAssessmentSequenceNumber(assessmentData, isResidential = false, isLeadAssessment = false) {
+  const issueDate = getAssessmentIssueDateValue(assessmentData);
+  const projectId = assessmentData?.projectId?._id || assessmentData?.projectId;
+  const assessmentId = assessmentData?._id || assessmentData?.id;
+  if (!issueDate || !projectId || !assessmentId || isLeadAssessment) return undefined;
+
+  const parsedIssueDate = new Date(issueDate);
+  if (Number.isNaN(parsedIssueDate.getTime())) return undefined;
+
+  const startOfDay = new Date(parsedIssueDate);
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(parsedIssueDate);
+  endOfDay.setHours(23, 59, 59, 999);
+
+  const typeFilter = isResidential
+    ? { jobType: 'residential-asbestos' }
+    : { jobType: { $nin: ['residential-asbestos', 'lead-assessment'] } };
+
+  const sameDayAssessments = await AsbestosAssessment.find({
+    projectId,
+    reportAuthorisedAt: { $gte: startOfDay, $lte: endOfDay },
+    ...typeFilter,
+    $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
+  })
+    .select('_id createdAt')
+    .sort({ createdAt: 1 })
+    .lean();
+
+  const idx = sameDayAssessments.findIndex(
+    (a) => String(a._id) === String(assessmentId),
+  );
+  return idx >= 0 ? idx + 1 : undefined;
+}
 
 // Format inspection time to ensure proper AM/PM display
 const formatInspectionTime = (timeString) => {
@@ -455,7 +533,14 @@ function buildClearanceFlowCss() {
     .clearance-table th, .clearance-table td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: top; word-wrap: break-word; overflow-wrap: break-word; }
     .clearance-table th { background-color: #f5f5f5; font-weight: 700; }
     .clearance-table tr:nth-child(even) { background-color: #f9f9f9; }
-    .signature-block { margin-top: 12px; font-size: 0.8rem; color: #222; line-height: 1.5; }
+    .signature-block {
+      margin-top: 12px;
+      font-size: 0.8rem;
+      color: #222;
+      line-height: 1.5;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
     .signature-block .paragraph { margin: 0 0 1px 0; line-height: 1.2; }
     .signature-block img { display: block; margin: 0 0 1px 0; max-width: 150px; max-height: 75px; }
     .page-break { page-break-before: always; break-before: page; height: 0; margin: 0; padding: 0; }
@@ -833,21 +918,6 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       versionControlTitle = 'FRIABLE ASBESTOS REMOVAL CLEARANCE CERTIFICATE';
     }
     
-    // Determine filename for version control page (should match the actual filename)
-    let reportTypeNameVC = 'Asbestos Clearance Report';
-    if (clearanceData.clearanceType === 'Vehicle/Equipment') {
-      reportTypeNameVC = 'Inspection Certificate';
-    }
-    
-    // Determine clearance type prefix for filename (NF for Non-friable, F for Friable types)
-    let clearanceTypePrefix = '';
-    if (clearanceData.clearanceType === 'Non-friable') {
-      clearanceTypePrefix = 'NF ';
-    } else if (clearanceData.clearanceType === 'Friable' || clearanceData.clearanceType === 'Friable (Non-Friable Conditions)') {
-      clearanceTypePrefix = 'F ';
-    }
-    // Vehicle/Equipment clearances don't get a prefix
-    
     // Determine report authoriser text
     let reportAuthoriserText;
     if (clearanceData.reportApprovedBy) {
@@ -867,7 +937,17 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
       .replace(/\[CLEARANCE_DATE\]/g, pdfGenerationDate) // Use PDF generation date for Issue Date in document details
       .replace(/\[LAA_NAME\]/g, clearanceData.createdBy?.firstName && clearanceData.createdBy?.lastName ? `${clearanceData.createdBy.firstName} ${clearanceData.createdBy.lastName}` : clearanceData.LAA || 'Unknown LAA')
       .replace(/\[REPORT_AUTHORISER\]/g, reportAuthoriserText)
-      .replace(/\[FILENAME\]/g, `${clearanceData.projectId?.projectID || 'Unknown'}: ${clearanceTypePrefix}${reportTypeNameVC} - ${filenameSiteName} (${formatClearanceDate(clearanceData.clearanceDate)})${clearanceData.sequenceNumber ? ` - ${clearanceData.sequenceNumber}` : ''}`)
+      .replace(/\[FILENAME\]/g, clearanceData.reportReference
+        ? toReportReference(clearanceData.reportReference)
+        : buildAsbestosClearanceFilename({
+            projectId: clearanceData.projectId?.projectID || 'Unknown',
+            clearanceType: clearanceData.clearanceType,
+            siteName: filenameSiteName,
+            reportIssueDate: clearanceData.reportIssueDate,
+            sequenceNumber: clearanceData.sequenceNumber,
+            includeRevision: false,
+            includeExtension: false,
+          }))
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
       .replace(/\[WATERMARK_PATH\]/g, `data:image/png;base64,${watermarkBase64}`)
       .replace(/\[FOOTER_TEXT\]/g, footerText)
@@ -1409,11 +1489,8 @@ const generateEnclosureCertificateHTML = async (
   const inspectionDateLabel = clearanceDateLabel;
   const issueDate = formatClearanceDate(new Date());
   const inspectedByTrimmed = (clearanceData?.enclosureInspectedBy || "").trim();
-  const laaName = inspectedByTrimmed
-    ? inspectedByTrimmed
-    : clearanceData?.createdBy?.firstName && clearanceData?.createdBy?.lastName
-      ? `${clearanceData.createdBy.firstName} ${clearanceData.createdBy.lastName}`
-      : clearanceData?.LAA || "Unknown LAA";
+  const laaFromField = (clearanceData?.LAA || "").trim();
+  const laaName = inspectedByTrimmed || laaFromField || "Unknown LAA";
   const enclosureDescription = (enclosureData?.description || "").trim();
   const enclosurePhotos = Array.isArray(enclosureData?.photos)
     ? enclosureData.photos.filter((p) => p && p.data)
@@ -1434,6 +1511,9 @@ const generateEnclosureCertificateHTML = async (
     inspectionTime: inspectionTimeForPlaceholders,
     selectedLegislation,
   };
+
+  const laaLicense =
+    (await replacePlaceholders("{LAA_LICENSE}", enclosureTemplateData)) || "AA00031";
 
   const enclosureIntroTemplate =
     "Following discussions with {CLIENT_NAME}, Lancaster and Dickenson Consulting (L & D) were contracted to undertake a visual inspection and smoke test of the friable asbestos removal enclosure(s) located at {SITE_NAME} (herein referred to as 'the Site').\n\n" +
@@ -1528,7 +1608,17 @@ const generateEnclosureCertificateHTML = async (
       <td>${issueDate}</td>
     </tr>
   `;
-  const versionFilename = `${projectReference}: Enclosure Inspection Certificate - ${siteAddress} (${clearanceDateLabel})`;
+  const versionFilename = clearanceData.enclosureCertificateReportReference
+    ? toReportReference(clearanceData.enclosureCertificateReportReference)
+    : buildEnclosureCertificateFilename({
+        projectId: projectReference,
+        siteName: siteAddress,
+        reportIssueDate: clearanceData.enclosureCertificateIssueDate,
+        sequenceNumber:
+          clearanceData.enclosureSequenceNumber ?? clearanceData.sequenceNumber,
+        includeRevision: false,
+        includeExtension: false,
+      });
   const populatedVersionControl = versionControlTemplate
     .replace(/\[REPORT_TYPE\]/g, "Enclosure Inspection")
     .replace(/\[REPORT_TITLE\]/g, "ENCLOSURE INSPECTION CERTIFICATE")
@@ -1586,7 +1676,7 @@ const generateEnclosureCertificateHTML = async (
       clearanceData?.asbestosRemovalist || "Unknown Removalist",
     )
     .replace(/\[LAA_NAME\]/g, laaName)
-    .replace(/\[LAA_LICENSE\]/g, "AA00031")
+    .replace(/\[LAA_LICENSE\]/g, laaLicense)
     .replace(/\[SIGNATURE_IMAGE\]/g, "")
     .replace(/\[ASBESTOS_REMOVAL_ITEMS_HTML\]/g, "")
     .replace(/\[INSPECTION_DETAILS_TITLE\]/g, "INSPECTION DETAILS")
@@ -1709,6 +1799,8 @@ const generateEnclosureCertificateHTML = async (
             margin-bottom: 0 !important;
             line-height: 1.28;
             font-size: 0.76rem;
+            break-inside: avoid;
+            page-break-inside: avoid;
           }
           .page.enclosure-inspection-cert .signature-block .paragraph {
             margin-top: 0 !important;
@@ -2273,7 +2365,16 @@ const generateLeadClearanceHTML = async (clearanceData, pdfId = 'unknown') => {
   const laaName = (clearanceData.createdBy?.firstName && clearanceData.createdBy?.lastName)
     ? `${clearanceData.createdBy.firstName} ${clearanceData.createdBy.lastName}`
     : consultant;
-  const versionControlFilename = `${jobRef}_Lead Clearance Report - ${siteAddress} (${clearanceDateStr})${clearanceData.sequenceNumber ? ` - ${clearanceData.sequenceNumber}` : ''}`;
+  const versionControlFilename = clearanceData.reportReference
+    ? toReportReference(clearanceData.reportReference)
+    : buildLeadClearanceFilename({
+        projectId: jobRef,
+        siteName: siteAddress,
+        reportIssueDate: clearanceData.reportIssueDate,
+        sequenceNumber: clearanceData.sequenceNumber,
+        includeRevision: false,
+        includeExtension: false,
+      });
 
   const generateLeadRevisionHistory = () => {
     const revision = clearanceData.revision || 0;
@@ -2393,7 +2494,13 @@ const generateLeadClearanceHTML = async (clearanceData, pdfId = 'unknown') => {
     .cover-page .cover-content p { font-size: 1.3rem; margin: 0 0 10px 0; color: #222; }
     .cover-company-details { font-size: 0.75rem; color: #222; line-height: 1.5; position: absolute; bottom: 150px; left: 24px; z-index: 6; width: calc(50% - 48px); }
     .cover-logo { position: absolute; right: 32px; bottom: 32px; width: 300px; background: rgba(255,255,255,0.95); padding: 5px; border-radius: 3px; z-index: 10; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-    .sign-off-block { font-size: 0.8rem; color: #222; line-height: 1.5; }
+    .sign-off-block {
+      font-size: 0.8rem;
+      color: #222;
+      line-height: 1.5;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
     .sign-off-block .sign-off-signature { margin: 1px 0; line-height: 1; }
     .sign-off-block img { margin: 0; padding: 0; display: block; }
     .sign-off-block .sign-off-name { display: block; margin-top: 2px; line-height: 1.3; }
@@ -2877,13 +2984,20 @@ router.post('/generate-asbestos-clearance-v2', async (req, res) => {
     if (clearanceData.clearanceType === 'Vehicle/Equipment' && clearanceData.vehicleEquipmentDescription) {
       siteName = clearanceData.vehicleEquipmentDescription;
     }
-    const clearanceDate = clearanceData.clearanceDate ? formatDateSydney(clearanceData.clearanceDate) : 'Unknown';
-    let reportTypeName = clearanceData.clearanceType === 'Vehicle/Equipment' ? 'Inspection Certificate' : 'Asbestos Clearance Report';
-    let clearanceTypePrefix = '';
-    if (clearanceData.clearanceType === 'Non-friable') clearanceTypePrefix = 'NF ';
-    else if (clearanceData.clearanceType === 'Friable' || clearanceData.clearanceType === 'Friable (Non-Friable Conditions)') clearanceTypePrefix = 'F ';
-    const sequenceSuffix = clearanceData.sequenceNumber ? ` - ${clearanceData.sequenceNumber}` : '';
-    const filename = `${projectId}_${clearanceTypePrefix}${reportTypeName} - ${siteName} (${clearanceDate})${sequenceSuffix}.pdf`;
+    const filename = clearanceData.reportReference
+      ? withRevisionAndExtension(
+          clearanceData.reportReference,
+          clearanceData.revision,
+          true,
+        )
+      : buildAsbestosClearanceFilename({
+          projectId,
+          clearanceType: clearanceData.clearanceType,
+          siteName,
+          reportIssueDate: clearanceData.reportIssueDate,
+          sequenceNumber: clearanceData.sequenceNumber,
+          revision: clearanceData.revision,
+        });
 
     const airReports = (clearanceData.airMonitoringReports && clearanceData.airMonitoringReports.length > 0)
       ? [...clearanceData.airMonitoringReports].sort((a, b) => new Date(a.shiftDate || 0) - new Date(b.shiftDate || 0))
@@ -2947,8 +3061,49 @@ router.post("/generate-enclosure-certificate", async (req, res) => {
       return res.status(400).json({ error: "clearanceData._id is required to retain the PDF" });
     }
 
+    const projectId =
+      clearanceData.projectId?.projectID ||
+      clearanceData.project?.projectID ||
+      clearanceData.projectId ||
+      "Unknown";
+    const siteName =
+      clearanceData.projectId?.name || clearanceData.project?.name || "Unknown";
+    let enclosureSequenceNumber;
+    if (clearanceData.enclosureCertificateIssueDate) {
+      try {
+        const issueDate = new Date(clearanceData.enclosureCertificateIssueDate);
+        if (!Number.isNaN(issueDate.getTime())) {
+          const startOfDay = new Date(issueDate);
+          startOfDay.setHours(0, 0, 0, 0);
+          const endOfDay = new Date(issueDate);
+          endOfDay.setHours(23, 59, 59, 999);
+          const sameDayCertificates = await AsbestosClearance.find({
+            projectId: clearanceData.projectId?._id || clearanceData.projectId,
+            isEnclosureCertificate: true,
+            enclosureCertificateIssueDate: { $gte: startOfDay, $lte: endOfDay },
+            $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
+          })
+            .select("_id createdAt")
+            .sort({ createdAt: 1 })
+            .lean();
+
+          const idx = sameDayCertificates.findIndex(
+            (c) => String(c._id) === String(clearanceId),
+          );
+          if (idx >= 0) enclosureSequenceNumber = idx + 1;
+        }
+      } catch (sequenceErr) {
+        console.error(`[${pdfId}] Failed to calculate enclosure sequence number:`, sequenceErr);
+      }
+    }
+
+    const enclosureClearanceData = {
+      ...clearanceData,
+      enclosureSequenceNumber,
+    };
+
     const htmlContent = await generateEnclosureCertificateHTML(
-      clearanceData,
+      enclosureClearanceData,
       enclosureData || {},
       pdfId,
     );
@@ -2957,17 +3112,19 @@ router.post("/generate-enclosure-certificate", async (req, res) => {
       prince_options: { page_margin: "0.5in", media: "print", html_mode: "quirks" },
     });
 
-    const projectId =
-      clearanceData.projectId?.projectID ||
-      clearanceData.project?.projectID ||
-      clearanceData.projectId ||
-      "Unknown";
-    const siteName =
-      clearanceData.projectId?.name || clearanceData.project?.name || "Unknown";
-    const dateStr = clearanceData.clearanceDate
-      ? formatClearanceDate(clearanceData.clearanceDate)
-      : "Unknown";
-    const filename = `${projectId}_Enclosure Inspection Certificate - ${siteName} (${dateStr}).pdf`;
+    const filename = enclosureClearanceData.enclosureCertificateReportReference
+      ? withRevisionAndExtension(
+          enclosureClearanceData.enclosureCertificateReportReference,
+          enclosureClearanceData.revision,
+          true,
+        )
+      : buildEnclosureCertificateFilename({
+          projectId,
+          siteName,
+          reportIssueDate: enclosureClearanceData.enclosureCertificateIssueDate,
+          sequenceNumber: enclosureSequenceNumber,
+          revision: enclosureClearanceData.revision,
+        });
 
     const mergedPdfPath = `enclosure-certificates/${clearanceId}.pdf`;
     try {
@@ -3423,9 +3580,19 @@ router.post('/generate-lead-clearance-v2', async (req, res) => {
 
     const projectId = leadClearanceData.projectId?.projectID || leadClearanceData.project?.projectID || leadClearanceData.projectId || 'Unknown';
     const siteName = leadClearanceData.projectId?.name || leadClearanceData.project?.name || leadClearanceData.siteName || 'Unknown';
-    const clearanceDate = leadClearanceData.clearanceDate ? new Date(leadClearanceData.clearanceDate).toLocaleDateString('en-GB') : 'Unknown';
-    const sequenceSuffix = leadClearanceData.sequenceNumber ? ` - ${leadClearanceData.sequenceNumber}` : '';
-    const filename = `${projectId}_Lead Clearance Report - ${siteName} (${clearanceDate})${sequenceSuffix}.pdf`;
+    const filename = leadClearanceData.reportReference
+      ? withRevisionAndExtension(
+          leadClearanceData.reportReference,
+          leadClearanceData.revision,
+          true,
+        )
+      : buildLeadClearanceFilename({
+          projectId,
+          siteName,
+          reportIssueDate: leadClearanceData.reportIssueDate,
+          sequenceNumber: leadClearanceData.sequenceNumber,
+          revision: leadClearanceData.revision,
+        });
 
     const { status_id } = await docRaptorService.createAsyncDocument(htmlContent, {
       page_size: 'A4',
@@ -4238,15 +4405,27 @@ async function runAssessmentPdfV3(assessmentData, isResidential) {
 
   const projectId = assessmentData.projectId?.projectID || 'Unknown';
   const siteName = assessmentData.projectId?.name || assessmentData.siteName || 'Unknown';
-  const dateStr = assessmentData.assessmentDate ? formatDateSydney(assessmentData.assessmentDate) : 'Unknown';
-  let filename;
-  if (isLeadAssessment) {
-    filename = `${projectId}_Lead_Assessment_Report - ${siteName} (${dateStr}).pdf`;
-  } else if (useResidentialLayout) {
-    filename = `${projectId}: Residential Asbestos Assessment Report - ${siteName} (${dateStr}).pdf`;
-  } else {
-    filename = `${projectId}: Asbestos Assessment Report - ${siteName} (${dateStr}).pdf`;
-  }
+  const reportIssueDate = getAssessmentIssueDateValue(assessmentData);
+  const sequenceNumber = await calculateAssessmentSequenceNumber(
+    assessmentData,
+    useResidentialLayout,
+    isLeadAssessment,
+  );
+  const filename = assessmentData.reportReference && !isLeadAssessment
+    ? withRevisionAndExtension(
+        assessmentData.reportReference,
+        assessmentData.revision,
+        true,
+      )
+    : buildAssessmentReportFilename({
+        projectId,
+        siteName,
+        reportIssueDate,
+        sequenceNumber,
+        revision: assessmentData.revision,
+        isResidential: useResidentialLayout,
+        isLeadAssessment,
+      });
 
   return { buffer: merged, filename };
 }
@@ -4510,9 +4689,20 @@ const generateAssessmentHTML = async (assessmentData) => {
 
     // Populate version control template with data (like clearance: REPORT_TITLE, FOOTER_TEXT, document-details-table, WATERMARK_PATH)
     const versionControlReportTitle = isResidential ? 'RESIDENTIAL ASBESTOS ASSESSMENT REPORT' : 'ASBESTOS ASSESSMENT REPORT';
-    const versionControlFilename = isResidential
-      ? `${assessmentData.projectId?.projectID || 'Unknown'}_Residential_Asbestos_Assessment_Report - ${assessmentData.projectId?.name || 'Unknown'} (${assessmentData.assessmentDate ? formatDateSydney(assessmentData.assessmentDate) : 'Unknown'}).pdf`
-      : `${assessmentData.projectId?.projectID || 'Unknown'}_Asbestos_Assessment_Report - ${assessmentData.projectId?.name || 'Unknown'} (${assessmentData.assessmentDate ? formatDateSydney(assessmentData.assessmentDate) : 'Unknown'}).pdf`;
+    const versionControlFilename = assessmentData.reportReference
+      ? toReportReference(assessmentData.reportReference)
+      : toReportReference(
+          buildAssessmentReportFilename({
+            projectId: assessmentData.projectId?.projectID,
+            siteName: assessmentData.projectId?.name || assessmentSiteAddress,
+            reportIssueDate: getAssessmentIssueDateValue(assessmentData),
+            sequenceNumber: await calculateAssessmentSequenceNumber(assessmentData, isResidential, false),
+            isResidential,
+            isLeadAssessment: false,
+            includeRevision: false,
+            includeExtension: false,
+          }),
+        );
     const populatedVersionControl = versionControlTemplateWithUrl
       .replace(/\[REPORT_TITLE\]/g, versionControlReportTitle)
       .replace(/\[SITE_ADDRESS\]/g, assessmentSiteAddress)
@@ -5403,19 +5593,47 @@ const generateAssessmentCoverVersionHTMLV3 = async (assessmentData, isResidentia
   let assessmentFooterText;
   let versionControlReportTitle;
   let versionControlFilename;
+  const reportIssueDateValue = getAssessmentIssueDateValue(assessmentData);
+  const assessmentSequenceNumber = await calculateAssessmentSequenceNumber(
+    assessmentData,
+    isResidential,
+    isLeadAssessment,
+  );
   if (isLeadAssessment) {
     const headerTitle = templateContent?.reportHeaders?.title || 'Lead Assessment Report';
     assessmentReportTitle = formatLeadAssessmentCoverTitleHtml(headerTitle);
     assessmentFooterText = `Lead Assessment Report: ${assessmentSiteAddress}`;
     versionControlReportTitle = headerTitle.trim().toUpperCase();
-    versionControlFilename = `${assessmentData.projectId?.projectID || 'Unknown'}_Lead_Assessment_Report - ${assessmentSiteAddress} (${assessmentData.assessmentDate ? formatDateSydney(assessmentData.assessmentDate) : 'Unknown'}).pdf`;
+    versionControlFilename = toReportReference(
+      assessmentData.reportReference ||
+        buildAssessmentReportFilename({
+          projectId: assessmentData.projectId?.projectID,
+          siteName: assessmentSiteAddress,
+          reportIssueDate: reportIssueDateValue,
+          sequenceNumber: assessmentSequenceNumber,
+          isLeadAssessment: true,
+          includeRevision: false,
+          includeExtension: false,
+        }),
+    );
   } else {
     assessmentReportTitle = isResidential ? 'RESIDENTIAL ASBESTOS ASSESSMENT REPORT' : 'ASBESTOS ASSESSMENT<br />REPORT';
     assessmentFooterText = isResidential ? `Residential Asbestos Assessment Report: ${assessmentSiteAddress}` : `Asbestos Assessment Report: ${assessmentSiteAddress}`;
     versionControlReportTitle = isResidential ? 'RESIDENTIAL ASBESTOS ASSESSMENT REPORT' : (templateContent?.reportTitle || 'ASBESTOS ASSESSMENT REPORT');
-    versionControlFilename = isResidential
-      ? `${assessmentData.projectId?.projectID || 'Unknown'}_Residential_Asbestos_Assessment_Report - ${assessmentSiteAddress} (${assessmentData.assessmentDate ? formatDateSydney(assessmentData.assessmentDate) : 'Unknown'}).pdf`
-      : `${assessmentData.projectId?.projectID || 'Unknown'}_Asbestos_Assessment_Report - ${assessmentSiteAddress} (${assessmentData.assessmentDate ? formatDateSydney(assessmentData.assessmentDate) : 'Unknown'}).pdf`;
+    versionControlFilename = assessmentData.reportReference
+      ? toReportReference(assessmentData.reportReference)
+      : toReportReference(
+          buildAssessmentReportFilename({
+            projectId: assessmentData.projectId?.projectID,
+            siteName: assessmentSiteAddress,
+            reportIssueDate: reportIssueDateValue,
+            sequenceNumber: assessmentSequenceNumber,
+            isResidential,
+            isLeadAssessment: false,
+            includeRevision: false,
+            includeExtension: false,
+          }),
+        );
   }
 
   // Revision history: assessment report authorisation only (not Fibre ID approval)
@@ -6600,7 +6818,13 @@ const generateLeadAssessmentFlowHTMLV3 = async (assessmentData) => {
       .section-body.discussion-conclusions-content.discussion-follow-on { margin-top: 8px; }
       .section-body.discussion-conclusions-content.job-specific-exclusions { margin-top: 2px; }
       .section-body.discussion-wrap { margin-bottom: 8px; }
-      .section-body.discussion-signoff { margin-top: 0; margin-bottom: 0; line-height: 1.2; }
+      .section-body.discussion-signoff {
+        margin-top: 0;
+        margin-bottom: 0;
+        line-height: 1.2;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
       .section-body.discussion-signoff img {
         display: block;
         margin: 0 0 1px 0;
@@ -7024,7 +7248,7 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
   assessmentItems.forEach((item, idx) => {
     getIncludedPhotosFlow(item).forEach(photoData => flowTableBlocks.push({ item, idx, photoData }));
   });
-  const buildBlockHtml = (block, blockIndex, addContinuationHeader) => {
+  const buildSampleBlockHtml = (block) => {
     const { item, idx, photoData } = block;
     const n = idx + 1;
     const sampleTable = asbestosSampleItemTemplateWithUrl
@@ -7038,20 +7262,8 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
       .replace(/\[CONDITION\]/g, getConditionDisplay(item))
       .replace(/\[RISK\]/g, getRiskDisplay(item))
       .replace(/\[COMMENTS\]/g, getCommentsValue(item));
-    const continuationHeader = addContinuationHeader
-      ? '<div class="page-break"></div><div class="section-header">Table 1: Assessment Register cont.</div>'
-      : '';
-    return `${continuationHeader}<div class="sample-block">${sampleTable}</div>`;
+    return `<div class="sample-block">${sampleTable}</div>`;
   };
-  // Residential: all items after a page break. Asbestos: first item beneath SUMMARY (if it fits), rest on following pages.
-  const firstTableBlockHtml = !isResidential && flowTableBlocks.length > 0
-    ? buildBlockHtml(flowTableBlocks[0], 0, false)
-    : '';
-  const remainingTableBlocks = isResidential ? flowTableBlocks : flowTableBlocks.slice(1);
-  const sampleTablesHtml = remainingTableBlocks.map((block, blockIndex) => {
-    const addContinuationHeader = blockIndex >= 2 && blockIndex % 2 === 0;
-    return buildBlockHtml(block, isResidential ? blockIndex : blockIndex + 1, addContinuationHeader);
-  }).join('');
 
   // Discussion & Conclusions: asbestos items, then non-asbestos items (build early so flowTemplateData can be used in replacePlaceholders)
   // Use same effective asbestos display logic as sample tables (includes fibres array, referred items)
@@ -7128,6 +7340,15 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
   if (hasSitePlanFlow) {
     surveyFindingsHtml += `<p style="margin-top: 12px;">A site plan for this assessment is presented in ${escapeHtml(sitePlanAppendixFlow)} of this report.</p>`;
   }
+
+  const registerTableHeaderHtml = '<div class="section-header assessment-register-header">Table 1: Assessment Register</div>';
+  const continuationTableBlocks = flowTableBlocks.slice(1);
+  const assessmentRegisterStartHtml = flowTableBlocks.length > 0
+    ? `<div class="assessment-register-start">${registerTableHeaderHtml}${buildSampleBlockHtml(flowTableBlocks[0])}</div>`
+    : `${registerTableHeaderHtml}<div class="section-body">No items</div>`;
+  const registerContinuationHtml = continuationTableBlocks.length > 0
+    ? continuationTableBlocks.map((block) => buildSampleBlockHtml(block)).join('')
+    : '';
 
   const asbestosCountFlow = identifiedAsbestosItems.length;
   const hasSampledItemsRequiringAnalysisFlow = assessmentItems.some((i) => (i.sampleReference || '').trim() && !isVisuallyAssessed(i.asbestosContent));
@@ -7301,7 +7522,13 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
           .section-body.discussion-conclusions-content.discussion-follow-on { margin-top: 8px; }
           .section-body.discussion-conclusions-content.job-specific-exclusions { margin-top: 2px; }
           .section-body.discussion-wrap { margin-bottom: 8px; }
-          .section-body.discussion-signoff { margin-top: 0; margin-bottom: 0; line-height: 1.2; }
+          .section-body.discussion-signoff {
+            margin-top: 0;
+            margin-bottom: 0;
+            line-height: 1.2;
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
           .section-body.discussion-signoff img {
             display: block;
             margin: 0 0 1px 0;
@@ -7321,12 +7548,15 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
           li { margin-bottom: 8px; }
 
           .sample-register-header { font-size: 0.8rem; font-weight: 700; margin: 14px 0 10px 0; }
+          /* Keep "Table 1: Assessment Register" with the first register item when pagination pushes the item to a new page */
+          .assessment-register-start { break-inside: avoid; page-break-inside: avoid; }
+          .assessment-register-start .assessment-register-header { break-after: avoid; page-break-after: avoid; margin-bottom: 6px; }
           .sample-block { break-inside: avoid; page-break-inside: avoid; margin-bottom: 30px; }
 
-          /* Reuse the sample table styles from Item1 (lighter weight) */
-          table { width: 100%; border-collapse: collapse; }
-          th, td { border: 1.5px solid #888; padding: 6px 8px; font-size: 0.64rem; vertical-align: top; }
-          th { background: #f5f5f5; font-weight: 700; text-align: left; }
+          /* Reuse the sample table styles from Item1 (lighter weight) — scope to register tables only */
+          .sample-block table { width: 100%; border-collapse: collapse; }
+          .sample-block th, .sample-block td { border: 1.5px solid #888; padding: 6px 8px; font-size: 0.64rem; vertical-align: top; }
+          .sample-block th { background: #f5f5f5; font-weight: 700; text-align: left; }
           /* Ensure assessment register "field headers" are bold */
           .sample-label { font-weight: 700; background: #f5f5f5; }
           .sample-asbestos-content-cell { font-weight: 700; }
@@ -7419,12 +7649,10 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
         <div class="section-body">${surveyFindingsHtml}</div>
 
         ${isResidential ? '<div class="page-break"></div>' : ''}
-        ${(isResidential || firstTableBlockHtml || flowTableBlocks.length === 0) ? `<div class="section-header">Table 1: Assessment Register</div>` : ''}
-        ${firstTableBlockHtml}
-        ${!isResidential && remainingTableBlocks.length > 0 ? '<div class="page-break"></div><div class="section-header">Table 1: Assessment Register cont.</div>' : ''}
-        ${sampleTablesHtml || (flowTableBlocks.length === 0 ? '<div class="section-body">No items</div>' : '')}
+        ${assessmentRegisterStartHtml}
+        ${registerContinuationHtml}
 
-        ${(identifiedAsbestosItems.length > 0 || flowTableBlocks.length % 2 === 1) ? '<div class="page-break"></div>' : ''}
+        ${identifiedAsbestosItems.length > 0 ? '<div class="page-break"></div>' : ''}
         <div class="section-header">${escapeHtml(templateContent?.standardSections?.discussionTitle || 'DISCUSSION AND CONCLUSIONS')}</div>
         <div class="section-body discussion-wrap">
           ${asbestosCountLineHtml}

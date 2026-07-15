@@ -21,6 +21,193 @@ const {
   notifyShiftAuthorisationRequesterOnApproval,
 } = require("../services/reportAuthorisationNotificationService");
 const { buildContentDispositionAttachment } = require('../utils/contentDisposition');
+const {
+  buildLDChainOfCustodyFilename,
+  buildAsbestosAirMonitoringFilename,
+  buildLeadAirMonitoringFilename,
+  toReportReference,
+} = require('../utils/reportFilenames');
+const AsbestosRemovalJob = require('../models/AsbestosRemovalJob');
+const LeadRemovalJob = require('../models/LeadRemovalJob');
+
+async function freezeShiftReportReference(shift) {
+  const issueDate = shift.reportIssueDate || new Date();
+  if (!shift.reportIssueDate) {
+    shift.reportIssueDate = issueDate;
+  }
+
+  const parsedIssueDate = new Date(issueDate);
+  const jobId = shift.job?._id || shift.job;
+  const isLead = shift.jobModel === 'LeadRemovalJob';
+  let projectIdValue = null;
+  let projectID = 'Unknown';
+  let siteName = 'Unknown';
+  let sequenceNumber = 1;
+
+  if (!jobId) {
+    return;
+  }
+
+  if (isLead) {
+    const removalJob = await LeadRemovalJob.findById(jobId)
+      .select('projectId projectName')
+      .lean();
+    projectIdValue = removalJob?.projectId || null;
+    siteName = removalJob?.projectName || 'Unknown';
+  } else {
+    const removalJob = await AsbestosRemovalJob.findById(jobId)
+      .select('projectId')
+      .lean();
+    projectIdValue = removalJob?.projectId || null;
+  }
+
+  if (!projectIdValue) {
+    return;
+  }
+
+  const project = await Project.findById(projectIdValue)
+    .select('projectID name')
+    .lean();
+  if (project?.projectID) projectID = project.projectID;
+  if (!isLead && project?.name) {
+    siteName = project.name;
+  } else if (isLead && project?.name && siteName === 'Unknown') {
+    siteName = project.name;
+  }
+
+  if (!Number.isNaN(parsedIssueDate.getTime())) {
+    const startOfDay = new Date(parsedIssueDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(parsedIssueDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const JobModel = isLead ? LeadRemovalJob : AsbestosRemovalJob;
+    const sameDayJobs = await JobModel.find({ projectId: projectIdValue })
+      .select('_id')
+      .lean();
+    const jobIds = sameDayJobs.map((j) => j._id);
+
+    const jobModelQuery = isLead
+      ? { jobModel: 'LeadRemovalJob' }
+      : {
+          $or: [
+            { jobModel: 'AsbestosRemovalJob' },
+            { jobModel: null },
+            { jobModel: { $exists: false } },
+          ],
+        };
+
+    const sameDayShifts = await Shift.find({
+      job: { $in: jobIds },
+      reportIssueDate: { $gte: startOfDay, $lte: endOfDay },
+      reportApprovedBy: { $exists: true, $nin: [null, ''] },
+      $and: [
+        jobModelQuery,
+        { $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }] },
+      ],
+    })
+      .select('_id createdAt')
+      .sort({ createdAt: 1 })
+      .lean();
+
+    const ids = sameDayShifts.map((s) => String(s._id));
+    if (!ids.includes(String(shift._id))) {
+      sameDayShifts.push({
+        _id: shift._id,
+        createdAt: shift.createdAt,
+      });
+      sameDayShifts.sort(
+        (a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0),
+      );
+    }
+    const idx = sameDayShifts.findIndex(
+      (s) => String(s._id) === String(shift._id),
+    );
+    if (idx >= 0) sequenceNumber = idx + 1;
+  }
+
+  const filenameBuilder = isLead
+    ? buildLeadAirMonitoringFilename
+    : buildAsbestosAirMonitoringFilename;
+
+  shift.sequenceNumber = sequenceNumber;
+  shift.reportReference = toReportReference(
+    filenameBuilder({
+      projectId: projectID,
+      siteName,
+      reportIssueDate: issueDate,
+      sequenceNumber,
+      includeRevision: false,
+      includeExtension: false,
+    }),
+  );
+}
+
+const MAX_ANALYSIS_REPORT_FILES = 10;
+const MAX_ANALYSIS_REPORT_RAW_BYTES = 5 * 1024 * 1024; // 5MB per file
+const MAX_ANALYSIS_REPORTS_TOTAL_RAW_BYTES = 12 * 1024 * 1024; // stay under MongoDB 16MB doc limit
+
+function normalizeUploadedFiles(filesInput) {
+  if (!filesInput) return [];
+  return Array.isArray(filesInput) ? filesInput : [filesInput];
+}
+
+function getShiftAnalysisReportEntries(shift) {
+  if (!shift) return [];
+  if (Array.isArray(shift.analysisReports) && shift.analysisReports.length > 0) {
+    return shift.analysisReports;
+  }
+  if (shift.analysisReportData) {
+    return [
+      {
+        _id: 'legacy',
+        originalName: shift.analysisReportOriginalName || 'analysis-report.pdf',
+        data: shift.analysisReportData,
+      },
+    ];
+  }
+  return [];
+}
+
+function validatePdfUpload(file) {
+  if (!file) return 'Missing file';
+  if (!file.mimetype || !file.mimetype.toLowerCase().includes('pdf')) {
+    return 'File must be a PDF';
+  }
+  if (file.size > MAX_ANALYSIS_REPORT_RAW_BYTES) {
+    return `File too large. Maximum supported PDF size is ${MAX_ANALYSIS_REPORT_RAW_BYTES / (1024 * 1024)}MB per file.`;
+  }
+  return null;
+}
+
+function bufferFromUpload(file) {
+  return Buffer.isBuffer(file.data) ? file.data : Buffer.from(file.data || []);
+}
+
+async function mergePdfBuffers(buffers) {
+  if (!buffers.length) return null;
+  if (buffers.length === 1) return buffers[0];
+  const { PDFDocument } = require('pdf-lib');
+  const mergedDoc = await PDFDocument.create();
+  for (const buf of buffers) {
+    const doc = await PDFDocument.load(buf);
+    const pages = await mergedDoc.copyPages(doc, doc.getPageIndices());
+    pages.forEach((p) => mergedDoc.addPage(p));
+  }
+  return Buffer.from(await mergedDoc.save());
+}
+
+function syncLegacyAnalysisReportFields(shift, reports) {
+  if (reports.length > 0) {
+    shift.analysisReportPath = 'db:analysis-report';
+    shift.analysisReportOriginalName = reports[0].originalName;
+    shift.analysisReportData = undefined;
+  } else {
+    shift.analysisReportPath = undefined;
+    shift.analysisReportOriginalName = undefined;
+    shift.analysisReportData = undefined;
+  }
+}
 
 // Exclude soft-deleted shifts from list queries (restorable from archived data page)
 const notDeletedShiftFilter = {
@@ -282,9 +469,31 @@ router.patch('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports
         return obj;
       }, {});
 
+    // Preserve the first authorisation date for filename continuity across revisions.
+    if (
+      updates.reportIssueDate !== undefined &&
+      shift.reportIssueDate
+    ) {
+      delete updates.reportIssueDate;
+    }
+
+    const becomingAuthorised =
+      updates.reportApprovedBy !== undefined &&
+      updates.reportApprovedBy &&
+      !shiftBeforeUpdate.reportApprovedBy;
+
     // Update each field individually
     for (const [key, value] of Object.entries(updates)) {
       shift[key] = value;
+    }
+
+    // Freeze report reference on first authorisation.
+    if (becomingAuthorised && !shift.reportReference) {
+      try {
+        await freezeShiftReportReference(shift);
+      } catch (refErr) {
+        console.error('Failed to freeze shift report reference:', refErr);
+      }
     }
     
     // Ensure descriptionOfWorks is set (for existing shifts that might not have it)
@@ -336,10 +545,18 @@ router.patch('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports
               }
             });
           if (populatedShift.job && populatedShift.job.projectId) {
-            await Project.findByIdAndUpdate(
-              populatedShift.job.projectId._id,
-              { reports_present: true }
-            );
+            const projectId = populatedShift.job.projectId._id || populatedShift.job.projectId;
+            await Project.findByIdAndUpdate(projectId, { reports_present: true });
+            const {
+              addReportCategories,
+              REPORT_CATEGORIES,
+            } = require('../services/projectReportCategoriesService');
+            const category =
+              populatedShift.jobModel === 'LeadRemovalJob' ||
+              updatedShift.jobModel === 'LeadRemovalJob'
+                ? REPORT_CATEGORIES.LEAD_REMOVAL
+                : REPORT_CATEGORIES.ASBESTOS_REMOVAL;
+            await addReportCategories(projectId, category);
           }
         } catch (error) {
           console.error("Error updating project reports_present field:", error);
@@ -450,10 +667,13 @@ router.patch('/:id/reopen', auth, checkPermission(['admin.update']), async (req,
       });
     }
 
-    // Reopen by resetting status to "in progress" (ongoing) so the shift can be edited again
+    // Reopen by resetting status to "in progress" (ongoing) so the shift can be edited again.
+    // Preserve first reportIssueDate / reportReference for stable filenames across revisions.
     shift.status = 'ongoing';
+    if (shift.reportApprovedBy) {
+      shift.revision = (typeof shift.revision === 'number' ? shift.revision : 0) + 1;
+    }
     shift.reportApprovedBy = '';
-    shift.reportIssueDate = null;
     shift.reportViewedAt = null;
 
     const updatedShift = await shift.save();
@@ -568,40 +788,62 @@ router.get('/:id/site-plan', auth, checkPermission(['jobs.view']), async (req, r
   }
 });
 
-// Upload lead analysis report PDF for a shift
+// Upload lead analysis report PDF(s) for a shift (replaces all reports; backwards compatible single-file upload)
 router.post('/:id/upload-analysis-report', auth, checkPermission(['jobs.edit']), async (req, res) => {
   try {
-    const shift = await Shift.findById(req.params.id);
+    const shift = await Shift.findById(req.params.id).select(
+      '+analysisReportData +analysisReports.data',
+    );
     if (!shift) {
       return res.status(404).json({ message: 'Shift not found' });
     }
-    if (!req.files || !req.files.file) {
+
+    const uploaded =
+      normalizeUploadedFiles(req.files?.files) ||
+      [];
+    const single = req.files?.file;
+    const files = uploaded.length > 0 ? uploaded : normalizeUploadedFiles(single);
+
+    if (!files.length) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
-    const file = req.files.file;
-    if (!file.mimetype || !file.mimetype.toLowerCase().includes('pdf')) {
-      return res.status(400).json({ error: 'File must be a PDF' });
-    }
-
-    // Same persistence strategy as asbestos fibre analysis reports: store PDF as base64 in MongoDB.
-    // Enforce a conservative raw-size cap to stay below MongoDB 16MB document limit after base64 expansion.
-    const MAX_RAW_PDF_BYTES = 10 * 1024 * 1024; // 10MB
-    if (file.size > MAX_RAW_PDF_BYTES) {
+    if (files.length > MAX_ANALYSIS_REPORT_FILES) {
       return res.status(400).json({
-        error: 'File too large. Maximum supported PDF size is 10MB for persistent storage.',
+        error: `Too many files. Maximum is ${MAX_ANALYSIS_REPORT_FILES} analysis reports per shift.`,
       });
     }
 
-    const rawBuffer = Buffer.isBuffer(file.data) ? file.data : Buffer.from(file.data || []);
-    const reportData = rawBuffer.toString('base64');
-    shift.analysisReportData = reportData;
-    // Kept for backwards compatibility in UI checks that rely on truthy path to indicate attachment exists.
-    shift.analysisReportPath = 'db:analysis-report';
-    shift.analysisReportOriginalName = file.name;
+    let totalRaw = 0;
+    const reports = [];
+    for (const file of files) {
+      const validationError = validatePdfUpload(file);
+      if (validationError) {
+        return res.status(400).json({ error: validationError });
+      }
+      totalRaw += file.size;
+      if (totalRaw > MAX_ANALYSIS_REPORTS_TOTAL_RAW_BYTES) {
+        return res.status(400).json({
+          error: 'Total size of analysis reports exceeds the storage limit for this shift.',
+        });
+      }
+      const rawBuffer = bufferFromUpload(file);
+      reports.push({
+        originalName: file.name,
+        data: rawBuffer.toString('base64'),
+      });
+    }
+
+    shift.analysisReports = reports;
+    syncLegacyAnalysisReportFields(shift, reports);
     await shift.save();
+
     res.json({
       message: 'Analysis report uploaded successfully',
       analysisReportOriginalName: shift.analysisReportOriginalName,
+      analysisReportFiles: reports.map((r, index) => ({
+        id: shift.analysisReports[index]._id,
+        originalName: r.originalName,
+      })),
     });
   } catch (error) {
     console.error('Error uploading analysis report:', error);
@@ -609,30 +851,143 @@ router.post('/:id/upload-analysis-report', auth, checkPermission(['jobs.edit']),
   }
 });
 
-// Download lead analysis report PDF for a shift (stored in MongoDB base64)
+// Replace lead analysis reports using an ordered manifest (existing + new uploads)
+router.put('/:id/analysis-reports', auth, checkPermission(['jobs.edit']), async (req, res) => {
+  try {
+    const shift = await Shift.findById(req.params.id).select(
+      '+analysisReportData +analysisReports.data',
+    );
+    if (!shift) {
+      return res.status(404).json({ message: 'Shift not found' });
+    }
+
+    let manifest = [];
+    try {
+      manifest = JSON.parse(req.body?.manifest || '[]');
+    } catch {
+      return res.status(400).json({ error: 'Invalid manifest JSON' });
+    }
+
+    if (!Array.isArray(manifest)) {
+      return res.status(400).json({ error: 'Manifest must be an array' });
+    }
+
+    if (manifest.length > MAX_ANALYSIS_REPORT_FILES) {
+      return res.status(400).json({
+        error: `Too many files. Maximum is ${MAX_ANALYSIS_REPORT_FILES} analysis reports per shift.`,
+      });
+    }
+
+    const existingEntries = getShiftAnalysisReportEntries(shift);
+    const existingById = new Map(
+      existingEntries.map((entry) => [String(entry._id), entry]),
+    );
+
+    const reports = [];
+    let totalRaw = 0;
+
+    for (const item of manifest) {
+      if (item?.kind === 'existing') {
+        const existing = existingById.get(String(item.id));
+        if (!existing?.data) {
+          return res.status(400).json({ error: 'Referenced analysis report no longer exists' });
+        }
+        const buf = Buffer.from(existing.data, 'base64');
+        totalRaw += buf.length;
+        if (totalRaw > MAX_ANALYSIS_REPORTS_TOTAL_RAW_BYTES) {
+          return res.status(400).json({
+            error: 'Total size of analysis reports exceeds the storage limit for this shift.',
+          });
+        }
+        reports.push({
+          originalName: existing.originalName,
+          data: existing.data,
+        });
+      } else if (item?.kind === 'new') {
+        const fileKey = item.fileKey;
+        if (!fileKey || !req.files?.[fileKey]) {
+          return res.status(400).json({ error: `Missing uploaded file for key ${fileKey}` });
+        }
+        const file = req.files[fileKey];
+        const validationError = validatePdfUpload(file);
+        if (validationError) {
+          return res.status(400).json({ error: validationError });
+        }
+        totalRaw += file.size;
+        if (totalRaw > MAX_ANALYSIS_REPORTS_TOTAL_RAW_BYTES) {
+          return res.status(400).json({
+            error: 'Total size of analysis reports exceeds the storage limit for this shift.',
+          });
+        }
+        const rawBuffer = bufferFromUpload(file);
+        reports.push({
+          originalName: file.name,
+          data: rawBuffer.toString('base64'),
+        });
+      } else {
+        return res.status(400).json({ error: 'Invalid manifest entry' });
+      }
+    }
+
+    shift.analysisReports = reports;
+    syncLegacyAnalysisReportFields(shift, reports);
+    await shift.save();
+
+    res.json({
+      message: reports.length
+        ? 'Analysis reports saved successfully'
+        : 'Analysis reports cleared',
+      analysisReportFiles: (shift.analysisReports || []).map((r) => ({
+        id: r._id,
+        originalName: r.originalName,
+      })),
+    });
+  } catch (error) {
+    console.error('Error saving analysis reports:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Download lead analysis report PDF for a shift (merged, in display order)
 router.get('/:id/analysis-report', auth, checkPermission(['jobs.view']), async (req, res) => {
   try {
-    const shift = await Shift.findById(req.params.id).select('+analysisReportData analysisReportOriginalName analysisReportPath');
+    const shift = await Shift.findById(req.params.id).select(
+      '+analysisReportData +analysisReports.data analysisReportOriginalName analysisReportPath',
+    );
     if (!shift) {
       console.warn('[analysis-report] Shift not found:', req.params.id);
       return res.status(404).json({ message: 'Analysis report not found' });
     }
-    if (!shift.analysisReportData) {
+
+    const entries = getShiftAnalysisReportEntries(shift);
+    if (!entries.length) {
       console.warn('[analysis-report] No analysisReportData for shift:', req.params.id);
       return res.status(404).json({ message: 'Analysis report not found' });
     }
 
-    const pdfBuffer = Buffer.from(shift.analysisReportData, 'base64');
-    if (!pdfBuffer || pdfBuffer.length === 0) {
+    const pdfBuffers = entries
+      .map((entry) => {
+        const pdfBuffer = Buffer.from(entry.data, 'base64');
+        return pdfBuffer?.length ? pdfBuffer : null;
+      })
+      .filter(Boolean);
+
+    if (!pdfBuffers.length) {
       return res.status(404).json({ message: 'Analysis report not found' });
     }
-    const name = shift.analysisReportOriginalName || 'analysis-report.pdf';
+
+    const mergedBuffer = await mergePdfBuffers(pdfBuffers);
+    const name =
+      entries.length === 1
+        ? entries[0].originalName || 'analysis-report.pdf'
+        : 'analysis-reports.pdf';
+
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
       'Content-Disposition',
-      buildContentDispositionAttachment(name, { defaultFilename: 'analysis-report.pdf' })
+      buildContentDispositionAttachment(name, { defaultFilename: 'analysis-report.pdf' }),
     );
-    res.send(pdfBuffer);
+    res.send(mergedBuffer);
   } catch (error) {
     console.error('Error downloading analysis report:', error);
     res.status(500).json({ message: error.message });
@@ -867,7 +1222,9 @@ router.get('/:id/chain-of-custody', auth, checkPermission(['jobs.view']), async 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
       'Content-Disposition',
-      buildContentDispositionAttachment(`${projectID}: Chain of Custody - ${shiftDate}.pdf`)
+      buildContentDispositionAttachment(
+        buildLDChainOfCustodyFilename({ projectId: projectID })
+      )
     );
     res.send(pdfBuffer);
   } catch (error) {

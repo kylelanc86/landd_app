@@ -477,6 +477,7 @@ const LDsuppliedJobs = () => {
         revision: fullAssessment.revision || 0,
         LAA: fullAssessment.LAA, // Include LAA for "Sampled by" field
         assessorId: fullAssessment.assessorId, // Include assessorId as fallback
+        fibreIdReportReference: fullAssessment.fibreIdReportReference || null,
       };
 
       // Always request PDF data and download (avoids blank page when opening data URL in new tab)
@@ -700,6 +701,7 @@ const LDsuppliedJobs = () => {
         sampleReceiptDate: fullJob.sampleReceiptDate,
         LAA: fullJob.sampledBy || null,
         revision: fullJob.revision || 0,
+        reportReference: fullJob.reportReference || null,
       };
       await generateFibreIDReport({
         assessment: assessmentForReport,

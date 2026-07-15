@@ -34,6 +34,7 @@ import MassBalances from "./widgets/MassBalances";
 import Micrometer from "./widgets/Micrometer";
 import FumeHoods from "./widgets/FumeHoods";
 import Calipers from "./widgets/Calipers";
+import Mycometers from "./widgets/Mycometers";
 import {
   resolveCalibrationsTab,
   storeCalibrationsTab,
@@ -193,6 +194,10 @@ const Calibrations = () => {
           {/* Micrometer */}
           <Grid item xs={12} md={6} lg={3}>
             <Micrometer viewCalibrationsPath="/records/laboratory/calibrations/micrometer" />
+          </Grid>
+          {/* Mycometers */}
+          <Grid item xs={12} md={6} lg={3}>
+            <Mycometers viewCalibrationsPath="/records/laboratory/calibrations/mycometers" />
           </Grid>
           {/* PCM Microscope */}
           <Grid item xs={12} md={6} lg={3}>

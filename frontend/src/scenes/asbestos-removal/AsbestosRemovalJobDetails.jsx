@@ -52,7 +52,6 @@ import MailIcon from "@mui/icons-material/Mail";
 import DescriptionIcon from "@mui/icons-material/Description";
 import { tokens } from "../../theme/tokens";
 import api from "../../services/api";
-import axios from "../../services/axios";
 import {
   shiftService,
   sampleService,
@@ -70,6 +69,7 @@ import {
   downloadClearancePDFByClearanceId,
   downloadClearancePDFByJobId,
   downloadEnclosureCertificateByClearanceId,
+  generateEnclosureCertificatePDF,
 } from "../../utils/templatePDFGenerator";
 import { generateShiftReport } from "../../utils/generateShiftReport";
 import { useAuth } from "../../context/AuthContext";
@@ -176,6 +176,7 @@ const AsbestosRemovalJobDetails = () => {
   const [clearancePdfStatus, setClearancePdfStatus] = useState("idle"); // 'idle' | 'generating' | 'completed' | 'error'
   const [clearancePdfStartingId, setClearancePdfStartingId] = useState(null); // clearance _id while start request is in flight (prevents duplicate clicks)
   const [clearancePdfGeneratingForClearanceId, setClearancePdfGeneratingForClearanceId] = useState(null); // clearance _id whose PDF is generating (until poll completes)
+  const clearancePdfCompletedJobRef = useRef(null); // prevent duplicate completion/download handling
   const [clearanceDownloadDialogOpen, setClearanceDownloadDialogOpen] = useState(false);
   const [shiftReportDownloadingShiftId, setShiftReportDownloadingShiftId] = useState(null);
   const [sendingAuthorisationRequests, setSendingAuthorisationRequests] =
@@ -761,6 +762,10 @@ const AsbestosRemovalJobDetails = () => {
         if (data.status === "completed" || data.ready) {
           const clearanceId = clearancePdfGeneratingForClearanceId;
           const jobId = clearancePdfJobId;
+          if (clearancePdfCompletedJobRef.current === jobId) {
+            return;
+          }
+          clearancePdfCompletedJobRef.current = jobId;
           setClearancePdfStatus("idle");
           setClearancePdfJobId(null);
           setClearancePdfGeneratingForClearanceId(null);
@@ -813,7 +818,7 @@ const AsbestosRemovalJobDetails = () => {
     clearancePdfJobId,
     clearancePdfStatus,
     clearancePdfGeneratingForClearanceId,
-    fetchJobDetails,
+    fetchClearances,
     showSnackbar,
   ]);
 
@@ -1593,7 +1598,7 @@ const AsbestosRemovalJobDetails = () => {
 
       const filename = getAxiosDownloadFilename(
         response,
-        buildShiftChainOfCustodyFilename(job?.projectId?.projectID, shift.date),
+        buildShiftChainOfCustodyFilename(job?.projectId?.projectID),
       );
       triggerBlobDownload(
         new Blob([response.data], { type: "application/pdf" }),
@@ -1611,6 +1616,7 @@ const AsbestosRemovalJobDetails = () => {
     event?.stopPropagation();
     setClearancePdfStartingId(clearance._id);
     setClearancePdfGeneratingForClearanceId(clearance._id);
+    clearancePdfCompletedJobRef.current = null;
     showSnackbar("PDF generation has started. You will be notified when it is ready.", "info");
     setClearancePdfStatus("generating");
     setClearancePdfJobId(null);
@@ -1830,44 +1836,14 @@ const AsbestosRemovalJobDetails = () => {
       if (hasRetainedEnclosureCertificatePdf(clearance)) {
         const { filename } = await downloadEnclosureCertificateByClearanceId(
           clearance._id,
-          { openInNewTab: !clearance.enclosureCertificateApprovedBy },
         );
-        if (clearance.enclosureCertificateApprovedBy) {
-          showSnackbar(`Downloaded: ${filename}`, "success");
-        }
+        showSnackbar(`Downloaded: ${filename}`, "success");
       } else {
         const fullClearance = await asbestosClearanceService.getById(
           clearance._id,
         );
-        const response = await axios.post(
-          "/pdf-docraptor-v2/generate-enclosure-certificate",
-          {
-            clearanceData: fullClearance,
-            enclosureData: {
-              description: fullClearance.enclosureDescription || "",
-              photos: fullClearance.enclosurePhotos || [],
-            },
-          },
-          { responseType: "blob", timeout: 120000 },
-        );
-
-        const pdfBlob = new Blob([response.data], { type: "application/pdf" });
-        const contentDisposition = response.headers["content-disposition"];
-        let filename = `enclosure-certificate-${new Date().toISOString().slice(0, 10)}.pdf`;
-        if (contentDisposition) {
-          const match = contentDisposition.match(/filename="(.+)"/);
-          if (match?.[1]) filename = match[1];
-        }
-
-        const url = window.URL.createObjectURL(pdfBlob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-        showSnackbar("Enclosure certificate generated", "success");
+        const { filename } = await generateEnclosureCertificatePDF(fullClearance);
+        showSnackbar(`Generated and downloaded: ${filename}`, "success");
         await fetchClearances();
       }
 

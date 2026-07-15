@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Box,
   Typography,
@@ -45,6 +45,7 @@ const ExternalCalibrationListPage = ({
   title,
   equipmentSectionTitle,
   equipmentType,
+  equipmentTypes,
   emptyMessage,
   routeBase,
   referenceField,
@@ -56,6 +57,15 @@ const ExternalCalibrationListPage = ({
 }) => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const resolvedEquipmentTypes = useMemo(
+    () =>
+      equipmentTypes?.length
+        ? equipmentTypes
+        : equipmentType
+          ? [equipmentType]
+          : [],
+    [equipmentType, equipmentTypes]
+  );
 
   const [equipment, setEquipment] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -97,14 +107,20 @@ const ExternalCalibrationListPage = ({
     try {
       setLoading(true);
 
-      const [equipmentResponse, allCalibrations] = await Promise.all([
-        equipmentService.getAll({ equipmentType }),
+      const [equipmentResponses, allCalibrations] = await Promise.all([
+        Promise.all(
+          resolvedEquipmentTypes.map((type) =>
+            equipmentService.getAll({ equipmentType: type, limit: 1000 })
+          )
+        ),
         calibrationService.getAll(),
       ]);
 
-      const equipmentList = (equipmentResponse.equipment || []).sort((a, b) =>
-        a.equipmentReference.localeCompare(b.equipmentReference)
-      );
+      const equipmentList = equipmentResponses
+        .flatMap((response) => response.equipment || [])
+        .sort((a, b) =>
+          a.equipmentReference.localeCompare(b.equipmentReference)
+        );
 
       const calibrationsByReference = {};
       for (const cal of Array.isArray(allCalibrations) ? allCalibrations : []) {
@@ -123,16 +139,17 @@ const ExternalCalibrationListPage = ({
         )
       );
     } catch (err) {
-      console.error(`Error fetching ${equipmentType} equipment:`, err);
-      setError(err.message || `Failed to fetch ${equipmentType} equipment`);
+      const label = resolvedEquipmentTypes.join(", ") || "equipment";
+      console.error(`Error fetching ${label} equipment:`, err);
+      setError(err.message || `Failed to fetch ${label} equipment`);
     } finally {
       setLoading(false);
     }
   }, [
     calibrationService,
     enrichWithCalibrations,
-    equipmentType,
     referenceField,
+    resolvedEquipmentTypes,
   ]);
 
   useEffect(() => {

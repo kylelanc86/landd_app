@@ -33,6 +33,7 @@ const sieveCalibrationRoutes = require('./routes/sieveCalibrations');
 const massBalanceCalibrationRoutes = require('./routes/massBalanceCalibrations');
 const micrometerCalibrationRoutes = require('./routes/micrometerCalibrations');
 const caliperCalibrationRoutes = require('./routes/caliperCalibrations');
+const mycometerCalibrationRoutes = require('./routes/mycometerCalibrations');
 const fumeHoodCalibrationRoutes = require('./routes/fumeHoodCalibrations');
 const acetoneVaporiserCalibrationRoutes = require('./routes/acetoneVaporiserCalibrations');
 const riLiquidCalibrationRoutes = require('./routes/riLiquidCalibrations');
@@ -51,6 +52,7 @@ const pdfDocRaptorV2Routes = require('./routes/pdf-docraptor-v2');
 const asbestosAssessmentsRoutes = require('./routes/asbestosAssessments');
 const sampleItemsRoutes = require('./routes/sampleItems');
 const clientSuppliedJobsRoutes = require('./routes/clientSuppliedJobs');
+const mycometerJobsRoutes = require('./routes/mycometerJobs');
 const invoiceItemsRoutes = require('./routes/invoiceItems');
 const iaqRecordsRoutes = require('./routes/iaqRecords');
 const blanksRoutes = require('./routes/blanks');
@@ -309,6 +311,9 @@ connectDB()
     mountCalibrationRoutes('/api/caliper-calibrations', caliperCalibrationRoutes);
     mountCalibrationRoutes('/caliper-calibrations', caliperCalibrationRoutes);
 
+    mountCalibrationRoutes('/api/mycometer-calibrations', mycometerCalibrationRoutes);
+    mountCalibrationRoutes('/mycometer-calibrations', mycometerCalibrationRoutes);
+
     mountCalibrationRoutes('/api/fume-hood-calibrations', fumeHoodCalibrationRoutes);
     mountCalibrationRoutes('/fume-hood-calibrations', fumeHoodCalibrationRoutes);
     
@@ -359,6 +364,9 @@ connectDB()
     
     app.use('/api/client-supplied-jobs', requireAuth, checkTokenBlacklist, clientSuppliedJobsRoutes);
     app.use('/client-supplied-jobs', requireAuth, checkTokenBlacklist, clientSuppliedJobsRoutes);
+
+    app.use('/api/mycometer-jobs', requireAuth, checkTokenBlacklist, mycometerJobsRoutes);
+    app.use('/mycometer-jobs', requireAuth, checkTokenBlacklist, mycometerJobsRoutes);
     
     app.use('/api/invoice-items', requireAuth, checkTokenBlacklist, invoiceItemsRoutes);
     app.use('/invoice-items', requireAuth, checkTokenBlacklist, invoiceItemsRoutes);

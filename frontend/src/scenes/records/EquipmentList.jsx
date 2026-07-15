@@ -36,7 +36,6 @@ import CloseIcon from "@mui/icons-material/Close";
 import HistoryIcon from "@mui/icons-material/History";
 import { formatDate } from "../../utils/dateFormat";
 import { equipmentService } from "../../services/equipmentService";
-import { calibrationFrequencyService } from "../../services/calibrationFrequencyService";
 import { airPumpCalibrationService } from "../../services/airPumpCalibrationService";
 import { flowmeterCalibrationService } from "../../services/flowmeterCalibrationService";
 import { efaService } from "../../services/efaService";
@@ -49,8 +48,19 @@ import furnaceCalibrationService from "../../services/furnaceCalibrationService"
 import pneumaticTesterCalibrationService from "../../services/pneumaticTesterCalibrationService";
 import primaryFlowmeterService from "../../services/primaryFlowmeterService";
 import sieveCalibrationService from "../../services/sieveCalibrationService";
+import mycometerCalibrationService from "../../services/mycometerCalibrationService";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
+
+const DEFAULT_STATUS_FILTER = "Active & Overdue";
+
+const matchesStatusFilter = (itemStatus, filterStatus) => {
+  if (!filterStatus) return true;
+  if (filterStatus === DEFAULT_STATUS_FILTER) {
+    return itemStatus === "Active" || itemStatus === "Calibration Overdue";
+  }
+  return itemStatus === filterStatus;
+};
 
 const EquipmentList = () => {
   const theme = useTheme();
@@ -78,7 +88,6 @@ const EquipmentList = () => {
   const [selectedEquipment, setSelectedEquipment] = useState(null);
   const [calibrationHistory, setCalibrationHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
-  const [calibrationFrequencies, setCalibrationFrequencies] = useState([]);
   const [referenceError, setReferenceError] = useState(null);
   const [duplicateReferenceDialog, setDuplicateReferenceDialog] = useState(false);
   const [duplicateExistingEquipment, setDuplicateExistingEquipment] =
@@ -94,43 +103,11 @@ const EquipmentList = () => {
   const [filters, setFilters] = useState({
     search: "",
     equipmentType: "All Types",
-    status: "Active",
+    status: DEFAULT_STATUS_FILTER,
   });
 
   const handleBackToHome = () => {
     navigate(`/records?view=${view}`);
-  };
-
-  const fetchCalibrationFrequencies = async () => {
-    try {
-      const [fixedResponse, variableResponse] = await Promise.all([
-        calibrationFrequencyService.getFixedFrequencies(),
-        calibrationFrequencyService.getVariableFrequencies(),
-      ]);
-
-      const fixedFrequencies = fixedResponse.data || [];
-      const variableFrequencies = variableResponse.data || [];
-
-      // Combine both types of frequencies for easier lookup
-      const allFrequencies = [
-        ...fixedFrequencies.map((freq) => ({
-          ...freq,
-          type: "fixed",
-          displayText: `Every ${freq.frequencyValue} ${freq.frequencyUnit}`,
-        })),
-        ...variableFrequencies.map((freq) => ({
-          ...freq,
-          type: "variable",
-          displayText: freq.calibrationRequirements,
-        })),
-      ];
-
-      setCalibrationFrequencies(allFrequencies);
-    } catch (err) {
-      console.error("Error fetching calibration frequencies:", err);
-      // Don't set error state for calibration frequencies as it's not critical
-      setCalibrationFrequencies([]);
-    }
   };
 
   // Fetch full equipment list and cache it (only fetch once or when explicitly needed)
@@ -138,36 +115,19 @@ const EquipmentList = () => {
     async (forceRefresh = false) => {
       // If we have already loaded and not forcing refresh, skip
       if (hasLoadedRef.current && !forceRefresh) {
-        console.log(
-          "EquipmentList: Skipping fetch - already loaded and not forcing refresh",
-        );
         return;
       }
 
-      console.log(
-        "EquipmentList: Starting fetchEquipment, forceRefresh:",
-        forceRefresh,
-      );
       try {
         setLoading(true);
         setError(null);
 
-        // Fetch all equipment (no filters) to build cache
-        console.log("EquipmentList: Fetching all equipment...");
         const response = await equipmentService.getAll({
-          limit: 1000, // Get a large number to cache everything
+          limit: 1000,
         });
         const baseEquipment = response.equipment || [];
-        console.log(
-          `EquipmentList: Fetched ${baseEquipment.length} equipment items`,
-        );
 
-        // Keep table load fast: do not fetch calibration data here.
-        const equipmentWithCalibrations = baseEquipment;
-        console.log(
-          `EquipmentList: Caching ${equipmentWithCalibrations.length} equipment items`,
-        );
-        setCachedEquipment(equipmentWithCalibrations);
+        setCachedEquipment(baseEquipment);
         hasLoadedRef.current = true;
       } catch (err) {
         console.error("Error fetching equipment:", err);
@@ -184,19 +144,13 @@ const EquipmentList = () => {
   };
 
   useEffect(() => {
-    fetchCalibrationFrequencies();
     fetchEquipment(true); // Force initial fetch
   }, []); // Only run once on mount
 
   // Listen for equipment data updates from other components
   useEffect(() => {
-    const handleEquipmentDataUpdate = (event) => {
-      console.log(
-        "Equipment data updated, refreshing Equipment List:",
-        event.detail,
-      );
+    const handleEquipmentDataUpdate = () => {
       fetchEquipment(true); // Force refresh equipment data cache
-      fetchCalibrationFrequencies(); // Also refresh calibration frequencies
     };
 
     window.addEventListener("equipmentDataUpdated", handleEquipmentDataUpdate);
@@ -229,7 +183,7 @@ const EquipmentList = () => {
     const reasons = [];
     const itemStatus = item.calculatedStatus || calculateStatus(item);
 
-    if (filters.status && filters.status !== itemStatus) {
+    if (!matchesStatusFilter(itemStatus, filters.status)) {
       reasons.push(
         `Status filter is "${filters.status}" but this equipment is "${itemStatus}"`,
       );
@@ -748,6 +702,27 @@ const EquipmentList = () => {
           }
           break;
 
+        case "Mycometer Analyser":
+        case "Mycometer Rotameter":
+          try {
+            const mycometerData =
+              await mycometerCalibrationService.getByEquipment(
+                equipmentReference,
+              );
+            history = (mycometerData.data || mycometerData || []).map(
+              (cal) => ({
+                date: cal.date,
+                calibrationId: cal.calibrationId || cal._id,
+                notes: cal.notes || "",
+                calibratedBy: cal.calibratedBy?.name || "N/A",
+                type: "Mycometer Calibration/Servicing",
+              }),
+            );
+          } catch (err) {
+            console.error("Error fetching Mycometer calibrations:", err);
+          }
+          break;
+
         default:
           // For other equipment types, try to find a generic endpoint or show message
           history = [];
@@ -814,13 +789,6 @@ const EquipmentList = () => {
     );
   };
 
-  const getCalibrationFrequencyOptions = (equipmentType) => {
-    return calibrationFrequencies.filter(
-      (freq) =>
-        freq.equipmentType.toLowerCase() === equipmentType.toLowerCase(),
-    );
-  };
-
   // Check if equipment reference is unique
   const checkReferenceUniqueness = (reference, excludeId = null) => {
     if (!reference || !reference.trim()) {
@@ -881,30 +849,15 @@ const EquipmentList = () => {
       }
 
       // Status filter (based on calculated status) - always client-side
-      if (filters.status) {
-        if (item.calculatedStatus !== filters.status) {
-          return false;
-        }
+      if (!matchesStatusFilter(item.calculatedStatus, filters.status)) {
+        return false;
       }
 
       return true;
     });
   }, [equipmentWithStatus, filters]);
 
-  if (loading) {
-    return (
-      <Box
-        display="flex"
-        justifyContent="center"
-        alignItems="center"
-        height="100vh"
-      >
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  if (error) {
+  if (error && cachedEquipment.length === 0) {
     return (
       <Box m="20px">
         <Alert severity="error">{error}</Alert>
@@ -1019,7 +972,7 @@ const EquipmentList = () => {
               ))}
             </Select>
           </FormControl>
-          <FormControl size="small" sx={{ minWidth: 120 }}>
+          <FormControl size="small" sx={{ minWidth: 220 }}>
             <InputLabel>Status</InputLabel>
             <Select
               value={filters.status}
@@ -1027,6 +980,9 @@ const EquipmentList = () => {
               onChange={(e) => handleFilterChange("status", e.target.value)}
             >
               <MenuItem value="">All Status</MenuItem>
+              <MenuItem value={DEFAULT_STATUS_FILTER}>
+                Active & Calibration Overdue
+              </MenuItem>
               <MenuItem value="Active">Active</MenuItem>
               <MenuItem value="Calibration Overdue">
                 Calibration Overdue
@@ -1040,7 +996,7 @@ const EquipmentList = () => {
               setFilters({
                 search: "",
                 equipmentType: "All Types",
-                status: "Active",
+                status: DEFAULT_STATUS_FILTER,
               })
             }
             size="small"
@@ -1090,6 +1046,7 @@ const EquipmentList = () => {
       >
         <DataGrid
           rows={filteredEquipment}
+          loading={loading}
           sortingOrder={["desc", "asc"]}
           columns={[
             {

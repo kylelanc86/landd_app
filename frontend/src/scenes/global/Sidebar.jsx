@@ -624,6 +624,14 @@ const Sidebar = () => {
             icon={<DangerousIcon />}
           />
 
+          {isAdmin && (
+            <CollapsibleSection
+              title="Mycometer Sampling"
+              to="/mycometer-sampling"
+              icon={<ScienceIcon />}
+            />
+          )}
+
           {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
             <CollapsibleSection
               title="Fibre Identification"

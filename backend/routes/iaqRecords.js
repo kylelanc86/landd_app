@@ -11,6 +11,10 @@ const {
 const { formatDateSydney, todaySydney } = require('../utils/dateUtils');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
+const {
+  buildIAQFilename,
+  toReportReference,
+} = require('../utils/reportFilenames');
 
 // Get all IAQ records
 router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
@@ -74,24 +78,45 @@ router.patch('/:id', auth, checkPermission(['projects.edit']), async (req, res) 
     if (req.body.status !== undefined) {
       record.status = req.body.status;
       const completeStatuses = ['Complete - Satisfactory', 'Complete - Failed'];
+      const hasAnalysisDates =
+        (record.analysisDates && record.analysisDates.length > 0) ||
+        (Array.isArray(req.body.analysisDates) && req.body.analysisDates.length > 0);
       if (
         completeStatuses.includes(req.body.status) &&
         !record.analysisDate &&
-        req.body.analysisDate === undefined
+        !hasAnalysisDates &&
+        req.body.analysisDate === undefined &&
+        req.body.analysisDates === undefined
       ) {
-        record.analysisDate = new Date();
+        const today = new Date();
+        record.analysisDate = today;
+        record.analysisDates = [today];
       }
+    }
+    if (req.body.analysisDates !== undefined) {
+      record.analysisDates = Array.isArray(req.body.analysisDates)
+        ? req.body.analysisDates
+            .filter(Boolean)
+            .map((d) => new Date(d))
+        : [];
+      record.analysisDate = record.analysisDates[0] || null;
     }
     if (req.body.analysisDate !== undefined) {
       record.analysisDate = req.body.analysisDate
         ? new Date(req.body.analysisDate)
         : null;
+      if (!record.analysisDates?.length && record.analysisDate) {
+        record.analysisDates = [record.analysisDate];
+      }
     }
     if (req.body.reportApprovedBy !== undefined) {
       record.reportApprovedBy = req.body.reportApprovedBy;
     }
     if (req.body.reportIssueDate !== undefined) {
-      record.reportIssueDate = req.body.reportIssueDate;
+      // Preserve the first authorisation date for filename continuity.
+      if (!record.reportIssueDate) {
+        record.reportIssueDate = req.body.reportIssueDate;
+      }
     }
     if (req.body.analysedBy !== undefined) {
       record.analysedBy = req.body.analysedBy;
@@ -123,8 +148,11 @@ router.post('/:id/unlock-analysis', auth, checkPermission(['projects.edit']), as
     }
 
     record.status = 'Samples Submitted to Lab';
+    if (record.reportApprovedBy) {
+      record.revision = (typeof record.revision === 'number' ? record.revision : 0) + 1;
+    }
     record.reportApprovedBy = null;
-    record.reportIssueDate = null;
+    // Preserve first reportIssueDate / reportReference for stable filenames across revisions.
     record.authorisationRequestedBy = null;
     record.authorisationRequestedByEmail = null;
     record.reportViewedAt = null;
@@ -165,12 +193,24 @@ router.post('/:id/authorise', auth, checkPermission(['projects.edit']), async (r
         : req.user?.email || 'Unknown';
 
     record.reportApprovedBy = approver;
-    record.reportIssueDate = new Date();
+    if (!record.reportIssueDate) {
+      record.reportIssueDate = new Date();
+    }
     record.updatedAt = new Date();
 
-    const updatedRecord = await record.save();
-
     const iaqReference = generateIAQReference(record);
+    if (!record.reportReference) {
+      record.reportReference = toReportReference(
+        buildIAQFilename({
+          monitoringDate: record.monitoringDate,
+          reportIssueDate: record.reportIssueDate,
+          includeRevision: false,
+          includeExtension: false,
+        }),
+      );
+    }
+
+    const updatedRecord = await record.save();
 
     await notifyAuthorisationRequesterOnApproval({
       authorisationRequestedBy: updatedRecord.authorisationRequestedBy,
@@ -197,7 +237,7 @@ router.post('/:id/authorise', auth, checkPermission(['projects.edit']), async (r
   }
 });
 
-// Helper function to generate IAQ reference (simplified version)
+// Helper function to generate month/year IAQ reference for samples and notifications.
 function generateIAQReference(record) {
   if (!record || !record.monitoringDate) return 'N/A';
   const dateObj = new Date(record.monitoringDate);

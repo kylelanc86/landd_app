@@ -37,6 +37,7 @@ import { useSnackbar } from "../../context/SnackbarContext";
 import { useAuth } from "../../context/AuthContext";
 import { hasPermission } from "../../config/permissions";
 import { generateIAQReport } from "../../utils/generateIAQReport";
+import { generateIAQReference } from "../../utils/iaqReference";
 import MailIcon from "@mui/icons-material/Mail";
 
 const IndoorAirQuality = () => {
@@ -102,36 +103,6 @@ const IndoorAirQuality = () => {
   const handleSetToday = () => {
     setMonitoringDate(formatDateForInput(new Date()));
     setDateError(null);
-  };
-
-  // Generate IAQ Reference: {Month} - {Year} - {x}
-  const generateIAQReference = (record, allRecords) => {
-    const dateObj = new Date(record.monitoringDate);
-    const month = dateObj.toLocaleString("default", { month: "short" });
-    const year = dateObj.getFullYear();
-    const monthYear = `${month} ${year}`;
-
-    // Find all records for the same month-year, sorted by creation time
-    const sameMonthYearRecords = allRecords
-      .filter((r) => {
-        const recordDate = new Date(r.monitoringDate);
-        return (
-          recordDate.getMonth() === dateObj.getMonth() &&
-          recordDate.getFullYear() === dateObj.getFullYear()
-        );
-      })
-      .sort((a, b) => {
-        // Sort by creation time to maintain order
-        return new Date(a.createdAt) - new Date(b.createdAt);
-      });
-
-    // Find the position of the current record (1-indexed)
-    const reportNumber =
-      sameMonthYearRecords.findIndex(
-        (r) => r._id === record._id || r.id === record.id,
-      ) + 1;
-
-    return `${monthYear} - ${reportNumber}`;
   };
 
   const handleAddRecord = async () => {
@@ -490,7 +461,7 @@ const IndoorAirQuality = () => {
                 </TableHead>
                 <TableBody>
                   {sortedRecords.map((record) => {
-                    const iaqReference = generateIAQReference(record, records);
+                    const iaqReference = generateIAQReference(record);
                     const recordId = record._id || record.id;
                     return (
                       <TableRow

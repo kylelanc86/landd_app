@@ -131,6 +131,8 @@ const leadClearanceSchema = new mongoose.Schema(
     ],
     reportApprovedBy: { type: String, required: false },
     reportIssueDate: { type: Date, required: false },
+    /** Frozen report reference = first-authorisation filename (no .pdf, no revX). */
+    reportReference: { type: String, required: false },
     authorisationRequestedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

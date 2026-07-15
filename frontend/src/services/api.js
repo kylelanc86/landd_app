@@ -269,10 +269,6 @@ export const projectService = {
   delete: (id) => api.delete(`/projects/${id}`),
   checkDependencies: (id) => api.get(`/projects/${id}/dependencies`),
   getTimeLogs: (projectId) => api.get(`/projects/${projectId}/timelogs`),
-  // Get project IDs that have active jobs or reports (optimized for reports page)
-  getProjectIdsWithReportsOrJobs: () => api.get('/projects/with-reports-or-jobs/ids'),
-  // Get projects by array of IDs (optimized for reports page)
-  getProjectsByIds: (projectIds) => api.post('/projects/by-ids', { projectIds }),
 };
 
 // Sample service
@@ -331,6 +327,19 @@ export const shiftService = {
     formData.append("file", file);
     return api.post(`/air-monitoring-shifts/${id}/upload-analysis-report`, formData);
   },
+  uploadAnalysisReports: (id, files) => {
+    const formData = new FormData();
+    (files || []).forEach((file) => formData.append("files", file));
+    return api.post(`/air-monitoring-shifts/${id}/upload-analysis-report`, formData);
+  },
+  saveAnalysisReports: (id, { manifest, filesByKey }) => {
+    const formData = new FormData();
+    formData.append("manifest", JSON.stringify(manifest || []));
+    Object.entries(filesByKey || {}).forEach(([key, file]) => {
+      formData.append(key, file);
+    });
+    return api.put(`/air-monitoring-shifts/${id}/analysis-reports`, formData);
+  },
   getAnalysisReportUrl: (id) => `${api.defaults.baseURL}/air-monitoring-shifts/${id}/analysis-report`,
 };
 
@@ -365,7 +374,8 @@ export const userService = {
   getAsbestosAssessors: () => api.get('/users/asbestos-assessors'),
   getTechnicians: () => api.get('/users/technicians'),
   getFibreCounters: () => api.get('/users/fibre-counters'),
-  getFibreIdentifiers: () => api.get('/users/fibre-identifiers')
+  getFibreIdentifiers: () => api.get('/users/fibre-identifiers'),
+  getMycometerCertified: () => api.get('/users/mycometer-certified')
 };
 
 // User preferences service
@@ -548,6 +558,56 @@ export const clientSuppliedJobsService = {
   sendForApproval: (id) => api.post(`/client-supplied-jobs/${id}/send-for-approval`),
   authorise: (id) => api.post(`/client-supplied-jobs/${id}/authorise`),
   sendForAuthorisation: (id) => api.post(`/client-supplied-jobs/${id}/send-for-authorisation`)
+};
+
+export const mycometerJobsService = {
+  getAll: () => api.get('/mycometer-jobs'),
+  getById: (id) => api.get(`/mycometer-jobs/${id}`),
+  create: (data) => api.post('/mycometer-jobs', data),
+  update: (id, data) => api.put(`/mycometer-jobs/${id}`, data),
+  addReport: (id, data) => api.post(`/mycometer-jobs/${id}/reports`, data),
+  updateReport: (id, sampleType, data) =>
+    api.put(
+      `/mycometer-jobs/${id}/reports/${encodeURIComponent(sampleType)}`,
+      data,
+    ),
+  deleteReport: (id, sampleType) =>
+    api.delete(
+      `/mycometer-jobs/${id}/reports/${encodeURIComponent(sampleType)}`,
+    ),
+  updateSampleType: (id, sampleType, data) =>
+    api.put(
+      `/mycometer-jobs/${id}/sample-types/${encodeURIComponent(sampleType)}`,
+      data,
+    ),
+  completeSampling: (id, sampleType, data) =>
+    api.post(
+      `/mycometer-jobs/${id}/sample-types/${encodeURIComponent(sampleType)}/complete-sampling`,
+      data,
+    ),
+  reopenSampleType: (id, sampleType) =>
+    api.patch(
+      `/mycometer-jobs/${id}/sample-types/${encodeURIComponent(sampleType)}/reopen`,
+    ),
+  updateAnalysis: (id, sampleType, data) =>
+    api.put(
+      `/mycometer-jobs/${id}/sample-types/${encodeURIComponent(sampleType)}/analysis`,
+      data,
+    ),
+  markReportViewed: (id, sampleType, data = {}) =>
+    api.put(
+      `/mycometer-jobs/${id}/sample-types/${encodeURIComponent(sampleType)}/report-viewed`,
+      data,
+    ),
+  authorise: (id, sampleType) =>
+    api.post(
+      `/mycometer-jobs/${id}/sample-types/${encodeURIComponent(sampleType)}/authorise`,
+    ),
+  sendForAuthorisation: (id, sampleType) =>
+    api.post(
+      `/mycometer-jobs/${id}/sample-types/${encodeURIComponent(sampleType)}/send-for-authorisation`,
+    ),
+  delete: (id) => api.delete(`/mycometer-jobs/${id}`),
 };
 
 export default api; 

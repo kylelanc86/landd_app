@@ -1,6 +1,12 @@
 import pdfMake from "pdfmake/build/pdfmake";
 import { formatDateInSydney } from '../utils/dateUtils';
 import { compareLabReference } from '../utils/formatters';
+import {
+  buildFibreIDFilename,
+  toReportReference,
+  withRevisionAndExtension,
+} from './reportFilenames';
+import { buildLabReportFooter } from './pdfFooter';
 
 // Helper to format date as DD/MM/YYYY in Sydney timezone (for report issue date, sample date)
 function formatDate(dateStr) {
@@ -193,6 +199,24 @@ pdfMake.fonts = {
   });
   const textMeasurer = createPdfTextMeasurer();
 
+  const projectID = assessment?.projectId?.projectID || '';
+  const siteName = assessment?.projectId?.name || '';
+  const issueDate = reportIssueDate || assessment?.reportIssueDate || null;
+  const revision = assessment?.revision || 0;
+  const reportReference =
+    toReportReference(assessment?.fibreIdReportReference) ||
+    toReportReference(assessment?.reportReference) ||
+    toReportReference(
+      buildFibreIDFilename({
+        projectId: projectID,
+        siteName,
+        reportIssueDate: issueDate,
+        includeRevision: false,
+        includeExtension: false,
+      }),
+    );
+  const filename = withRevisionAndExtension(reportReference, revision, true);
+
   // Sort sample items by lab reference (numeric order: Lab1, Lab2, ..., Lab9, Lab10, not text order)
   const sortedSampleItems = [...sampleItems].sort(compareLabReference);
 
@@ -361,7 +385,13 @@ pdfMake.fonts = {
                       { text: [ { text: 'L&D Job Reference: ', bold: true }, { text: assessment?.projectId?.projectID || '' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: [ { text: 'No. of Samples: ', bold: true }, { text: sampleItems.length.toString() } ], style: 'tableContent', margin: [0, 0, 0, 2] },
                       { text: [ { text: 'Analysed by: ', bold: true }, { text: analyst || 'Jordan Smith' } ], style: 'tableContent', margin: [0, 0, 0, 2] },
-                      { text: [ { text: 'Report Issue Date: ', bold: true }, { text: formatDate(new Date()) } ], style: 'tableContent', margin: [0, 0, 0, 2] }, // Always use PDF generation date
+                      { text: [
+                        { text: 'Report Issue Date: ', bold: true },
+                        {
+                          text: issueDate ? formatDate(issueDate) : 'Pending authorisation',
+                          color: issueDate ? 'black' : 'red',
+                        },
+                      ], style: 'tableContent', margin: [0, 0, 0, 2] },
                     ]
                   },
                   {
@@ -852,67 +882,18 @@ pdfMake.fonts = {
     
     footer: (function(nataLogo) {
       return function(currentPage, pageCount) {
-        return {
-          stack: [
-            // Green border above footer
-            {
-              canvas: [
-                { type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 2, lineColor: '#16b12b' }
-              ],
-              margin: [0, 0, 0, 8]
-            },
-            {
-              columns: [
-                {
-                  stack: [
-                    { text: `Report Reference: ${assessment?.projectId?.projectID}`, fontSize: 8 },
-                    { text: `Revision: ${assessment?.revision || 0}`, fontSize: 8 }
-                  ],
-                  alignment: 'left',
-                  width: '30%'
-                },
-                {
-                  stack: nataLogo ? [ { image: 'nataLogo', fit: [180, 54], alignment: 'center' } ] : [],
-                  alignment: 'center',
-                  width: '40%'
-                },
-                {
-                  stack: [
-                    { text: `Page ${currentPage} of ${pageCount}`, alignment: 'right', fontSize: 8 }
-                  ],
-                  alignment: 'right',
-                  width: '30%'
-                }
-              ]
-            }
-          ],
-          margin: [40, 10, 40, 0]
-        };
+        return buildLabReportFooter({
+          reportReference,
+          revision: assessment?.revision || 0,
+          currentPage,
+          pageCount,
+          hasNataLogo: !!nataLogo,
+          lineSpacing: 4,
+          lineWidth: 2,
+        });
       };
     })(nataLogo)
   };
-
-  // Build filename: ProjectID: Fibre ID Report - ProjectName (SampleDate).pdf
-  const projectID = assessment?.projectId?.projectID || '';
-  const projectNameRaw = assessment?.projectId?.name || '';
-  // Preserve common unit-complex naming by converting "/" to ", " in filenames.
-  const projectName = projectNameRaw
-    .replace(/\//g, ', ')
-    .replace(/[^a-zA-Z0-9,._\- ]/g, '');
-  
-  // Get sample date - try to use reportIssueDate first, then first sample's analysedAt, or current date
-  let sampleDate = '';
-  if (reportIssueDate) {
-    const date = new Date(reportIssueDate);
-    sampleDate = !isNaN(date.getTime()) ? formatDate(reportIssueDate) : formatDate(new Date());
-  } else if (sampleItems && sampleItems.length > 0 && sampleItems[0].analysisData?.analysedAt) {
-    const date = new Date(sampleItems[0].analysisData.analysedAt);
-    sampleDate = !isNaN(date.getTime()) ? formatDate(sampleItems[0].analysisData.analysedAt) : formatDate(new Date());
-  } else {
-    sampleDate = formatDate(new Date());
-  }
-  
-  const filename = `${projectID}: Fibre ID Report - ${projectName} (${sampleDate}).pdf`;
 
   const pdfDoc = pdfMake.createPdf(docDefinition, undefined, undefined, {
     // Security options to prevent text selection/copying

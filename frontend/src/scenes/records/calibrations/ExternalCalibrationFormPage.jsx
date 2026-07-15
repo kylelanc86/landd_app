@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Box,
   Typography,
@@ -44,11 +44,13 @@ const ExternalCalibrationFormPage = ({
   title,
   listTitle,
   equipmentType,
+  equipmentTypes,
   equipmentLabel,
   routeBase,
   cacheKey,
   referenceField,
   equipmentIdField,
+  equipmentTypeField,
   calibrationService,
   emptyEquipmentText,
   getInitialFormData,
@@ -56,12 +58,23 @@ const ExternalCalibrationFormPage = ({
   validateForm,
   buildPayload,
   renderExtraFields,
+  equipmentOptionLabel,
+  companyFieldLabel = "Calibration Company",
 }) => {
   const navigate = useNavigate();
   const { calibrationId } = useParams();
   const [searchParams] = useSearchParams();
   const equipmentIdParam = searchParams.get("equipmentId");
   const { currentUser } = useAuth();
+  const resolvedEquipmentTypes = useMemo(
+    () =>
+      equipmentTypes?.length
+        ? equipmentTypes
+        : equipmentType
+          ? [equipmentType]
+          : [],
+    [equipmentType, equipmentTypes]
+  );
 
   const isEditRoute = Boolean(calibrationId);
   const [isEditMode, setIsEditMode] = useState(!isEditRoute);
@@ -72,11 +85,17 @@ const ExternalCalibrationFormPage = ({
   const [formData, setFormData] = useState(getInitialFormData);
 
   const fetchEquipment = useCallback(async () => {
-    const response = await equipmentService.getAll();
-    return (response.equipment || [])
-      .filter((item) => item.equipmentType === equipmentType)
-      .sort((a, b) => a.equipmentReference.localeCompare(b.equipmentReference));
-  }, [equipmentType]);
+    const responses = await Promise.all(
+      resolvedEquipmentTypes.map((type) =>
+        equipmentService.getAll({ equipmentType: type, limit: 1000 })
+      )
+    );
+    return responses
+      .flatMap((response) => response.equipment || [])
+      .sort((a, b) =>
+        a.equipmentReference.localeCompare(b.equipmentReference)
+      );
+  }, [resolvedEquipmentTypes]);
 
   useEffect(() => {
     const loadPage = async () => {
@@ -99,6 +118,9 @@ const ExternalCalibrationFormPage = ({
               ...prev,
               [equipmentIdField]: selected._id,
               [referenceField]: selected.equipmentReference,
+              ...(equipmentTypeField
+                ? { [equipmentTypeField]: selected.equipmentType }
+                : {}),
             }));
           }
         }
@@ -116,6 +138,7 @@ const ExternalCalibrationFormPage = ({
     calibrationService,
     equipmentIdField,
     equipmentIdParam,
+    equipmentTypeField,
     fetchEquipment,
     isEditRoute,
     mapCalibrationToForm,
@@ -130,6 +153,9 @@ const ExternalCalibrationFormPage = ({
       ...prev,
       [equipmentIdField]: equipmentId,
       [referenceField]: selected ? selected.equipmentReference : "",
+      ...(equipmentTypeField
+        ? { [equipmentTypeField]: selected ? selected.equipmentType : "" }
+        : {}),
     }));
     setError(null);
   };
@@ -301,7 +327,14 @@ const ExternalCalibrationFormPage = ({
                       )
                     )
                   }
-                  options={equipmentOptionsFromList(equipmentList)}
+                  options={
+                    equipmentOptionLabel
+                      ? equipmentList.map((item) => ({
+                          value: String(item._id),
+                          label: equipmentOptionLabel(item),
+                        }))
+                      : equipmentOptionsFromList(equipmentList)
+                  }
                   onChange={(e) => handleEquipmentChange(e.target.value)}
                   disabled={isEditRoute}
                   emptyOptionsText={emptyEquipmentText}
@@ -323,7 +356,7 @@ const ExternalCalibrationFormPage = ({
 
             <TextField
               fullWidth
-              label="Calibration Company"
+              label={companyFieldLabel}
               value={formData.calibrationCompany}
               onChange={(e) =>
                 setFormData({ ...formData, calibrationCompany: e.target.value })
@@ -332,7 +365,7 @@ const ExternalCalibrationFormPage = ({
               disabled={lookupViewMode}
             />
 
-            {renderExtraFields({ formData, setFormData, lookupViewMode })}
+            {renderExtraFields?.({ formData, setFormData, lookupViewMode })}
 
             <TextField
               fullWidth

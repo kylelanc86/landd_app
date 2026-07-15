@@ -17,11 +17,9 @@ import BusinessIcon from "@mui/icons-material/Business";
 import SecurityIcon from "@mui/icons-material/Security";
 import ScienceIcon from "@mui/icons-material/Science";
 import PermissionGate from "../../components/PermissionGate";
-import { usePermissions } from "../../hooks/usePermissions";
 
 const SurveysDashboard = () => {
   const navigate = useNavigate();
-  const { isSuperAdmin = false } = usePermissions();
   const theme = useTheme();
   const isTablet = useMediaQuery(theme.breakpoints.down("md"));
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -57,7 +55,8 @@ const SurveysDashboard = () => {
       icon: <ScienceIcon />,
       color: "#9c27b0",
       onClick: () => navigate("/surveys/lead"),
-      underDevelopment: !isSuperAdmin,
+      underDevelopment: true,
+      underDevelopmentLabel: "Under Development",
     },
     {
       id: "commercial-asbestos",
@@ -78,7 +77,7 @@ const SurveysDashboard = () => {
       underDevelopment: true,
     },
     ],
-    [isSuperAdmin, navigate]
+    [navigate]
   );
 
   return (
@@ -155,7 +154,7 @@ const SurveysDashboard = () => {
                           textShadow: "0 2px 4px rgba(0,0,0,0.3)",
                         }}
                       >
-                        Under Development
+                        {module.underDevelopmentLabel || "Under Development"}
                       </Typography>
                     </Box>
                   )}
@@ -291,7 +290,7 @@ const SurveysDashboard = () => {
                           textShadow: "0 2px 4px rgba(0,0,0,0.3)",
                         }}
                       >
-                        Under Development
+                        {module.underDevelopmentLabel || "Under Development"}
                       </Typography>
                     </Box>
                   )}

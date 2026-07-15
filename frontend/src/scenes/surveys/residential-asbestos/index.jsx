@@ -951,10 +951,8 @@ const ResidentialAsbestosAssessment = () => {
       await asbestosAssessmentService.updateAsbestosAssessment(job.id, {
         projectId: orig.projectId?._id || orig.projectId,
         assessmentDate: orig.assessmentDate || job.surveyDate,
-        reportApprovedBy: authoriser,
-        reportIssueDate: now,
         reportAuthorisedBy: authoriser,
-        reportAuthorisedAt: now,
+        reportAuthorisedAt: orig.reportAuthorisedAt || now,
         status: "complete",
       });
 

@@ -852,6 +852,10 @@ const SampleList = () => {
     }
   };
 
+  const handleViewAnalysisDetails = () => {
+    navigate(`/air-monitoring/shift/${shiftId}/analysis?viewOnly=true`);
+  };
+
   // Dictation functions
   const startDictation = () => {
     // If already dictating, stop it first
@@ -1639,6 +1643,25 @@ const SampleList = () => {
           placeholder="Optional notes"
         />
       </Box>
+
+      {isReportAuthorized && (
+        <Box sx={{ mt: 2 }}>
+          <Button
+            variant="outlined"
+            onClick={handleViewAnalysisDetails}
+            sx={{
+              borderColor: theme.palette.primary.main,
+              color: theme.palette.primary.main,
+              "&:hover": {
+                borderColor: theme.palette.primary.dark,
+                backgroundColor: theme.palette.primary.light,
+              },
+            }}
+          >
+            View Analysis Details
+          </Button>
+        </Box>
+      )}
 
       <Box
         sx={{

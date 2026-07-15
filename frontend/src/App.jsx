@@ -57,6 +57,8 @@ import MicrometerPage from "./scenes/records/calibrations/MicrometerPage.jsx";
 import MicrometerCalibrationPage from "./scenes/records/calibrations/MicrometerCalibrationPage.jsx";
 import CalipersPage from "./scenes/records/calibrations/CalipersPage.jsx";
 import CalipersCalibrationPage from "./scenes/records/calibrations/CalipersCalibrationPage.jsx";
+import MycometersPage from "./scenes/records/calibrations/MycometersPage.jsx";
+import MycometersCalibrationPage from "./scenes/records/calibrations/MycometersCalibrationPage.jsx";
 import FumeHoodsPage from "./scenes/records/calibrations/FumeHoodsPage.jsx";
 import FumeHoodsCalibrationPage from "./scenes/records/calibrations/FumeHoodsCalibrationPage.jsx";
 import EquipmentList from "./scenes/records/EquipmentList.jsx";
@@ -68,6 +70,10 @@ import ClientSuppliedSamples from "./scenes/fibreID/ClientSuppliedSamples.jsx";
 import ClientSuppliedFibreCountAnalysis from "./scenes/fibreID/ClientSuppliedFibreCountAnalysis.jsx";
 import ClientSuppliedFibreIDAnalysis from "./scenes/fibreID/ClientSuppliedFibreIDAnalysis.jsx";
 import LDsuppliedAnalysisPage from "./scenes/fibreID/LDsuppliedAnalysisPage.jsx";
+import MycometerAnalysis from "./scenes/laboratory-services/MycometerAnalysis.jsx";
+import MycometerJobReports from "./scenes/laboratory-services/MycometerJobReports.jsx";
+import MycometerSamples from "./scenes/laboratory-services/MycometerSamples.jsx";
+import MycometerSampleAnalysis from "./scenes/laboratory-services/MycometerSampleAnalysis.jsx";
 import UserManual from "./scenes/userManual/UserManual";
 import NotificationCentre from "./scenes/notifications/NotificationCentre.jsx";
 
@@ -1262,6 +1268,42 @@ function App() {
                                   }
                                 />
                                 <Route
+                                  path="/records/laboratory/calibrations/mycometers/new"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <MycometersCalibrationPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/mycometers/edit/:calibrationId"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <MycometersCalibrationPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/records/laboratory/calibrations/mycometers"
+                                  element={
+                                    <ProtectedRoute
+                                      requiredPermissions={[
+                                        "calibrations.view",
+                                      ]}
+                                    >
+                                      <MycometersPage />
+                                    </ProtectedRoute>
+                                  }
+                                />
+                                <Route
                                   path="/records/laboratory/calibrations/fume-hoods/new"
                                   element={
                                     <ProtectedRoute
@@ -1674,6 +1716,46 @@ function App() {
                                       <Suspense fallback={<LoadingSpinner />}>
                                         <ClientSuppliedFibreCountAnalysis />
                                       </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/mycometer-sampling"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["clientSup.view"]}
+                                    >
+                                      <MycometerAnalysis />
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/mycometer-sampling/:jobId/:sampleTypeSlug/analysis"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["clientSup.view"]}
+                                    >
+                                      <MycometerSampleAnalysis />
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/mycometer-sampling/:jobId/:sampleTypeSlug"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["clientSup.view"]}
+                                    >
+                                      <MycometerSamples />
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/mycometer-sampling/:jobId"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["clientSup.view"]}
+                                    >
+                                      <MycometerJobReports />
                                     </PermissionRoute>
                                   }
                                 />

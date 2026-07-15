@@ -306,6 +306,14 @@ const MobileDrawer = ({ open, onClose }) => {
               icon={<DangerousIcon />}
             />
 
+            {isAdmin && (
+              <MenuItem
+                title="Mycometer Sampling"
+                to="/mycometer-sampling"
+                icon={<ScienceIcon />}
+              />
+            )}
+
             {isFeatureEnabled("ADVANCED.FIBRE_ID") && (
               <MenuItem
                 title="Fibre Identification"

@@ -232,6 +232,11 @@ const asbestosClearanceSchema = new mongoose.Schema(
       type: Date,
       required: false,
     },
+    /** Frozen report reference = first-authorisation filename (no .pdf, no revX). */
+    reportReference: {
+      type: String,
+      required: false,
+    },
     authorisationRequestedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -271,6 +276,8 @@ const asbestosClearanceSchema = new mongoose.Schema(
     enclosureCertificateMergedPdfPath: { type: String, required: false },
     enclosureCertificateApprovedBy: { type: String, required: false },
     enclosureCertificateIssueDate: { type: Date, required: false },
+    /** Frozen enclosure report reference at first certificate authorisation (no .pdf, no revX). */
+    enclosureCertificateReportReference: { type: String, required: false },
     enclosureCertificateAuthorisationRequestedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

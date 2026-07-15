@@ -2,21 +2,23 @@ import pdfMake from "pdfmake/build/pdfmake";
 import api from '../services/api';
 import { formatDateInSydney } from '../utils/dateUtils';
 import { uniqueShiftSampleSamplerLabels } from './airMonitoringSamplerDisplay';
+import {
+  buildAsbestosAirMonitoringFilename,
+  buildFibreCountFilename,
+  toReportReference,
+  withRevisionAndExtension,
+} from './reportFilenames';
+import {
+  buildLabReportFooter,
+  FOOTER_TEXT_WIDTH,
+  NATA_LOGO_FOOTER_WIDTH,
+  NATA_LOGO_FOOTER_HEIGHT,
+} from './pdfFooter';
 
 // Helper to format date as DD/MM/YYYY in Sydney timezone (for report authorisation, samples received, issue dates)
 function formatDate(dateStr) {
   if (!dateStr) return '';
   return formatDateInSydney(dateStr);
-}
-
-// Helper to format date as YYYYMMDD for filenames
-function formatDateForFilename(dateStr) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}${month}${day}`;
 }
 
 // Helper to format time as HH:mm
@@ -175,6 +177,38 @@ export async function generateShiftReport({ shift, job, samples, project, openIn
     endDate.setDate(endDate.getDate() + 1);
     sampleDateValue = `${formatDate(startDate)} - ${formatDate(endDate)}`;
   }
+
+  const projectID =
+    job?.projectID ||
+    job?.projectId?.projectID ||
+    project?.projectID ||
+    (samples?.[0]?.fullSampleID ? samples[0].fullSampleID.substring(0, 8) : '') ||
+    job?.jobID ||
+    job?.id ||
+    '';
+  const siteName =
+    project?.name ||
+    job?.projectId?.name ||
+    '';
+  const issueDate = shift?.reportIssueDate || null;
+  const revision = shift?.revision || 0;
+  const sequenceNumber = shift?.sequenceNumber;
+  const filenameBuilder = isClientSupplied
+    ? buildFibreCountFilename
+    : buildAsbestosAirMonitoringFilename;
+  const reportReference =
+    toReportReference(shift?.reportReference) ||
+    toReportReference(
+      filenameBuilder({
+        projectId: projectID,
+        siteName,
+        reportIssueDate: issueDate,
+        sequenceNumber,
+        includeRevision: false,
+        includeExtension: false,
+      }),
+    );
+  const filename = withRevisionAndExtension(reportReference, revision, true);
   
   // Determine base URL for fonts - use window.location.origin to avoid CORS issues
   // Use window.location.origin to load fonts from the same origin as the app
@@ -484,7 +518,7 @@ pdfMake.fonts = {
                         text: [ 
                           { text: 'Report Authorised by: ', bold: true }, 
                           { 
-                            text: shift?.reportApprovedBy || 'Pending authorization',
+                            text: shift?.reportApprovedBy || 'Pending authorisation',
                             color: (!shift?.reportApprovedBy) ? 'red' : 'black'
                           } 
                         ],
@@ -493,7 +527,13 @@ pdfMake.fonts = {
                         width: '50%'
                       },
                       {
-                        text: [ { text: 'Report Issue Date: ', bold: true }, { text: formatDate(new Date()) } ], // PDF generation date (Sydney)
+                        text: [
+                          { text: 'Report Issue Date: ', bold: true },
+                          {
+                            text: issueDate ? formatDate(issueDate) : 'Pending authorisation',
+                            color: issueDate ? 'black' : 'red',
+                          },
+                        ],
                         style: 'tableContent',
                         margin: [0, 0, 0, 2],
                         width: '50%'
@@ -873,55 +913,58 @@ pdfMake.fonts = {
     ],
     footer: (function(nataLogo, job, sortedSamples, companyLogo) {
       return function(currentPage, pageCount) {
+        if (isClientSupplied) {
+          return buildLabReportFooter({
+            reportReference,
+            revision: shift?.revision || 0,
+            currentPage,
+            pageCount,
+            hasNataLogo: !!nataLogo,
+            lineSpacing: 8,
+            lineWidth: 1.5,
+          });
+        }
+
         const footerBlocks = [];
         footerBlocks.push({
-            canvas: [
-            { type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1.5, lineColor: '#16b12b' }
+          canvas: [
+            { type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1.5, lineColor: '#16b12b' },
           ],
-          margin: [0, 0, 0, 8]
+          margin: [0, 0, 0, 8],
         });
         footerBlocks.push({
-            columns: [
-              {
-                stack: [
-                  { text: `Report Reference: ${job?.projectID || (sortedSamples[0]?.fullSampleID ? sortedSamples[0].fullSampleID.substring(0, 8) : '') || job?.jobID || job?.id || ''}`, fontSize: 8 },
-                  { text: `Revision: ${shift?.revision || 0}`, fontSize: 8 }
-                ],
-                alignment: 'left',
-              width: '30%',
-              },
-              {
-              stack: nataLogo ? [ { image: nataLogo, fit: [180, 54], alignment: 'center' } ] : [],
-                alignment: 'center',
-              width: '40%'
-              },
-              {
-                stack: [
-                  { text: `Page ${currentPage} of ${pageCount}`, alignment: 'right', fontSize: 8 }
-                ],
-                alignment: 'right',
-              width: '30%',
-            }
-          ]
+          columns: [
+            {
+              width: FOOTER_TEXT_WIDTH,
+              stack: [
+                { text: `Report Reference: ${reportReference}`, fontSize: 8, margin: [0, 4, 4, 0] },
+                { text: `Revision: ${shift?.revision || 0}`, fontSize: 8, margin: [0, 8, 0, 0] },
+                { text: `Page ${currentPage} of ${pageCount}`, fontSize: 8, margin: [0, 8, 0, 4] },
+              ],
+              alignment: 'left',
+            },
+            {
+              width: NATA_LOGO_FOOTER_WIDTH,
+              stack: nataLogo
+                ? [{
+                    image: 'nataLogo',
+                    width: NATA_LOGO_FOOTER_WIDTH,
+                    height: NATA_LOGO_FOOTER_HEIGHT,
+                    alignment: 'right',
+                  }]
+                : [],
+              alignment: 'right',
+            },
+          ],
         });
 
         return {
           stack: footerBlocks,
-        margin: [40, 10, 40, 0]
-      };
+          margin: [40, 10, 40, 0],
+        };
       };
     })(nataLogo, job || {}, sortedSamples, companyLogo)
   };
-
-  // Build filename
-  const projectID = job?.projectID || job?.projectId?.projectID || (sortedSamples[0]?.fullSampleID ? sortedSamples[0].fullSampleID.substring(0, 8) : '') || job?.jobID || job?.id || '';
-  const projectNameRaw = project?.name || '';
-  const projectName = projectNameRaw
-    .replace(/\//g, ', ')
-    .replace(/[^a-zA-Z0-9,._\- ]/g, '');
-  const samplingDate = shift?.date ? formatDateForFilename(shift.date) : '';
-  const reportType = isClientSupplied ? 'Fibre Count Report' : 'Air Monitoring Report';
-  const filename = `${projectID}: ${reportType} - ${projectName}${samplingDate ? ` (${samplingDate})` : ''}.pdf`;
 
   const pdfDoc = pdfMake.createPdf(docDefinition, undefined, undefined, {
     // Security options to prevent text selection/copying

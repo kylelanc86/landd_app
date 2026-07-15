@@ -3,6 +3,7 @@ export const NOTIFICATION_CENTRE_REFRESH_EVENT = "notificationCentre:refresh";
 const CALIBRATION_MUTATION_PATTERN = /-calibrations(?:\/|$)/i;
 const EXCLUDED_CALIBRATION_PATHS = ["calibration-canonical"];
 const EXCLUDED_CALIBRATION_SUFFIXES = ["/pumps/bulk"];
+const IAQ_MUTATION_PATTERN = /\/iaq-records(?:\/|$)/i;
 
 export const isCalibrationMutationRequest = (config) => {
   const method = config?.method?.toLowerCase();
@@ -51,10 +52,20 @@ export const isEquipmentStatusMutationRequest = (config) => {
 
 export const isNotificationCentreMutationRequest = (config) =>
   isCalibrationMutationRequest(config) ||
-  isEquipmentStatusMutationRequest(config);
+  isEquipmentStatusMutationRequest(config) ||
+  isIaqMutationRequest(config);
 
-// TODO(iaq-notifications): Extend mutation detection for /iaq-records writes.
 // TODO(audit-notifications): Extend mutation detection for /records/audits writes.
+
+export const isIaqMutationRequest = (config) => {
+  const method = config?.method?.toLowerCase();
+  if (!["post", "put", "patch", "delete"].includes(method)) {
+    return false;
+  }
+
+  const url = `${config?.baseURL || ""}${config?.url || ""}`;
+  return IAQ_MUTATION_PATTERN.test(url);
+};
 
 export const requestNotificationCentreRefresh = () => {
   if (typeof window === "undefined") {

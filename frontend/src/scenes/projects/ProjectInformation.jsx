@@ -294,7 +294,11 @@ const ProjectInformation = () => {
         !targetPath.startsWith("/projects/") ||
         (targetPath === "/projects" && currentPath.startsWith("/projects/"))
       ) {
-        setPendingNavigation(targetPath);
+        setPendingNavigation(
+          targetPath === "/projects"
+            ? getReturnNavigation()
+            : { pathname: targetPath },
+        );
         setUnsavedChangesDialogOpen(true);
         return;
       }
@@ -339,7 +343,9 @@ const ProjectInformation = () => {
         e.preventDefault();
         e.stopPropagation();
 
-        setPendingNavigation(href);
+        setPendingNavigation(
+          href === "/projects" ? getReturnNavigation() : { pathname: href },
+        );
         setUnsavedChangesDialogOpen(true);
         return false;
       }
@@ -369,7 +375,7 @@ const ProjectInformation = () => {
       if (hasUnsavedChanges) {
         // Prevent the navigation
         window.history.pushState(null, "", window.location.pathname);
-        setPendingNavigation("/projects");
+        setPendingNavigation(getReturnNavigation());
         setUnsavedChangesDialogOpen(true);
       }
     };
@@ -1134,20 +1140,39 @@ const ProjectInformation = () => {
     }));
   };
 
-  // Helper function to determine return path based on navigation source
-  const getReturnPath = () => {
-    // Check if user came from dashboard
-    if (location.state?.from === "dashboard") {
-      return "/";
+  // Helper function to determine return navigation based on navigation source
+  const getProjectsReturnState = () => {
+    if (location.state?.projectsPagination) {
+      return { paginationModel: location.state.projectsPagination };
     }
-    // Default to projects list
-    return "/projects";
+    return undefined;
+  };
+
+  const getReturnNavigation = () => {
+    if (location.state?.from === "dashboard") {
+      return { pathname: "/" };
+    }
+    return {
+      pathname: "/projects",
+      state: getProjectsReturnState(),
+    };
+  };
+
+  const navigateToReturn = () => {
+    const { pathname, state } = getReturnNavigation();
+    navigate(pathname, state ? { state } : undefined);
   };
 
   // Override navigate function to check for unsaved changes
-  const safeNavigate = (path) => {
-    // If path is "/projects", use conditional return path
-    const targetPath = path === "/projects" ? getReturnPath() : path;
+  const safeNavigate = (path, navState) => {
+    let targetPath = path;
+    let targetState = navState;
+
+    if (path === "/projects") {
+      const returnNav = getReturnNavigation();
+      targetPath = returnNav.pathname;
+      targetState = returnNav.state;
+    }
 
     console.log("🔍 safeNavigate called:", {
       path,
@@ -1158,11 +1183,11 @@ const ProjectInformation = () => {
     });
     if (hasUnsavedChanges) {
       console.log("🔍 Showing unsaved changes dialog");
-      setPendingNavigation(targetPath);
+      setPendingNavigation({ pathname: targetPath, state: targetState });
       setUnsavedChangesDialogOpen(true);
     } else {
       console.log("🔍 Navigating directly");
-      navigate(targetPath);
+      navigate(targetPath, targetState ? { state: targetState } : undefined);
     }
   };
 
@@ -1172,13 +1197,17 @@ const ProjectInformation = () => {
     setHasUnsavedChanges(false);
 
     // Navigate to the pending location (either local or global)
-    // If pending navigation is "/projects", use conditional return path
-    let targetPath = pendingNavigation || window.pendingNavigation;
-    if (targetPath === "/projects") {
-      targetPath = getReturnPath();
+    let pendingNav = pendingNavigation || window.pendingNavigation;
+    if (pendingNav === "/projects") {
+      pendingNav = getReturnNavigation();
+    } else if (typeof pendingNav === "string") {
+      pendingNav = { pathname: pendingNav };
     }
-    if (targetPath) {
-      navigate(targetPath);
+    if (pendingNav) {
+      navigate(
+        pendingNav.pathname,
+        pendingNav.state ? { state: pendingNav.state } : undefined,
+      );
       setPendingNavigation(null);
       window.pendingNavigation = null;
     }
@@ -1428,7 +1457,7 @@ const ProjectInformation = () => {
 
         // Navigate to projects page after successful creation if shouldNavigate is true
         if (shouldNavigate) {
-          navigate("/projects");
+          navigateToReturn();
         }
         return; // Exit early
       }
@@ -1463,7 +1492,7 @@ const ProjectInformation = () => {
         }
         // Navigate to projects page or dashboard after successful update if shouldNavigate is true
         if (shouldNavigate) {
-          navigate(getReturnPath());
+          navigateToReturn();
         }
       }
     } catch (error) {
@@ -1595,7 +1624,7 @@ const ProjectInformation = () => {
       }
 
       // Success - navigate to projects list or dashboard depending on source
-      navigate(getReturnPath());
+      navigateToReturn();
     } catch (error) {
       console.error("❌ PROJECT DELETE ERROR", {
         projectId: id,
@@ -1645,7 +1674,13 @@ const ProjectInformation = () => {
                 variant="contained"
                 color="primary"
                 startIcon={<DescriptionIcon />}
-                onClick={() => safeNavigate(`/reports/project/${id}`)}
+                onClick={() =>
+                  safeNavigate(`/reports/project/${id}`, {
+                    from: "project-info",
+                    projectId: id,
+                    projectsPagination: location.state?.projectsPagination,
+                  })
+                }
               >
                 Project Reports
               </Button>

@@ -80,6 +80,12 @@ import { formatDate } from "../../utils/dateFormat";
 import { getTodayInSydney } from "../../utils/dateUtils";
 import { hasPermission } from "../../config/permissions";
 import PermissionGate from "../../components/PermissionGate";
+import AnalysisReportFileList from "./AnalysisReportFileList";
+import {
+  buildAnalysisReportItemsFromShift,
+  hasAnalysisReportChanges,
+  persistAnalysisReportItems,
+} from "./analysisReportFiles";
 
 const TIMING_LOG_PREFIX = "[LeadRemovalJobDetails]";
 const TIMING_ENABLED = false;
@@ -210,7 +216,7 @@ const LeadRemovalJobDetails = () => {
   const [attachAnalysisLeadContent, setAttachAnalysisLeadContent] = useState(
     {},
   );
-  const [attachAnalysisFile, setAttachAnalysisFile] = useState(null);
+  const [attachAnalysisReportItems, setAttachAnalysisReportItems] = useState([]);
   const [attachAnalysisSaving, setAttachAnalysisSaving] = useState(false);
   const [attachAnalysisSamplesLoading, setAttachAnalysisSamplesLoading] =
     useState(false);
@@ -1270,12 +1276,19 @@ const LeadRemovalJobDetails = () => {
       setAttachAnalysisShift(shift);
       setAttachAnalysisModalOpen(true);
       setAttachAnalysisLeadContent({});
-      setAttachAnalysisFile(null);
+      setAttachAnalysisReportItems([]);
       setAttachAnalysisSamplesLoading(true);
       setAttachAnalysisSamples([]);
       try {
-        const res = await leadAirSampleService.getByShift(shift._id);
-        const samples = (res.data || []).sort((a, b) => {
+        const [shiftRes, samplesRes] = await Promise.all([
+          shiftService.getById(shift._id),
+          leadAirSampleService.getByShift(shift._id),
+        ]);
+        setAttachAnalysisShift(shiftRes.data);
+        setAttachAnalysisReportItems(
+          buildAnalysisReportItemsFromShift(shiftRes.data),
+        );
+        const samples = (samplesRes.data || []).sort((a, b) => {
           const numA =
             parseInt(
               String(a.sampleNumber || a.fullSampleID || "").replace(
@@ -1315,17 +1328,23 @@ const LeadRemovalJobDetails = () => {
     setAttachAnalysisShift(null);
     setAttachAnalysisSamples([]);
     setAttachAnalysisLeadContent({});
-    setAttachAnalysisFile(null);
+    setAttachAnalysisReportItems([]);
   }, []);
 
   const handleSaveAttachAnalysis = useCallback(async () => {
     if (!attachAnalysisShift?._id) return;
     setAttachAnalysisSaving(true);
     try {
-      if (attachAnalysisFile) {
-        await shiftService.uploadAnalysisReport(
+      const reportsChanged = hasAnalysisReportChanges(
+        attachAnalysisReportItems,
+        attachAnalysisShift,
+      );
+      if (reportsChanged) {
+        await persistAnalysisReportItems(
           attachAnalysisShift._id,
-          attachAnalysisFile,
+          attachAnalysisReportItems,
+          attachAnalysisShift,
+          shiftService,
         );
       }
       for (const sample of attachAnalysisSamples) {
@@ -1362,21 +1381,25 @@ const LeadRemovalJobDetails = () => {
           });
         }
       }
-      if (attachAnalysisFile) {
-        const allLeadContentEntered = attachAnalysisSamples.every(
-          (s) => String(attachAnalysisLeadContent[s._id] ?? "").trim() !== "",
-        );
-        await shiftService.update(attachAnalysisShift._id, {
-          status: allLeadContentEntered
-            ? "shift_complete"
-            : "analysis_complete",
-        });
-        showSnackbar(
-          allLeadContentEntered
-            ? "Analysis report attached, lead content saved, and shift marked complete."
-            : "Analysis report attached - lead content incomplete.",
-          "success",
-        );
+      if (reportsChanged) {
+        if (attachAnalysisReportItems.length > 0) {
+          const allLeadContentEntered = attachAnalysisSamples.every(
+            (s) => String(attachAnalysisLeadContent[s._id] ?? "").trim() !== "",
+          );
+          await shiftService.update(attachAnalysisShift._id, {
+            status: allLeadContentEntered
+              ? "shift_complete"
+              : "analysis_complete",
+          });
+          showSnackbar(
+            allLeadContentEntered
+              ? "Analysis report(s) attached, lead content saved, and shift marked complete."
+              : "Analysis report(s) attached - lead content incomplete.",
+            "success",
+          );
+        } else {
+          showSnackbar("Analysis reports removed.", "success");
+        }
       } else {
         showSnackbar("Lead content saved.", "success");
       }
@@ -1392,7 +1415,7 @@ const LeadRemovalJobDetails = () => {
     attachAnalysisShift,
     attachAnalysisSamples,
     attachAnalysisLeadContent,
-    attachAnalysisFile,
+    attachAnalysisReportItems,
     showSnackbar,
     fetchJobDetails,
     handleCloseAttachAnalysisModal,
@@ -1659,7 +1682,7 @@ const LeadRemovalJobDetails = () => {
 
       const filename = getAxiosDownloadFilename(
         response,
-        buildShiftChainOfCustodyFilename(job?.projectId?.projectID, shift.date),
+        buildShiftChainOfCustodyFilename(job?.projectId?.projectID),
       );
       triggerBlobDownload(
         new Blob([response.data], { type: "application/pdf" }),
@@ -3630,7 +3653,7 @@ const LeadRemovalJobDetails = () => {
       <Dialog
         open={attachAnalysisModalOpen}
         onClose={handleCloseAttachAnalysisModal}
-        maxWidth="sm"
+        maxWidth="md"
         fullWidth
         PaperProps={{
           sx: {
@@ -3639,36 +3662,18 @@ const LeadRemovalJobDetails = () => {
           },
         }}
       >
-        <DialogTitle sx={{ pb: 1, px: 3, pt: 3 }}>
+        <DialogTitle sx={{ pb: 1, px: 3, pt: 3,mb: 1 }}>
           Attach Analysis Report
         </DialogTitle>
         <DialogContent sx={{ px: 3, pt: 1, pb: 2 }}>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Upload a PDF analysis report and enter lead content (μg/filter) for
-            each sample. Lead concentration (mg/m³) is calculated as lead
-            content ÷ (flowrate × minutes).
-          </Typography>
+
           <Box sx={{ mb: 3 }}>
-            <Typography variant="subtitle2" sx={{ mb: 1 }}>
-              PDF Report
-            </Typography>
-            <Button
-              variant="outlined"
-              component="label"
-              size="small"
-              sx={{ textTransform: "none" }}
-            >
-              {attachAnalysisFile ? attachAnalysisFile.name : "Choose PDF file"}
-              <input
-                type="file"
-                hidden
-                accept=".pdf,application/pdf"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) setAttachAnalysisFile(f);
-                }}
-              />
-            </Button>
+
+            <AnalysisReportFileList
+              items={attachAnalysisReportItems}
+              onChange={setAttachAnalysisReportItems}
+              disabled={attachAnalysisSaving}
+            />
           </Box>
           <Typography variant="subtitle2" sx={{ mb: 1 }}>
             Lead content
@@ -3715,7 +3720,7 @@ const LeadRemovalJobDetails = () => {
                           [sample._id]: e.target.value,
                         }))
                       }
-                      sx={{ width: 90 }}
+                      sx={{ width: 190 }}
                       inputProps={{
                         "aria-label": `Lead content for sample ${displayLabel}`,
                         style: { padding: "6px 8px", fontSize: "0.875rem" },

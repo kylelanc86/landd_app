@@ -75,6 +75,11 @@ const clientSuppliedJobSchema = new mongoose.Schema({
     type: Date,
     required: false
   },
+  /** Frozen authorised filename without .pdf / revX (set on first authorisation). */
+  reportReference: {
+    type: String,
+    required: false
+  },
   authorisationRequestedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

@@ -1,14 +1,78 @@
 import pdfMake from "pdfmake/build/pdfmake";
 import api, { userService } from "../services/api";
+import {
+  buildLeadAirMonitoringFilename,
+  toReportReference,
+  withRevisionAndExtension,
+} from "./reportFilenames";
+import { FOOTER_CONTENT_WIDTH } from "./pdfFooter";
 
-function formatDate(dateStr) {
-  if (!dateStr) return "";
-  const d = new Date(dateStr);
-  return d.toLocaleDateString("en-AU", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+const LEAD_GREEN_RULE_WIDTH = 520;
+
+const LEAD_FOOTER_PAGE_WIDTH = Math.round(FOOTER_CONTENT_WIDTH * 0.1);
+const LEAD_FOOTER_TEXT_WIDTH = FOOTER_CONTENT_WIDTH - LEAD_FOOTER_PAGE_WIDTH;
+
+function buildLeadMonitoringFooter({
+  reportReference,
+  revision,
+  currentPage,
+  mainPageCount,
+  isMainReportPage,
+}) {
+  return {
+    stack: [
+      {
+        canvas: [
+          {
+            type: "line",
+            x1: 0,
+            y1: 0,
+            x2: LEAD_GREEN_RULE_WIDTH,
+            y2: 0,
+            lineWidth: 1.5,
+            lineColor: "#16b12b",
+          },
+        ],
+        margin: [0, 0, 0, 8],
+      },
+      {
+        width: FOOTER_CONTENT_WIDTH,
+        table: {
+          widths: [LEAD_FOOTER_TEXT_WIDTH, LEAD_FOOTER_PAGE_WIDTH],
+          body: [
+            [
+              {
+                stack: [
+                  {
+                    text: `Report Reference: ${reportReference}`,
+                    fontSize: 8,
+                  },
+                  {
+                    text: `Revision: ${revision ?? 0}`,
+                    fontSize: 8,
+                    margin: [0, 4, 0, 0],
+                  },
+                ],
+              },
+              {
+                stack: isMainReportPage
+                  ? [
+                      {
+                        text: `Page ${currentPage} of ${mainPageCount}`,
+                        fontSize: 8,
+                        alignment: "right",
+                      },
+                    ]
+                  : [],
+              },
+            ],
+          ],
+        },
+        layout: "noBorders",
+      },
+    ],
+    margin: [40, 6, 40, 0],
+  };
 }
 
 function formatDateLong(dateStr) {
@@ -19,12 +83,6 @@ function formatDateLong(dateStr) {
     month: "long",
     year: "numeric",
   });
-}
-
-function formatDateForFilename(dateStr) {
-  if (!dateStr) return "";
-  const d = new Date(dateStr);
-  return d.toISOString().slice(0, 10).replace(/-/g, "");
 }
 
 function formatTime(timeStr) {
@@ -92,7 +150,7 @@ function getSamplerName(shift) {
  * Generate Lead Monitoring Shift Report PDF (letter-style 3-pager).
  * Includes main report, Appendix A cover page (page 2), and attached analysis report when available.
  * @param {Object} options
- * @param {Object} options.shift - Shift record (_id, analysisReportPath, date, supervisor, defaultSampler)
+ * @param {Object} options.shift - Shift record (_id, analysisReportPath, analysisReportFiles, date, supervisor, defaultSampler)
  * @param {Object} options.job - LeadRemovalJob (leadAbatementContractor, projectName, client)
  * @param {Array} options.samples - Lead air samples (fullSampleID, location, startTime, endTime, averageFlowrate, leadContent, leadConcentration)
  * @param {Object} options.project - Project (name, address, client)
@@ -166,12 +224,38 @@ export async function generateLeadMonitoringShiftReport({
     return aNum - bNum;
   });
 
-  const reportRef =
+  const projectID =
     project?.projectID ||
     job?.projectId?.projectID ||
     job?.projectId?.projectId?.projectID ||
-    (sortedSamples[0]?.fullSampleID ? sortedSamples[0].fullSampleID.substring(0, 8) : "") ||
+    (sortedSamples[0]?.fullSampleID
+      ? sortedSamples[0].fullSampleID.substring(0, 8)
+      : "") ||
     "";
+  const siteNameForFilename =
+    project?.name ||
+    job?.projectName ||
+    job?.projectId?.name ||
+    (job?.projectId?.projectId && typeof job.projectId.projectId === "object"
+      ? job.projectId.projectId.name
+      : null) ||
+    "";
+  const issueDate = shift?.reportIssueDate || null;
+  const revision = shift?.revision || 0;
+  const sequenceNumber = shift?.sequenceNumber;
+  const reportReference =
+    toReportReference(shift?.reportReference) ||
+    toReportReference(
+      buildLeadAirMonitoringFilename({
+        projectId: projectID,
+        siteName: siteNameForFilename,
+        reportIssueDate: issueDate,
+        sequenceNumber,
+        includeRevision: false,
+        includeExtension: false,
+      }),
+    );
+  const filename = withRevisionAndExtension(reportReference, revision, true);
 
   const samplesAboveLimit = sortedSamples.filter((s) => {
     const n = parseLeadConcentrationNumeric(s.leadConcentration);
@@ -547,7 +631,7 @@ export async function generateLeadMonitoringShiftReport({
                     type: "line",
                     x1: 0,
                     y1: 0,
-                    x2: 520,
+                    x2: LEAD_GREEN_RULE_WIDTH,
                     y2: 0,
                     lineWidth: 1.5,
                     lineColor: "#16b12b",
@@ -567,73 +651,15 @@ export async function generateLeadMonitoringShiftReport({
       tableContent: { fontSize: 8 },
     },
     content: [...mainContent, ...appendixContent],
-    footer: (currentPage, pageCount) => {
-      const isMainReportPage = currentPage <= mainPageCount;
-      const footerBlocks = [
-        {
-          canvas: [
-            {
-              type: "line",
-              x1: 0,
-              y1: 0,
-              x2: 515,
-              y2: 0,
-              lineWidth: 1.5,
-              lineColor: "#16b12b",
-            },
-          ],
-          margin: [0, 0, 0, 8],
-        },
-        {
-          columns: [
-            {
-              stack: [
-                {
-                  text: `Report Reference: ${reportRef}`,
-                  fontSize: 8,
-                },
-                {
-                  text: `Revision: ${shift?.revision ?? 0}`,
-                  fontSize: 8,
-                },
-              ],
-              alignment: "left",
-              width: "30%",
-            },
-            { text: "", width: "40%" },
-            {
-              stack: isMainReportPage
-                ? [
-                    {
-                      text: `Page ${currentPage} of ${mainPageCount}`,
-                      alignment: "right",
-                      fontSize: 8,
-                    },
-                  ]
-                : [],
-              alignment: "right",
-              width: "30%",
-            },
-          ],
-        },
-      ];
-      return {
-        stack: footerBlocks,
-        margin: [40, 6, 40, 0],
-      };
-    },
+    footer: (currentPage, pageCount) =>
+      buildLeadMonitoringFooter({
+        reportReference,
+        revision: shift?.revision ?? 0,
+        currentPage,
+        mainPageCount,
+        isMainReportPage: currentPage <= mainPageCount,
+      }),
   };
-
-  const projectID =
-    project?.projectID ||
-    job?.projectId?.projectID ||
-    job?.projectId?.projectId?.projectID ||
-    "";
-  const projectName = (siteName || "")
-    .replace(/\//g, ", ")
-    .replace(/[^a-zA-Z0-9,._\- ]/g, "");
-  const samplingDate = shift?.date ? formatDateForFilename(shift.date) : "";
-  const filename = `Lead Air Monitoring Report_${projectID || "report"}${samplingDate ? `_${samplingDate}` : ""}.pdf`;
 
   const pdfDoc = pdfMake.createPdf(docDefinition, undefined, undefined, {
     permissions: {
@@ -691,7 +717,7 @@ export async function generateLeadMonitoringShiftReport({
 
   if (!response?.data || response.data.byteLength === 0) {
     throw new Error(
-      "No analysis report has been attached for this shift. Please attach the PDF in the Attach Analysis Report modal before viewing.",
+      "No analysis reports have been attached for this shift. Please attach PDF(s) in the Attach Analysis Report modal before viewing.",
     );
   }
 

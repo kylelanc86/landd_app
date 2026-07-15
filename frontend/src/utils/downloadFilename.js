@@ -25,10 +25,27 @@ export function getAxiosDownloadFilename(response, fallback) {
   return parseContentDispositionFilename(disposition) || fallback;
 }
 
-export function buildShiftChainOfCustodyFilename(projectID, shiftDate) {
+function formatFilenameDateYYYYMMDD(dateValue = new Date()) {
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Australia/Sydney',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const year = parts.find((p) => p.type === 'year')?.value;
+  const month = parts.find((p) => p.type === 'month')?.value;
+  const day = parts.find((p) => p.type === 'day')?.value;
+  if (!year || !month || !day) return '';
+  return `${year}${month}${day}`;
+}
+
+/** L&D-generated Chain of Custody form filename (generation date; no auth/sequence). */
+export function buildShiftChainOfCustodyFilename(projectID, generationDate = new Date()) {
   const id = projectID || 'Unknown';
-  const date = shiftDate ? formatDateInSydney(shiftDate) : 'N/A';
-  return `${id}: Chain of Custody - ${date}.pdf`;
+  const dateToken = formatFilenameDateYYYYMMDD(generationDate || new Date()) || formatFilenameDateYYYYMMDD(new Date());
+  return `${id}_L&D Chain of Custody - ${dateToken}.pdf`;
 }
 
 export function triggerBlobDownload(blob, filename) {

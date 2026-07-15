@@ -170,6 +170,15 @@ const projectSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  // Cached report category tiles for Project Reports (lazy-filled on first access)
+  reportCategories: {
+    type: [String],
+    default: undefined
+  },
+  reportCategoriesCachedAt: {
+    type: Date,
+    default: null
+  },
   isLargeProject: {
     type: Boolean,
     default: false

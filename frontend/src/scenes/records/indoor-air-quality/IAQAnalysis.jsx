@@ -35,8 +35,11 @@ import {
   FormControlLabel,
   Chip,
   Alert,
+  IconButton,
 } from "@mui/material";
 import CommentIcon from "@mui/icons-material/Comment";
+import AddIcon from "@mui/icons-material/Add";
+import DeleteIcon from "@mui/icons-material/Delete";
 import { useParams, useNavigate } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ClearIcon from "@mui/icons-material/Clear";
@@ -61,6 +64,12 @@ import {
 import LookupField from "../../../components/LookupField";
 import LookupRadioGroup from "../../../components/LookupRadioGroup";
 import { userOptionsFromList } from "../../../utils/lookupOptions";
+import { getTodayInSydney, formatDateForInput } from "../../../utils/dateUtils";
+import {
+  formatAnalysisDates,
+  getRecordAnalysisDates,
+  validateAnalysisDates,
+} from "../../../utils/formatAnalysisDates";
 
 const SAMPLES_KEY = "ldc_iaq_samples";
 const ANALYSIS_PROGRESS_KEY = "ldc_iaq_analysis_progress";
@@ -124,6 +133,14 @@ const buildSampleAnalysisState = (sample) => {
 const formatAnalysisFieldLabel = (value) => {
   if (!value) return "—";
   return value.charAt(0).toUpperCase() + value.slice(1);
+};
+
+const parseRecordAnalysisDatesForInput = (record) => {
+  const dates = getRecordAnalysisDates(record);
+  if (dates.length) {
+    return dates.map((d) => formatDateForInput(d)).filter(Boolean);
+  }
+  return [getTodayInSydney()];
 };
 
 // Simplified Sample Summary Component for IAQ
@@ -496,6 +513,7 @@ const IAQAnalysis = () => {
   const [error, setError] = useState(null);
   const { activeCounters } = useUserLists();
   const [analysedBy, setAnalysedBy] = useState("");
+  const [analysisDates, setAnalysisDates] = useState([getTodayInSydney()]);
   const [iaqRecord, setIaqRecord] = useState(null);
   const [fibreCountModalOpen, setFibreCountModalOpen] = useState(false);
   const [activeSampleId, setActiveSampleId] = useState(null);
@@ -528,6 +546,7 @@ const IAQAnalysis = () => {
 
         const recordData = recordResponse.data;
         setIaqRecord(recordData);
+        setAnalysisDates(parseRecordAnalysisDatesForInput(recordData));
         const allRecordsData = allRecordsResponse.data || [];
         setAllRecords(allRecordsData);
 
@@ -594,6 +613,9 @@ const IAQAnalysis = () => {
               if (analystName) {
                 setAnalysedBy(analystName);
               }
+            }
+            if (parsed.analysisDates?.length) {
+              setAnalysisDates(parsed.analysisDates);
             }
             const mergedAnalyses = { ...initialAnalyses };
             Object.keys(parsed.sampleAnalyses).forEach((sampleId) => {
@@ -906,13 +928,14 @@ const IAQAnalysis = () => {
         analysisDetails,
         sampleAnalyses,
         analysedBy,
+        analysisDates,
       };
       localStorage.setItem(
         ANALYSIS_PROGRESS_KEY,
         JSON.stringify(progressData)
       );
     }
-  }, [analysisDetails, sampleAnalyses, analysedBy, iaqRecordId, samples.length, isReadOnly]);
+  }, [analysisDetails, sampleAnalyses, analysedBy, analysisDates, iaqRecordId, samples.length, isReadOnly]);
 
   // Calculate duration in minutes
   const calculateDuration = useCallback((startTime, endTime) => {
@@ -1694,6 +1717,42 @@ const IAQAnalysis = () => {
     }
   };
 
+  const handleAnalysisDateChange = (index, value) => {
+    if (index === 0 && !value) {
+      return;
+    }
+
+    const next = [...analysisDates];
+    next[index] = value;
+
+    const filled = next.filter(Boolean);
+    if (filled.length > 0) {
+      const validation = validateAnalysisDates(filled);
+      if (!validation.ok) {
+        showSnackbar(validation.message, "warning");
+        return;
+      }
+    }
+
+    setAnalysisDates(next);
+  };
+
+  const handleAddAnalysisDate = () => {
+    const lastDate = analysisDates.filter(Boolean).slice(-1)[0];
+    let nextDate = getTodayInSydney();
+    if (lastDate) {
+      const d = new Date(`${lastDate}T12:00:00`);
+      d.setDate(d.getDate() + 1);
+      nextDate = formatDateForInput(d);
+    }
+    setAnalysisDates((prev) => [...prev, nextDate]);
+  };
+
+  const handleRemoveAnalysisDate = (index) => {
+    if (index === 0) return;
+    setAnalysisDates((prev) => prev.filter((_, i) => i !== index));
+  };
+
   // Handle submit (finalise analysis)
   const handleSubmit = async (e) => {
     if (e) {
@@ -1702,6 +1761,13 @@ const IAQAnalysis = () => {
 
     if (!isAllAnalysisComplete) {
       showSnackbar("Please complete all analysis before finalising", "warning");
+      return;
+    }
+
+    const validAnalysisDates = analysisDates.filter(Boolean);
+    const dateValidation = validateAnalysisDates(validAnalysisDates);
+    if (!dateValidation.ok) {
+      showSnackbar(dateValidation.message, "warning");
       return;
     }
 
@@ -1799,7 +1865,7 @@ const IAQAnalysis = () => {
       await iaqRecordService.update(iaqRecordId, {
         status: recordStatus,
         analysedBy: analystDisplayName || analysedBy,
-        analysisDate: new Date().toISOString(),
+        analysisDates: validAnalysisDates.map((d) => new Date(d).toISOString()),
       });
 
       // Clear localStorage
@@ -1999,13 +2065,8 @@ const IAQAnalysis = () => {
         </Alert>
       )}
 
-      {/* Analyst Dropdown */}
-      <Stack
-        direction={{ xs: "column", sm: "row" }}
-        spacing={2}
-        alignItems="center"
-        mb={3}
-      >
+      {/* Analyst & Analysis Dates */}
+      <Stack spacing={2} alignItems="flex-start" mb={3}>
         <LookupField
           sx={{ maxWidth: 300 }}
           mode={isReadOnly ? "view" : "edit"}
@@ -2019,6 +2080,64 @@ const IAQAnalysis = () => {
           allowEmpty
           emptyOptionLabel="Select analyst"
         />
+        {isReadOnly ? (
+          <TextField
+            label="Analysis Date"
+            value={formatAnalysisDates(analysisDates)}
+            InputProps={{ readOnly: true }}
+            sx={{ maxWidth: 420 }}
+            fullWidth
+          />
+        ) : (
+          <Stack
+            direction="row"
+            spacing={1}
+            alignItems="center"
+            flexWrap="wrap"
+            useFlexGap
+          >
+            {analysisDates.map((date, index) => (
+              <Stack
+                key={`analysis-date-${index}`}
+                direction="row"
+                spacing={0.5}
+                alignItems="center"
+              >
+                <TextField
+                  label={
+                    index === 0 ? "Analysis Date" : `Analysis Date ${index + 1}`
+                  }
+                  type="date"
+                  value={date}
+                  onChange={(e) =>
+                    handleAnalysisDateChange(index, e.target.value)
+                  }
+                  InputLabelProps={{ shrink: true }}
+                  sx={{ width: 200 }}
+                  required={index === 0}
+                />
+                {index > 0 && (
+                  <IconButton
+                    onClick={() => handleRemoveAnalysisDate(index)}
+                    size="small"
+                    aria-label="Remove analysis date"
+                    sx={{ flexShrink: 0 }}
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                )}
+              </Stack>
+            ))}
+            <Button
+              startIcon={<AddIcon />}
+              onClick={handleAddAnalysisDate}
+              size="small"
+              sx={{ whiteSpace: "nowrap", flexShrink: 0 }}
+            >
+              Add analysis date
+            </Button>
+          </Stack>
+        )}
       </Stack>
 
       <Box component="form" onSubmit={handleSubmit}>

@@ -1,34 +1,15 @@
 /**
  * IAQ report reference and sample ID helpers.
- * fullSampleID is stored as "{IAQ reference} - {AM suffix}" e.g. "IAQ Mar 2026 - 1 - AM1".
+ * fullSampleID is stored as "{IAQ reference} - {AM suffix}" e.g. "IAQ Mar 2026 - AM1".
  */
 
-function generateIAQReference(record, allRecords) {
-  if (!record || !allRecords?.length) return '';
+function generateIAQReference(record) {
+  if (!record?.monitoringDate) return '';
 
   const dateObj = new Date(record.monitoringDate);
   const month = dateObj.toLocaleString('en', { month: 'short' });
   const year = dateObj.getFullYear();
-  const monthYear = `${month} ${year}`;
-
-  const recordId = String(record._id || record.id);
-
-  const sameMonthYearRecords = allRecords
-    .filter((r) => {
-      const recordDate = new Date(r.monitoringDate);
-      return (
-        recordDate.getMonth() === dateObj.getMonth() &&
-        recordDate.getFullYear() === dateObj.getFullYear()
-      );
-    })
-    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-
-  const reportNumber =
-    sameMonthYearRecords.findIndex(
-      (r) => String(r._id || r.id) === recordId
-    ) + 1;
-
-  return `IAQ ${monthYear} - ${reportNumber}`;
+  return `IAQ ${month} ${year}`;
 }
 
 function extractAMSampleSuffix(sampleId) {

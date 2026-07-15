@@ -286,10 +286,19 @@ const EditUserPage = () => {
 
   const handleLaaLicenceChange = (index, field, value) => {
     const updatedLicences = [...form.licences];
-    updatedLicences[index] = {
-      ...updatedLicences[index],
-      [field]: value,
-    };
+    const current = { ...updatedLicences[index], [field]: value };
+    if (field === "licenceType") {
+      if (value === "Mycometer Certification") {
+        current.state = "";
+        current.licenceNumber = "";
+        current.surface = current.surface || "";
+        current.air = current.air || "";
+      } else {
+        current.surface = "";
+        current.air = "";
+      }
+    }
+    updatedLicences[index] = current;
     setForm({ ...form, licences: updatedLicences });
   };
 
@@ -298,7 +307,13 @@ const EditUserPage = () => {
       ...form,
       licences: [
         ...form.licences,
-        { licenceType: "", state: "", licenceNumber: "" },
+        {
+          licenceType: "",
+          state: "",
+          licenceNumber: "",
+          surface: "",
+          air: "",
+        },
       ],
     });
   };
@@ -306,6 +321,16 @@ const EditUserPage = () => {
   const removeLaaLicence = (index) => {
     const updatedLicences = form.licences.filter((_, i) => i !== index);
     setForm({ ...form, licences: updatedLicences });
+  };
+
+  const isValidLicence = (licence) => {
+    if (!licence.licenceType) return false;
+    if (licence.licenceType === "Mycometer Certification") {
+      return Boolean(
+        licence.surface?.trim() && licence.air?.trim(),
+      );
+    }
+    return Boolean(licence.state && licence.licenceNumber);
   };
 
   const handleSignatureUpload = async (e) => {
@@ -339,6 +364,18 @@ const EditUserPage = () => {
 
   const handleSaveUser = async (e) => {
     e.preventDefault();
+    const incompleteMycometer = form.licences.some(
+      (licence) =>
+        licence.licenceType === "Mycometer Certification" &&
+        !(licence.surface?.trim() && licence.air?.trim()),
+    );
+    if (incompleteMycometer) {
+      showSnackbar(
+        "Mycometer Certification requires both Surface and Air values.",
+        "warning",
+      );
+      return;
+    }
     try {
       setSaving(true);
       const updateData = {
@@ -348,10 +385,7 @@ const EditUserPage = () => {
         phone: form.phone.trim() || "",
         role: form.role,
         isActive: form.isActive,
-        licences: form.licences.filter(
-          (licence) =>
-            licence.state && licence.licenceNumber && licence.licenceType,
-        ), // Only include valid licences
+        licences: form.licences.filter(isValidLicence),
         signature: form.signature || "",
         chargeOutRate: parseFloat(form.chargeOutRate) || 0,
         workingHours: form.workingHours,
@@ -886,70 +920,120 @@ const EditUserPage = () => {
             <Typography variant="h6" sx={{ mb: 2 }}>
               Licences
             </Typography>
-            {form.licences.map((licence, index) => (
-              <Card key={index} sx={{ mb: 2, p: 2 }}>
-                <CardContent>
-                  <Grid container spacing={2}>
-                    <Grid item xs={4}>
-                      <FormControl fullWidth size="small">
-                        <InputLabel>Licence Type</InputLabel>
-                        <Select
-                          label="Licence Type"
-                          value={licence.licenceType}
-                          onChange={(e) =>
-                            handleLaaLicenceChange(
-                              index,
-                              "licenceType",
-                              e.target.value,
-                            )
-                          }
-                        >
-                          <MenuItem value="Asbestos Assessor">
-                            Asbestos Assessor
-                          </MenuItem>
-                          <MenuItem value="White Card">White Card</MenuItem>
-                        </Select>
-                      </FormControl>
+            {form.licences.map((licence, index) => {
+              const isMycometer =
+                licence.licenceType === "Mycometer Certification";
+              return (
+                <Card key={index} sx={{ mb: 2, p: 2 }}>
+                  <CardContent>
+                    <Grid container spacing={2}>
+                      <Grid item xs={isMycometer ? 12 : 4} sm={4}>
+                        <FormControl fullWidth size="small">
+                          <InputLabel>Licence Type</InputLabel>
+                          <Select
+                            label="Licence Type"
+                            value={licence.licenceType}
+                            onChange={(e) =>
+                              handleLaaLicenceChange(
+                                index,
+                                "licenceType",
+                                e.target.value,
+                              )
+                            }
+                          >
+                            <MenuItem value="Asbestos Assessor">
+                              Asbestos Assessor
+                            </MenuItem>
+                            <MenuItem value="White Card">White Card</MenuItem>
+                            <MenuItem value="Mycometer Certification">
+                              Mycometer Certification
+                            </MenuItem>
+                          </Select>
+                        </FormControl>
+                      </Grid>
+                      {isMycometer ? (
+                        <>
+                          <Grid item xs={12} sm={4}>
+                            <TextField
+                              label="Surface"
+                              value={licence.surface || ""}
+                              onChange={(e) =>
+                                handleLaaLicenceChange(
+                                  index,
+                                  "surface",
+                                  e.target.value,
+                                )
+                              }
+                              fullWidth
+                              size="small"
+                              required
+                            />
+                          </Grid>
+                          <Grid item xs={12} sm={4}>
+                            <TextField
+                              label="Air"
+                              value={licence.air || ""}
+                              onChange={(e) =>
+                                handleLaaLicenceChange(
+                                  index,
+                                  "air",
+                                  e.target.value,
+                                )
+                              }
+                              fullWidth
+                              size="small"
+                              required
+                            />
+                          </Grid>
+                        </>
+                      ) : (
+                        <>
+                          <Grid item xs={4}>
+                            <TextField
+                              label="State"
+                              value={licence.state}
+                              onChange={(e) =>
+                                handleLaaLicenceChange(
+                                  index,
+                                  "state",
+                                  e.target.value,
+                                )
+                              }
+                              fullWidth
+                              size="small"
+                            />
+                          </Grid>
+                          <Grid item xs={4}>
+                            <TextField
+                              label="Licence Number"
+                              value={licence.licenceNumber}
+                              onChange={(e) =>
+                                handleLaaLicenceChange(
+                                  index,
+                                  "licenceNumber",
+                                  e.target.value,
+                                )
+                              }
+                              fullWidth
+                              size="small"
+                            />
+                          </Grid>
+                        </>
+                      )}
                     </Grid>
-                    <Grid item xs={4}>
-                      <TextField
-                        label="State"
-                        value={licence.state}
-                        onChange={(e) =>
-                          handleLaaLicenceChange(index, "state", e.target.value)
-                        }
-                        fullWidth
-                        size="small"
-                      />
-                    </Grid>
-                    <Grid item xs={4}>
-                      <TextField
-                        label="Licence Number"
-                        value={licence.licenceNumber}
-                        onChange={(e) =>
-                          handleLaaLicenceChange(
-                            index,
-                            "licenceNumber",
-                            e.target.value,
-                          )
-                        }
-                        fullWidth
-                        size="small"
-                      />
-                    </Grid>
-                  </Grid>
-                </CardContent>
-                <CardActions>
-                  <IconButton
-                    onClick={() => removeLaaLicence(index)}
-                    color="error"
-                    size="small"
-                  >
-                    <RemoveIcon />
-                  </IconButton>
-                </CardActions>
-              </Card>
-            ))}
+                  </CardContent>
+                  <CardActions>
+                    <IconButton
+                      onClick={() => removeLaaLicence(index)}
+                      color="error"
+                      size="small"
+                    >
+                      <RemoveIcon />
+                    </IconButton>
+                  </CardActions>
+                </Card>
+              );
+            })}
             <Button
               startIcon={<AddIcon />}
               onClick={addLaaLicence}

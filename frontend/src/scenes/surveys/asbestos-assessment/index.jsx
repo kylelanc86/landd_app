@@ -946,10 +946,8 @@ const AsbestosAssessment = () => {
       await asbestosAssessmentService.updateAsbestosAssessment(job.id, {
         projectId: orig.projectId?._id || orig.projectId,
         assessmentDate: orig.assessmentDate || job.surveyDate,
-        reportApprovedBy: authoriser,
-        reportIssueDate: now,
         reportAuthorisedBy: authoriser,
-        reportAuthorisedAt: now,
+        reportAuthorisedAt: orig.reportAuthorisedAt || now,
         status: "complete",
       });
 
@@ -1020,6 +1018,7 @@ const AsbestosAssessment = () => {
         revision: fullAssessment.revision || 0,
         LAA: fullAssessment.LAA,
         assessorId: fullAssessment.assessorId,
+        fibreIdReportReference: fullAssessment.fibreIdReportReference || null,
       };
       const pdfDataUrl = await generateFibreIDReport({
         assessment: assessmentForReport,

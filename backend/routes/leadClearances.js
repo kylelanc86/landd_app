@@ -11,6 +11,10 @@ const {
   resolveLeadClearanceJobUrl,
 } = require("../services/reportAuthorisationNotificationService");
 const { formatDateSydney } = require("../utils/dateUtils");
+const {
+  buildLeadClearanceFilename,
+  toReportReference,
+} = require("../utils/reportFilenames");
 
 const notDeletedShiftFilter = {
   $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
@@ -398,6 +402,19 @@ router.put("/:id", auth, checkPermission(permEdit), async (req, res) => {
 
     clearClearancePdfFields(clearance);
     const updated = await clearance.save();
+
+    if (['complete', 'Site Work Complete'].includes(updated.status)) {
+      try {
+        const {
+          addReportCategories,
+          REPORT_CATEGORIES,
+        } = require('../services/projectReportCategoriesService');
+        await addReportCategories(updated.projectId, REPORT_CATEGORIES.LEAD_REMOVAL);
+      } catch (err) {
+        console.error('Error updating report categories for lead clearance:', err);
+      }
+    }
+
     const populated = await LeadClearance.findById(updated._id)
       .populate({
         path: "projectId",
@@ -498,6 +515,19 @@ router.patch("/:id/status", auth, checkPermission(permEdit), async (req, res) =>
     clearance.updatedBy = req.user.id;
     clearClearancePdfFields(clearance);
     const updated = await clearance.save();
+
+    if (['complete', 'Site Work Complete'].includes(updated.status)) {
+      try {
+        const {
+          addReportCategories,
+          REPORT_CATEGORIES,
+        } = require('../services/projectReportCategoriesService');
+        await addReportCategories(updated.projectId, REPORT_CATEGORIES.LEAD_REMOVAL);
+      } catch (err) {
+        console.error('Error updating report categories for lead clearance:', err);
+      }
+    }
+
     const populated = await LeadClearance.findById(updated._id)
       .populate({
         path: "projectId",
@@ -555,7 +585,21 @@ router.post("/:id/authorise", auth, checkPermission(permEdit), async (req, res) 
         ? `${req.user.firstName} ${req.user.lastName}`
         : req.user?.email || "Unknown";
     clearance.reportApprovedBy = approver;
-    clearance.reportIssueDate = new Date();
+    if (!clearance.reportIssueDate) {
+      clearance.reportIssueDate = new Date();
+    }
+    if (!clearance.reportReference) {
+      clearance.reportReference = toReportReference(
+        buildLeadClearanceFilename({
+          projectId: clearance.projectId?.projectID || "Unknown",
+          siteName: clearance.projectId?.name || "Unknown",
+          reportIssueDate: clearance.reportIssueDate,
+          sequenceNumber: clearance.sequenceNumber,
+          includeRevision: false,
+          includeExtension: false,
+        }),
+      );
+    }
     clearance.updatedBy = req.user.id;
     const updated = await clearance.save();
     const populatedForEmail = await LeadClearance.findById(updated._id)

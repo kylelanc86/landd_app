@@ -77,6 +77,35 @@ function mapClientSuppliedJobToReport(job, reportType, defaultDescription) {
   };
 }
 
+/**
+ * Lightweight: which report categories exist for a project.
+ * Uses Project.reportCategories cache when present; otherwise computes once and stores it.
+ */
+router.get(
+  '/project/:projectId/categories',
+  auth,
+  checkPermission(['projects.view']),
+  async (req, res) => {
+    try {
+      const { projectId } = req.params;
+      if (!mongoose.Types.ObjectId.isValid(projectId)) {
+        return res.status(400).json({ message: 'Invalid project ID' });
+      }
+
+      const {
+        getReportCategories,
+      } = require('../services/projectReportCategoriesService');
+
+      const categories = await getReportCategories(projectId);
+      res.json({ categories });
+    } catch (error) {
+      console.error('Error fetching report categories:', error);
+      const status = error.message === 'Project not found' ? 404 : 500;
+      res.status(status).json({ message: error.message });
+    }
+  }
+);
+
 // Get Asbestos Assessment Reports (final-authorised jobs only — in-progress work is surfaced under Project Reports active jobs)
 router.get('/asbestos-assessment/:projectId', auth, checkPermission(['projects.view']), async (req, res) => {
   try {

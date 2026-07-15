@@ -1,5 +1,6 @@
 import pdfMake from "pdfmake/build/pdfmake";
 import api from "../services/api";
+import { buildShiftChainOfCustodyFilename } from "./downloadFilename";
 
 async function loadImageAsBase64(imagePath) {
   try {
@@ -367,7 +368,7 @@ export async function generateLeadChainOfCustodyPDF({
     }),
   };
 
-  const filename = `Lead_Chain_of_Custody_${shiftDate.replace(/\//g, "-") || "shift"}.pdf`;
+  const filename = buildShiftChainOfCustodyFilename(projectID || "Unknown");
   const pdfDoc = pdfMake.createPdf(docDefinition);
   if (openInNewTab) {
     pdfDoc.open();

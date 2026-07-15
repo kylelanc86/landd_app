@@ -165,6 +165,15 @@ router.post('/upload', requireAuth, checkTokenBlacklist, async (req, res) => {
 
     await uploadedReport.save();
 
+    try {
+      const {
+        addReportCategories,
+      } = require('../services/projectReportCategoriesService');
+      await addReportCategories(projectId, reportType);
+    } catch (err) {
+      console.error('Error updating report categories for uploaded report:', err);
+    }
+
     res.status(201).json({
       message: 'Report uploaded successfully',
       report: uploadedReport
@@ -236,6 +245,15 @@ router.delete('/:reportId', requireAuth, checkTokenBlacklist, async (req, res) =
 
     // Delete record from database
     await UploadedReport.findByIdAndDelete(reportId);
+
+    try {
+      const {
+        invalidateReportCategories,
+      } = require('../services/projectReportCategoriesService');
+      await invalidateReportCategories(report.projectId);
+    } catch (err) {
+      console.error('Error invalidating report categories after upload delete:', err);
+    }
 
     res.json({ message: 'Report deleted successfully' });
   } catch (error) {

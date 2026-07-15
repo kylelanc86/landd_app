@@ -34,7 +34,7 @@ import {
   FormHelperText,
 } from "@mui/material";
 import CommentIcon from "@mui/icons-material/Comment";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ClearIcon from "@mui/icons-material/Clear";
 import RefreshIcon from "@mui/icons-material/Refresh";
@@ -348,10 +348,12 @@ const SampleSummary = React.memo(
                   variant="outlined"
                   size="small"
                   onClick={() => onOpenFibreCountModal(sample._id)}
-                  disabled={optionalFibreCountReadOnly}
+                  disabled={false}
                   sx={{ textTransform: "none" }}
                 >
-                  {isComplete
+                  {isReadOnly
+                    ? "View Fibre Counts"
+                    : isComplete
                     ? "Edit Optional Fibre Count"
                     : "Optional Fibre Count"}
                 </Button>
@@ -362,7 +364,7 @@ const SampleSummary = React.memo(
                     variant="contained"
                     size="small"
                     onClick={() => onOpenFibreCountModal(sample._id)}
-                    disabled={isReadOnly || isFilterUncountable(sample._id)}
+                    disabled={isFilterUncountable(sample._id)}
                     sx={{
                       backgroundColor: isSampleAnalysed(sample._id)
                         ? "success.main"
@@ -374,7 +376,9 @@ const SampleSummary = React.memo(
                       },
                     }}
                   >
-                    {isSampleAnalysed(sample._id)
+                    {isReadOnly
+                      ? "View Fibre Counts"
+                      : isSampleAnalysed(sample._id)
                       ? "Edit Fibre Counts"
                       : "Enter Fibre Counts"}
                   </Button>
@@ -493,6 +497,7 @@ const Analysis = () => {
   const theme = useTheme();
   const { shiftId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { currentUser } = useAuth();
   const { showSnackbar } = useSnackbar();
   const [samples, setSamples] = useState([]);
@@ -515,6 +520,7 @@ const Analysis = () => {
   const { activeCounters } = useUserLists();
   const [analysedBy, setAnalysedBy] = useState("");
   const [shiftStatus, setShiftStatus] = useState("");
+  const [isReportFinalised, setIsReportFinalised] = useState(false);
   const [fibreCountModalOpen, setFibreCountModalOpen] = useState(false);
   const [activeSampleId, setActiveSampleId] = useState(null);
   const [validationDialogOpen, setValidationDialogOpen] = useState(false);
@@ -533,6 +539,14 @@ const Analysis = () => {
   const [refreshDialogOpen, setRefreshDialogOpen] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState(null);
   const [originalState, setOriginalState] = useState(null);
+  const isReadOnlyRequested = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get("viewOnly") === "true";
+  }, [location.search]);
+  const isAnalysisReadOnly =
+    isReadOnlyRequested ||
+    isReportFinalised ||
+    ["analysis_complete", "shift_complete", "complete"].includes(shiftStatus);
 
   // Load samples and in-progress analysis data
   useEffect(() => {
@@ -555,6 +569,7 @@ const Analysis = () => {
 
         // Set shift status and calibrations
         setShiftStatus(shiftResponse.data.status);
+        setIsReportFinalised(Boolean(shiftResponse.data?.reportApprovedBy));
         setPcmCalibrations(pcmCalibrationsResponse);
         const graticuleData =
           graticuleCalibrationsResponse.data ||
@@ -1912,6 +1927,7 @@ const Analysis = () => {
       // Fetch fresh shift data to update the status
       const shiftResponse = await shiftService.getById(shiftId);
       setShiftStatus(shiftResponse.data.status);
+      setIsReportFinalised(Boolean(shiftResponse.data?.reportApprovedBy));
     } catch (error) {
       console.error("Error reopening shift:", error);
       showSnackbar(
@@ -2201,8 +2217,8 @@ const Analysis = () => {
             calculateConcentration={calculateConcentration}
             getReportedConcentration={getReportedConcentration}
             inputRefs={inputRefs}
-            isReadOnly={shiftStatus === "analysis_complete" || sample.status === "failed"}
-            optionalFibreCountReadOnly={shiftStatus === "analysis_complete"}
+            isReadOnly={isAnalysisReadOnly || sample.status === "failed"}
+            optionalFibreCountReadOnly={isAnalysisReadOnly}
             onOpenFibreCountModal={handleOpenFibreCountModal}
             onOpenCommentModal={handleOpenCommentModal}
           />
@@ -2253,8 +2269,8 @@ const Analysis = () => {
                 calculateConcentration={calculateConcentration}
                 getReportedConcentration={getReportedConcentration}
                 inputRefs={inputRefs}
-                isReadOnly={shiftStatus === "analysis_complete" || sample.status === "failed"}
-                optionalFibreCountReadOnly={shiftStatus === "analysis_complete"}
+                isReadOnly={isAnalysisReadOnly || sample.status === "failed"}
+                optionalFibreCountReadOnly={isAnalysisReadOnly}
                 onOpenFibreCountModal={handleOpenFibreCountModal}
                 onOpenCommentModal={handleOpenCommentModal}
                 isLast={true}
@@ -2333,7 +2349,7 @@ const Analysis = () => {
       >
         <Box sx={{ maxWidth: 300, width: "100%" }}>
           <LookupField
-            mode={shiftStatus === "analysis_complete" ? "view" : "edit"}
+            mode={isAnalysisReadOnly ? "view" : "edit"}
             label="Analyst"
             required
             value={analysedBy}
@@ -2362,9 +2378,7 @@ const Analysis = () => {
               <Typography variant="h5">Microscope Calibration</Typography>
               <Stack direction={{ xs: "column", sm: "row" }} spacing={3}>
                 <LookupRadioGroup
-                  mode={
-                    shiftStatus === "analysis_complete" ? "view" : "edit"
-                  }
+                  mode={isAnalysisReadOnly ? "view" : "edit"}
                   label="Microscope"
                   name="microscope"
                   value={analysisDetails.microscope}
@@ -2374,14 +2388,12 @@ const Analysis = () => {
                     label: m.equipmentReference,
                   }))}
                   onChange={handleAnalysisDetailsChange}
-                  disabled={shiftStatus === "analysis_complete"}
+                  disabled={isAnalysisReadOnly}
                   emptyMessage="No active Phase Contrast Microscope available"
                 />
                 <Box sx={{ width: 24 }} />
                 <LookupRadioGroup
-                  mode={
-                    shiftStatus === "analysis_complete" ? "view" : "edit"
-                  }
+                  mode={isAnalysisReadOnly ? "view" : "edit"}
                   label="Test Slide"
                   name="testSlide"
                   value={analysisDetails.testSlide}
@@ -2391,14 +2403,12 @@ const Analysis = () => {
                     label: t.equipmentReference,
                   }))}
                   onChange={handleAnalysisDetailsChange}
-                  disabled={shiftStatus === "analysis_complete"}
+                  disabled={isAnalysisReadOnly}
                   emptyMessage="No active HSE Test Slide available"
                 />
                 <Box sx={{ width: 24 }} />
                 <LookupRadioGroup
-                  mode={
-                    shiftStatus === "analysis_complete" ? "view" : "edit"
-                  }
+                  mode={isAnalysisReadOnly ? "view" : "edit"}
                   label="Test Slide Lines"
                   name="testSlideLines"
                   value={analysisDetails.testSlideLines}
@@ -2412,7 +2422,7 @@ const Analysis = () => {
                     { value: "Partial6", label: "Partial 6" },
                   ]}
                   onChange={handleAnalysisDetailsChange}
-                  disabled={shiftStatus === "analysis_complete"}
+                  disabled={isAnalysisReadOnly}
                 />
               </Stack>
             </Stack>
@@ -2450,7 +2460,7 @@ const Analysis = () => {
             >
               Cancel
             </Button>
-            {shiftStatus !== "analysis_complete" && (
+            {!isAnalysisReadOnly && (
               <>
                 <Button
                   variant="contained"
@@ -2483,7 +2493,8 @@ const Analysis = () => {
                 </Button>
               </>
             )}
-            {shiftStatus === "analysis_complete" &&
+            {!isReadOnlyRequested &&
+              shiftStatus === "analysis_complete" &&
               (currentUser?.role === "admin" || currentUser?.role === "super_admin") && (
                 <Button
                   variant="contained"
@@ -2528,7 +2539,7 @@ const Analysis = () => {
                       mb: 2,
                     }}
                   >
-                    {shiftStatus !== "analysis_complete" && (
+                    {!isAnalysisReadOnly && (
                       <Button
                         startIcon={<ClearIcon />}
                         onClick={handleClearTableInModal}
@@ -2585,7 +2596,7 @@ const Analysis = () => {
                                 onClick={() => handleFillZeros(activeSampleId)}
                                 disabled={
                                   isFilterUncountable(activeSampleId) ||
-                                  shiftStatus === "analysis_complete"
+                                  isAnalysisReadOnly
                                 }
                                 sx={{
                                   minWidth: "auto",
@@ -2652,7 +2663,7 @@ const Analysis = () => {
                                     size="small"
                                     disabled={
                                       isFilterUncountable(activeSampleId) ||
-                                      shiftStatus === "analysis_complete"
+                                      isAnalysisReadOnly
                                     }
                                     inputRef={(el) => {
                                       inputRefs.current[
@@ -2709,13 +2720,17 @@ const Analysis = () => {
               )}
             </DialogContent>
             <DialogActions>
-              <Button onClick={handleCancelFibreCountModal}>Cancel</Button>
-              <Button
-                onClick={handleSaveAndCloseFibreCountModal}
-                variant="contained"
-              >
-                Save & Close
+              <Button onClick={handleCancelFibreCountModal}>
+                {isAnalysisReadOnly ? "Close" : "Cancel"}
               </Button>
+              {!isAnalysisReadOnly && (
+                <Button
+                  onClick={handleSaveAndCloseFibreCountModal}
+                  variant="contained"
+                >
+                  Save & Close
+                </Button>
+              )}
             </DialogActions>
           </Dialog>
 
@@ -2741,7 +2756,7 @@ const Analysis = () => {
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
                 placeholder="Enter comment for this sample..."
-                disabled={shiftStatus === "analysis_complete"}
+                disabled={isAnalysisReadOnly}
                 sx={{ mt: 2 }}
               />
             </DialogContent>
@@ -2752,7 +2767,7 @@ const Analysis = () => {
                   <Button
                     onClick={handleDeleteComment}
                     color="error"
-                    disabled={shiftStatus === "analysis_complete"}
+                    disabled={isAnalysisReadOnly}
                   >
                     Delete Comment
                   </Button>
@@ -2760,7 +2775,7 @@ const Analysis = () => {
               <Button
                 onClick={handleSaveComment}
                 variant="contained"
-                disabled={shiftStatus === "analysis_complete"}
+                disabled={isAnalysisReadOnly}
               >
                 Save Comment
               </Button>

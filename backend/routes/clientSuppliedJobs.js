@@ -10,6 +10,11 @@ const {
 } = require('../services/reportAuthorisationNotificationService');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
+const {
+  buildFibreCountFilename,
+  buildFibreIDFilename,
+  toReportReference,
+} = require('../utils/reportFilenames');
 
 /** AsbestosAssessment collection name in Mongo (mongoose default plural, lowercased). */
 const ASBESTOS_ASSESSMENT_COLLECTION = 'asbestosassessments';
@@ -354,9 +359,25 @@ router.post('/', auth, checkPermission('clientSup.create'), async (req, res) => 
 // PUT /api/client-supplied-jobs/:id - update job
 router.put('/:id', auth, checkPermission('clientSup.edit'), async (req, res) => {
   try {
+    const existing = await ClientSuppliedJob.findById(req.params.id).select(
+      'reportIssueDate reportReference',
+    );
+    if (!existing) {
+      return res.status(404).json({ message: 'Client supplied job not found' });
+    }
+
+    const updatePayload = { ...req.body, updatedAt: new Date() };
+    // Preserve first authorisation date / frozen report reference across edits.
+    if (existing.reportIssueDate) {
+      delete updatePayload.reportIssueDate;
+    }
+    if (existing.reportReference) {
+      delete updatePayload.reportReference;
+    }
+
     const job = await ClientSuppliedJob.findByIdAndUpdate(
       req.params.id,
-      { ...req.body, updatedAt: new Date() },
+      updatePayload,
       { new: true }
     )
     .populate({
@@ -559,11 +580,49 @@ router.post('/:id/authorise', auth, checkPermission('clientSup.edit'), async (re
         : req.user?.email || 'Unknown';
 
     job.reportApprovedBy = approver;
-    job.reportIssueDate = new Date();
+    if (!job.reportIssueDate) {
+      job.reportIssueDate = new Date();
+    }
     job.status = 'Completed';
     job.updatedAt = new Date();
 
+    if (!job.reportReference) {
+      const projectName = job.projectId?.name || 'Unknown';
+      const projectID = job.projectId?.projectID || 'Unknown';
+      const builder =
+        job.jobType === 'Fibre Count'
+          ? buildFibreCountFilename
+          : buildFibreIDFilename;
+      job.reportReference = toReportReference(
+        builder({
+          projectId: projectID,
+          siteName: projectName,
+          reportIssueDate: job.reportIssueDate,
+          includeRevision: false,
+          includeExtension: false,
+        }),
+      );
+    }
+
     const updatedJob = await job.save();
+
+    try {
+      const {
+        addReportCategories,
+        REPORT_CATEGORIES,
+      } = require('../services/projectReportCategoriesService');
+      const category =
+        job.jobType === 'Fibre Count'
+          ? REPORT_CATEGORIES.FIBRE_COUNT
+          : job.jobType === 'Fibre ID'
+            ? REPORT_CATEGORIES.FIBRE_ID
+            : null;
+      if (category) {
+        await addReportCategories(job.projectId?._id || job.projectId, category);
+      }
+    } catch (err) {
+      console.error('Error updating report categories for client supplied job:', err);
+    }
 
     const projectName = job.projectId?.name || 'Unknown Project';
     const projectID = job.projectId?.projectID || 'N/A';
