@@ -19,8 +19,14 @@ const {
   buildAsbestosAssessmentFilename,
   toReportReference,
   withRevisionAndExtension,
+  isPlaceholderReportReference,
 } = require('../utils/reportFilenames');
 const { buildContentDispositionAttachment } = require('../utils/contentDisposition');
+const {
+  isAssessmentItemReferred,
+  findPrimarySampledItemForRef,
+  getPrimarySampledItems,
+} = require('../utils/asbestosAssessmentItems');
 
 // Initialize DocRaptor service
 const docRaptorService = new DocRaptorService();
@@ -103,6 +109,58 @@ function getAssessmentIssueDateValue(assessmentData) {
   // Filename / report reference date must use final assessment authorisation only.
   // Do not fall back to reportIssueDate — that field is also used for Fibre ID approval.
   return assessmentData?.reportAuthorisedAt || null;
+}
+
+/**
+ * Rebuild and persist reportReference when it was frozen as Unknown_* (missing project/site).
+ * Mutates assessmentData.reportReference in place when repaired.
+ */
+async function repairPlaceholderAssessmentReportReference(assessmentData, isResidential = false, isLeadAssessment = false) {
+  if (isLeadAssessment || !isPlaceholderReportReference(assessmentData?.reportReference)) {
+    return false;
+  }
+  const projectID = assessmentData?.projectId?.projectID;
+  const siteName = assessmentData?.projectId?.name || assessmentData?.siteName;
+  if (!projectID || !siteName) return false;
+
+  const reportIssueDate = getAssessmentIssueDateValue(assessmentData);
+  const sequenceNumber = await calculateAssessmentSequenceNumber(
+    assessmentData,
+    isResidential,
+    isLeadAssessment,
+  );
+  const repaired = toReportReference(
+    buildAssessmentReportFilename({
+      projectId: projectID,
+      siteName,
+      reportIssueDate,
+      sequenceNumber,
+      isResidential,
+      isLeadAssessment: false,
+      includeRevision: false,
+      includeExtension: false,
+    }),
+  );
+  if (!repaired || isPlaceholderReportReference(repaired)) return false;
+
+  assessmentData.reportReference = repaired;
+  const assessmentId = assessmentData._id || assessmentData.id;
+  if (assessmentId) {
+    try {
+      await AsbestosAssessment.findByIdAndUpdate(assessmentId, {
+        reportReference: repaired,
+      });
+      console.log(
+        `[assessment-pdf] Repaired placeholder reportReference assessmentId=${assessmentId} -> ${repaired}`,
+      );
+    } catch (err) {
+      console.error(
+        `[assessment-pdf] Failed to persist repaired reportReference assessmentId=${assessmentId}`,
+        err.message,
+      );
+    }
+  }
+  return true;
 }
 
 async function calculateAssessmentSequenceNumber(assessmentData, isResidential = false, isLeadAssessment = false) {
@@ -4335,7 +4393,7 @@ async function runAssessmentPdfV3(assessmentData, isResidential) {
   if (idStr) {
     try {
       const doc = await AsbestosAssessment.findById(idStr)
-        .select('state fibreAnalysisReport sitePlan sitePlanFile sitePlanLegend sitePlanLegendTitle sitePlanFigureTitle leadSitePlanAppendices leadAssessmentPlanAppendices')
+        .select('state fibreAnalysisReport sitePlan sitePlanFile sitePlanLegend sitePlanLegendTitle sitePlanFigureTitle leadSitePlanAppendices leadAssessmentPlanAppendices reportReference')
         .lean();
       if (doc) {
         if (doc.state != null) assessmentData.state = doc.state;
@@ -4349,11 +4407,18 @@ async function runAssessmentPdfV3(assessmentData, isResidential) {
         if (doc.sitePlanFigureTitle != null) assessmentData.sitePlanFigureTitle = doc.sitePlanFigureTitle;
         if (doc.leadSitePlanAppendices != null) assessmentData.leadSitePlanAppendices = doc.leadSitePlanAppendices;
         if (doc.leadAssessmentPlanAppendices != null) assessmentData.leadAssessmentPlanAppendices = doc.leadAssessmentPlanAppendices;
+        if (doc.reportReference != null) assessmentData.reportReference = doc.reportReference;
       }
     } catch (err) {
       // Load fibre/site plan from DB failed; continue without
     }
   }
+
+  await repairPlaceholderAssessmentReportReference(
+    assessmentData,
+    useResidentialLayout,
+    isLeadAssessment,
+  );
 
   // Single HTML document (cover, version, flow, appendix covers, site plan image) → one DocRaptor call
   const fullHtml = await generateAssessmentSingleHTMLV3(assessmentData, useResidentialLayout, isLeadAssessment);
@@ -4411,7 +4476,9 @@ async function runAssessmentPdfV3(assessmentData, isResidential) {
     useResidentialLayout,
     isLeadAssessment,
   );
-  const filename = assessmentData.reportReference && !isLeadAssessment
+  const filename = assessmentData.reportReference &&
+    !isLeadAssessment &&
+    !isPlaceholderReportReference(assessmentData.reportReference)
     ? withRevisionAndExtension(
         assessmentData.reportReference,
         assessmentData.revision,
@@ -4568,9 +4635,19 @@ router.get('/download-by-assessment/:assessmentId', auth, async (req, res) => {
   }
   try {
     // Query without .lean() so Mongoose properly hydrates Buffer; then get plain buffer for response
-    const assessment = await AsbestosAssessment.findById(assessmentId).select('pdfBuffer pdfReadyAt pdfFilename');
+    const assessment = await AsbestosAssessment.findById(assessmentId).select('pdfBuffer pdfReadyAt pdfFilename reportReference');
     if (!assessment) {
       return res.status(404).json({ error: 'Assessment not found' });
+    }
+    // Cached PDF baked with Unknown_* reference/filename — force regeneration
+    if (
+      isPlaceholderReportReference(assessment.pdfFilename) ||
+      isPlaceholderReportReference(assessment.reportReference)
+    ) {
+      return res.status(404).json({
+        error: 'No PDF available for this assessment',
+        hint: 'Generate the PDF first using Generate PDF',
+      });
     }
     // Retention: if PDF is past 7 days, return 410 Gone — unless we have a completed freshJobId or we're in development
     const isDev = !process.env.NODE_ENV || process.env.NODE_ENV === 'development';
@@ -4689,7 +4766,7 @@ const generateAssessmentHTML = async (assessmentData) => {
 
     // Populate version control template with data (like clearance: REPORT_TITLE, FOOTER_TEXT, document-details-table, WATERMARK_PATH)
     const versionControlReportTitle = isResidential ? 'RESIDENTIAL ASBESTOS ASSESSMENT REPORT' : 'ASBESTOS ASSESSMENT REPORT';
-    const versionControlFilename = assessmentData.reportReference
+    const versionControlFilename = !isPlaceholderReportReference(assessmentData.reportReference)
       ? toReportReference(assessmentData.reportReference)
       : toReportReference(
           buildAssessmentReportFilename({
@@ -4751,8 +4828,9 @@ const generateAssessmentHTML = async (assessmentData) => {
     const getSampleRefDisplay = (item, fallback) => {
       if (isVisuallyAssessed(item.asbestosContent)) return 'Visually assessed';
       const ref = item.sampleReference || fallback;
-      const sampled = findSampledItemForRef(item.sampleReference);
-      if (sampled && sampled !== item) return `Refer to sample ${ref}`;
+      if (isAssessmentItemReferred(item, assessmentItems)) {
+        return `Refer to sample ${ref}`;
+      }
       return ref;
     };
     const getLocationContent = (item) => {
@@ -4766,11 +4844,7 @@ const generateAssessmentHTML = async (assessmentData) => {
     // Assessment register: only show Chrysotile/Amosite/Crocidolite asbestos OR No Asbestos Detected (hide organic, SMF, etc.)
     // Derive asbestos content from analytical data (fibres array) when available - matches fibre ID report logic
     // For referred items (same sampleReference as another item), use the sampled item's asbestos content
-    const findSampledItemForRef = (ref) => {
-      const r = String(ref || '').trim();
-      if (!r) return null;
-      return assessmentItems.find((i) => (i.sampleReference || '').trim() === r) || null;
-    };
+    const findSampledItemForRef = (ref) => findPrimarySampledItemForRef(assessmentItems, ref);
     const getAsbestosContentRaw = (item) => {
       if (item.asbestosContent && String(item.asbestosContent).trim()) return item.asbestosContent;
       const ad = item.analysisData;
@@ -5110,10 +5184,8 @@ const generateAssessmentHTML = async (assessmentData) => {
     const siteName = assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site';
     const hasSampledItemsRequiringAnalysis = assessmentItems.some((i) => (i.sampleReference || '').trim() && !isVisuallyAssessed(i.asbestosContent));
     const firstSampledPerRef = hasSampledItemsRequiringAnalysis
-      ? assessmentItems.filter((item, index) => {
-          if (!(item.sampleReference || '').trim() || isVisuallyAssessed(item.asbestosContent)) return false;
-          const ref = item.sampleReference.trim();
-          return index === assessmentItems.findIndex((i) => (i.sampleReference || '').trim() === ref);
+      ? getPrimarySampledItems(assessmentItems, {
+          excludeVisuallyAssessed: (item) => isVisuallyAssessed(item.asbestosContent),
         })
       : [];
     const analysisComplete = assessmentData.status === 'sample-analysis-complete' ||
@@ -5620,7 +5692,7 @@ const generateAssessmentCoverVersionHTMLV3 = async (assessmentData, isResidentia
     assessmentReportTitle = isResidential ? 'RESIDENTIAL ASBESTOS ASSESSMENT REPORT' : 'ASBESTOS ASSESSMENT<br />REPORT';
     assessmentFooterText = isResidential ? `Residential Asbestos Assessment Report: ${assessmentSiteAddress}` : `Asbestos Assessment Report: ${assessmentSiteAddress}`;
     versionControlReportTitle = isResidential ? 'RESIDENTIAL ASBESTOS ASSESSMENT REPORT' : (templateContent?.reportTitle || 'ASBESTOS ASSESSMENT REPORT');
-    versionControlFilename = assessmentData.reportReference
+    versionControlFilename = !isPlaceholderReportReference(assessmentData.reportReference)
       ? toReportReference(assessmentData.reportReference)
       : toReportReference(
           buildAssessmentReportFilename({
@@ -7081,8 +7153,9 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
   const getSampleRefDisplay = (item, fallback) => {
     if (isVisuallyAssessed(item.asbestosContent)) return 'Visually assessed';
     const ref = item.sampleReference || fallback;
-    const sampled = findSampledItemForRefFlow(item.sampleReference);
-    if (sampled && sampled !== item) return `Refer to sample ${ref}`;
+    if (isAssessmentItemReferred(item, assessmentItems)) {
+      return `Refer to sample ${ref}`;
+    }
     return ref;
   };
   const getLocationContent = (item) => {
@@ -7096,11 +7169,7 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
   // Assessment register: only show Chrysotile/Amosite/Crocidolite asbestos OR No Asbestos Detected (hide organic, SMF, etc.)
   // Derive asbestos content from analytical data (fibres array) when available - matches fibre ID report logic
   // For referred items (same sampleReference as another item), use the sampled item's asbestos content
-  const findSampledItemForRefFlow = (ref) => {
-    const r = String(ref || '').trim();
-    if (!r) return null;
-    return assessmentItems.find((i) => (i.sampleReference || '').trim() === r) || null;
-  };
+  const findSampledItemForRefFlow = (ref) => findPrimarySampledItemForRef(assessmentItems, ref);
   const getAsbestosContentRawFlow = (item) => {
     if (item.asbestosContent && String(item.asbestosContent).trim()) return item.asbestosContent;
     const ad = item.analysisData;
@@ -7353,10 +7422,8 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
   const asbestosCountFlow = identifiedAsbestosItems.length;
   const hasSampledItemsRequiringAnalysisFlow = assessmentItems.some((i) => (i.sampleReference || '').trim() && !isVisuallyAssessed(i.asbestosContent));
   const firstSampledPerRefFlow = hasSampledItemsRequiringAnalysisFlow
-    ? assessmentItems.filter((item, index) => {
-        if (!(item.sampleReference || '').trim() || isVisuallyAssessed(item.asbestosContent)) return false;
-        const ref = item.sampleReference.trim();
-        return index === assessmentItems.findIndex((i) => (i.sampleReference || '').trim() === ref);
+    ? getPrimarySampledItems(assessmentItems, {
+        excludeVisuallyAssessed: (item) => isVisuallyAssessed(item.asbestosContent),
       })
     : [];
   const analysisCompleteFlow = assessmentData.status === 'sample-analysis-complete' ||

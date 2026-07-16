@@ -17,8 +17,10 @@ const permView = "asbestos.view";
 const permCreate = "asbestos.create";
 const permEdit = "asbestos.edit";
 const permDelete = "asbestos.delete";
+// Include edit-form fields (projectId, consultant, etc.) so Edit on the job
+// details clearance list does not crash on missing properties.
 const CLEARANCE_TABLE_SELECT =
-  "_id clearanceDate status descriptionOfWorks reportApprovedBy reportIssueDate reportViewedAt authorisationRequestedBy pdfDownloadUrl pdfJobId pdfReadyAt pdfFilename";
+  "_id projectId clearanceDate status inspectionTime consultant leadAbatementContractor jurisdiction secondaryHeader descriptionOfWorks vehicleEquipmentDescription notes useComplexTemplate jobSpecificExclusions reportApprovedBy reportIssueDate reportViewedAt authorisationRequestedBy pdfDownloadUrl pdfJobId pdfReadyAt pdfFilename";
 
 // Get all lead removal jobs with filtering and pagination
 router.get("/", auth, checkPermission(permView), async (req, res) => {
@@ -213,6 +215,10 @@ router.get(
           leadRemovalJobId: job._id,
         })
           .select(CLEARANCE_TABLE_SELECT)
+          .populate({
+            path: "projectId",
+            select: "projectID name",
+          })
           .lean();
       }
 
@@ -290,6 +296,10 @@ router.get(
         leadRemovalJobId: req.params.id,
       })
         .select(CLEARANCE_TABLE_SELECT)
+        .populate({
+          path: "projectId",
+          select: "projectID name",
+        })
         .lean();
       res.json({ clearances });
     } catch (error) {

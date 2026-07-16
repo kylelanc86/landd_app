@@ -39,6 +39,10 @@ import customDataFieldGroupService from "../../services/customDataFieldGroupServ
 import { useUserLists } from "../../context/UserListsContext";
 import LookupField from "../../components/LookupField";
 import {
+  isAssessmentItemReferred,
+  getPrimarySampledItems,
+} from "../../utils/asbestosAssessmentItems";
+import {
   userOptionsFromList,
   buildUserDisplayLabel,
 } from "../../utils/lookupOptions";
@@ -156,28 +160,29 @@ const LDsuppliedAnalysisPage = () => {
         throw new Error(`Assessment item ${itemNumber} not found`);
       }
 
-      // Referred items (same sampleReference as another item, not first occurrence) are not samples for analysis - redirect to first sampled item if current item is referred
+      // Referred items are not samples for analysis - redirect to first primary sampled item
       const itemsList = assessmentData.items || [];
-      const isVisuallyAssessed = (i) =>
+      const isVA = (i) =>
         i.asbestosContent === "Visually Assessed as Asbestos" ||
         i.asbestosContent === "Visually Assessed as Non-Asbestos" ||
         i.asbestosContent === "Visually Assessed as Non-asbestos";
-      const isFirstOccurrenceOfRef = (i, index) => {
-        if (!i.sampleReference?.trim()) return false;
-        if (isVisuallyAssessed(i)) return false;
-        const ref = i.sampleReference.trim();
-        const firstIndex = itemsList.findIndex(
-          (x) => (x.sampleReference || "").trim() === ref,
-        );
-        return index === firstIndex;
-      };
-      const currentIndex = itemsList.findIndex((i) => i === item);
       const isReferredOrNotSampled =
-        currentIndex < 0 || !isFirstOccurrenceOfRef(item, currentIndex);
+        !item?.sampleReference?.trim() ||
+        isVA(item) ||
+        isAssessmentItemReferred(item, itemsList);
       if (isReferredOrNotSampled) {
-        const firstSampledIndex = itemsList.findIndex((i, idx) =>
-          isFirstOccurrenceOfRef(i, idx),
-        );
+        const firstSampled = getPrimarySampledItems(itemsList, {
+          excludeVisuallyAssessed: isVA,
+        })[0];
+        const firstSampledIndex = firstSampled
+          ? itemsList.findIndex(
+              (i) =>
+                i === firstSampled ||
+                (i._id &&
+                  firstSampled._id &&
+                  String(i._id) === String(firstSampled._id)),
+            )
+          : -1;
         if (firstSampledIndex >= 0) {
           setLoading(false);
           navigate(
@@ -560,7 +565,7 @@ const LDsuppliedAnalysisPage = () => {
     );
   };
 
-  // Sampled items = first occurrence of each unique sampleReference (actual samples for analysis). Referred items (later items with same sampleReference) are excluded.
+  // Sampled items = primary samples (isReferred=false). Referred items are excluded from analysis.
   const { sampledItems, isSampledItem, getDisplayLabReference } = useMemo(() => {
     if (!assessment?.items?.length)
       return {
@@ -573,15 +578,9 @@ const LDsuppliedAnalysisPage = () => {
       item.asbestosContent === "Visually Assessed as Asbestos" ||
       item.asbestosContent === "Visually Assessed as Non-Asbestos" ||
       item.asbestosContent === "Visually Assessed as Non-asbestos";
-    // Include only the first item per unique sampleReference (the actual sample); referred items (same ref, later in list) are excluded
-    const sampled = items.filter((item, index) => {
-      if (!item.sampleReference?.trim()) return false;
-      if (isVA(item)) return false;
-      const ref = item.sampleReference.trim();
-      const firstIndexWithRef = items.findIndex(
-        (i) => (i.sampleReference || "").trim() === ref,
-      );
-      return index === firstIndexWithRef;
+    // Include only primary sampled items (explicit isReferred=false, or legacy first per ref)
+    const sampled = getPrimarySampledItems(items, {
+      excludeVisuallyAssessed: isVA,
     });
     const sampledSet = new Set(sampled);
     const isSampled = (item) => item && sampledSet.has(item);

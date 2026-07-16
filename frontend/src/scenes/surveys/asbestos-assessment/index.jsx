@@ -53,6 +53,7 @@ import { hasPermission } from "../../../config/permissions";
 import { getTodaySydney } from "../../../utils/dateUtils";
 import { useSnackbar } from "../../../context/SnackbarContext";
 import { generateFibreIDReport } from "../../../utils/generateFibreIDReport";
+import { getPrimarySampledItems } from "../../../utils/asbestosAssessmentItems";
 import {
   startAssessmentPDFJob,
   getAssessmentPDFStatus,
@@ -849,8 +850,17 @@ const AsbestosAssessment = () => {
   };
 
   // True when a retained PDF exists (backend clears PDF fields when content changes, so presence = current).
-  const hasRetainedValidPdf = (job) =>
-    Boolean(job.pdfReadyAt || job.originalData?.pdfReadyAt || job.pdfFilename || job.originalData?.pdfFilename);
+  // Treat Unknown_* filenames as invalid so a bad frozen reference forces regeneration.
+  const hasRetainedValidPdf = (job) => {
+    const filename = job.pdfFilename || job.originalData?.pdfFilename || '';
+    if (/^Unknown_/i.test(String(filename).trim())) return false;
+    return Boolean(
+      job.pdfReadyAt ||
+        job.originalData?.pdfReadyAt ||
+        job.pdfFilename ||
+        job.originalData?.pdfFilename,
+    );
+  };
 
   const handleDownloadOrGenerateAssessmentReport = async (event, job) => {
     event.stopPropagation();
@@ -905,7 +915,7 @@ const AsbestosAssessment = () => {
     }
   };
 
-  // Check if all sampled items (first occurrence per sampleReference) have been analysed
+  // Check if all primary sampled items (excluding referred) have been analysed
   const areAllSampledItemsAnalysed = (job) => {
     const items = job?.originalData?.items || job?.items;
     if (!items?.length) return false;
@@ -913,14 +923,8 @@ const AsbestosAssessment = () => {
       item.asbestosContent === "Visually Assessed as Asbestos" ||
       item.asbestosContent === "Visually Assessed as Non-Asbestos" ||
       item.asbestosContent === "Visually Assessed as Non-asbestos";
-    const sampled = items.filter((item, index) => {
-      if (!item.sampleReference?.trim()) return false;
-      if (isVA(item)) return false;
-      const ref = item.sampleReference.trim();
-      const firstIndex = items.findIndex(
-        (i) => (i.sampleReference || "").trim() === ref,
-      );
-      return index === firstIndex;
+    const sampled = getPrimarySampledItems(items, {
+      excludeVisuallyAssessed: isVA,
     });
     if (sampled.length === 0) return false;
     return sampled.every((item) => item.analysisData?.isAnalysed === true);
@@ -980,15 +984,9 @@ const AsbestosAssessment = () => {
         i.asbestosContent === "Visually Assessed as Asbestos" ||
         i.asbestosContent === "Visually Assessed as Non-Asbestos" ||
         i.asbestosContent === "Visually Assessed as Non-asbestos";
-      const sampledItems = items.filter((item, index) => {
-        if (!item.sampleReference?.trim()) return false;
-        if (isVA(item)) return false;
-        const ref = item.sampleReference.trim();
-        const firstIndex = items.findIndex(
-          (x) => (x.sampleReference || "").trim() === ref,
-        );
-        return index === firstIndex && item.analysisData?.isAnalysed === true;
-      });
+      const sampledItems = getPrimarySampledItems(items, {
+        excludeVisuallyAssessed: isVA,
+      }).filter((item) => item.analysisData?.isAnalysed === true);
       // Lab reference format: {projectID}-Lab{index+1} to match fibre ID report
       const projectID = fullAssessment.projectId?.projectID || "Unknown";
       const sampleItemsForReport = sampledItems.map((item, index) => ({

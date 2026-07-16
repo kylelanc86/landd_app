@@ -854,8 +854,18 @@ const ResidentialAsbestosAssessment = () => {
   };
 
   // True when a retained PDF exists (backend clears PDF fields when content changes, so presence = current).
-  const hasRetainedValidPdf = (job) =>
-    Boolean(job.pdfReadyAt || job.originalData?.pdfReadyAt || job.pdfFilename || job.originalData?.pdfFilename);
+  // True when a retained PDF exists (backend clears PDF fields when content changes, so presence = current).
+  // Treat Unknown_* filenames as invalid so a bad frozen reference forces regeneration.
+  const hasRetainedValidPdf = (job) => {
+    const filename = job.pdfFilename || job.originalData?.pdfFilename || '';
+    if (/^Unknown_/i.test(String(filename).trim())) return false;
+    return Boolean(
+      job.pdfReadyAt ||
+        job.originalData?.pdfReadyAt ||
+        job.pdfFilename ||
+        job.originalData?.pdfFilename,
+    );
+  };
 
   const handleDownloadOrGenerateAssessmentReport = async (event, job) => {
     event.stopPropagation();

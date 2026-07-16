@@ -562,7 +562,7 @@ pdfMake.fonts = {
             margin: [0, 0, 0, 12]
           },
           
-          // Sample Analysis Table — centred content; row height from pdfMake, top offset for shorter cells
+          // Sample Analysis Table — centred content; shorter cells get equal top/bottom margin
           (function() {
             // Table column widths in percentage: ['16%', '11%', '11%', '19%', '11%', '13%', '19%']
             // A4 page width: 595pt, margins: 40pt each side = 515pt usable width
@@ -574,7 +574,9 @@ pdfMake.fonts = {
             const CELL_BORDER_WIDTH = 1; // 0.5pt left + 0.5pt right cell borders
             const WRAP_WIDTH_SAFETY_PT = 2; // pdfMake vs canvas measurement fudge
             const LINE_HEIGHT_PT = measurer.getLineHeightPt(CELL_FONT_SIZE, false);
-            const FIBRE_ITEM_GAP_PT = LINE_HEIGHT_PT / 2; // half a line between stacked fibre results
+            // Small gap between stacked fibre results (do not use empty text spacers —
+            // pdfMake still allocates a full line box for those and hugely overspaces).
+            const FIBRE_ITEM_GAP_PT = 2;
             const MIN_ROW_LINES = 2;
 
             const getColumnInnerWidthPt = (columnIndex) =>
@@ -604,7 +606,7 @@ pdfMake.fonts = {
                 (sum, item) => sum + estimateWrappedLines(item, columnIndex, { bold }),
                 0
               );
-              const gapLines = Math.max(0, items.length - 1) * 0.5;
+              const gapLines = Math.max(0, items.length - 1) * (FIBRE_ITEM_GAP_PT / LINE_HEIGHT_PT);
               return Math.max(textLines + gapLines, 1);
             };
 
@@ -612,22 +614,17 @@ pdfMake.fonts = {
               if (!items?.length) return buildSampleCell({ text: 'None', bold });
               if (items.length === 1) return buildSampleCell({ text: items[0], bold });
 
-              const stack = [];
-              items.forEach((item, itemIndex) => {
-                if (itemIndex > 0) {
-                  stack.push({
-                    text: '',
-                    margin: [0, FIBRE_ITEM_GAP_PT / 2, 0, FIBRE_ITEM_GAP_PT / 2],
-                  });
-                }
-                stack.push({
+              return {
+                stack: items.map((item, itemIndex) => ({
                   text: item,
                   fontSize: CELL_FONT_SIZE,
                   bold,
                   alignment: 'center',
-                });
-              });
-              return { stack };
+                  margin: itemIndex < items.length - 1
+                    ? [0, 0, 0, FIBRE_ITEM_GAP_PT]
+                    : [0, 0, 0, 0],
+                })),
+              };
             };
             
             const tableRows = sortedSampleItems.map((item, index) => {
@@ -813,7 +810,6 @@ pdfMake.fonts = {
 
           const dataRows = tableRows.map((row) => {
             const maxLines = Math.max(...row.lineCounts, 1);
-            const needsMinRowHeight = maxLines < MIN_ROW_LINES;
             const layoutLines = Math.max(maxLines, MIN_ROW_LINES);
 
             return row.cells.map((cell, cellIndex) => {
@@ -822,9 +818,8 @@ pdfMake.fonts = {
 
               return {
                 ...cell,
-                margin: needsMinRowHeight
-                  ? [0, verticalMargin, 0, verticalMargin]
-                  : [0, verticalMargin, 0, 0],
+                // Symmetric top/bottom padding so shorter cells sit centred in the row
+                margin: [0, verticalMargin, 0, verticalMargin],
               };
             });
           });

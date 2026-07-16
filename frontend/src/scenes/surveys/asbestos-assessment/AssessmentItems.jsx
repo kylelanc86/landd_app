@@ -56,9 +56,11 @@ import {
   ArrowUpward as ArrowUpwardIcon,
   ContentCopy as ContentCopyIcon,
   RotateRight as RotateRightIcon,
+  DragIndicator as DragIndicatorIcon,
 } from "@mui/icons-material";
 import MicIcon from "@mui/icons-material/Mic";
 import WarningIcon from "@mui/icons-material/Warning";
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import PermissionGate from "../../../components/PermissionGate";
@@ -80,6 +82,11 @@ import {
   rotateDataUrl90Cw,
   rotateNormalizedPoint90Cw,
 } from "../../../utils/rotateImageDataUrl";
+import {
+  isAssessmentItemReferred,
+  getPrimarySampledItems,
+  findPrimarySampledItemForRef,
+} from "../../../utils/asbestosAssessmentItems";
 
 /** Default arrow overlay color (hex) and rotation (degrees, anticlockwise). */
 const DEFAULT_ARROW_COLOR = "#f44336";
@@ -144,15 +151,9 @@ const isAsbestosResultPart = (part) => {
  * Non-asbestos fibres are not shown in this column.
  */
 const getEffectiveAsbestosDisplayForItem = (item, items) => {
-  const findSampled = (ref) => {
-    const r = String(ref || "").trim();
-    if (!r) return null;
-    return (
-      (items || []).find((i) => (i.sampleReference || "").trim() === r) || null
-    );
-  };
-  const sampled = findSampled(item.sampleReference);
-  const source = sampled && sampled !== item ? sampled : item;
+  const sampled = findPrimarySampledItemForRef(items, item.sampleReference);
+  const source =
+    sampled && isAssessmentItemReferred(item, items) ? sampled : item;
   const requiresAnalysis = (i) =>
     (i.sampleReference || "").trim() && !isVisuallyAssessedContent(i.asbestosContent);
   const notYetAnalysed =
@@ -198,21 +199,15 @@ const isVisuallyAssessedContent = (ac) => {
 
 /**
  * Returns the string to show in the Sample Reference column: the assessment sample reference (e.g. LD-001).
- * For referred items (same sample as another row), returns "Refer to sample {ref}".
+ * For referred items (explicitly set as referred), returns "Refer to sample {ref}".
  * This matches the Fibre ID report, where "Sample Reference" is the assessment ref; lab ref (e.g. PROJ-Lab1) is "L&D ID Reference".
  */
 const getDisplaySampleReference = (item, items) => {
   const ref = (item.sampleReference || "").trim();
-  const firstIdx = (items || []).findIndex(
-    (i) => (i.sampleReference || "").trim() === ref,
-  );
-  const isReferred =
-    ref &&
-    firstIdx >= 0 &&
-    items.indexOf(item) !== firstIdx;
-  return isReferred
-    ? `Refer to sample ${item.sampleReference}`
-    : item.sampleReference || "N/A";
+  if (ref && isAssessmentItemReferred(item, items)) {
+    return `Refer to sample ${item.sampleReference}`;
+  }
+  return item.sampleReference || "N/A";
 };
 
 const getAssessmentItemTypeLabel = (item, items) => {
@@ -228,16 +223,7 @@ const getAssessmentItemTypeLabel = (item, items) => {
   const ref = (item?.sampleReference || "").trim();
   if (!ref) return "Sampled";
 
-  const firstIndexWithRef = (items || []).findIndex(
-    (i) => (i.sampleReference || "").trim() === ref,
-  );
-  const currentIndex = (items || []).findIndex((i) => i._id === item?._id);
-  const isReferred =
-    firstIndexWithRef !== -1 &&
-    currentIndex !== -1 &&
-    firstIndexWithRef !== currentIndex;
-
-  return isReferred ? "Referred" : "Sampled";
+  return isAssessmentItemReferred(item, items) ? "Referred" : "Sampled";
 };
 
 /**
@@ -247,12 +233,14 @@ const getAssessmentItemTypeLabel = (item, items) => {
 const getLabReferenceForItem = (item, items, assessment) => {
   const projectID = assessment?.projectId?.projectID;
   if (!projectID) return null;
+  if (isAssessmentItemReferred(item, items)) return null;
   const seen = new Set();
   const orderedRefs = (items || [])
     .filter(
       (i) =>
         (i.sampleReference || "").trim() !== "" &&
-        !isVisuallyAssessedContent(i.asbestosContent),
+        !isVisuallyAssessedContent(i.asbestosContent) &&
+        !isAssessmentItemReferred(i, items),
     )
     .map((i) => (i.sampleReference || "").trim())
     .filter((r) => {
@@ -264,15 +252,6 @@ const getLabReferenceForItem = (item, items, assessment) => {
     orderedRefs.map((r, idx) => [r, idx + 1]),
   );
   const currentRef = (item.sampleReference || "").trim();
-  const firstIdxWithRef = (items || []).findIndex(
-    (i) => (i.sampleReference || "").trim() === currentRef,
-  );
-  const currentIdx = (items || []).findIndex((i) => i._id === item._id);
-  const isReferred =
-    currentRef !== "" &&
-    firstIdxWithRef >= 0 &&
-    firstIdxWithRef !== currentIdx;
-  if (isReferred) return null; // Referred items share the same lab ref as the primary; show only on primary
   const labN = refToLabIndex[currentRef];
   return labN ? `${projectID}-Lab${labN}` : null;
 };
@@ -386,17 +365,9 @@ const resolveAnalysisIncompleteForDisplay = (text, assessment) => {
       !isVisuallyAssessedContent(i.asbestosContent),
   );
   const firstSampledPerRef = hasSampledItemsRequiringAnalysis
-    ? items.filter((item, index) => {
-        if (
-          !(item.sampleReference || "").trim() ||
-          isVisuallyAssessedContent(item.asbestosContent)
-        )
-          return false;
-        const ref = (item.sampleReference || "").trim();
-        return (
-          index ===
-          items.findIndex((i) => (i.sampleReference || "").trim() === ref)
-        );
+    ? getPrimarySampledItems(items, {
+        excludeVisuallyAssessed: (item) =>
+          isVisuallyAssessedContent(item.asbestosContent),
       })
     : [];
   const analysisComplete =
@@ -736,28 +707,24 @@ const AssessmentItems = () => {
       return true; // Empty is allowed (not required)
     }
     const normalizedRef = ensureSampleReferencePrefix(sampleRef);
-    return !items.some((item, index) => {
+    return !items.some((item) => {
       const itemRefNormalized = ensureSampleReferencePrefix(item.sampleReference);
       if (itemRefNormalized !== normalizedRef) return false;
       if (excludeItemId && item._id === excludeItemId) return false;
-      // Only count as duplicate if this item is the primary for this ref (first occurrence)
-      const firstIndexWithRef = items.findIndex(
-        (i) => ensureSampleReferencePrefix(i.sampleReference) === normalizedRef,
-      );
-      return index === firstIndexWithRef;
+      // Only conflict with primary (non-referred) items
+      return !isAssessmentItemReferred(item, items);
     });
   };
 
-  // Helper function to get all unique sample references from existing items
+  // Helper function to get sample references from primary (non-referred) sampled items
   const getAvailableSampleReferences = () => {
-    const sampleRefs = items
-      .filter(
-        (item) => item.sampleReference && item.sampleReference.trim() !== "",
-      )
+    return getPrimarySampledItems(items, {
+      excludeVisuallyAssessed: (item) =>
+        isVisuallyAssessedContent(item.asbestosContent),
+    })
       .map((item) => item.sampleReference)
-      .filter((ref, index, self) => self.indexOf(ref) === index) // Get unique values
+      .filter((ref) => ref && String(ref).trim() !== "")
       .sort();
-    return sampleRefs;
   };
 
   const handleSubmit = async (e) => {
@@ -861,6 +828,7 @@ const AssessmentItems = () => {
                     form.sampleReference.toUpperCase(),
                   )
               : "",
+        isReferred: Boolean(isReferredItem) && !isVisuallyAssessedItem && !isNonACM,
         levelFloor: showLevelFloor ? form.levelFloor : "",
         roomArea: form.roomArea,
         locationDescription: form.locationDescription,
@@ -934,17 +902,9 @@ const AssessmentItems = () => {
       item.asbestosContent === "Visually Assessed as Asbestos" ||
       item.asbestosContent === "Visually Assessed as Non-Asbestos";
 
-    // Referred = same sample ref as another item but this is not the first occurrence (so it "refers to" the primary).
-    // Primary sampled item (first with this ref) gets editable field; referred items get dropdown.
-    const currentRef = (item.sampleReference || "").trim();
-    const firstIndexWithThisRef = items.findIndex(
-      (i) => (i.sampleReference || "").trim() === currentRef,
-    );
-    const currentIndex = items.findIndex((i) => i._id === item._id);
-    const isReferredItemCheck =
-      currentRef !== "" &&
-      firstIndexWithThisRef !== -1 &&
-      firstIndexWithThisRef !== currentIndex;
+    // Referred = explicitly set as referred (or legacy: not the primary for this sample ref).
+    // Primary sampled item gets editable field; referred items get dropdown.
+    const isReferredItemCheck = isAssessmentItemReferred(item, items);
 
     // Check if this is a non-ACM item (legacy support)
     const isNonACMItem =
@@ -1053,15 +1013,7 @@ const AssessmentItems = () => {
     const isVisuallyAssessedItemCheck =
       item.asbestosContent === "Visually Assessed as Asbestos" ||
       item.asbestosContent === "Visually Assessed as Non-Asbestos";
-    const currentRef = (item.sampleReference || "").trim();
-    const firstIndexWithThisRef = items.findIndex(
-      (i) => (i.sampleReference || "").trim() === currentRef,
-    );
-    const currentIndex = items.findIndex((i) => i._id === item._id);
-    const isReferredItemCheck =
-      currentRef !== "" &&
-      firstIndexWithThisRef !== -1 &&
-      firstIndexWithThisRef !== currentIndex;
+    const isReferredItemCheck = isAssessmentItemReferred(item, items);
     const isNonACMItem =
       (!item.sampleReference || item.sampleReference.trim() === "") &&
       (!item.asbestosType || item.asbestosType.trim() === "") &&
@@ -1101,6 +1053,7 @@ const AssessmentItems = () => {
 
     const itemData = {
       sampleReference: sampleRefForCreate === null ? null : sampleRefForCreate,
+      isReferred: Boolean(isReferredItemCheck),
       levelFloor: item.levelFloor || "",
       roomArea: item.roomArea || "",
       locationDescription: item.locationDescription || "",
@@ -1183,6 +1136,29 @@ const AssessmentItems = () => {
   const cancelDelete = () => {
     setDeleteConfirmDialogOpen(false);
     setItemToDelete(null);
+  };
+
+  const handleItemsDragEnd = async (result) => {
+    if (isReportLocked) return;
+    if (!result.destination) return;
+    if (result.source.index === result.destination.index) return;
+
+    const previousItems = items;
+    const reordered = Array.from(items);
+    const [moved] = reordered.splice(result.source.index, 1);
+    reordered.splice(result.destination.index, 0, moved);
+    setItems(reordered);
+
+    try {
+      const itemIds = reordered.map((item) => item._id);
+      const saved = await asbestosAssessmentService.reorderItems(id, itemIds);
+      setItems(saved || reordered);
+      showSnackbar("Item order updated", "success");
+    } catch (err) {
+      console.error("Error reordering items:", err);
+      setItems(previousItems);
+      showSnackbar("Failed to reorder items", "error");
+    }
   };
 
   const resetForm = () => {
@@ -3116,6 +3092,16 @@ const AssessmentItems = () => {
                       "&:hover": { backgroundColor: "transparent" },
                     }}
                   >
+                    {!isReportLocked && items.length > 0 && (
+                      <TableCell
+                        sx={{
+                          fontWeight: "bold",
+                          color: "inherit",
+                          width: 40,
+                          px: 0.5,
+                        }}
+                      />
+                    )}
                     {items &&
                       items.length > 0 &&
                       items.some(
@@ -3213,235 +3199,302 @@ const AssessmentItems = () => {
                     </TableCell>
                   </TableRow>
                 </TableHead>
-                <TableBody>
-                  {items.length === 0 ? (
-                    <TableRow>
-                      <TableCell
-                        colSpan={
-                          5 +
-                          (items &&
-                          items.length > 0 &&
-                          items.some(
-                            (item) =>
-                              item.levelFloor && item.levelFloor.trim() !== "",
-                          )
-                            ? 1
-                            : 0)
-                        }
-                        align="center"
+                <DragDropContext onDragEnd={handleItemsDragEnd}>
+                  <Droppable
+                    droppableId="assessment-items"
+                    isDropDisabled={isReportLocked}
+                  >
+                    {(droppableProvided) => (
+                      <TableBody
+                        ref={droppableProvided.innerRef}
+                        {...droppableProvided.droppableProps}
                       >
-                        No items found. Click "Add Item" to create your first
-                        item.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    items.map((item) => {
-                      const hasLevelFloor =
-                        items &&
-                        items.length > 0 &&
-                        items.some(
-                          (item) =>
-                            item.levelFloor && item.levelFloor.trim() !== "",
-                        );
-                      return (
-                        <TableRow
-                          key={item._id || item.itemNumber}
-                          onClick={() => handleEdit(item)}
-                          sx={{ cursor: "pointer" }}
-                        >
-                          {hasLevelFloor && (
-                            <TableCell>
-                              {item.levelFloor ? (
-                                <Typography variant="body2">
-                                  {item.levelFloor}
-                                </Typography>
-                              ) : (
-                                <Typography
-                                  variant="body2"
-                                  color="text.secondary"
-                                  fontStyle="italic"
-                                >
-                                  Not specified
-                                </Typography>
-                              )}
+                        {items.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={5} align="center">
+                              No items found. Click "Add Item" to create your
+                              first item.
                             </TableCell>
-                          )}
-                          <TableCell
-                            sx={{
-                              display: "none",
-                              "@media (orientation: portrait) and (max-width: 600px)":
-                                {
-                                  display: "table-cell",
-                                  width: "55%",
-                                  minWidth: "55%",
-                                },
-                            }}
-                          >
-                            {[
-                              item.roomArea || "",
-                              item.locationDescription || "",
-                            ]
-                              .filter(Boolean)
-                              .join(" – ") || "N/A"}
-                          </TableCell>
-                          <TableCell
-                            sx={{
-                              display: "table-cell",
-                              "@media (orientation: portrait) and (max-width: 600px)":
-                                {
-                                  display: "none",
-                                },
-                            }}
-                          >
-                            {item.roomArea || "N/A"}
-                          </TableCell>
-                          <TableCell
-                            sx={{
-                              display: "table-cell",
-                              "@media (orientation: portrait) and (max-width: 600px)":
-                                {
-                                  display: "none",
-                                },
-                            }}
-                          >
-                            {item.locationDescription || "N/A"}
-                          </TableCell>
-                          <TableCell
-                            sx={{
-                              "@media (orientation: portrait) and (max-width: 600px)":
-                                {
-                                  width: "25%",
-                                  maxWidth: "25%",
-                                },
-                            }}
-                          >
-                            {getDisplaySampleReference(item, items, assessment)}
-                          </TableCell>
-                          <TableCell
-                            sx={{
-                              display: "table-cell",
-                              "@media (orientation: portrait) and (max-width: 600px)":
-                                {
-                                  display: "none",
-                                },
-                            }}
-                          >
-                            {getEffectiveAsbestosDisplayForItem(item, items)}
-                          </TableCell>
-                          <TableCell
-                            sx={{
-                              display: "table-cell",
-                              "@media (orientation: portrait) and (max-width: 600px)":
-                                {
-                                  display: "none",
-                                },
-                            }}
-                          >
-                            {(() => {
-                              const photoCount =
-                                (item.photographs?.length || 0) +
-                                (item.photograph ? 1 : 0);
-                              const selectedCount =
-                                item.photographs?.filter(
-                                  (p) => p.includeInReport,
-                                ).length || 0;
-                              return photoCount > 0 ? (
-                                <Box
-                                  display="flex"
-                                  flexDirection="column"
-                                  alignItems="flex-start"
-                                  gap={0.5}
-                                >
-                                  <Chip
-                                    label={`${photoCount} photo${
-                                      photoCount !== 1 ? "s" : ""
-                                    }`}
-                                    color="success"
-                                    size="small"
-                                  />
-                                  {item.photographs?.length > 0 && (
-                                    <Typography
-                                      variant="caption"
-                                      color="text.secondary"
-                                    >
-                                      {selectedCount} in report
-                                    </Typography>
-                                  )}
-                                </Box>
-                              ) : (
-                                <Chip
-                                  label="No photos"
-                                  color="default"
-                                  size="small"
-                                />
-                              );
-                            })()}
-                          </TableCell>
-                          <TableCell onClick={(e) => e.stopPropagation()}>
-                            <Box display="flex" gap={1}>
-                              <IconButton
-                                onClick={() => handleOpenPhotoGallery(item)}
-                                color="secondary"
-                                size="small"
-                                title="Manage Photos"
+                          </TableRow>
+                        ) : (
+                          items.map((item, index) => {
+                            const hasLevelFloor = items.some(
+                              (i) =>
+                                i.levelFloor && i.levelFloor.trim() !== "",
+                            );
+                            const rowKey = String(
+                              item._id || item.itemNumber || index,
+                            );
+                            const renderRow = (provided, snapshot) => (
+                              <TableRow
+                                ref={provided.innerRef}
+                                {...provided.draggableProps}
+                                onClick={() => handleEdit(item)}
+                                style={{
+                                  ...provided.draggableProps.style,
+                                  ...(snapshot.isDragging
+                                    ? {
+                                        display: "table",
+                                        tableLayout: "fixed",
+                                        backgroundColor:
+                                          "rgba(0, 0, 0, 0.04)",
+                                      }
+                                    : {}),
+                                }}
+                                sx={{
+                                  cursor: "pointer",
+                                }}
                               >
-                                <PhotoCameraIcon />
-                              </IconButton>
-                              {!isReportLocked && (
-                                <IconButton
-                                  onClick={() => handleDuplicate(item)}
-                                  color="primary"
-                                  size="small"
-                                  title="Duplicate item"
+                                {!isReportLocked && (
+                                  <TableCell
+                                    onClick={(e) => e.stopPropagation()}
+                                    sx={{
+                                      width: 40,
+                                      px: 0.5,
+                                      verticalAlign: "middle",
+                                    }}
+                                  >
+                                    <Box
+                                      {...provided.dragHandleProps}
+                                      sx={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        cursor: "grab",
+                                        color: "text.secondary",
+                                        "&:active": { cursor: "grabbing" },
+                                      }}
+                                      title="Drag to reorder"
+                                    >
+                                      <DragIndicatorIcon fontSize="small" />
+                                    </Box>
+                                  </TableCell>
+                                )}
+                                {hasLevelFloor && (
+                                  <TableCell>
+                                    {item.levelFloor ? (
+                                      <Typography variant="body2">
+                                        {item.levelFloor}
+                                      </Typography>
+                                    ) : (
+                                      <Typography
+                                        variant="body2"
+                                        color="text.secondary"
+                                        fontStyle="italic"
+                                      >
+                                        Not specified
+                                      </Typography>
+                                    )}
+                                  </TableCell>
+                                )}
+                                <TableCell
                                   sx={{
-                                    display: "inline-flex",
+                                    display: "none",
+                                    "@media (orientation: portrait) and (max-width: 600px)":
+                                      {
+                                        display: "table-cell",
+                                        width: "55%",
+                                        minWidth: "55%",
+                                      },
+                                  }}
+                                >
+                                  {[
+                                    item.roomArea || "",
+                                    item.locationDescription || "",
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" – ") || "N/A"}
+                                </TableCell>
+                                <TableCell
+                                  sx={{
+                                    display: "table-cell",
                                     "@media (orientation: portrait) and (max-width: 600px)":
                                       {
                                         display: "none",
                                       },
                                   }}
                                 >
-                                  <ContentCopyIcon />
-                                </IconButton>
-                              )}
-                              <IconButton
-                                onClick={() => handleEdit(item)}
-                                color="primary"
-                                size="small"
-                                title={isReportLocked ? "View only (report approved)" : "Edit"}
-                                disabled={isReportLocked}
-                                sx={{
-                                  display: "inline-flex",
-                                  "@media (max-width: 600px)": {
-                                    display: "none",
-                                  },
-                                }}
+                                  {item.roomArea || "N/A"}
+                                </TableCell>
+                                <TableCell
+                                  sx={{
+                                    display: "table-cell",
+                                    "@media (orientation: portrait) and (max-width: 600px)":
+                                      {
+                                        display: "none",
+                                      },
+                                  }}
+                                >
+                                  {item.locationDescription || "N/A"}
+                                </TableCell>
+                                <TableCell
+                                  sx={{
+                                    "@media (orientation: portrait) and (max-width: 600px)":
+                                      {
+                                        width: "25%",
+                                        maxWidth: "25%",
+                                      },
+                                  }}
+                                >
+                                  {getDisplaySampleReference(
+                                    item,
+                                    items,
+                                    assessment,
+                                  )}
+                                </TableCell>
+                                <TableCell
+                                  sx={{
+                                    display: "table-cell",
+                                    "@media (orientation: portrait) and (max-width: 600px)":
+                                      {
+                                        display: "none",
+                                      },
+                                  }}
+                                >
+                                  {getEffectiveAsbestosDisplayForItem(
+                                    item,
+                                    items,
+                                  )}
+                                </TableCell>
+                                <TableCell
+                                  sx={{
+                                    display: "table-cell",
+                                    "@media (orientation: portrait) and (max-width: 600px)":
+                                      {
+                                        display: "none",
+                                      },
+                                  }}
+                                >
+                                  {(() => {
+                                    const photoCount =
+                                      (item.photographs?.length || 0) +
+                                      (item.photograph ? 1 : 0);
+                                    const selectedCount =
+                                      item.photographs?.filter(
+                                        (p) => p.includeInReport,
+                                      ).length || 0;
+                                    return photoCount > 0 ? (
+                                      <Box
+                                        display="flex"
+                                        flexDirection="column"
+                                        alignItems="flex-start"
+                                        gap={0.5}
+                                      >
+                                        <Chip
+                                          label={`${photoCount} photo${
+                                            photoCount !== 1 ? "s" : ""
+                                          }`}
+                                          color="success"
+                                          size="small"
+                                        />
+                                        {item.photographs?.length > 0 && (
+                                          <Typography
+                                            variant="caption"
+                                            color="text.secondary"
+                                          >
+                                            {selectedCount} in report
+                                          </Typography>
+                                        )}
+                                      </Box>
+                                    ) : (
+                                      <Chip
+                                        label="No photos"
+                                        color="default"
+                                        size="small"
+                                      />
+                                    );
+                                  })()}
+                                </TableCell>
+                                <TableCell
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Box display="flex" gap={1}>
+                                    <IconButton
+                                      onClick={() =>
+                                        handleOpenPhotoGallery(item)
+                                      }
+                                      color="secondary"
+                                      size="small"
+                                      title="Manage Photos"
+                                    >
+                                      <PhotoCameraIcon />
+                                    </IconButton>
+                                    {!isReportLocked && (
+                                      <IconButton
+                                        onClick={() => handleDuplicate(item)}
+                                        color="primary"
+                                        size="small"
+                                        title="Duplicate item"
+                                        sx={{
+                                          display: "inline-flex",
+                                          "@media (orientation: portrait) and (max-width: 600px)":
+                                            {
+                                              display: "none",
+                                            },
+                                        }}
+                                      >
+                                        <ContentCopyIcon />
+                                      </IconButton>
+                                    )}
+                                    <IconButton
+                                      onClick={() => handleEdit(item)}
+                                      color="primary"
+                                      size="small"
+                                      title={
+                                        isReportLocked
+                                          ? "View only (report approved)"
+                                          : "Edit"
+                                      }
+                                      disabled={isReportLocked}
+                                      sx={{
+                                        display: "inline-flex",
+                                        "@media (max-width: 600px)": {
+                                          display: "none",
+                                        },
+                                      }}
+                                    >
+                                      <EditIcon />
+                                    </IconButton>
+                                    <IconButton
+                                      onClick={() => handleDelete(item)}
+                                      color="error"
+                                      size="small"
+                                      title="Delete"
+                                      disabled={isReportLocked}
+                                      sx={{
+                                        display: "inline-flex",
+                                        "@media (orientation: portrait) and (max-width: 600px)":
+                                          {
+                                            display: "none",
+                                          },
+                                      }}
+                                    >
+                                      <DeleteIcon />
+                                    </IconButton>
+                                  </Box>
+                                </TableCell>
+                              </TableRow>
+                            );
+
+                            return (
+                              <Draggable
+                                key={rowKey}
+                                draggableId={rowKey}
+                                index={index}
+                                isDragDisabled={isReportLocked}
                               >
-                                <EditIcon />
-                              </IconButton>
-                              <IconButton
-                                onClick={() => handleDelete(item)}
-                                color="error"
-                                size="small"
-                                title="Delete"
-                                disabled={isReportLocked}
-                                sx={{
-                                  display: "inline-flex",
-                                  "@media (orientation: portrait) and (max-width: 600px)":
-                                    {
-                                      display: "none",
-                                    },
-                                }}
-                              >
-                                <DeleteIcon />
-                              </IconButton>
-                            </Box>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
+                                {(provided, snapshot) =>
+                                  renderRow(provided, snapshot)
+                                }
+                              </Draggable>
+                            );
+                          })
+                        )}
+                        {droppableProvided.placeholder}
+                      </TableBody>
+                    )}
+                  </Droppable>
+                </DragDropContext>
               </Table>
             </TableContainer>
           </CardContent>
@@ -3716,16 +3769,17 @@ const AssessmentItems = () => {
                 </Grid>
                 {editingItem && (() => {
                   const currentRef = (editingItem.sampleReference || "").trim();
-                  const otherItemsWithSameRef = (items || []).filter(
+                  const otherItemsReferringToThis = (items || []).filter(
                     (i) =>
                       i._id !== editingItem._id &&
-                      (i.sampleReference || "").trim() === currentRef,
+                      (i.sampleReference || "").trim() === currentRef &&
+                      isAssessmentItemReferred(i, items),
                   );
                   const isSampledWithReferredItems =
                     !isVisuallyAssessedItem &&
                     !isReferredItem &&
                     currentRef !== "" &&
-                    otherItemsWithSameRef.length > 0;
+                    otherItemsReferringToThis.length > 0;
                   return (
                   <Grid item xs={12} md={6}>
                     <FormControl fullWidth disabled={isSampledWithReferredItems}>

@@ -19,7 +19,9 @@ const {
   buildLDChainOfCustodyFilename,
   buildFibreIDFilename,
   toReportReference,
+  isPlaceholderReportReference,
 } = require('../utils/reportFilenames');
+const { healReferredFlags } = require('../utils/asbestosAssessmentItems');
 
 /** Assessment report PDF retention (days) – matches DocRaptor; after this, report is no longer offered for download. */
 const ASSESSMENT_PDF_RETENTION_DAYS = 7;
@@ -548,6 +550,15 @@ router.get('/:id', async (req, res) => {
       omitItems ||
       itemsMaterialTypesRaw.length > 0;
 
+    // Heal duplicate sample refs before responding (persists when flags were wrong)
+    if (!omitItems && job.items && job.items.length > 0) {
+      const { changed } = healReferredFlags(job.items);
+      if (changed) {
+        job.markModified('items');
+        await job.save();
+      }
+    }
+
     if (!needsPlainTransform) {
       return res.json(job);
     }
@@ -587,8 +598,23 @@ router.get('/:id', async (req, res) => {
 // PUT /api/assessments/:id - update assessment job
 router.put('/:id', async (req, res) => {
   try {
+    // Include fields needed to freeze report references on first authorisation / Fibre ID approval.
     const existingJob = await AsbestosAssessment.findById(req.params.id)
-      .select('jobType leadAssessmentScope leadDiscussionConclusionsByType')
+      .select(
+        [
+          'jobType',
+          'leadAssessmentScope',
+          'leadDiscussionConclusionsByType',
+          'projectId',
+          'createdAt',
+          'reportAuthorisedBy',
+          'reportAuthorisedAt',
+          'reportReference',
+          'reportApprovedBy',
+          'reportIssueDate',
+          'fibreIdReportReference',
+        ].join(' '),
+      )
       .lean();
     if (!existingJob) return res.status(404).json({ message: 'Assessment job not found' });
 
@@ -715,7 +741,7 @@ router.put('/:id', async (req, res) => {
       reportApprovedBy !== undefined &&
       reportApprovedBy &&
       !existingJob.reportApprovedBy;
-    if (isBecomingFibreIdApproved && !existingJob.fibreIdReportReference) {
+    if (isBecomingFibreIdApproved && isPlaceholderReportReference(existingJob.fibreIdReportReference)) {
       const issueDate =
         existingJob.reportIssueDate ||
         updateData.reportIssueDate ||
@@ -723,7 +749,10 @@ router.put('/:id', async (req, res) => {
       if (!existingJob.reportIssueDate && !updateData.reportIssueDate) {
         updateData.reportIssueDate = issueDate;
       }
-      const projectIdValue = existingJob.projectId?._id || existingJob.projectId;
+      const projectIdValue =
+        existingJob.projectId?._id ||
+        existingJob.projectId ||
+        (projectId && typeof projectId === 'object' ? projectId._id || projectId.id : projectId);
       let projectID = 'Unknown';
       let siteName = 'Unknown';
       try {
@@ -744,16 +773,25 @@ router.put('/:id', async (req, res) => {
     }
 
     // Freeze assessment report reference once (first authorisation), based on authorised filename without revX.
+    // Also rebuild if an earlier bug froze "Unknown_..." without project/site data.
     const isBecomingAuthorised =
       reportAuthorisedBy !== undefined &&
       reportAuthorisedBy &&
       !existingJob.reportAuthorisedBy;
-    if (isBecomingAuthorised && !existingJob.reportReference) {
+    const shouldFreezeOrRepairReportReference =
+      isPlaceholderReportReference(existingJob.reportReference) &&
+      (isBecomingAuthorised ||
+        existingJob.reportAuthorisedBy ||
+        (reportAuthorisedBy !== undefined && reportAuthorisedBy));
+    if (shouldFreezeOrRepairReportReference) {
       const issueDate =
         existingJob.reportAuthorisedAt ||
         updateData.reportAuthorisedAt ||
         new Date();
-      const projectIdValue = existingJob.projectId?._id || existingJob.projectId;
+      const projectIdValue =
+        existingJob.projectId?._id ||
+        existingJob.projectId ||
+        (projectId && typeof projectId === 'object' ? projectId._id || projectId.id : projectId);
       let sequenceNumber = 1;
       try {
         const parsedIssueDate = new Date(issueDate);
@@ -1098,6 +1136,9 @@ router.patch('/:id/archive', auth, async (req, res) => {
 });
 
 // POST /api/assessments/:id/send-for-authorisation - send authorisation request emails to report proofers
+// Used for both:
+// 1) Fibre ID report approval (status sample-analysis-complete, reportApprovedBy not set) — from L&D Supplied Jobs
+// 2) Assessment report authorisation (status report-ready-for-review / complete) — from Surveys
 router.post('/:id/send-for-authorisation', auth, checkPermission('asbestos.edit'), async (req, res) => {
   try {
     const assessment = await AsbestosAssessment.findById(req.params.id)
@@ -1120,9 +1161,31 @@ router.post('/:id/send-for-authorisation', auth, checkPermission('asbestos.edit'
       });
     }
 
-    if (!['report-ready-for-review', 'complete'].includes(assessment.status)) {
+    const fibreIdApproved = !!(
+      assessment.reportApprovedBy &&
+      String(assessment.reportApprovedBy).trim()
+    );
+    const isFibreIdAuthorisationRequest = !fibreIdApproved;
+    const labAnalysisComplete =
+      assessment.labSamplesStatus === 'analysis-complete' ||
+      ['sample-analysis-complete', 'report-ready-for-review', 'complete'].includes(
+        assessment.status,
+      );
+    const assessmentReportReady = ['report-ready-for-review', 'complete'].includes(
+      assessment.status,
+    );
+
+    if (isFibreIdAuthorisationRequest) {
+      if (!labAnalysisComplete) {
+        return res.status(400).json({
+          message:
+            'Sample analysis must be complete before sending the Fibre ID report for authorisation',
+        });
+      }
+    } else if (!assessmentReportReady) {
       return res.status(400).json({
-        message: 'Assessment report must be ready for review before sending for authorisation'
+        message:
+          'Assessment report must be ready for review before sending for authorisation',
       });
     }
 
@@ -1149,14 +1212,25 @@ router.post('/:id/send-for-authorisation', auth, checkPermission('asbestos.edit'
     const projectID = assessment.projectId?.projectID || 'N/A';
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
     const surveyPath = assessment.jobType === 'residential-asbestos' ? 'residential-asbestos' : 'asbestos-assessment';
-    const reportLabel = assessment.jobType === 'residential-asbestos' ? 'Residential Asbestos Assessment' : 'Asbestos Assessment';
-    const jobUrl = `${frontendUrl}/surveys/${surveyPath}`;
+    const assessmentReportLabel = assessment.jobType === 'residential-asbestos'
+      ? 'Residential Asbestos Assessment'
+      : 'Asbestos Assessment';
+
+    const reportLabel = isFibreIdAuthorisationRequest
+      ? 'Fibre ID'
+      : assessmentReportLabel;
+    const jobUrl = isFibreIdAuthorisationRequest
+      ? `${frontendUrl}/fibre-id/ldjobs`
+      : `${frontendUrl}/surveys/${surveyPath}`;
+    const subject = isFibreIdAuthorisationRequest
+      ? `Report Authorisation Required - ${projectID}: Fibre ID Report`
+      : `Report Authorisation Required - ${projectID}: ${assessmentReportLabel} Report`;
 
     const emailPromises = reportProoferUsers.map(async (user) => {
       try {
         await sendMail({
           to: user.email,
-          subject: `Report Authorisation Required - ${projectID}: ${reportLabel} Report`,
+          subject,
           text: `
 A ${reportLabel} report is ready for authorisation.
 
@@ -1199,7 +1273,8 @@ Please review and authorise the report at: ${jobUrl}
 
     res.json({
       message: `Authorisation request emails sent successfully to ${reportProoferUsers.length} report proofer user(s)`,
-      recipients: reportProoferUsers.map(u => ({ email: u.email, name: `${u.firstName} ${u.lastName}` }))
+      recipients: reportProoferUsers.map(u => ({ email: u.email, name: `${u.firstName} ${u.lastName}` })),
+      stage: isFibreIdAuthorisationRequest ? 'fibre-id' : 'assessment-report',
     });
   } catch (err) {
     console.error('Error sending authorisation request emails:', err);
@@ -1264,6 +1339,14 @@ router.get('/:id/items', async (req, res) => {
       })
       .populate('assessorId');
     if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+
+    // Heal duplicate sample refs: only one primary sample per ref; rest are referred.
+    const { changed } = healReferredFlags(job.items || []);
+    if (changed) {
+      job.markModified('items');
+      await job.save();
+    }
+
     res.json(job.items || []);
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch items', error: err.message });
@@ -1285,6 +1368,7 @@ router.post('/:id/items', async (req, res) => {
       job.status = 'in-progress';
     }
     job.items.push(req.body);
+    healReferredFlags(job.items);
     job.markModified('items');
     clearAssessmentPdfFields(job);
     await job.save();
@@ -1297,6 +1381,51 @@ router.post('/:id/items', async (req, res) => {
       error: err.message,
       ...(isValidation && err.errors && { errors: err.errors }),
     });
+  }
+});
+
+// PUT /api/assessments/:id/items/reorder - reorder items (array order drives UI + report)
+// Must be registered before /:id/items/:itemId so "reorder" is not treated as an itemId.
+router.put('/:id/items/reorder', async (req, res) => {
+  try {
+    const { itemIds } = req.body;
+    if (!Array.isArray(itemIds) || itemIds.length === 0) {
+      return res.status(400).json({ message: 'itemIds array is required' });
+    }
+
+    const job = await AsbestosAssessment.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+
+    const items = job.items || [];
+    if (itemIds.length !== items.length) {
+      return res.status(400).json({
+        message: 'itemIds length must match the number of assessment items',
+      });
+    }
+
+    const byId = new Map(items.map((item) => [item._id.toString(), item]));
+    const reordered = [];
+    for (const id of itemIds) {
+      const item = byId.get(String(id));
+      if (!item) {
+        return res.status(400).json({ message: `Unknown item id: ${id}` });
+      }
+      reordered.push(item);
+      byId.delete(String(id));
+    }
+    if (byId.size > 0) {
+      return res.status(400).json({ message: 'itemIds must include every assessment item exactly once' });
+    }
+
+    // Heal referred flags on current order first, then apply new order (flags are stable).
+    healReferredFlags(items);
+    job.items.splice(0, job.items.length, ...reordered);
+    job.markModified('items');
+    clearAssessmentPdfFields(job);
+    await job.save();
+    res.json(job.items || []);
+  } catch (err) {
+    res.status(400).json({ message: 'Failed to reorder items', error: err.message });
   }
 });
 
@@ -1330,6 +1459,9 @@ router.put('/:id/items/:itemId', async (req, res) => {
     }
 
     clearAssessmentPdfFields(job);
+    // After sample-ref changes, ensure only one primary per shared sample reference
+    healReferredFlags(job.items || []);
+    job.markModified('items');
     await job.save();
     res.json(item);
   } catch (err) {

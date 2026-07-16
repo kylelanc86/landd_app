@@ -835,7 +835,12 @@ const LeadRemovalJobDetails = () => {
         : storedConsultant;
 
       setClearanceForm({
-        projectId: clearance.projectId._id || clearance.projectId,
+        projectId:
+          clearance.projectId?._id ||
+          clearance.projectId ||
+          job?.projectId?._id ||
+          job?.projectId ||
+          "",
         clearanceDate: clearance.clearanceDate
           ? new Date(clearance.clearanceDate).toISOString().split("T")[0]
           : "",
@@ -2019,7 +2024,7 @@ const LeadRemovalJobDetails = () => {
 
   const resetClearanceForm = () => {
     setClearanceForm({
-      projectId: job?.projectId._id || job?.projectId || "",
+      projectId: job?.projectId?._id || job?.projectId || "",
       clearanceDate: getTodayInSydney(),
       inspectionTime: "09:00 AM",
       asbestosRemovalist:

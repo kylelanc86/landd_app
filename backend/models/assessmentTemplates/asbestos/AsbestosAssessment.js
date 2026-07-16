@@ -5,6 +5,8 @@ const AssessmentItemSchema = new mongoose.Schema({
   // for items that are confirmed to contain asbestos
   itemNumber: { type: Number, required: false },
   sampleReference: { type: String, required: false },
+  /** True when this item was created/edited as a "Referred" sample (shares another item's sample reference). */
+  isReferred: { type: Boolean, required: false },
   locationDescription: { type: String, required: true },
   levelFloor: { type: String, required: false },
   roomArea: { type: String, required: false },

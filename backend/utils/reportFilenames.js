@@ -41,6 +41,12 @@ function toReportReference(filenameOrReference) {
     .trim();
 }
 
+/** True when a frozen reference was built without project/site data (bug placeholder). */
+function isPlaceholderReportReference(filenameOrReference) {
+  const ref = toReportReference(filenameOrReference);
+  return !ref || /^Unknown_/i.test(ref);
+}
+
 function withRevisionAndExtension(reportReference, revision, includeExtension = true) {
   const base = toReportReference(reportReference);
   const withRev = `${base}${buildRevisionSuffix(revision)}`;
@@ -272,6 +278,7 @@ module.exports = {
   buildSequenceSuffixOptionB,
   buildRevisionSuffix,
   toReportReference,
+  isPlaceholderReportReference,
   withRevisionAndExtension,
   getAsbestosClearancePrefix,
   buildAsbestosClearanceFilename,

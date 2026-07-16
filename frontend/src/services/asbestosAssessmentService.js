@@ -6,7 +6,10 @@ import {
 } from '../utils/reportFilenames';
 
 function buildAssessmentDownloadFallback(assessmentData, isResidential = false) {
-  if (assessmentData?.reportReference) {
+  if (
+    assessmentData?.reportReference &&
+    !/^Unknown_/i.test(String(assessmentData.reportReference).trim())
+  ) {
     return withRevisionAndExtension(
       assessmentData.reportReference,
       assessmentData.revision,
@@ -109,6 +112,14 @@ const asbestosAssessmentService = {
   // Update assessment item
   updateItem: async (assessmentId, itemId, itemData) => {
     const response = await api.put(`/assessments/${assessmentId}/items/${itemId}`, itemData);
+    return response.data;
+  },
+
+  // Reorder assessment items (array order drives UI + report)
+  reorderItems: async (assessmentId, itemIds) => {
+    const response = await api.put(`/assessments/${assessmentId}/items/reorder`, {
+      itemIds,
+    });
     return response.data;
   },
 
