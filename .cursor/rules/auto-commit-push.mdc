@@ -1,0 +1,27 @@
+---
+description: Commit and push completed fixes without waiting to be asked
+alwaysApply: true
+---
+
+# Auto commit and push
+
+After finishing a coherent fix or feature in this repo, **commit and push to the current branch without waiting for the user to ask**.
+
+## When to commit
+
+- Bug fixes that resolve the reported issue
+- Completed feature work the user requested
+- Follow-up fixes to something just shipped in the same session
+
+## How
+
+- Follow the normal git safety protocol (status, diff, log; HEREDOC commit message; no force-push; no secrets)
+- Stage only relevant source files (never `node_modules`, `.env`, credentials)
+- Push to the tracked remote branch after a successful commit
+- Brief confirmation in the reply (commit hash / message is enough)
+
+## When not to
+
+- User explicitly says not to commit or push
+- Changes are exploratory, incomplete, or still waiting on a decision
+- Only docs/rules/config noise with no related product change (unless the user asked for that)
