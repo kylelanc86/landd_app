@@ -54,7 +54,7 @@ import { useUserLists } from "../../../context/UserListsContext";
 import { hasPermission } from "../../../config/permissions";
 import { getTodaySydney } from "../../../utils/dateUtils";
 import { useSnackbar } from "../../../context/SnackbarContext";
-import { isPlaceholderReportReference } from "../../../utils/reportFilenames";
+import { isCorruptCachedAssessmentLabel } from "../../../utils/reportFilenames";
 import {
   startAssessmentPDFJob,
   getAssessmentPDFStatus,
@@ -855,10 +855,19 @@ const ResidentialAsbestosAssessment = () => {
   };
 
   // True when a retained PDF exists (backend clears PDF fields when content changes, so presence = current).
-  // Treat Unknown_* / [DRAFT] filenames as invalid so a bad frozen reference forces regeneration.
+  // Reject Unknown_* always; reject [DRAFT] only after authorisation (draft PDFs may correctly include [DRAFT]).
   const hasRetainedValidPdf = (job) => {
     const filename = job.pdfFilename || job.originalData?.pdfFilename || '';
-    if (filename && isPlaceholderReportReference(filename)) return false;
+    const authorised = !!(
+      job.reportAuthorisedBy ||
+      job.originalData?.reportAuthorisedBy
+    );
+    if (
+      filename &&
+      isCorruptCachedAssessmentLabel(filename, { isAuthorised: !!authorised })
+    ) {
+      return false;
+    }
     return Boolean(
       job.pdfReadyAt ||
         job.originalData?.pdfReadyAt ||

@@ -20,6 +20,7 @@ const {
   toReportReference,
   withRevisionAndExtension,
   isPlaceholderReportReference,
+  isCorruptCachedAssessmentLabel,
 } = require('../utils/reportFilenames');
 const { buildContentDispositionAttachment } = require('../utils/contentDisposition');
 const {
@@ -4650,14 +4651,22 @@ router.get('/download-by-assessment/:assessmentId', auth, async (req, res) => {
   }
   try {
     // Query without .lean() so Mongoose properly hydrates Buffer; then get plain buffer for response
-    const assessment = await AsbestosAssessment.findById(assessmentId).select('pdfBuffer pdfReadyAt pdfFilename reportReference');
+    const assessment = await AsbestosAssessment.findById(assessmentId).select(
+      'pdfBuffer pdfReadyAt pdfFilename reportReference reportAuthorisedBy',
+    );
     if (!assessment) {
       return res.status(404).json({ error: 'Assessment not found' });
     }
-    // Cached PDF baked with Unknown_* reference/filename — force regeneration
+    // Cached PDF baked with Unknown_* (or [DRAFT] after authorisation) — force regeneration.
+    // Skip this gate for a just-completed generation job (freshJobId), and never treat an
+    // empty reportReference alone as corrupt (drafts often have no frozen reference yet).
+    const isAuthorised =
+      assessment.reportAuthorisedBy != null &&
+      String(assessment.reportAuthorisedBy).trim() !== '';
     if (
-      isPlaceholderReportReference(assessment.pdfFilename) ||
-      isPlaceholderReportReference(assessment.reportReference)
+      !skipExpiryCheck &&
+      (isCorruptCachedAssessmentLabel(assessment.pdfFilename, { isAuthorised }) ||
+        isCorruptCachedAssessmentLabel(assessment.reportReference, { isAuthorised }))
     ) {
       return res.status(404).json({
         error: 'No PDF available for this assessment',

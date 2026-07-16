@@ -47,6 +47,19 @@ function isPlaceholderReportReference(filenameOrReference) {
   return !ref || /^Unknown_/i.test(ref) || /\[DRAFT\]/i.test(ref);
 }
 
+/**
+ * True when a stored PDF filename/reference should force regeneration.
+ * Empty is allowed (drafts may have no frozen reference yet).
+ * [DRAFT] is only corrupt after the report has been authorised.
+ */
+function isCorruptCachedAssessmentLabel(filenameOrReference, { isAuthorised = false } = {}) {
+  const ref = toReportReference(filenameOrReference);
+  if (!ref) return false;
+  if (/^Unknown_/i.test(ref)) return true;
+  if (isAuthorised && /\[DRAFT\]/i.test(ref)) return true;
+  return false;
+}
+
 function withRevisionAndExtension(reportReference, revision, includeExtension = true) {
   const base = toReportReference(reportReference);
   const withRev = `${base}${buildRevisionSuffix(revision)}`;
@@ -279,6 +292,7 @@ module.exports = {
   buildRevisionSuffix,
   toReportReference,
   isPlaceholderReportReference,
+  isCorruptCachedAssessmentLabel,
   withRevisionAndExtension,
   getAsbestosClearancePrefix,
   buildAsbestosClearanceFilename,
