@@ -2,14 +2,12 @@ import api from './api';
 import { getAxiosDownloadFilename } from '../utils/downloadFilename';
 import {
   buildAsbestosAssessmentFilename,
+  isPlaceholderReportReference,
   withRevisionAndExtension,
 } from '../utils/reportFilenames';
 
 function buildAssessmentDownloadFallback(assessmentData, isResidential = false) {
-  if (
-    assessmentData?.reportReference &&
-    !/^Unknown_/i.test(String(assessmentData.reportReference).trim())
-  ) {
+  if (!isPlaceholderReportReference(assessmentData?.reportReference)) {
     return withRevisionAndExtension(
       assessmentData.reportReference,
       assessmentData.revision,

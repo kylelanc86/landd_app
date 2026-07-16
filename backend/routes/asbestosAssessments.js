@@ -107,7 +107,7 @@ const notDeletedAssessmentFilter = {
 // GET /api/assessments - list all assessment jobs (populate project and assessor); excludes archived and soft-deleted
 // Query param jobType: 'asbestos-assessment' | 'residential-asbestos' - when set, only jobs of that type are returned
 // Query param list=1 - return minimal fields for table display (no full items, photos, blobs); faster and smaller payload
-// Query param projectId (ObjectId) - restrict to assessments for that project (e.g. Project Reports active jobs)
+// Query param projectId (ObjectId) - restrict to assessments for that project
 router.get('/', async (req, res) => {
   try {
     // Exclude closed (archived) jobs unless reopened for editing after Project Reports → Revise
@@ -735,6 +735,14 @@ router.put('/:id', async (req, res) => {
         updateData.reportAuthorisedAt = reportAuthorisedAt;
       }
     }
+    // Ensure first authorisation always stamps an issue date (server-side fallback).
+    const isBecomingAuthorised =
+      reportAuthorisedBy !== undefined &&
+      reportAuthorisedBy &&
+      !existingJob.reportAuthorisedBy;
+    if (isBecomingAuthorised && !existingJob.reportAuthorisedAt && !updateData.reportAuthorisedAt) {
+      updateData.reportAuthorisedAt = new Date();
+    }
 
     // Freeze Fibre ID report reference once (first Fibre ID approval).
     const isBecomingFibreIdApproved =
@@ -773,11 +781,7 @@ router.put('/:id', async (req, res) => {
     }
 
     // Freeze assessment report reference once (first authorisation), based on authorised filename without revX.
-    // Also rebuild if an earlier bug froze "Unknown_..." without project/site data.
-    const isBecomingAuthorised =
-      reportAuthorisedBy !== undefined &&
-      reportAuthorisedBy &&
-      !existingJob.reportAuthorisedBy;
+    // Also rebuild if an earlier bug froze Unknown_* or [DRAFT] placeholders.
     const shouldFreezeOrRepairReportReference =
       isPlaceholderReportReference(existingJob.reportReference) &&
       (isBecomingAuthorised ||
@@ -788,6 +792,9 @@ router.put('/:id', async (req, res) => {
         existingJob.reportAuthorisedAt ||
         updateData.reportAuthorisedAt ||
         new Date();
+      if (!existingJob.reportAuthorisedAt && !updateData.reportAuthorisedAt) {
+        updateData.reportAuthorisedAt = issueDate;
+      }
       const projectIdValue =
         existingJob.projectId?._id ||
         existingJob.projectId ||

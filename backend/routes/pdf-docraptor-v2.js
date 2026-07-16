@@ -112,7 +112,8 @@ function getAssessmentIssueDateValue(assessmentData) {
 }
 
 /**
- * Rebuild and persist reportReference when it was frozen as Unknown_* (missing project/site).
+ * Rebuild and persist reportReference when it was frozen as Unknown_*, [DRAFT], or empty.
+ * Only persists once the assessment is authorised (has a real issue date).
  * Mutates assessmentData.reportReference in place when repaired.
  */
 async function repairPlaceholderAssessmentReportReference(assessmentData, isResidential = false, isLeadAssessment = false) {
@@ -123,7 +124,19 @@ async function repairPlaceholderAssessmentReportReference(assessmentData, isResi
   const siteName = assessmentData?.projectId?.name || assessmentData?.siteName;
   if (!projectID || !siteName) return false;
 
-  const reportIssueDate = getAssessmentIssueDateValue(assessmentData);
+  let reportIssueDate = getAssessmentIssueDateValue(assessmentData);
+  const hadAuthorisedAt = !!reportIssueDate;
+  const isAuthorised =
+    assessmentData?.reportAuthorisedBy != null &&
+    String(assessmentData.reportAuthorisedBy).trim() !== '';
+  // Authorised but missing date (legacy) — backfill so we can freeze a real reference.
+  if (!reportIssueDate && isAuthorised) {
+    reportIssueDate = new Date();
+    assessmentData.reportAuthorisedAt = reportIssueDate;
+  }
+  // Never persist a draft placeholder as the frozen report reference.
+  if (!reportIssueDate) return false;
+
   const sequenceNumber = await calculateAssessmentSequenceNumber(
     assessmentData,
     isResidential,
@@ -147,9 +160,11 @@ async function repairPlaceholderAssessmentReportReference(assessmentData, isResi
   const assessmentId = assessmentData._id || assessmentData.id;
   if (assessmentId) {
     try {
-      await AsbestosAssessment.findByIdAndUpdate(assessmentId, {
-        reportReference: repaired,
-      });
+      const update = { reportReference: repaired };
+      if (!hadAuthorisedAt && assessmentData.reportAuthorisedAt) {
+        update.reportAuthorisedAt = assessmentData.reportAuthorisedAt;
+      }
+      await AsbestosAssessment.findByIdAndUpdate(assessmentId, update);
       console.log(
         `[assessment-pdf] Repaired placeholder reportReference assessmentId=${assessmentId} -> ${repaired}`,
       );

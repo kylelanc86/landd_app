@@ -106,7 +106,7 @@ router.get(
   }
 );
 
-// Get Asbestos Assessment Reports (final-authorised jobs only — in-progress work is surfaced under Project Reports active jobs)
+// Get Asbestos Assessment Reports (final-authorised jobs only)
 router.get('/asbestos-assessment/:projectId', auth, checkPermission(['projects.view']), async (req, res) => {
   try {
     const assessments = await AsbestosAssessment.find({

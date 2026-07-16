@@ -41,10 +41,10 @@ function toReportReference(filenameOrReference) {
     .trim();
 }
 
-/** True when a frozen reference was built without project/site data (bug placeholder). */
+/** True when a frozen reference is empty, Unknown_*, or still draft (must not be kept). */
 function isPlaceholderReportReference(filenameOrReference) {
   const ref = toReportReference(filenameOrReference);
-  return !ref || /^Unknown_/i.test(ref);
+  return !ref || /^Unknown_/i.test(ref) || /\[DRAFT\]/i.test(ref);
 }
 
 function withRevisionAndExtension(reportReference, revision, includeExtension = true) {

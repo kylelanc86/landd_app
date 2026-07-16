@@ -649,6 +649,8 @@ const Sidebar = () => {
               icon={<BiotechIcon />}
             />
           )}
+
+          <SectionDivider />
         </Box>
 
         <Box
@@ -658,7 +660,7 @@ const Sidebar = () => {
             marginTop: "auto",
           }}
         >
-          <SectionDivider />
+          
           <Item
             title="Notification Centre"
             to="/notifications"

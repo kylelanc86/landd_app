@@ -56,3 +56,10 @@ export const getNotificationData = async ({ forceRefresh = false } = {}) => {
 export const clearNotificationCache = () => {
   notificationsCache = null;
 };
+
+export const sendTestNotificationDigest = async () => {
+  const response = await api.post(
+    "/calibration-canonical/notifications/digest/send-test",
+  );
+  return response.data;
+};

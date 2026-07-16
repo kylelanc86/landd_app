@@ -446,6 +446,15 @@ connectDB()
     server.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
       console.log(`Request/keep-alive timeout: ${server.timeout}ms`);
+
+      try {
+        const {
+          startNotificationDigestScheduler,
+        } = require('./jobs/notificationDigestScheduler');
+        startNotificationDigestScheduler();
+      } catch (error) {
+        console.error('Failed to start notification digest scheduler:', error);
+      }
     });
   })
   .catch(err => {

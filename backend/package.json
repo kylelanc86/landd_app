@@ -9,7 +9,8 @@
     "install:prod": "npm ci --only=production --no-audit --no-fund",
     "cleanup-tokens": "node scripts/cleanupTokenBlacklist.js",
     "migrate": "node scripts/runMigration.js",
-    "diagnose:calibrations": "node scripts/calibrationCanonicalDiagnostics.js"
+    "diagnose:calibrations": "node scripts/calibrationCanonicalDiagnostics.js",
+    "send:notification-digest": "node scripts/sendNotificationDigest.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1036.0",
@@ -25,6 +26,7 @@
     "express-fileupload": "^1.5.1",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^7.0.3",
+    "node-cron": "^4.6.0",
     "node-fetch": "^2.7.0",
     "nodemailer": "^7.0.3",
     "pako": "^2.1.0",

@@ -54,6 +54,7 @@ import { getTodaySydney } from "../../../utils/dateUtils";
 import { useSnackbar } from "../../../context/SnackbarContext";
 import { generateFibreIDReport } from "../../../utils/generateFibreIDReport";
 import { getPrimarySampledItems } from "../../../utils/asbestosAssessmentItems";
+import { isPlaceholderReportReference } from "../../../utils/reportFilenames";
 import {
   startAssessmentPDFJob,
   getAssessmentPDFStatus,
@@ -850,10 +851,10 @@ const AsbestosAssessment = () => {
   };
 
   // True when a retained PDF exists (backend clears PDF fields when content changes, so presence = current).
-  // Treat Unknown_* filenames as invalid so a bad frozen reference forces regeneration.
+  // Treat Unknown_* / [DRAFT] filenames as invalid so a bad frozen reference forces regeneration.
   const hasRetainedValidPdf = (job) => {
     const filename = job.pdfFilename || job.originalData?.pdfFilename || '';
-    if (/^Unknown_/i.test(String(filename).trim())) return false;
+    if (filename && isPlaceholderReportReference(filename)) return false;
     return Boolean(
       job.pdfReadyAt ||
         job.originalData?.pdfReadyAt ||

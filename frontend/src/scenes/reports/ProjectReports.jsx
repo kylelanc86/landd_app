@@ -19,13 +19,6 @@ import {
   TextField,
   InputLabel,
   Grid,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
   IconButton,
   ImageList,
   ImageListItem,
@@ -48,7 +41,6 @@ import api, {
   sampleService,
   clientService,
   clientSuppliedJobsService,
-  asbestosAssessmentService,
   leadAirSampleService,
 } from "../../services/api";
 import reportService from "../../services/reportService";
@@ -91,10 +83,6 @@ const ProjectReports = () => {
   const [newStatus, setNewStatus] = useState("");
   const [statusUpdateLoading, setStatusUpdateLoading] = useState(false);
 
-  // Active jobs state
-  const [activeJobs, setActiveJobs] = useState([]);
-  const [loadingActiveJobs, setLoadingActiveJobs] = useState(false);
-
   // Report processing state
   const [processingReport, setProcessingReport] = useState({
     reportId: null,
@@ -113,60 +101,6 @@ const ProjectReports = () => {
   });
 
   const { showSnackbar } = useSnackbar();
-
-  // Function to format job status for display
-  const formatJobStatus = (status) => {
-    if (!status) return "";
-
-    // Replace underscores with spaces
-    let formatted = status.replace(/_/g, " ");
-
-    // Capitalize first letter of each word
-    formatted = formatted
-      .split(" ")
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(" ");
-
-    return formatted;
-  };
-
-  // Function to format date or date range for display
-  const formatDateRange = (dates) => {
-    if (!dates || dates.length === 0) return "N/A";
-
-    // Remove duplicates and sort
-    const uniqueDates = [
-      ...new Set(
-        dates.map((date) => {
-          const d = new Date(date);
-          return d.toISOString().split("T")[0]; // Get YYYY-MM-DD format
-        }),
-      ),
-    ].sort();
-
-    if (uniqueDates.length === 1) {
-      // Single date
-      const date = new Date(uniqueDates[0]);
-      return date.toLocaleDateString("en-AU", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      });
-    } else {
-      // Date range
-      const startDate = new Date(uniqueDates[0]);
-      const endDate = new Date(uniqueDates[uniqueDates.length - 1]);
-      return `${startDate.toLocaleDateString("en-AU", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      })} - ${endDate.toLocaleDateString("en-AU", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      })}`;
-    }
-  };
 
   // Revise dialog state
   const [reviseDialog, setReviseDialog] = useState({
@@ -239,152 +173,6 @@ const ProjectReports = () => {
       console.error("Error adding project to recent searches:", error);
     }
   }, []);
-
-  // Load active jobs for this project
-  const loadActiveJobs = useCallback(async () => {
-    if (!projectId) return;
-
-    setLoadingActiveJobs(true);
-    try {
-      const activeJobsList = [];
-
-      // Fetch active asbestos removal jobs
-      try {
-        const { default: asbestosRemovalJobService } =
-          await import("../../services/asbestosRemovalJobService");
-        const jobsResponse = await asbestosRemovalJobService.getAll({
-          projectId: projectId,
-        });
-        const jobs = jobsResponse.jobs || jobsResponse.data || [];
-        const activeAsbestosJobs = jobs.filter(
-          (job) =>
-            (job.projectId === projectId || job.projectId?._id === projectId) &&
-            job.status === "in_progress",
-        );
-
-        // Fetch shifts for all asbestos removal jobs to get dates
-        for (const job of activeAsbestosJobs) {
-          let dates = [];
-          try {
-            const { shiftService } = await import("../../services/api");
-            const shiftsResponse = await shiftService.getByJob(job._id);
-            const shifts = shiftsResponse.data || [];
-            dates = shifts.map((shift) => shift.date).filter(Boolean);
-          } catch (shiftError) {
-            console.error(
-              `Error fetching shifts for job ${job._id}:`,
-              shiftError,
-            );
-          }
-
-          activeJobsList.push({
-            id: job._id,
-            type: "asbestos-removal",
-            name: job.name || "Asbestos Removal Job",
-            status: job.status,
-            asbestosRemovalist: job.asbestosRemovalist,
-            jobType: job.jobType || "none",
-            url: `/asbestos-removal/jobs/${job._id}/details`,
-            dates: dates,
-          });
-        }
-      } catch (error) {
-        console.error("Error fetching active asbestos removal jobs:", error);
-      }
-
-      // Fetch active client supplied jobs (fibre ID)
-      try {
-        const { clientSuppliedJobsService } =
-          await import("../../services/api");
-        const clientJobsResponse = await clientSuppliedJobsService.getAll({
-          projectId: projectId,
-        });
-        const clientJobs = clientJobsResponse.data || [];
-        const activeClientJobs = clientJobs.filter(
-          (job) =>
-            (job.projectId === projectId || job.projectId?._id === projectId) &&
-            (job.status === "In Progress" ||
-              job.status === "Analysis Complete"),
-        );
-
-        activeClientJobs.forEach((job) => {
-          // Collect all relevant dates for client supplied jobs
-          const dates = [];
-          if (job.sampleReceiptDate) dates.push(job.sampleReceiptDate);
-          if (job.analysisDate) dates.push(job.analysisDate);
-          if (job.reportIssueDate) dates.push(job.reportIssueDate);
-
-          activeJobsList.push({
-            id: job._id,
-            type: "fibre-id",
-            name:
-              job.jobNumber || `Fibre ID Job - ${job.jobType || "Fibre ID"}`,
-            status: job.status,
-            jobType: job.jobType || "Fibre ID",
-            url: `/client-supplied/${job._id}/samples`,
-            dates: dates,
-          });
-        });
-      } catch (error) {
-        console.error("Error fetching active client supplied jobs:", error);
-      }
-
-      // Open asbestos / residential assessment jobs (not yet final-authorised — same signal as “still in play” before Project Reports list)
-      try {
-        const [stdRes, resiRes] = await Promise.all([
-          asbestosAssessmentService.getAsbestosAssessments({
-            list: 1,
-            jobType: "asbestos-assessment",
-            projectId,
-          }),
-          asbestosAssessmentService.getAsbestosAssessments({
-            list: 1,
-            jobType: "residential-asbestos",
-            projectId,
-          }),
-        ]);
-        const stdJobs = Array.isArray(stdRes?.data) ? stdRes.data : [];
-        const resiJobs = Array.isArray(resiRes?.data) ? resiRes.data : [];
-        const openAssessments = [...stdJobs, ...resiJobs].filter((job) => {
-          const auth = job.reportAuthorisedBy;
-          const hasAuth =
-            auth != null && String(auth).trim() !== "";
-          return !hasAuth;
-        });
-        openAssessments.forEach((job) => {
-          const id = job._id || job.id;
-          const isResidential = job.jobType === "residential-asbestos";
-          activeJobsList.push({
-            id,
-            type: "asbestos-assessment-open",
-            name: isResidential
-              ? "Residential Asbestos Assessment"
-              : "Asbestos Assessment",
-            status: job.status || "in-progress",
-            jobType: job.jobType || "asbestos-assessment",
-            url: isResidential
-              ? `/surveys/residential-asbestos/${id}/items`
-              : `/surveys/asbestos-assessment/${id}/items`,
-            dates: job.assessmentDate ? [job.assessmentDate] : [],
-          });
-        });
-      } catch (error) {
-        console.error("Error fetching open assessment jobs:", error);
-      }
-
-      setActiveJobs(activeJobsList);
-    } catch (error) {
-      console.error("Error loading active jobs:", error);
-      setActiveJobs([]);
-    } finally {
-      setLoadingActiveJobs(false);
-    }
-  }, [projectId]);
-
-  // Load active jobs when projectId changes
-  useEffect(() => {
-    loadActiveJobs();
-  }, [loadActiveJobs]);
 
   // Load project details
   useEffect(() => {
@@ -2031,7 +1819,6 @@ const ProjectReports = () => {
           "success",
         );
         loadReports();
-        loadActiveJobs();
       }
     } catch (error) {
       console.error("Error revising report:", error);
@@ -2389,91 +2176,6 @@ const ProjectReports = () => {
         <Alert severity="error" sx={{ mb: 3 }}>
           {error}
         </Alert>
-      )}
-
-      {/* Active Jobs Table */}
-      {activeJobs.length > 0 && !selectedCategory && (
-        <Paper sx={{ p: 3, mb: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            Active Jobs
-          </Typography>
-          {loadingActiveJobs ? (
-            <Box sx={{ display: "flex", justifyContent: "center", p: 2 }}>
-              <CircularProgress />
-            </Box>
-          ) : (
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
-                    <TableCell>Job Type</TableCell>
-                    <TableCell>Date(s)</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell align="center">Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {activeJobs.map((job) => {
-                    // Format job type with asbestos removalist in brackets if applicable
-                    let jobTypeDisplay =
-                      job.type === "asbestos-removal"
-                        ? "Asbestos Removal"
-                        : job.type === "asbestos-assessment-open"
-                          ? job.name
-                        : job.jobType || "Fibre ID";
-
-                    if (
-                      job.type === "asbestos-removal" &&
-                      job.asbestosRemovalist
-                    ) {
-                      jobTypeDisplay += ` (${job.asbestosRemovalist})`;
-                    }
-
-                    return (
-                      <TableRow key={job.id}>
-                        <TableCell>
-                          <Typography
-                            variant="body2"
-                            sx={{ color: "black", fontWeight: 500 }}
-                          >
-                            {jobTypeDisplay}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2">
-                            {formatDateRange(job.dates || [])}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={formatJobStatus(job.status)}
-                            color={
-                              job.type === "asbestos-assessment-open" ||
-                              job.status === "in_progress" ||
-                              job.status === "In Progress"
-                                ? "warning"
-                                : "info"
-                            }
-                            size="small"
-                          />
-                        </TableCell>
-                        <TableCell align="center">
-                          <Button
-                            variant="contained"
-                            size="small"
-                            onClick={() => navigate(job.url)}
-                          >
-                            View Job
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
-        </Paper>
       )}
 
       {/* Categories or Reports List */}
