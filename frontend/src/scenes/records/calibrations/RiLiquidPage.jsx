@@ -539,13 +539,6 @@ const RiLiquidPage = () => {
             >
               New RI Liquid Bottle
             </Button>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={handleAdd}
-            >
-              Add Calibration
-            </Button>
           </Box>
         }
       />
@@ -553,6 +546,15 @@ const RiLiquidPage = () => {
         <Typography variant="h6" component="h2">
           Active RI Liquid Bottles
         </Typography>
+      </Box>
+      <Box mb="20px">
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={handleAdd}
+        >
+          Add Calibration
+        </Button>
       </Box>
 
       {loading ? (
