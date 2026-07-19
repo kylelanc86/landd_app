@@ -51,6 +51,10 @@ const riLiquidCalibrationSchema = new mongoose.Schema({
   isEmpty: {
     type: Boolean,
     default: false
+  },
+  dateEmptied: {
+    type: Date,
+    required: false
   }
 }, {
   timestamps: true

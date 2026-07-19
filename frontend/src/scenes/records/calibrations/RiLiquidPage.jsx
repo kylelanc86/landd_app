@@ -482,7 +482,7 @@ const RiLiquidPage = () => {
                 navigate("/records/laboratory/calibrations/ri-liquid/history")
               }
             >
-              Historical Records
+              Historical Records - Empty Bottles
             </Button>
             <Button
               variant="contained"

@@ -23,8 +23,10 @@ router.get('/', auth, checkPermission(['calibrations.view']), async (req, res) =
     const filter = {};
     if (bottleId) filter.bottleId = bottleId;
     if (status) filter.status = status;
-    // By default, exclude empty bottles unless explicitly requested
-    if (req.query.includeEmpty !== 'true') {
+    // emptyOnly: only emptied bottles; includeEmpty: active + empty; default: active only
+    if (req.query.emptyOnly === 'true') {
+      filter.isEmpty = true;
+    } else if (req.query.includeEmpty !== 'true') {
       filter.isEmpty = { $ne: true };
     }
 
@@ -54,6 +56,7 @@ router.get('/', auth, checkPermission(['calibrations.view']), async (req, res) =
         nextCalibration: cal.nextCalibration,
         notes: cal.notes,
         isEmpty: cal.isEmpty,
+        dateEmptied: cal.dateEmptied,
         calibratedBy: cal.calibratedBy,
         createdAt: cal.createdAt,
         updatedAt: cal.updatedAt
@@ -103,6 +106,7 @@ router.get('/bottle/:bottleId', auth, checkPermission(['calibrations.view']), as
         nextCalibration: cal.nextCalibration,
         notes: cal.notes,
         isEmpty: cal.isEmpty,
+        dateEmptied: cal.dateEmptied,
         calibratedBy: cal.calibratedBy,
         createdAt: cal.createdAt,
         updatedAt: cal.updatedAt
@@ -144,6 +148,7 @@ router.get('/:id', auth, checkPermission(['calibrations.view']), async (req, res
       nextCalibration: calibration.nextCalibration,
       notes: calibration.notes,
       isEmpty: calibration.isEmpty,
+      dateEmptied: calibration.dateEmptied,
       calibratedBy: calibration.calibratedBy,
       createdAt: calibration.createdAt,
       updatedAt: calibration.updatedAt
@@ -372,7 +377,7 @@ router.put('/bottle/:bottleId/mark-empty', auth, checkPermission(['calibrations.
     // Update all calibrations for this bottle to mark as empty
     const result = await RiLiquidCalibration.updateMany(
       { bottleId: bottleId },
-      { isEmpty: true }
+      { isEmpty: true, dateEmptied: new Date() }
     );
 
     res.json({ 
