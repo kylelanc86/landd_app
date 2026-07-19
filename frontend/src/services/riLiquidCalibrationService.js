@@ -13,6 +13,21 @@ export const riLiquidCalibrationService = {
     }
   },
 
+  getActiveBottles: async () => {
+    const response = await api.get(`${BASE_URL}/bottles/active`);
+    return response.data;
+  },
+
+  getEmptyBottles: async () => {
+    const response = await api.get(`${BASE_URL}/bottles/empty`);
+    return response.data;
+  },
+
+  createBottle: async (data) => {
+    const response = await api.post(`${BASE_URL}/bottles`, data);
+    return response.data;
+  },
+
   // Get RI Liquid calibration by ID
   getById: async (id) => {
     try {
@@ -66,7 +81,9 @@ export const riLiquidCalibrationService = {
   // Mark bottle as empty
   markBottleAsEmpty: async (bottleId) => {
     try {
-      const response = await api.put(`${BASE_URL}/bottle/${bottleId}/mark-empty`);
+      const response = await api.put(
+        `${BASE_URL}/bottle/${encodeURIComponent(bottleId)}/mark-empty`
+      );
       return response.data;
     } catch (error) {
       throw error;

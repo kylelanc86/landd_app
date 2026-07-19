@@ -103,6 +103,7 @@ const RiLiquidHistoryPage = () => {
   const { bottleId } = useParams();
 
   const [calibrations, setCalibrations] = useState([]);
+  const [emptyBottleHistory, setEmptyBottleHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedBottle, setSelectedBottle] = useState(null);
@@ -117,30 +118,29 @@ const RiLiquidHistoryPage = () => {
       setLoading(true);
       setError(null);
 
-      const calibrationResponse = bottleId
-        ? await riLiquidCalibrationService.getByBottle(bottleId, {
+      if (bottleId) {
+        const calibrationResponse =
+          await riLiquidCalibrationService.getByBottle(bottleId, {
             limit: 1000,
-          })
-        : await riLiquidCalibrationService.getAll({
-            limit: 1000,
-            sortBy: "date",
-            sortOrder: "desc",
-            emptyOnly: "true",
           });
-
-      const calibrationData = calibrationResponse.data || [];
-
-      const sortedCalibrations = calibrationData.sort((a, b) => {
-        const dateA = new Date(a.date);
-        const dateB = new Date(b.date);
-        return dateB - dateA;
-      });
-
-      setCalibrations(sortedCalibrations);
+        const calibrationData = calibrationResponse.data || [];
+        setCalibrations(
+          calibrationData.sort(
+            (a, b) => new Date(b.date) - new Date(a.date),
+          ),
+        );
+        setEmptyBottleHistory([]);
+      } else {
+        const bottleResponse =
+          await riLiquidCalibrationService.getEmptyBottles();
+        setEmptyBottleHistory(bottleResponse.data || []);
+        setCalibrations([]);
+      }
     } catch (err) {
       console.error("Error fetching data:", err);
       setError(err.message || "Failed to load calibration history");
       setCalibrations([]);
+      setEmptyBottleHistory([]);
     } finally {
       setLoading(false);
     }
@@ -148,60 +148,12 @@ const RiLiquidHistoryPage = () => {
 
   const emptyBottles = useMemo(() => {
     if (bottleId) return [];
-
-    const byBottle = new Map();
-
-    calibrations.forEach((calibration) => {
-      const id = calibration.bottleId;
-      if (!id) return;
-
-      const existing = byBottle.get(id);
-      const calibrationTime = new Date(calibration.date).getTime();
-      const emptiedAt = calibration.dateEmptied
-        ? new Date(calibration.dateEmptied).getTime()
-        : 0;
-
-      if (!existing) {
-        byBottle.set(id, {
-          bottleId: id,
-          batchNumber: calibration.batchNumber,
-          dateOpened: calibration.dateOpened,
-          refractiveIndex: calibration.refractiveIndex,
-          dateEmptied: calibration.dateEmptied || null,
-          latestCalibrationTime: calibrationTime,
-          calibrations: [calibration],
-        });
-        return;
-      }
-
-      existing.calibrations.push(calibration);
-
-      if (
-        calibration.dateOpened &&
-        (!existing.dateOpened ||
-          new Date(calibration.dateOpened) < new Date(existing.dateOpened))
-      ) {
-        existing.dateOpened = calibration.dateOpened;
-      }
-      if (
-        emptiedAt >
-        (existing.dateEmptied ? new Date(existing.dateEmptied).getTime() : 0)
-      ) {
-        existing.dateEmptied = calibration.dateEmptied;
-      }
-      if (calibrationTime >= existing.latestCalibrationTime) {
-        existing.batchNumber = calibration.batchNumber;
-        existing.refractiveIndex = calibration.refractiveIndex;
-        existing.latestCalibrationTime = calibrationTime;
-      }
-    });
-
-    return Array.from(byBottle.values()).sort((a, b) => {
-      const dateA = a.dateEmptied ? new Date(a.dateEmptied).getTime() : 0;
-      const dateB = b.dateEmptied ? new Date(b.dateEmptied).getTime() : 0;
-      return dateB - dateA;
-    });
-  }, [calibrations, bottleId]);
+    return [...emptyBottleHistory].sort(
+      (a, b) =>
+        new Date(b.dateEmptied || 0).getTime() -
+        new Date(a.dateEmptied || 0).getTime(),
+    );
+  }, [emptyBottleHistory, bottleId]);
 
   const bottleSpecificSummary = useMemo(() => {
     if (!bottleId || calibrations.length === 0) return null;

@@ -1,9 +1,17 @@
 const express = require('express');
 const router = express.Router();
 const RiLiquidCalibration = require('../models/RiLiquidCalibration');
+const RiLiquidBottle = require('../models/RiLiquidBottle');
 const CalibrationFrequency = require('../models/CalibrationFrequency');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
+
+const ALLOWED_REFRACTIVE_INDICES = [1.55, 1.67, 1.70];
+
+const refractiveIndexPrefix = (value) => {
+  const numericValue = Number(value);
+  return numericValue === 1.7 ? '1.70' : numericValue.toFixed(2);
+};
 
 // Get all RI Liquid calibrations
 router.get('/', auth, checkPermission(['calibrations.view']), async (req, res) => {
@@ -73,6 +81,184 @@ router.get('/', auth, checkPermission(['calibrations.view']), async (req, res) =
   } catch (error) {
     console.error('Error fetching RI Liquid calibrations:', error);
     res.status(500).json({ message: error.message });
+  }
+});
+
+// Get active bottles, including legacy bottles represented only by calibration records
+router.get('/bottles/active', auth, checkPermission(['calibrations.view']), async (req, res) => {
+  try {
+    const [bottles, activeCalibrations] = await Promise.all([
+      RiLiquidBottle.find({ isEmpty: { $ne: true } }).sort({ bottleId: 1 }).lean(),
+      RiLiquidCalibration.find({ isEmpty: { $ne: true } })
+        .sort({ date: -1 })
+        .populate('calibratedBy', 'firstName lastName')
+        .lean()
+    ]);
+
+    const latestCalibrationByBottle = new Map();
+    activeCalibrations.forEach((calibration) => {
+      if (
+        calibration.bottleId &&
+        !latestCalibrationByBottle.has(calibration.bottleId)
+      ) {
+        latestCalibrationByBottle.set(calibration.bottleId, calibration);
+      }
+    });
+
+    const bottleById = new Map();
+    bottles.forEach((bottle) => {
+      bottleById.set(bottle.bottleId, {
+        ...bottle,
+        latestCalibration:
+          latestCalibrationByBottle.get(bottle.bottleId) || null
+      });
+    });
+
+    // Existing installations stored bottle details only on calibrations.
+    latestCalibrationByBottle.forEach((calibration, bottleId) => {
+      if (!bottleById.has(bottleId)) {
+        bottleById.set(bottleId, {
+          bottleId,
+          refractiveIndex: calibration.refractiveIndex,
+          batchNumber: calibration.batchNumber,
+          dateOpened: calibration.dateOpened,
+          isEmpty: false,
+          isLegacy: true,
+          latestCalibration: calibration
+        });
+      }
+    });
+
+    const data = Array.from(bottleById.values()).sort((a, b) =>
+      a.bottleId.localeCompare(b.bottleId, undefined, {
+        numeric: true,
+        sensitivity: 'base'
+      })
+    );
+
+    res.json({ data });
+  } catch (error) {
+    console.error('Error fetching active RI Liquid bottles:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get empty bottles with all calibration records for history
+router.get('/bottles/empty', auth, checkPermission(['calibrations.view']), async (req, res) => {
+  try {
+    const [bottles, emptyCalibrations] = await Promise.all([
+      RiLiquidBottle.find({ isEmpty: true }).lean(),
+      RiLiquidCalibration.find({ isEmpty: true })
+        .sort({ date: -1 })
+        .populate('calibratedBy', 'firstName lastName')
+        .lean()
+    ]);
+
+    const calibrationsByBottle = new Map();
+    emptyCalibrations.forEach((calibration) => {
+      const records = calibrationsByBottle.get(calibration.bottleId) || [];
+      records.push(calibration);
+      calibrationsByBottle.set(calibration.bottleId, records);
+    });
+
+    const bottleById = new Map();
+    bottles.forEach((bottle) => {
+      bottleById.set(bottle.bottleId, {
+        ...bottle,
+        calibrations: calibrationsByBottle.get(bottle.bottleId) || []
+      });
+    });
+
+    calibrationsByBottle.forEach((calibrations, bottleId) => {
+      if (!bottleById.has(bottleId)) {
+        const latest = calibrations[0];
+        const dateEmptied = calibrations.reduce(
+          (latestDate, calibration) =>
+            calibration.dateEmptied &&
+            (!latestDate ||
+              new Date(calibration.dateEmptied) > new Date(latestDate))
+              ? calibration.dateEmptied
+              : latestDate,
+          null
+        );
+        bottleById.set(bottleId, {
+          bottleId,
+          refractiveIndex: latest.refractiveIndex,
+          batchNumber: latest.batchNumber,
+          dateOpened: latest.dateOpened,
+          isEmpty: true,
+          dateEmptied,
+          isLegacy: true,
+          calibrations
+        });
+      }
+    });
+
+    const data = Array.from(bottleById.values()).sort(
+      (a, b) =>
+        new Date(b.dateEmptied || 0).getTime() -
+        new Date(a.dateEmptied || 0).getTime()
+    );
+
+    res.json({ data });
+  } catch (error) {
+    console.error('Error fetching empty RI Liquid bottles:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Create an RI Liquid bottle and assign the next ID for its refractive index
+router.post('/bottles', auth, checkPermission(['calibrations.create']), async (req, res) => {
+  try {
+    const refractiveIndex = Number(req.body.refractiveIndex);
+    const batchNumber = req.body.batchNumber?.trim();
+    const dateOpened = new Date(req.body.dateOpened);
+
+    if (
+      !ALLOWED_REFRACTIVE_INDICES.includes(refractiveIndex) ||
+      !batchNumber ||
+      !req.body.dateOpened ||
+      Number.isNaN(dateOpened.getTime())
+    ) {
+      return res.status(400).json({
+        message:
+          'Refractive index, batch number, and a valid date opened are required'
+      });
+    }
+
+    const prefix = refractiveIndexPrefix(refractiveIndex);
+    const bottleIdPattern = new RegExp(`^${prefix.replace('.', '\\.')}-(\\d+)$`);
+
+    // The unique bottleId index protects against simultaneous allocations.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const [bottleIds, calibrationBottleIds] = await Promise.all([
+        RiLiquidBottle.distinct('bottleId', { bottleId: bottleIdPattern }),
+        RiLiquidCalibration.distinct('bottleId', { bottleId: bottleIdPattern })
+      ]);
+
+      const highestNumber = [...bottleIds, ...calibrationBottleIds].reduce(
+        (highest, bottleId) => {
+          const match = bottleId.match(bottleIdPattern);
+          return match ? Math.max(highest, Number(match[1])) : highest;
+        },
+        0
+      );
+
+      try {
+        const bottle = await RiLiquidBottle.create({
+          bottleId: `${prefix}-${highestNumber + 1}`,
+          refractiveIndex,
+          batchNumber,
+          dateOpened
+        });
+        return res.status(201).json(bottle);
+      } catch (error) {
+        if (error.code !== 11000 || attempt === 2) throw error;
+      }
+    }
+  } catch (error) {
+    console.error('Error creating RI Liquid bottle:', error);
+    res.status(400).json({ message: error.message });
   }
 });
 
@@ -166,27 +352,41 @@ router.post('/', auth, checkPermission(['calibrations.create']), async (req, res
   try {
     const {
       equipmentId,
+      bottleId,
       date,
-      refractiveIndex,
       asbestosTypeVerified,
-      dateOpened,
-      batchNumber,
-      status,
       notes,
       technicianId
     } = req.body;
+    const requestedBottleId = bottleId || equipmentId;
 
     // Validate required fields
-    if (!equipmentId || !date || refractiveIndex === undefined || refractiveIndex === null || 
-        !asbestosTypeVerified || !dateOpened || !batchNumber || !technicianId) {
-      return res.status(400).json({ message: 'Missing required fields: bottleId, date, refractiveIndex, asbestosTypeVerified, dateOpened, batchNumber, and technicianId are required' });
+    if (!requestedBottleId || !date || !asbestosTypeVerified || !technicianId) {
+      return res.status(400).json({
+        message:
+          'Bottle ID, calibration date, asbestos type, and technician are required'
+      });
     }
 
-    // Validate refractive index is one of the allowed values
-    const allowedRefractiveIndices = [1.55, 1.67, 1.70];
-    const refractiveIndexValue = parseFloat(refractiveIndex);
-    if (!allowedRefractiveIndices.includes(refractiveIndexValue)) {
-      return res.status(400).json({ message: 'Refractive index must be one of: 1.55, 1.67, or 1.70' });
+    const bottle =
+      await RiLiquidBottle.findOne({
+        bottleId: requestedBottleId,
+        isEmpty: { $ne: true }
+      }).lean();
+    const legacyBottleCalibration = bottle
+      ? null
+      : await RiLiquidCalibration.findOne({
+          bottleId: requestedBottleId,
+          isEmpty: { $ne: true }
+        })
+          .sort({ date: -1 })
+          .lean();
+
+    const bottleDetails = bottle || legacyBottleCalibration;
+    if (!bottleDetails) {
+      return res.status(400).json({
+        message: 'Please select an active RI Liquid bottle'
+      });
     }
 
     // Validate asbestos type
@@ -202,6 +402,7 @@ router.post('/', auth, checkPermission(['calibrations.create']), async (req, res
       { refractiveIndex: 1.70, asbestosType: 'Crocidolite' }
     ];
     
+    const refractiveIndexValue = Number(bottleDetails.refractiveIndex);
     const isPass = passCombinations.some(combo => 
       Math.abs(refractiveIndexValue - combo.refractiveIndex) < 0.001 && 
       asbestosTypeVerified === combo.asbestosType
@@ -238,12 +439,12 @@ router.post('/', auth, checkPermission(['calibrations.create']), async (req, res
     }
 
     const calibrationData = {
-      bottleId: equipmentId,
+      bottleId: requestedBottleId,
       date: new Date(date),
-      refractiveIndex: parseFloat(refractiveIndex),
+      refractiveIndex: refractiveIndexValue,
       asbestosTypeVerified: asbestosTypeVerified,
-      dateOpened: new Date(dateOpened),
-      batchNumber: batchNumber.trim(),
+      dateOpened: new Date(bottleDetails.dateOpened),
+      batchNumber: bottleDetails.batchNumber,
       status: calculatedStatus,
       calibratedBy: technicianId,
       nextCalibration: nextCalibration,
@@ -373,16 +574,27 @@ router.delete('/:id', auth, checkPermission(['calibrations.delete']), async (req
 router.put('/bottle/:bottleId/mark-empty', auth, checkPermission(['calibrations.edit']), async (req, res) => {
   try {
     const { bottleId } = req.params;
+    const dateEmptied = new Date();
     
-    // Update all calibrations for this bottle to mark as empty
-    const result = await RiLiquidCalibration.updateMany(
-      { bottleId: bottleId },
-      { isEmpty: true, dateEmptied: new Date() }
-    );
+    const [calibrationResult, bottleResult] = await Promise.all([
+      RiLiquidCalibration.updateMany(
+        { bottleId },
+        { isEmpty: true, dateEmptied }
+      ),
+      RiLiquidBottle.updateOne(
+        { bottleId },
+        { isEmpty: true, dateEmptied }
+      )
+    ]);
+
+    if (calibrationResult.matchedCount === 0 && bottleResult.matchedCount === 0) {
+      return res.status(404).json({ message: 'RI Liquid bottle not found' });
+    }
 
     res.json({ 
       message: 'Bottle marked as empty successfully',
-      updatedCount: result.modifiedCount
+      updatedCount:
+        calibrationResult.modifiedCount + bottleResult.modifiedCount
     });
   } catch (error) {
     console.error('Error marking bottle as empty:', error);

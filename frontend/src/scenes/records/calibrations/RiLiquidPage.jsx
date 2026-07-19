@@ -51,16 +51,25 @@ const RiLiquidPage = () => {
   const { currentUser } = useAuth();
 
   const [calibrations, setCalibrations] = useState([]);
+  const [activeBottles, setActiveBottles] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Dialog and form state
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [bottleDialogOpen, setBottleDialogOpen] = useState(false);
   const [editingCalibration, setEditingCalibration] = useState(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [technicians, setTechnicians] = useState([]);
   const [techniciansLoading, setTechniciansLoading] = useState(false);
   const [formError, setFormError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [bottleFormError, setBottleFormError] = useState(null);
+  const [bottleSubmitting, setBottleSubmitting] = useState(false);
+  const [bottleFormData, setBottleFormData] = useState({
+    refractiveIndex: "",
+    batchNumber: "",
+    dateOpened: formatDateForInput(new Date()),
+  });
 
   const [formData, setFormData] = useState({
     bottleId: "",
@@ -102,52 +111,29 @@ const RiLiquidPage = () => {
     try {
       setLoading(true);
 
-      // Fetch all RI Liquid calibrations
-      const response = await riLiquidCalibrationService.getAll({
-        limit: 1000,
-        sortBy: "date",
-        sortOrder: "desc",
-      });
+      const response = await riLiquidCalibrationService.getActiveBottles();
+      const bottleData = response.data || [];
 
-      const calibrationData = response.data || [];
-
-      // Transform data for display
-      const transformedCalibrations = calibrationData.map((cal) => ({
-        id: cal._id,
-        _id: cal._id,
-        bottleId: cal.bottleId || "",
-        date: cal.date,
-        refractiveIndex: cal.refractiveIndex,
-        asbestosTypeVerified: cal.asbestosTypeVerified,
-        dateOpened: cal.dateOpened,
-        batchNumber: cal.batchNumber,
-        status: cal.status,
-        nextCalibration: cal.nextCalibration,
-        notes: cal.notes,
-        calibratedBy: cal.calibratedBy,
-      }));
-
-      // Group by bottle ID and get only the most recent calibration for each
-      // Note: All calibration records are saved to the database. This grouping
-      // only affects the display on this page. The history page shows all records.
-      const calibrationsByBottle = {};
-      transformedCalibrations.forEach((cal) => {
-        const bottleId = cal.bottleId;
-        if (!bottleId) return;
-
-        // Keep the most recent calibration (by calibration date) for each bottle
-        if (
-          !calibrationsByBottle[bottleId] ||
-          new Date(cal.date) > new Date(calibrationsByBottle[bottleId].date)
-        ) {
-          calibrationsByBottle[bottleId] = cal;
-        }
-      });
-
-      // Convert back to array - this shows only the most recent calibration per bottle
-      const mostRecentCalibrations = Object.values(calibrationsByBottle);
-
-      setCalibrations(mostRecentCalibrations);
+      setActiveBottles(bottleData);
+      setCalibrations(
+        bottleData.map((bottle) => {
+          const latest = bottle.latestCalibration || {};
+          return {
+            id: latest._id || null,
+            _id: latest._id || null,
+            bottleId: bottle.bottleId,
+            date: latest.date || null,
+            refractiveIndex: bottle.refractiveIndex,
+            asbestosTypeVerified: latest.asbestosTypeVerified,
+            dateOpened: bottle.dateOpened,
+            batchNumber: bottle.batchNumber,
+            status: latest.status || null,
+            nextCalibration: latest.nextCalibration || null,
+            notes: latest.notes || "",
+            calibratedBy: latest.calibratedBy || null,
+          };
+        }),
+      );
     } catch (error) {
       console.error("Error fetching data:", error);
       setCalibrations([]);
@@ -227,6 +213,59 @@ const RiLiquidPage = () => {
     setAddDialogOpen(true);
   };
 
+  const handleOpenBottleDialog = () => {
+    setBottleFormError(null);
+    setBottleFormData({
+      refractiveIndex: "",
+      batchNumber: "",
+      dateOpened: formatDateForInput(new Date()),
+    });
+    setBottleDialogOpen(true);
+  };
+
+  const handleBottleDialogClose = () => {
+    if (!bottleSubmitting) {
+      setBottleDialogOpen(false);
+      setBottleFormError(null);
+    }
+  };
+
+  const handleCreateBottle = async (event) => {
+    event.preventDefault();
+    setBottleFormError(null);
+
+    if (
+      !bottleFormData.refractiveIndex ||
+      !bottleFormData.batchNumber.trim() ||
+      !bottleFormData.dateOpened
+    ) {
+      setBottleFormError(
+        "Refractive index, batch number, and date opened are required",
+      );
+      return;
+    }
+
+    try {
+      setBottleSubmitting(true);
+      await riLiquidCalibrationService.createBottle({
+        refractiveIndex: Number(bottleFormData.refractiveIndex),
+        batchNumber: bottleFormData.batchNumber.trim(),
+        dateOpened: bottleFormData.dateOpened,
+      });
+      await fetchData();
+      setBottleDialogOpen(false);
+    } catch (error) {
+      console.error("Error creating RI Liquid bottle:", error);
+      setBottleFormError(
+        error.response?.data?.message ||
+          error.message ||
+          "Failed to create RI Liquid bottle",
+      );
+    } finally {
+      setBottleSubmitting(false);
+    }
+  };
+
   const handleDialogClose = () => {
     if (!submitting) {
       setAddDialogOpen(false);
@@ -258,6 +297,25 @@ const RiLiquidPage = () => {
       technicianName: selectedTechnician
         ? `${selectedTechnician.firstName} ${selectedTechnician.lastName}`
         : "",
+    }));
+  };
+
+  const handleBottleChange = (bottleId) => {
+    const bottle = activeBottles.find(
+      (item) => item.bottleId === bottleId,
+    );
+    setFormData((prev) => ({
+      ...prev,
+      bottleId,
+      refractiveIndex: bottle ? String(bottle.refractiveIndex) : "",
+      batchNumber: bottle?.batchNumber || "",
+      dateOpened: bottle?.dateOpened
+        ? formatDateForInput(new Date(bottle.dateOpened))
+        : "",
+      status: calculateStatus(
+        bottle?.refractiveIndex,
+        prev.asbestosTypeVerified,
+      ),
     }));
   };
 
@@ -313,31 +371,19 @@ const RiLiquidPage = () => {
 
     // Validation
     if (!formData.bottleId || formData.bottleId.trim() === "") {
-      setFormError("Please enter a bottle ID");
+      setFormError("Please select an active bottle");
       return;
     }
     if (!formData.date) {
       setFormError("Please select a calibration date");
       return;
     }
-    if (!formData.dateOpened) {
-      setFormError("Please select a date opened");
-      return;
-    }
     if (!formData.technicianId) {
       setFormError("Please select a technician");
       return;
     }
-    if (!formData.refractiveIndex) {
-      setFormError("Please select a refractive index");
-      return;
-    }
     if (!formData.asbestosTypeVerified) {
       setFormError("Please select an asbestos type verified");
-      return;
-    }
-    if (!formData.batchNumber || formData.batchNumber.trim() === "") {
-      setFormError("Please enter a batch number");
       return;
     }
 
@@ -351,12 +397,9 @@ const RiLiquidPage = () => {
       );
 
       const calibrationData = {
-        equipmentId: formData.bottleId.trim(),
+        bottleId: formData.bottleId.trim(),
         date: formData.date,
-        refractiveIndex: parseFloat(formData.refractiveIndex),
         asbestosTypeVerified: formData.asbestosTypeVerified,
-        dateOpened: formData.dateOpened,
-        batchNumber: formData.batchNumber.trim(),
         status: calculatedStatus,
         technicianId: formData.technicianId,
         notes: formData.notes || "",
@@ -365,7 +408,12 @@ const RiLiquidPage = () => {
       if (editingCalibration) {
         await riLiquidCalibrationService.update(
           editingCalibration._id,
-          calibrationData,
+          {
+            ...calibrationData,
+            refractiveIndex: parseFloat(formData.refractiveIndex),
+            dateOpened: formData.dateOpened,
+            batchNumber: formData.batchNumber.trim(),
+          },
         );
       } else {
         // Create new calibration record
@@ -473,7 +521,7 @@ const RiLiquidPage = () => {
         title="RI Liquid Calibrations"
         calibrationTab={CALIBRATION_TABS.INTERNAL}
         action={
-          <Box display="flex" gap={2}>
+          <Box display="flex" gap={2} flexWrap="wrap">
             <Button
               variant="outlined"
               color="primary"
@@ -483,6 +531,13 @@ const RiLiquidPage = () => {
               }
             >
               Historical Records - Empty Bottles
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<AddIcon />}
+              onClick={handleOpenBottleDialog}
+            >
+              New RI Liquid Bottle
             </Button>
             <Button
               variant="contained"
@@ -522,14 +577,14 @@ const RiLiquidPage = () => {
                 <TableRow>
                   <TableCell colSpan={6} align="center">
                     <Typography variant="body2" color="text.secondary">
-                      No calibrations found
+                      No active RI Liquid bottles found
                     </Typography>
                   </TableCell>
                 </TableRow>
               ) : (
                 calibrations.map((calibration) => {
                   return (
-                    <TableRow key={calibration.id || calibration._id}>
+                    <TableRow key={calibration.bottleId}>
                       <TableCell>{calibration.bottleId}</TableCell>
                       <TableCell>
                         {calibration.dateOpened
@@ -542,20 +597,24 @@ const RiLiquidPage = () => {
                           : "-"}
                       </TableCell>
                       <TableCell>
-                        <Box
-                          sx={{
-                            backgroundColor:
-                              calibration.status === "Pass"
-                                ? theme.palette.success.main
-                                : theme.palette.error.main,
-                            color: "white",
-                            padding: "4px 8px",
-                            borderRadius: "4px",
-                            display: "inline-block",
-                          }}
-                        >
-                          {calibration.status}
-                        </Box>
+                        {calibration.status ? (
+                          <Box
+                            sx={{
+                              backgroundColor:
+                                calibration.status === "Pass"
+                                  ? theme.palette.success.main
+                                  : theme.palette.error.main,
+                              color: "white",
+                              padding: "4px 8px",
+                              borderRadius: "4px",
+                              display: "inline-block",
+                            }}
+                          >
+                            {calibration.status}
+                          </Box>
+                        ) : (
+                          "-"
+                        )}
                       </TableCell>
                       <TableCell>
                         {calibration.nextCalibration
@@ -563,21 +622,25 @@ const RiLiquidPage = () => {
                           : "-"}
                       </TableCell>
                       <TableCell>
-                        <IconButton
-                          onClick={() => handleViewHistory(calibration)}
-                          size="small"
-                          title="View Calibration History"
-                          sx={{ color: theme.palette.info.main }}
-                        >
-                          <HistoryIcon />
-                        </IconButton>
-                        <IconButton
-                          onClick={() => handleEdit(calibration.id)}
-                          size="small"
-                          title="Edit Calibration"
-                        >
-                          <EditIcon />
-                        </IconButton>
+                        {calibration.id && (
+                          <IconButton
+                            onClick={() => handleViewHistory(calibration)}
+                            size="small"
+                            title="View Calibration History"
+                            sx={{ color: theme.palette.info.main }}
+                          >
+                            <HistoryIcon />
+                          </IconButton>
+                        )}
+                        {calibration.id && (
+                          <IconButton
+                            onClick={() => handleEdit(calibration.id)}
+                            size="small"
+                            title="Edit Calibration"
+                          >
+                            <EditIcon />
+                          </IconButton>
+                        )}
                         <IconButton
                           onClick={() =>
                             handleMarkAsEmpty(calibration.bottleId)
@@ -588,13 +651,15 @@ const RiLiquidPage = () => {
                         >
                           <EmptyIcon />
                         </IconButton>
-                        <IconButton
-                          onClick={() => handleDelete(calibration.id)}
-                          size="small"
-                          title="Delete Calibration"
-                        >
-                          <DeleteIcon />
-                        </IconButton>
+                        {calibration.id && (
+                          <IconButton
+                            onClick={() => handleDelete(calibration.id)}
+                            size="small"
+                            title="Delete Calibration"
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        )}
                       </TableCell>
                     </TableRow>
                   );
@@ -604,6 +669,125 @@ const RiLiquidPage = () => {
           </Table>
         </TableContainer>
       )}
+
+      {/* New RI Liquid Bottle Dialog */}
+      <Dialog
+        open={bottleDialogOpen}
+        onClose={handleBottleDialogClose}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+          >
+            <Typography variant="h6">New RI Liquid Bottle</Typography>
+            <IconButton
+              onClick={handleBottleDialogClose}
+              disabled={bottleSubmitting}
+            >
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <Box component="form" onSubmit={handleCreateBottle}>
+          <DialogContent>
+            {bottleFormError && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {bottleFormError}
+              </Alert>
+            )}
+            <Stack spacing={3} sx={{ mt: 1 }}>
+              <FormControl fullWidth required>
+                <InputLabel>Refractive Index</InputLabel>
+                <Select
+                  value={bottleFormData.refractiveIndex}
+                  onChange={(event) =>
+                    setBottleFormData((prev) => ({
+                      ...prev,
+                      refractiveIndex: event.target.value,
+                    }))
+                  }
+                  label="Refractive Index"
+                  disabled={bottleSubmitting}
+                >
+                  <MenuItem value="">
+                    <em>Select refractive index</em>
+                  </MenuItem>
+                  <MenuItem value="1.55">1.55</MenuItem>
+                  <MenuItem value="1.67">1.67</MenuItem>
+                  <MenuItem value="1.70">1.70</MenuItem>
+                </Select>
+              </FormControl>
+              <TextField
+                fullWidth
+                required
+                label="Batch Number"
+                value={bottleFormData.batchNumber}
+                onChange={(event) =>
+                  setBottleFormData((prev) => ({
+                    ...prev,
+                    batchNumber: event.target.value,
+                  }))
+                }
+                disabled={bottleSubmitting}
+              />
+              <Box display="flex" alignItems="center" gap={2}>
+                <TextField
+                  fullWidth
+                  required
+                  label="Date Opened"
+                  type="date"
+                  value={bottleFormData.dateOpened}
+                  onChange={(event) =>
+                    setBottleFormData((prev) => ({
+                      ...prev,
+                      dateOpened: event.target.value,
+                    }))
+                  }
+                  InputLabelProps={{ shrink: true }}
+                  disabled={bottleSubmitting}
+                />
+                <Button
+                  variant="outlined"
+                  onClick={() =>
+                    setBottleFormData((prev) => ({
+                      ...prev,
+                      dateOpened: formatDateForInput(new Date()),
+                    }))
+                  }
+                  disabled={bottleSubmitting}
+                  sx={{ minWidth: "100px" }}
+                >
+                  Today
+                </Button>
+              </Box>
+              <Typography variant="body2" color="text.secondary">
+                The Bottle ID will be generated automatically using the
+                refractive index and next available number.
+              </Typography>
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ p: 2 }}>
+            <Button
+              onClick={handleBottleDialogClose}
+              disabled={bottleSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={bottleSubmitting}
+              startIcon={bottleSubmitting ? null : <AddIcon />}
+            >
+              {bottleSubmitting ? "Creating..." : "Create Bottle"}
+            </Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
 
       {/* Add/Edit Calibration Dialog */}
       <Dialog
@@ -666,17 +850,63 @@ const RiLiquidPage = () => {
               </Alert>
             )}
             <Stack spacing={3} sx={{ mt: 1 }}>
-              <TextField
-                fullWidth
-                label="Bottle ID"
-                value={formData.bottleId}
-                onChange={(e) =>
-                  setFormData({ ...formData, bottleId: e.target.value })
-                }
-                placeholder="Enter bottle ID"
-                required
-                disabled={submitting || lookupViewMode}
-              />
+              {editingCalibration ? (
+                <TextField
+                  fullWidth
+                  label="Bottle ID"
+                  value={formData.bottleId}
+                  disabled
+                />
+              ) : (
+                <FormControl fullWidth required>
+                  <InputLabel>Active Bottle ID</InputLabel>
+                  <Select
+                    value={formData.bottleId}
+                    onChange={(event) =>
+                      handleBottleChange(event.target.value)
+                    }
+                    label="Active Bottle ID"
+                    disabled={submitting}
+                  >
+                    <MenuItem value="">
+                      <em>Select an active bottle</em>
+                    </MenuItem>
+                    {activeBottles.map((bottle) => (
+                      <MenuItem
+                        key={bottle.bottleId}
+                        value={bottle.bottleId}
+                      >
+                        {bottle.bottleId}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+
+              {formData.bottleId && (
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    Refractive Index
+                  </Typography>
+                  <Typography variant="body1" sx={{ mb: 1 }}>
+                    {Number(formData.refractiveIndex).toFixed(2)}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Batch Number
+                  </Typography>
+                  <Typography variant="body1" sx={{ mb: 1 }}>
+                    {formData.batchNumber || "-"}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Date Opened
+                  </Typography>
+                  <Typography variant="body1">
+                    {formData.dateOpened
+                      ? formatDate(formData.dateOpened)
+                      : "-"}
+                  </Typography>
+                </Paper>
+              )}
 
               <Box>
                 <Box
@@ -725,34 +955,6 @@ const RiLiquidPage = () => {
               />
 
               <FormControl fullWidth required>
-                <InputLabel>Refractive Index</InputLabel>
-                <Select
-                  value={formData.refractiveIndex}
-                  onChange={(e) => {
-                    const newRefractiveIndex = e.target.value;
-                    const newStatus = calculateStatus(
-                      newRefractiveIndex,
-                      formData.asbestosTypeVerified,
-                    );
-                    setFormData({
-                      ...formData,
-                      refractiveIndex: newRefractiveIndex,
-                      status: newStatus,
-                    });
-                  }}
-                  label="Refractive Index"
-                  disabled={submitting || lookupViewMode}
-                >
-                  <MenuItem value="">
-                    <em>Select refractive index</em>
-                  </MenuItem>
-                  <MenuItem value="1.55">1.55</MenuItem>
-                  <MenuItem value="1.67">1.67</MenuItem>
-                  <MenuItem value="1.70">1.70</MenuItem>
-                </Select>
-              </FormControl>
-
-              <FormControl fullWidth required>
                 <InputLabel>Asbestos Type Verified</InputLabel>
                 <Select
                   value={formData.asbestosTypeVerified}
@@ -779,56 +981,6 @@ const RiLiquidPage = () => {
                   <MenuItem value="Crocidolite">Crocidolite</MenuItem>
                 </Select>
               </FormControl>
-
-              <Box>
-                <Box
-                  display="flex"
-                  justifyContent="space-between"
-                  alignItems="center"
-                  mb={1}
-                >
-                  <TextField
-                    fullWidth
-                    label="Date Opened"
-                    type="date"
-                    value={formData.dateOpened}
-                    onChange={(e) =>
-                      setFormData({ ...formData, dateOpened: e.target.value })
-                    }
-                    InputLabelProps={{ shrink: true }}
-                    required
-                    disabled={submitting || lookupViewMode}
-                    sx={{ mr: 1 }}
-                  />
-                  {!lookupViewMode && (
-                    <Button
-                      variant="outlined"
-                      onClick={() => {
-                        setFormData((prev) => ({
-                          ...prev,
-                          dateOpened: formatDateForInput(new Date()),
-                        }));
-                      }}
-                      disabled={submitting}
-                      sx={{ ml: 1, minWidth: "100px" }}
-                    >
-                      Today
-                    </Button>
-                  )}
-                </Box>
-              </Box>
-
-              <TextField
-                fullWidth
-                label="Batch Number"
-                value={formData.batchNumber}
-                onChange={(e) =>
-                  setFormData({ ...formData, batchNumber: e.target.value })
-                }
-                placeholder="Enter batch number"
-                required
-                disabled={submitting || lookupViewMode}
-              />
 
               <FormControl fullWidth>
                 <InputLabel>Status</InputLabel>
