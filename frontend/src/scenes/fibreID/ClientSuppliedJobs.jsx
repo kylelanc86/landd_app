@@ -861,12 +861,12 @@ const ClientSuppliedJobs = () => {
           reportReference: fullJob.reportReference || null,
         };
 
-        // Generate the Fibre ID report
+        // Generate the Fibre ID report (always download — pdfmake open() ignores filename)
         await generateFibreIDReport({
           assessment: assessmentForReport,
           sampleItems: sampleItemsForReport,
           analyst: analyst || "Unknown Analyst",
-          openInNewTab: true,
+          openInNewTab: false,
           returnPdfData: false,
           reportApprovedBy: fullJob.reportApprovedBy || null,
           reportIssueDate: fullJob.reportIssueDate || null,
@@ -928,13 +928,13 @@ const ClientSuppliedJobs = () => {
           asbestosRemovalist: null, // Not applicable for client supplied
         };
 
-        // Generate the PDF using air monitoring format
+        // Generate the PDF using air monitoring format (always download — pdfmake open() ignores filename)
         await generateShiftReport({
           shift: mockShift,
           job: jobForPDF,
           samples: transformedSamples,
           project: fullJob.projectId,
-          openInNewTab: true,
+          openInNewTab: false,
           isClientSupplied: true, // Flag to indicate we want fibre count format
         });
         setReportViewedJobIds((prev) => new Set(prev).add(job._id));
