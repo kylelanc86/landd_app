@@ -3654,7 +3654,7 @@ const AsbestosRemovalJobDetails = () => {
         </DialogTitle>
         <form onSubmit={handleClearanceSubmit}>
           <DialogContent sx={{ px: 2, pt: 0.5, pb: 1 }}>
-            <Grid container spacing={1}>
+            <Grid container spacing={{ xs: 2, sm: 1 }}>
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
@@ -3904,14 +3904,22 @@ const AsbestosRemovalJobDetails = () => {
                 </FormControl>
               </Grid>
               <Grid item xs={12} sm={6}>
-                <Box sx={{ minWidth: 0, py: 0.25 }}>
+                <Box
+                  sx={{
+                    minWidth: 0,
+                    minHeight: 40,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1.5,
+                    flexWrap: "wrap",
+                  }}
+                >
                   <Typography
                     variant="caption"
                     sx={{
-                      fontSize: "0.7rem",
+                      fontSize: "0.75rem",
                       color: "text.secondary",
-                      display: "block",
-                      mb: 0.25,
+                      lineHeight: 1,
                     }}
                   >
                     Jurisdiction
@@ -3993,6 +4001,11 @@ const AsbestosRemovalJobDetails = () => {
                   }
                   placeholder="Enter secondary header text"
                   helperText="This will appear as a smaller header beneath the site name on the cover page"
+                  sx={{
+                    "& .MuiFormHelperText-root": {
+                      display: { xs: "none", sm: "block" },
+                    },
+                  }}
                 />
               </Grid>
             </Grid>
