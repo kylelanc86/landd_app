@@ -5,6 +5,7 @@ import {
   Box,
   Typography,
   useTheme,
+  useMediaQuery,
   Paper,
   Table,
   TableBody,
@@ -30,6 +31,7 @@ import {
   Select,
   MenuItem,
   FormControlLabel,
+  FormHelperText,
   Checkbox,
   Grid,
   Radio,
@@ -47,6 +49,7 @@ import DownloadingIcon from "@mui/icons-material/Downloading";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import CloseIcon from "@mui/icons-material/Close";
+import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import MailIcon from "@mui/icons-material/Mail";
 import DescriptionIcon from "@mui/icons-material/Description";
@@ -119,6 +122,30 @@ const clearanceFormsAreEqual = (a, b) => {
   return CLEARANCE_FORM_COMPARE_KEYS.every((key) => left[key] === right[key]);
 };
 
+/** Round to the nearest 5 minutes, matching the inspection-time minute options. */
+const formatNearestInspectionTime = (date = new Date()) => {
+  const totalMinutes = date.getHours() * 60 + date.getMinutes();
+  const roundedMinutes = Math.round(totalMinutes / 5) * 5;
+  const normalized =
+    ((roundedMinutes % (24 * 60)) + 24 * 60) % (24 * 60);
+  const hour24 = Math.floor(normalized / 60);
+  const minute = normalized % 60;
+  const ampm = hour24 >= 12 ? "PM" : "AM";
+  let hour12 = hour24 % 12;
+  if (hour12 === 0) hour12 = 12;
+  return `${hour12.toString().padStart(2, "0")}:${minute
+    .toString()
+    .padStart(2, "0")} ${ampm}`;
+};
+
+const formatInspectionTimeLabel = (inspectionTime) => {
+  const [hm, ampm] = String(inspectionTime || "").split(" ");
+  const [hour, minute] = String(hm || "").split(":");
+  const hourNumber = parseInt(hour, 10);
+  if (!minute || !ampm || Number.isNaN(hourNumber)) return inspectionTime;
+  return `${hourNumber}:${minute} ${ampm}`;
+};
+
 const hasRetainedEnclosureCertificatePdf = (clearance) =>
   Boolean(
     clearance?.enclosureCertificatePdfReadyAt ||
@@ -136,6 +163,9 @@ const AsbestosRemovalJobDetails = () => {
 
   const theme = useTheme();
   const colors = tokens;
+  const compactJobTabs = useMediaQuery(theme.breakpoints.down("sm"), {
+    noSsr: true,
+  });
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { jobId } = useParams();
@@ -178,6 +208,7 @@ const AsbestosRemovalJobDetails = () => {
   const [clearancePdfGeneratingForClearanceId, setClearancePdfGeneratingForClearanceId] = useState(null); // clearance _id whose PDF is generating (until poll completes)
   const clearancePdfCompletedJobRef = useRef(null); // prevent duplicate completion/download handling
   const [clearanceDownloadDialogOpen, setClearanceDownloadDialogOpen] = useState(false);
+  const [clearanceRegeneratePrompt, setClearanceRegeneratePrompt] = useState(null);
   const [shiftReportDownloadingShiftId, setShiftReportDownloadingShiftId] = useState(null);
   const [sendingAuthorisationRequests, setSendingAuthorisationRequests] =
     useState({});
@@ -189,6 +220,7 @@ const AsbestosRemovalJobDetails = () => {
     useState({});
   const [shiftDialogOpen, setShiftDialogOpen] = useState(false);
   const [newShiftDate, setNewShiftDate] = useState("");
+  const [shiftAsbestosRemovalist, setShiftAsbestosRemovalist] = useState("");
   const [copyPreviousShiftSamples, setCopyPreviousShiftSamples] =
     useState(false);
   const [editingShift, setEditingShift] = useState(null);
@@ -233,6 +265,24 @@ const AsbestosRemovalJobDetails = () => {
     if (!editingClearance || !clearanceFormBaseline) return true;
     return !clearanceFormsAreEqual(clearanceForm, clearanceFormBaseline);
   }, [clearanceForm, clearanceFormBaseline, editingClearance]);
+
+  const [nearestInspectionTime, setNearestInspectionTime] = useState(() =>
+    formatNearestInspectionTime(),
+  );
+
+  useEffect(() => {
+    if (!clearanceDialogOpen) return undefined;
+    const refresh = () => setNearestInspectionTime(formatNearestInspectionTime());
+    refresh();
+    const timer = setInterval(refresh, 15000);
+    return () => clearInterval(timer);
+  }, [clearanceDialogOpen]);
+
+  const handleUseNearestInspectionTime = () => {
+    const inspectionTime = formatNearestInspectionTime();
+    setNearestInspectionTime(inspectionTime);
+    setClearanceForm((prev) => ({ ...prev, inspectionTime }));
+  };
 
   const latestFetchIdRef = useRef(0);
   const clearancesBackgroundFetchTriggeredRef = useRef(false);
@@ -972,7 +1022,11 @@ const AsbestosRemovalJobDetails = () => {
       navigate("/asbestos-removal");
     } catch (error) {
       console.error("Error completing job:", error);
-      setError("Failed to complete job. Please try again.");
+      showSnackbar(
+        error.response?.data?.message ||
+          "Failed to complete job. Please try again.",
+        "error",
+      );
     }
   };
 
@@ -1237,8 +1291,11 @@ const AsbestosRemovalJobDetails = () => {
   };
 
   const handleCreateAirMonitoringShift = () => {
+    setEditingShift(null);
     setNewShiftDate("");
+    setShiftAsbestosRemovalist((job?.asbestosRemovalist || "").trim());
     setCopyPreviousShiftSamples(false);
+    fetchAsbestosRemovalists();
     setShiftDialogOpen(true);
   };
 
@@ -1348,6 +1405,27 @@ const AsbestosRemovalJobDetails = () => {
     return highestSampleNumber + 1;
   };
 
+  const shiftRemovalistOverride = (selected) => {
+    const value = (selected || "").trim();
+    const jobDefault = (job?.asbestosRemovalist || "").trim();
+    if (!value || value === jobDefault) return "";
+    return value;
+  };
+
+  const shiftRemovalistOptions = useMemo(() => {
+    const options = asbestosRemovalists
+      .map((removalist) => (removalist?.text || "").trim())
+      .filter(Boolean);
+    const extras = [job?.asbestosRemovalist, shiftAsbestosRemovalist];
+    extras.forEach((value) => {
+      const trimmed = (value || "").trim();
+      if (trimmed && !options.includes(trimmed)) {
+        options.unshift(trimmed);
+      }
+    });
+    return options;
+  }, [asbestosRemovalists, job?.asbestosRemovalist, shiftAsbestosRemovalist]);
+
   const handleShiftSubmit = async ({ duplicateFromPrevious = false } = {}) => {
     setShiftCreating(true);
     try {
@@ -1378,6 +1456,9 @@ const AsbestosRemovalJobDetails = () => {
       }
 
       // Create the new shift
+      const removalistOverride = shiftRemovalistOverride(
+        shiftAsbestosRemovalist,
+      );
       const shiftData = {
         job: jobId,
         jobModel: "AsbestosRemovalJob",
@@ -1389,6 +1470,9 @@ const AsbestosRemovalJobDetails = () => {
         supervisor: currentUser._id,
         status: "ongoing",
         descriptionOfWorks: copiedDescriptionOfWorks,
+        ...(removalistOverride
+          ? { asbestosRemovalist: removalistOverride }
+          : {}),
       };
 
       const response = await shiftService.create(shiftData);
@@ -1636,12 +1720,12 @@ const AsbestosRemovalJobDetails = () => {
     }
   };
 
-  // Green icon = retained PDF available → click only downloads. Orange = no PDF yet → click generates then downloads.
-  const hasRetainedValidPdf = (clearance) =>
-    Boolean(clearance.mergedPdfPath || clearance.pdfDownloadUrl);
+  // Green only when a PDF is stored on this server. Otherwise orange, and the click generates.
+  const hasRetainedValidPdf = (clearance) => clearance?.hasStoredPdf === true;
 
   const handleDownloadOrGenerateClearanceReport = async (clearance, event) => {
     event?.stopPropagation();
+    event?.currentTarget?.blur?.();
     if (hasRetainedValidPdf(clearance)) {
       setClearanceDownloadDialogOpen(true);
       try {
@@ -1657,20 +1741,19 @@ const AsbestosRemovalJobDetails = () => {
         }
       } catch (err) {
         console.error("Error downloading clearance PDF:", err);
-        const msg = err.message || "";
-        const isNoPdf = /no pdf|not available|retention|generate the pdf first/i.test(msg);
-        if (isNoPdf) {
-          showSnackbar("No PDF available. Starting generation…", "info");
-          handleOpenClearancePdfDialog(clearance, event);
-        } else {
-          showSnackbar(msg || "Failed to download PDF", "error");
-        }
+        setClearanceRegeneratePrompt(clearance);
       } finally {
         setClearanceDownloadDialogOpen(false);
       }
     } else {
       handleOpenClearancePdfDialog(clearance, event);
     }
+  };
+
+  const confirmRegenerateClearanceReport = () => {
+    const clearance = clearanceRegeneratePrompt;
+    setClearanceRegeneratePrompt(null);
+    if (clearance) handleOpenClearancePdfDialog(clearance);
   };
 
   const handleAuthoriseClearanceReport = async (clearance, event) => {
@@ -2026,6 +2109,10 @@ const AsbestosRemovalJobDetails = () => {
       ? new Date(shift.date).toISOString().split("T")[0]
       : "";
     setNewShiftDate(shiftDate);
+    setShiftAsbestosRemovalist(
+      (shift.asbestosRemovalist || job?.asbestosRemovalist || "").trim(),
+    );
+    fetchAsbestosRemovalists();
     setShiftDialogOpen(true);
   };
 
@@ -2034,13 +2121,16 @@ const AsbestosRemovalJobDetails = () => {
 
     setShiftCreating(true);
     try {
-      await shiftService.update(editingShift._id, { date: newShiftDate });
+      await shiftService.update(editingShift._id, {
+        date: newShiftDate,
+        asbestosRemovalist: shiftRemovalistOverride(shiftAsbestosRemovalist),
+      });
       await fetchJobDetails();
-      showSnackbar("Shift date updated successfully", "success");
+      showSnackbar("Shift updated successfully", "success");
       handleCloseShiftDialog();
     } catch (error) {
-      console.error("Error updating shift date:", error);
-      showSnackbar("Failed to update shift date", "error");
+      console.error("Error updating shift:", error);
+      showSnackbar("Failed to update shift", "error");
     } finally {
       setShiftCreating(false);
     }
@@ -2049,6 +2139,7 @@ const AsbestosRemovalJobDetails = () => {
   const handleCloseShiftDialog = () => {
     setShiftDialogOpen(false);
     setNewShiftDate("");
+    setShiftAsbestosRemovalist("");
     setCopyPreviousShiftSamples(false);
     setEditingShift(null);
     setShiftCreating(false);
@@ -2236,7 +2327,7 @@ const AsbestosRemovalJobDetails = () => {
         PaperProps={{ sx: { borderRadius: 2 } }}
       >
         <DialogTitle>Downloading report</DialogTitle>
-        <DialogContent>
+        <DialogContent tabIndex={-1}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2, py: 2 }}>
             <CircularProgress size={24} />
             <Typography>
@@ -2244,6 +2335,38 @@ const AsbestosRemovalJobDetails = () => {
             </Typography>
           </Box>
         </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(clearanceRegeneratePrompt)}
+        onClose={() => setClearanceRegeneratePrompt(null)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 2 } }}
+      >
+        <DialogTitle>Report could not be downloaded</DialogTitle>
+        <DialogContent>
+          <Typography>
+            The saved report could not be downloaded. Would you like to regenerate it?
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            onClick={() => setClearanceRegeneratePrompt(null)}
+            variant="outlined"
+            sx={{ textTransform: "none" }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={confirmRegenerateClearanceReport}
+            variant="contained"
+            color="warning"
+            sx={{ textTransform: "none" }}
+          >
+            Regenerate
+          </Button>
+        </DialogActions>
       </Dialog>
 
       {/* Air monitoring shift report download dialog */}
@@ -2322,7 +2445,7 @@ const AsbestosRemovalJobDetails = () => {
               color="text.secondary"
             >
               Project: {job?.projectId?.projectID || "Loading..."} -{" "}
-              {job?.projectName || "Loading..."}
+              {job?.projectId?.name || job?.projectName || "Loading..."}
             </Typography>
             <Typography
               variant="body1"
@@ -2476,31 +2599,54 @@ const AsbestosRemovalJobDetails = () => {
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
+            minWidth: 0,
           }}
         >
           <Tabs
             value={activeTab}
             onChange={handleTabChange}
             sx={{
-              "& .MuiTab-root": { fontSize: "1em" },
+              width: { xs: "100%", sm: "auto" },
+              minWidth: 0,
+              "& .MuiTabs-flexContainer": {
+                justifyContent: { xs: "space-evenly", sm: "flex-start" },
+                px: { xs: 1, sm: 0 },
+              },
+              "& .MuiTab-root": {
+                fontSize: "1em",
+                minWidth: { xs: 0, sm: 90 },
+                px: { xs: 1, sm: 2 },
+              },
               "& .MuiTab-iconWrapper": { display: { xs: "none", sm: "flex" } },
             }}
           >
             <Tab
-              label={`Air Mon Shifts (${airMonitoringShifts.length})`}
+              label={
+                compactJobTabs
+                  ? "Air Mon"
+                  : `Air Mon Shifts (${airMonitoringShifts.length})`
+              }
               icon={<MonitorIcon />}
               iconPosition="start"
             />
             {clearancesLoaded && (
               <Tab
-                label={`Clearances (${jobClearances.length})`}
+                label={
+                  compactJobTabs
+                    ? "Clearances"
+                    : `Clearances (${jobClearances.length})`
+                }
                 icon={<AssessmentIcon />}
                 iconPosition="start"
               />
             )}
             {clearancesLoaded && (
               <Tab
-                label={`Enclosure Inspection (${enclosureCertificates.length})`}
+                label={
+                  compactJobTabs
+                    ? "Enclosures"
+                    : `Enclosures (${enclosureCertificates.length})`
+                }
                 icon={<DescriptionIcon />}
                 iconPosition="start"
               />
@@ -2618,6 +2764,17 @@ const AsbestosRemovalJobDetails = () => {
                       >
                         <TableCell>
                           {shift.date ? formatDate(shift.date) : "N/A"}
+                          {shift.asbestosRemovalist &&
+                            shift.asbestosRemovalist !==
+                              job?.asbestosRemovalist && (
+                              <Typography
+                                variant="caption"
+                                display="block"
+                                color="text.secondary"
+                              >
+                                {shift.asbestosRemovalist}
+                              </Typography>
+                            )}
                         </TableCell>
                         <TableCell>
                           <Chip
@@ -2669,7 +2826,7 @@ const AsbestosRemovalJobDetails = () => {
                                   e.stopPropagation();
                                   handleEditShift(shift, e);
                                 }}
-                                title="Edit Shift Date"
+                                title="Edit shift"
                               >
                                 <EditIcon color="primary" />
                               </IconButton>
@@ -3477,8 +3634,16 @@ const AsbestosRemovalJobDetails = () => {
         onClose={handleCloseClearanceDialog}
         maxWidth="md"
         fullWidth
+        scroll="paper"
+        sx={{
+          "& .MuiDialog-paper": {
+            m: { xs: 1, sm: 4 },
+            width: { xs: "calc(100% - 16px)", sm: "100%" },
+            maxHeight: { xs: "calc(100% - 16px)", sm: "calc(100% - 64px)" },
+          },
+        }}
       >
-        <DialogTitle>
+        <DialogTitle sx={{ py: 1.25, px: 2, fontSize: "1.05rem" }}>
           {editingClearance
             ? isEnclosureCertificateModal
               ? "Edit Enclosure Certificate"
@@ -3488,11 +3653,12 @@ const AsbestosRemovalJobDetails = () => {
               : "Add New Clearance"}
         </DialogTitle>
         <form onSubmit={handleClearanceSubmit}>
-          <DialogContent>
-            <Grid container spacing={2}>
+          <DialogContent sx={{ px: 2, pt: 0.5, pb: 1 }}>
+            <Grid container spacing={1}>
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
+                  size="small"
                   label="Clearance Date"
                   type="date"
                   value={clearanceForm.clearanceDate}
@@ -3507,8 +3673,19 @@ const AsbestosRemovalJobDetails = () => {
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-                  <FormControl required sx={{ minWidth: 80 }}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    gap: 0.75,
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <FormControl
+                    required
+                    size="small"
+                    sx={{ flex: "1 1 56px", minWidth: 56 }}
+                  >
                     <InputLabel>Hour</InputLabel>
                     <Select
                       value={
@@ -3546,7 +3723,11 @@ const AsbestosRemovalJobDetails = () => {
                     </Select>
                   </FormControl>
 
-                  <FormControl required sx={{ minWidth: 100 }}>
+                  <FormControl
+                    required
+                    size="small"
+                    sx={{ flex: "1.15 1 70px", minWidth: 70 }}
+                  >
                     <InputLabel>Minutes</InputLabel>
                     <Select
                       value={
@@ -3581,7 +3762,11 @@ const AsbestosRemovalJobDetails = () => {
                     </Select>
                   </FormControl>
 
-                  <FormControl required sx={{ minWidth: 80 }}>
+                  <FormControl
+                    required
+                    size="small"
+                    sx={{ flex: "0.9 1 56px", minWidth: 56 }}
+                  >
                     <InputLabel>AM/PM</InputLabel>
                     <Select
                       value={
@@ -3610,11 +3795,25 @@ const AsbestosRemovalJobDetails = () => {
                       <MenuItem value="PM">PM</MenuItem>
                     </Select>
                   </FormControl>
+
+                  <Tooltip
+                    title={`Set time to ${formatInspectionTimeLabel(nearestInspectionTime)}`}
+                  >
+                    <IconButton
+                      type="button"
+                      size="small"
+                      onClick={handleUseNearestInspectionTime}
+                      aria-label={`Set inspection time to ${formatInspectionTimeLabel(nearestInspectionTime)}`}
+                      sx={{ flex: "0 0 auto", p: 0.5 }}
+                    >
+                      <AccessTimeIcon />
+                    </IconButton>
+                  </Tooltip>
                 </Box>
               </Grid>
               {!isEnclosureCertificateModal && (
               <Grid item xs={12} sm={6}>
-                <FormControl fullWidth required>
+                <FormControl fullWidth required size="small">
                   <InputLabel>Clearance Type</InputLabel>
                   <Select
                     value={clearanceForm.clearanceType}
@@ -3661,6 +3860,7 @@ const AsbestosRemovalJobDetails = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
+                  size="small"
                   label="Asbestos Removalist"
                   value={clearanceForm.asbestosRemovalist}
                   onChange={(e) =>
@@ -3673,7 +3873,7 @@ const AsbestosRemovalJobDetails = () => {
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <FormControl fullWidth required>
+                <FormControl fullWidth required size="small">
                   <InputLabel>LAA (Licensed Asbestos Assessor)</InputLabel>
                   <Select
                     value={clearanceForm.LAA || ""}
@@ -3704,19 +3904,19 @@ const AsbestosRemovalJobDetails = () => {
                 </FormControl>
               </Grid>
               <Grid item xs={12} sm={6}>
-                <Box sx={{ minWidth: 150 }}>
+                <Box sx={{ minWidth: 0, py: 0.25 }}>
                   <Typography
                     variant="caption"
                     sx={{
-                      fontSize: "0.75rem",
+                      fontSize: "0.7rem",
                       color: "text.secondary",
                       display: "block",
-                      mb: 1,
+                      mb: 0.25,
                     }}
                   >
                     Jurisdiction
                   </Typography>
-                  <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
+                  <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
                     <FormControlLabel
                       value="ACT"
                       control={
@@ -3732,7 +3932,10 @@ const AsbestosRemovalJobDetails = () => {
                         />
                       }
                       label="ACT"
-                      sx={{ margin: 0 }}
+                      sx={{
+                        margin: 0,
+                        "& .MuiFormControlLabel-label": { fontSize: "0.8125rem" },
+                      }}
                     />
                     <FormControlLabel
                       value="NSW"
@@ -3749,7 +3952,10 @@ const AsbestosRemovalJobDetails = () => {
                         />
                       }
                       label="NSW"
-                      sx={{ margin: 0 }}
+                      sx={{
+                        margin: 0,
+                        "& .MuiFormControlLabel-label": { fontSize: "0.8125rem" },
+                      }}
                     />
                   </Box>
                 </Box>
@@ -3758,6 +3964,7 @@ const AsbestosRemovalJobDetails = () => {
                 <Grid item xs={12}>
                   <TextField
                     fullWidth
+                    size="small"
                     label="Vehicle/Equipment Description"
                     value={clearanceForm.vehicleEquipmentDescription}
                     onChange={(e) =>
@@ -3775,6 +3982,7 @@ const AsbestosRemovalJobDetails = () => {
               <Grid item xs={12}>
                 <TextField
                   fullWidth
+                  size="small"
                   label="Secondary Header (Optional)"
                   value={clearanceForm.secondaryHeader}
                   onChange={(e) =>
@@ -3789,12 +3997,13 @@ const AsbestosRemovalJobDetails = () => {
               </Grid>
             </Grid>
           </DialogContent>
-          <DialogActions>
-            <Button onClick={handleCloseClearanceDialog}>
+          <DialogActions sx={{ px: 2, py: 1 }}>
+            <Button size="small" onClick={handleCloseClearanceDialog}>
               Cancel
             </Button>
             <Button
               type="submit"
+              size="small"
               variant="contained"
               disabled={
                 creating || (Boolean(editingClearance) && !clearanceFormHasChanges)
@@ -3911,6 +4120,34 @@ const AsbestosRemovalJobDetails = () => {
               Today
             </Button>
           </Box>
+          <FormControl fullWidth margin="dense" disabled={shiftCreating}>
+            <InputLabel id="shift-asbestos-removalist-label">
+              Asbestos Removalist
+            </InputLabel>
+            <Select
+              labelId="shift-asbestos-removalist-label"
+              label="Asbestos Removalist"
+              value={shiftAsbestosRemovalist}
+              onChange={(e) => setShiftAsbestosRemovalist(e.target.value)}
+            >
+              {shiftRemovalistOptions.length === 0 ? (
+                <MenuItem value={shiftAsbestosRemovalist || ""} disabled>
+                  Loading removalists...
+                </MenuItem>
+              ) : (
+                shiftRemovalistOptions.map((removalist) => (
+                  <MenuItem key={removalist} value={removalist}>
+                    {removalist}
+                  </MenuItem>
+                ))
+              )}
+            </Select>
+            <FormHelperText>
+              {shiftRemovalistOverride(shiftAsbestosRemovalist)
+                ? "This shift only. The job's asbestos removalist stays the same."
+                : "Uses this job's asbestos removalist."}
+            </FormHelperText>
+          </FormControl>
           {!editingShift && airMonitoringShifts.length > 0 && (
             <Box sx={{ mt: 1 }}>
               <FormControlLabel

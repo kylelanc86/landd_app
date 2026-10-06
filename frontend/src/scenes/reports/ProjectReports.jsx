@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { useParams, useLocation } from "react-router-dom";
+import { useParams, useLocation, useNavigate, Link } from "react-router-dom";
 import { useSnackbar } from "../../context/SnackbarContext";
 import {
   Box,
@@ -35,7 +35,6 @@ import CancelIcon from "@mui/icons-material/Cancel";
 import UploadIcon from "@mui/icons-material/Upload";
 import ReportCategories from "./ReportCategories";
 import ReportsList from "./ReportsList";
-import { useNavigate, Link } from "react-router-dom";
 import api, {
   projectService,
   sampleService,
@@ -285,6 +284,7 @@ const ProjectReports = () => {
               additionalInfo: report.assessorName || "N/A",
               status: report.status || "Unknown",
               type: "asbestos_assessment",
+              jobType: report.jobType || "asbestos-assessment",
               data: report,
             }));
           } catch (error) {
@@ -325,6 +325,11 @@ const ProjectReports = () => {
                     reportApprovedBy: report.reportApprovedBy,
                     reportIssueDate: report.reportIssueDate,
                     revision: report.revision || 0,
+                    ...(report.asbestosRemovalistOverride
+                      ? {
+                          asbestosRemovalist: report.asbestosRemovalistOverride,
+                        }
+                      : {}),
                   },
                   job: {
                     _id: report.jobId,
@@ -353,7 +358,7 @@ const ProjectReports = () => {
               Array.isArray(clearanceReports) &&
               clearanceReports.length > 0
             ) {
-              // Map clearances to report format
+              // Map clearances to report format (includes enclosure certificates)
               const mappedClearanceReports = clearanceReports.map(
                 (clearance) => ({
                   id: clearance.id,
@@ -366,7 +371,10 @@ const ProjectReports = () => {
                     `${clearance.clearanceType || "Clearance"} Clearance`,
                   status: clearance.status || "Unknown",
                   revision: clearance.revision || 0,
-                  type: "clearance",
+                  type: clearance.type || "clearance",
+                  isEnclosureCertificate: Boolean(
+                    clearance.isEnclosureCertificate,
+                  ),
                   data: clearance,
                 }),
               );
@@ -409,6 +417,8 @@ const ProjectReports = () => {
                     reportApprovedBy: report.reportApprovedBy,
                     reportIssueDate: report.reportIssueDate,
                     revision: report.revision || 0,
+                    supervisor: report.supervisor,
+                    defaultSampler: report.defaultSampler,
                   },
                   job: {
                     _id: report.jobId,
@@ -551,15 +561,69 @@ const ProjectReports = () => {
   }, [selectedCategory, projectId]);
 
   useEffect(() => {
+    const categoryFromNav = location.state?.selectedCategory;
+    if (
+      categoryFromNav &&
+      availableCategories.includes(categoryFromNav) &&
+      selectedCategory !== categoryFromNav
+    ) {
+      setSelectedCategory(categoryFromNav);
+    }
+  }, [
+    location.state?.selectedCategory,
+    availableCategories,
+    selectedCategory,
+  ]);
+
+  useEffect(() => {
     if (!selectedCategory || !projectId) return;
     loadReports();
   }, [selectedCategory, projectId, loadReports]);
 
   useEffect(() => {
+    if (checkingReports) return;
     if (selectedCategory && !availableCategories.includes(selectedCategory)) {
       setSelectedCategory(null);
     }
-  }, [availableCategories, selectedCategory]);
+  }, [availableCategories, selectedCategory, checkingReports]);
+
+  const handleOpenReportSummary = (report) => {
+    const reportId = report.id || report.data?._id || report.data?.id;
+    if (!reportId) return;
+
+    if (
+      report.type === "asbestos_assessment" ||
+      report.type === "residential_asbestos_assessment"
+    ) {
+      const jobType = report.jobType || report.data?.jobType;
+      const itemsPath =
+        jobType === "residential-asbestos"
+          ? `/surveys/residential-asbestos/${reportId}/items`
+          : `/surveys/asbestos-assessment/${reportId}/items`;
+      navigate(itemsPath, {
+        state: {
+          returnTo: `/reports/project/${projectId}`,
+          selectedCategory: selectedCategory || "asbestos-assessment",
+        },
+      });
+      return;
+    }
+
+    if (
+      !["shift", "clearance", "enclosure_certificate"].includes(report?.type)
+    ) {
+      return;
+    }
+    navigate(
+      `/reports/project/${projectId}/summary/${report.type}/${reportId}`,
+      {
+        state: {
+          ...(location.state || {}),
+          selectedCategory,
+        },
+      },
+    );
+  };
 
   const handleExportCSV = async (report) => {
     try {
@@ -940,6 +1004,8 @@ const ProjectReports = () => {
           ? "Air Monitoring"
           : report.type === "lead_shift"
             ? "Lead Monitoring"
+          : report.type === "enclosure_certificate"
+            ? "Enclosure Certificate"
           : report.type === "clearance"
             ? "Clearance"
             : report.type === "lead_clearance"
@@ -1101,6 +1167,35 @@ const ProjectReports = () => {
               }
             : null,
         });
+      } else if (report.type === "enclosure_certificate") {
+        const {
+          generateEnclosureCertificatePDF,
+          downloadEnclosureCertificateByClearanceId,
+        } = await import("../../utils/templatePDFGenerator");
+        const { default: asbestosClearanceService } =
+          await import("../../services/asbestosClearanceService");
+        const clearanceId = report.id || report.data?.id || report.data?._id;
+        const fullClearance =
+          await asbestosClearanceService.getById(clearanceId);
+
+        const hasRetainedPdf = Boolean(
+          fullClearance?.enclosureCertificatePdfReadyAt ||
+            fullClearance?.enclosureCertificateMergedPdfPath,
+        );
+
+        if (hasRetainedPdf) {
+          try {
+            await downloadEnclosureCertificateByClearanceId(clearanceId);
+          } catch (downloadErr) {
+            console.warn(
+              "Retained enclosure certificate PDF unavailable, regenerating:",
+              downloadErr,
+            );
+            await generateEnclosureCertificatePDF(fullClearance);
+          }
+        } else {
+          await generateEnclosureCertificatePDF(fullClearance);
+        }
       } else if (report.type === "clearance") {
         // Generate clearance report PDF using the new template system
         const { generateHTMLTemplatePDF } =
@@ -1114,15 +1209,6 @@ const ProjectReports = () => {
         const fullClearance =
           await asbestosClearanceService.getById(clearanceId);
 
-        // Debug logging to see what clearance data we're getting
-        console.log("=== CLEARANCE DATA FROM REPORTS PAGE ===");
-        console.log("Full clearance data:", fullClearance);
-        console.log("Clearance createdBy:", fullClearance?.createdBy);
-        console.log("Clearance LAA field:", fullClearance?.LAA);
-        console.log("Clearance clearanceType:", fullClearance?.clearanceType);
-        console.log("Clearance projectId:", fullClearance?.projectId);
-        console.log("=== END CLEARANCE DATA DEBUG ===");
-
         // Fix the LAA field to use the populated user data instead of the user ID
         const enhancedClearance = {
           ...fullClearance,
@@ -1132,8 +1218,6 @@ const ProjectReports = () => {
               ? `${fullClearance.createdBy.firstName} ${fullClearance.createdBy.lastName}`
               : fullClearance.LAA,
         };
-
-        console.log("Enhanced clearance LAA field:", enhancedClearance.LAA);
 
         // Generate and download the PDF
         await generateHTMLTemplatePDF("asbestos-clearance", enhancedClearance, {
@@ -1400,6 +1484,29 @@ const ProjectReports = () => {
       const clearance = await asbestosClearanceService.getById(reportId);
       return collectImagesFromItems(clearance?.items || []);
     }
+    if (report.type === "enclosure_certificate") {
+      const { default: asbestosClearanceService } = await import(
+        "../../services/asbestosClearanceService"
+      );
+      const clearance = await asbestosClearanceService.getById(reportId);
+      const photos = Array.isArray(clearance?.enclosurePhotos)
+        ? clearance.enclosurePhotos
+        : [];
+      return photos
+        .map((photo, index) => {
+          const data = photo?.data;
+          if (!data || typeof data !== "string") return null;
+          const normalized = data.startsWith("data:")
+            ? data
+            : `data:image/jpeg;base64,${data}`;
+          return {
+            id: `enclosure-${index}`,
+            data: normalized,
+            label: photo?.description || `Enclosure photo ${index + 1}`,
+          };
+        })
+        .filter(Boolean);
+    }
     if (report.type === "lead_clearance") {
       const { default: leadClearanceService } = await import(
         "../../services/leadClearanceService"
@@ -1548,244 +1655,113 @@ const ProjectReports = () => {
   const confirmReviseReport = async () => {
     const report = reviseDialog.report;
 
-    // Validate revision reason for clearance reports only
+    // Validate revision reason for clearance / enclosure certificate reports only
     if (
-      (report?.type === "clearance" || report?.type === "lead_clearance") &&
+      (report?.type === "clearance" ||
+        report?.type === "enclosure_certificate" ||
+        report?.type === "lead_clearance") &&
       !revisionReason.trim()
     ) {
       showSnackbar(
-        "Please provide a reason for revising this clearance report.",
+        report?.type === "enclosure_certificate"
+          ? "Please provide a reason for revising this enclosure certificate."
+          : "Please provide a reason for revising this clearance report.",
         "error",
       );
       return;
     }
 
     try {
-      if (report.type === "lead_shift") {
-        const { shift, job } = report.data;
-
-        if (shift && shift._id && job && job._id) {
-          const { shiftService } = await import("../../services/api");
-          const { default: leadRemovalJobService } =
-            await import("../../services/leadRemovalJobService");
-
-          const currentShift = await shiftService.getById(shift._id);
-          const currentRevision = currentShift.data.revision || 0;
-          const newRevision = currentRevision + 1;
-
-          await shiftService.update(shift._id, {
-            status: "ongoing",
-            reportApprovedBy: null,
-            reportIssueDate: null,
-            revision: newRevision,
-          });
-
-          await leadRemovalJobService.update(job._id, {
-            status: "in_progress",
-          });
-
-          showSnackbar(
-            "Report and job status reset to in progress. You can now revise the report.",
-            "success",
-          );
-
-          loadReports();
+      if (report.type === "lead_shift" || report.type === "shift") {
+        const { shiftService } = await import("../../services/api");
+        const shiftId =
+          report.data?.shift?._id || report.data?._id || report.id;
+        if (!shiftId) {
+          showSnackbar("Could not determine shift ID for revise.", "error");
+          return;
         }
-      } else if (report.type === "shift") {
-        // For air monitoring reports, we need to reset both the shift status AND the job status
-        const { shift, job } = report.data;
 
-        if (shift && shift._id && job && job._id) {
-          const { shiftService } = await import("../../services/api");
-          const { default: asbestosRemovalJobService } =
-            await import("../../services/asbestosRemovalJobService");
+        const res = await shiftService.reviseReport(shiftId);
+        const isLead = report.type === "lead_shift";
+        showSnackbar(
+          res.data?.message ||
+            `${isLead ? "Lead monitoring" : "Air monitoring"} report reopened for editing. The job is back in progress — re-authorise when ready.`,
+          "success",
+        );
 
-          // Get current shift data to increment revision count
-          const currentShift = await shiftService.getById(shift._id);
-          const currentRevision = currentShift.data.revision || 0;
-          const newRevision = currentRevision + 1;
-
-          // Update the shift status back to "ongoing" to allow revision and increment revision count
-          await shiftService.update(shift._id, {
-            status: "ongoing",
-            reportApprovedBy: null,
-            reportIssueDate: null,
-            revision: newRevision, // Increment revision count by 1
-          });
-
-          // Update the asbestos removal job status back to "in_progress" so it appears in the jobs table
-          await asbestosRemovalJobService.update(job._id, {
-            status: "in_progress",
-          });
-
-          // Show success message
-          showSnackbar(
-            "Report and job status reset to in progress. You can now revise the report.",
-            "success",
-          );
-
-          // Reload reports to reflect the change
-          loadReports();
-        }
+        await checkAvailableCategories();
+        loadReports();
       } else if (report.type === "lead_clearance") {
         const { default: leadClearanceService } =
           await import("../../services/leadClearanceService");
-        const { default: leadRemovalJobService } =
-          await import("../../services/leadRemovalJobService");
-
         const clearanceId = report.id || report.data?.id || report.data?._id;
-
-        const currentClearance =
-          await leadClearanceService.getById(clearanceId);
-        const currentRevision = currentClearance.revision || 0;
-        const newRevision = currentRevision + 1;
-
-        const newRevisionReason = {
-          revisionNumber: newRevision,
-          reason: revisionReason.trim(),
-          revisedBy: currentUser._id,
-          revisedAt: new Date(),
-        };
-
-        const existingRevisionReasons = currentClearance.revisionReasons || [];
-        const updatedRevisionReasons = [
-          ...existingRevisionReasons,
-          newRevisionReason,
-        ];
-
-        await leadClearanceService.update(clearanceId, {
-          status: "in progress",
-          revision: newRevision,
-          revisionReasons: updatedRevisionReasons,
-        });
-
-        try {
-          const jobsResponse = await leadRemovalJobService.getAll({
-            projectId,
-          });
-          const jobs = jobsResponse.jobs || jobsResponse.data || [];
-          const projectJob = jobs.find(
-            (job) =>
-              (job.projectId === projectId ||
-                job.projectId?._id === projectId) &&
-              job.status === "completed",
-          );
-
-          if (projectJob) {
-            await leadRemovalJobService.update(projectJob._id, {
-              status: "in_progress",
-            });
-          }
-        } catch (jobError) {
-          console.error(
-            "Error updating associated lead removal job:",
-            jobError,
-          );
+        if (!clearanceId) {
+          showSnackbar("Could not determine clearance ID for revise.", "error");
+          return;
         }
 
+        const res = await leadClearanceService.reviseReport(
+          clearanceId,
+          revisionReason.trim(),
+        );
         showSnackbar(
-          "Clearance and job status reset to in progress. You can now revise the report.",
+          res.data?.message ||
+            res.message ||
+            "Lead clearance report reopened for editing. The removal job is back in progress — re-authorise when ready.",
           "success",
         );
 
+        await checkAvailableCategories();
         loadReports();
-      } else if (report.type === "clearance") {
-        // For clearance reports, reset the clearance status and increment revision count
+      } else if (
+        report.type === "clearance" ||
+        report.type === "enclosure_certificate"
+      ) {
         const { default: asbestosClearanceService } =
           await import("../../services/asbestosClearanceService");
-        const { default: asbestosRemovalJobService } =
-          await import("../../services/asbestosRemovalJobService");
-
-        // Use report.id or report.data.id (backend returns 'id', not '_id')
         const clearanceId = report.id || report.data?.id || report.data?._id;
-
-        // Get current clearance data to increment revision count
-        const currentClearance =
-          await asbestosClearanceService.getById(clearanceId);
-        const currentRevision = currentClearance.revision || 0;
-        const newRevision = currentRevision + 1;
-
-        // Prepare revision reason data
-        const newRevisionReason = {
-          revisionNumber: newRevision,
-          reason: revisionReason.trim(),
-          revisedBy: currentUser._id,
-          revisedAt: new Date(),
-        };
-
-        // Get existing revision reasons and add the new one
-        const existingRevisionReasons = currentClearance.revisionReasons || [];
-        const updatedRevisionReasons = [
-          ...existingRevisionReasons,
-          newRevisionReason,
-        ];
-
-        // Update clearance with new revision and revision reason
-        await asbestosClearanceService.update(clearanceId, {
-          status: "in progress",
-          revision: newRevision,
-          revisionReasons: updatedRevisionReasons,
-        });
-
-        // Find and update the associated asbestos removal job for this project
-        try {
-          const jobsResponse = await asbestosRemovalJobService.getAll();
-          const jobs = jobsResponse.jobs || jobsResponse.data || [];
-          const projectJob = jobs.find(
-            (job) =>
-              (job.projectId === projectId ||
-                job.projectId?._id === projectId) &&
-              job.status === "completed",
-          );
-
-          if (projectJob) {
-            await asbestosRemovalJobService.update(projectJob._id, {
-              status: "in_progress",
-            });
-          }
-        } catch (jobError) {
-          console.error(
-            "Error updating associated asbestos removal job:",
-            jobError,
-          );
+        if (!clearanceId) {
+          showSnackbar("Could not determine clearance ID for revise.", "error");
+          return;
         }
 
-        // Show success message
+        const res = await asbestosClearanceService.reviseReport(
+          clearanceId,
+          revisionReason.trim(),
+        );
+        const isEnclosure = report.type === "enclosure_certificate";
         showSnackbar(
-          "Clearance and job status reset to in progress. You can now revise the report.",
+          res.data?.message ||
+            res.message ||
+            (isEnclosure
+              ? "Enclosure certificate reopened for editing. The removal job is back in progress — re-authorise when ready."
+              : "Clearance report reopened for editing. The removal job is back in progress — re-authorise when ready."),
           "success",
         );
 
-        // Reload reports to reflect the change
+        await checkAvailableCategories();
         loadReports();
       } else if (report.type === "fibre_id" || report.type === "fibre_count") {
-        // For fibre ID and fibre count reports (client supplied jobs), reset the status to Analysis Complete
         const { clientSuppliedJobsService } =
           await import("../../services/api");
 
-        // Get the job ID (could be in data.id or data._id)
         const jobId = report.data._id || report.data.id || report.id;
+        if (!jobId) {
+          showSnackbar("Could not determine job ID for revise.", "error");
+          return;
+        }
 
-        // Get current job data to increment revision count
-        const currentJob = await clientSuppliedJobsService.getById(jobId);
-        const currentRevision = currentJob.data?.revision || 0;
-        const newRevision = currentRevision + 1;
+        const res = await clientSuppliedJobsService.reviseReport(jobId);
+        const jobTypeLabel =
+          report.type === "fibre_count" ? "Fibre Count" : "Fibre ID";
 
-        // Update the client supplied job status back to "Analysis Complete" and clear approval
-        await clientSuppliedJobsService.update(jobId, {
-          status: "Analysis Complete",
-          reportApprovedBy: null,
-          reportIssueDate: null,
-          revision: newRevision,
-        });
-
-        // Show success message
         showSnackbar(
-          "Client supplied job status reset to Analysis Complete. You can now revise the report.",
+          res.data?.message ||
+            `${jobTypeLabel} report reopened for editing. The job is back on the Fibre ID jobs list — re-authorise when ready.`,
           "success",
         );
 
-        // Reload reports to reflect the change
+        await checkAvailableCategories();
         loadReports();
       } else if (report.type === "asbestos_assessment") {
         const { asbestosAssessmentService } = await import("../../services/api");
@@ -1818,6 +1794,7 @@ const ProjectReports = () => {
               : "Assessment report reset for editing. Open the job from Surveys → Asbestos Assessment to revise and re-authorise."),
           "success",
         );
+        await checkAvailableCategories();
         loadReports();
       }
     } catch (error) {
@@ -2212,6 +2189,7 @@ const ProjectReports = () => {
             onRevise={handleReviseReport}
             onViewCOC={handleViewCOC}
             onExportCSV={handleExportCSV}
+            onRowClick={handleOpenReportSummary}
             processingReport={processingReport}
           />
         </>
@@ -2358,12 +2336,15 @@ const ProjectReports = () => {
                 tableText = "the client supplied jobs table";
               } else if (
                 reportType === "clearance" ||
+                reportType === "enclosure_certificate" ||
                 reportType === "lead_clearance"
               ) {
                 tableText =
                   reportType === "lead_clearance"
                     ? "the lead clearances table"
-                    : "the clearances table";
+                    : reportType === "enclosure_certificate"
+                      ? "the enclosure inspections table on the asbestos removal job"
+                      : "the clearances table";
               } else if (reportType === "shift") {
                 tableText = "the asbestos removal jobs table";
               } else if (reportType === "lead_shift") {
@@ -2376,7 +2357,7 @@ const ProjectReports = () => {
               return `Proceeding will enable editing of the report in ${tableText} and will increase the report's revision count.`;
             })()}
           </DialogContentText>
-          {["clearance", "lead_clearance"].includes(
+          {["clearance", "enclosure_certificate", "lead_clearance"].includes(
             reviseDialog.report?.type,
           ) && (
             <TextField
@@ -2389,7 +2370,11 @@ const ProjectReports = () => {
               rows={3}
               value={revisionReason}
               onChange={(e) => setRevisionReason(e.target.value)}
-              placeholder="Please provide a reason for revising this clearance report..."
+              placeholder={
+                reviseDialog.report?.type === "enclosure_certificate"
+                  ? "Please provide a reason for revising this enclosure certificate..."
+                  : "Please provide a reason for revising this clearance report..."
+              }
               sx={{ mt: 2 }}
             />
           )}
@@ -2403,7 +2388,9 @@ const ProjectReports = () => {
             color="warning"
             variant="contained"
           >
-            Revise Report
+            {reviseDialog.report?.type === "enclosure_certificate"
+              ? "Revise Certificate"
+              : "Revise Report"}
           </Button>
         </DialogActions>
       </Dialog>

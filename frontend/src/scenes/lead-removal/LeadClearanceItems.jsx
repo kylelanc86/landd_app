@@ -60,16 +60,34 @@ import {
 } from "../../utils/imageCompression";
 import { rotateDataUrl90Cw } from "../../utils/rotateImageDataUrl";
 import { formatDate } from "../../utils/dateUtils";
+import { countSitePlans } from "../../utils/sitePlanAppendices";
 import leadRemovalJobService from "../../services/leadRemovalJobService";
 import PermissionGate from "../../components/PermissionGate";
 import { usePermissions } from "../../hooks/usePermissions";
-import SitePlanDrawing from "../../components/SitePlanDrawing";
 
 const WORKS_COMPLETED_OPTIONS = ["All surfaces HEPA vacuumed and wet-wiped", "Flaking lead paint removed, and surfaces overpainted"];
 const LEAD_VALIDATION_TYPES = [
   "Visual inspection",
   "Visual inspection and validation sampling",
 ];
+
+function isMongoPhotoId(id) {
+  return typeof id === "string" && /^[a-f\d]{24}$/i.test(id);
+}
+
+function mergePhotoBlobFields(photos, blobList) {
+  const blobById = new Map((blobList || []).map((b) => [String(b._id), b]));
+  return (photos || []).map((p) => {
+    const b = blobById.get(String(p._id));
+    if (!b) return p;
+    return { ...p, data: b.data, fullResolutionData: b.fullResolutionData };
+  });
+}
+
+const leadClearanceLiteGetOpts = {
+  omitPhotoData: true,
+  omitPlanFiles: true,
+};
 
 const LeadClearanceItems = () => {
   const theme = useTheme();
@@ -85,6 +103,9 @@ const LeadClearanceItems = () => {
 
   const [items, setItems] = useState([]);
   const [clearance, setClearance] = useState(null);
+  const sitePlanCount = countSitePlans(clearance, {
+    defaultFigureTitle: "Lead Clearance Site Plan",
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [leadRemovalJobId, setLeadRemovalJobId] = useState(null);
@@ -97,10 +118,10 @@ const LeadClearanceItems = () => {
   const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
   const [jobExclusionsModalOpen, setJobExclusionsModalOpen] = useState(false);
-  const [sitePlanDialogOpen, setSitePlanDialogOpen] = useState(false);
-  const [removingSitePlan, setRemovingSitePlan] = useState(false);
   const [photoGalleryDialogOpen, setPhotoGalleryDialogOpen] = useState(false);
   const [selectedItemForPhotos, setSelectedItemForPhotos] = useState(null);
+  const [galleryPhotosLoading, setGalleryPhotosLoading] = useState(false);
+  const [galleryPhotosError, setGalleryPhotosError] = useState(null);
   const [localPhotoChanges, setLocalPhotoChanges] = useState({});
   const [photosToDelete, setPhotosToDelete] = useState(new Set());
   const [localPhotoDescriptions, setLocalPhotoDescriptions] = useState({});
@@ -153,8 +174,8 @@ const LeadClearanceItems = () => {
     try {
       setLoading(true);
       const [itemsData, clearanceData, samplingData] = await Promise.all([
-        leadClearanceService.getItems(clearanceId),
-        leadClearanceService.getById(clearanceId),
+        leadClearanceService.getItems(clearanceId, { omitPhotoData: true }),
+        leadClearanceService.getById(clearanceId, leadClearanceLiteGetOpts),
         leadClearanceService.getSampling(clearanceId).catch(() => ({ preWorksSamples: [], validationSamples: [] })),
       ]);
 
@@ -193,6 +214,54 @@ const LeadClearanceItems = () => {
   useEffect(() => {
     fetchData();
   }, [clearanceId]);
+
+  // Lazy-load photo blobs when Manage Photos opens
+  useEffect(() => {
+    if (!photoGalleryDialogOpen || !clearanceId || !selectedItemForPhotos) return;
+    const photos = selectedItemForPhotos.photographs || [];
+    if (photos.length === 0) return;
+    const needsBlob = photos.some(
+      (p) => p && !p.data && isMongoPhotoId(p._id),
+    );
+    if (!needsBlob) {
+      setGalleryPhotosLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setGalleryPhotosLoading(true);
+      setGalleryPhotosError(null);
+      try {
+        const res = await leadClearanceService.getItemPhotosData(
+          clearanceId,
+          selectedItemForPhotos._id,
+        );
+        if (cancelled) return;
+        setSelectedItemForPhotos((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            photographs: mergePhotoBlobFields(prev.photographs, res?.photographs),
+          };
+        });
+      } catch (e) {
+        if (!cancelled) {
+          setGalleryPhotosError(
+            e.response?.data?.message ||
+              e.message ||
+              "Failed to load photos",
+          );
+        }
+      } finally {
+        if (!cancelled) setGalleryPhotosLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [photoGalleryDialogOpen, clearanceId, selectedItemForPhotos?._id]);
 
   const canCompleteClearance = useMemo(() => {
     if (!items?.length) return false;
@@ -306,7 +375,7 @@ const LeadClearanceItems = () => {
       await fetchData();
 
       if (!editingItem) {
-        const updatedItems = await leadClearanceService.getItems(clearanceId);
+        const updatedItems = await leadClearanceService.getItems(clearanceId, { omitPhotoData: true });
         const createdItem = updatedItems.find(
           (item) =>
             item.locationDescription === itemData.locationDescription &&
@@ -399,79 +468,6 @@ const LeadClearanceItems = () => {
       showSnackbar("Job specific exclusions saved", "success");
     } catch (err) {
       showSnackbar("Failed to save exclusions", "error");
-    }
-  };
-
-  const handleSitePlanSave = async (sitePlanData) => {
-    try {
-      const imageData =
-        typeof sitePlanData === "string"
-          ? sitePlanData
-          : sitePlanData?.imageData;
-      const legendEntries = Array.isArray(sitePlanData?.legend)
-        ? sitePlanData.legend.map((e) => ({
-            color: e.color,
-            description: e.description,
-          }))
-        : [];
-      const legendTitle =
-        sitePlanData?.legendTitle && sitePlanData.legendTitle.trim()
-          ? sitePlanData.legendTitle.trim()
-          : "Key";
-      const figureTitle =
-        sitePlanData?.figureTitle && sitePlanData.figureTitle.trim()
-          ? sitePlanData.figureTitle.trim()
-          : "Lead Clearance Site Plan";
-
-      if (!imageData) {
-        showSnackbar("No site plan image data was provided", "error");
-        return;
-      }
-
-      const sitePlanPayload = {
-        sitePlan: true,
-        sitePlanFile: imageData,
-        sitePlanLegend: legendEntries,
-        sitePlanLegendTitle: legendTitle,
-        sitePlanFigureTitle: figureTitle,
-        sitePlanSource: "drawn",
-      };
-
-      await leadClearanceService.update(clearanceId, sitePlanPayload);
-      setClearance((prev) => ({ ...prev, ...sitePlanPayload }));
-      showSnackbar("Site plan saved successfully!", "success");
-      setSitePlanDialogOpen(false);
-    } catch (err) {
-      showSnackbar("Failed to save site plan", "error");
-    }
-  };
-
-  const handleRemoveSitePlan = async () => {
-    if (!window.confirm("Are you sure you want to remove the site plan?")) return;
-    try {
-      setRemovingSitePlan(true);
-      await leadClearanceService.update(clearanceId, {
-        sitePlan: false,
-        sitePlanFile: null,
-        sitePlanSource: null,
-        sitePlanLegend: [],
-        sitePlanLegendTitle: null,
-        sitePlanFigureTitle: null,
-      });
-      setClearance((prev) => ({
-        ...prev,
-        sitePlan: false,
-        sitePlanFile: null,
-        sitePlanSource: null,
-        sitePlanLegend: [],
-        sitePlanLegendTitle: null,
-        sitePlanFigureTitle: null,
-      }));
-      showSnackbar("Site plan removed successfully", "success");
-    } catch (err) {
-      showSnackbar("Failed to remove site plan", "error");
-    } finally {
-      setRemovingSitePlan(false);
     }
   };
 
@@ -615,11 +611,27 @@ const LeadClearanceItems = () => {
         photoData,
         true,
       );
-      const updatedItems = await leadClearanceService.getItems(clearanceId);
+      const updatedItems = await leadClearanceService.getItems(clearanceId, { omitPhotoData: true });
       const updatedItem = updatedItems.find(
         (i) => i._id === selectedItemForPhotos._id,
       );
-      if (updatedItem) setSelectedItemForPhotos(updatedItem);
+      if (updatedItem) {
+        try {
+          const res = await leadClearanceService.getItemPhotosData(
+            clearanceId,
+            updatedItem._id,
+          );
+          setSelectedItemForPhotos({
+            ...updatedItem,
+            photographs: mergePhotoBlobFields(
+              updatedItem.photographs,
+              res?.photographs,
+            ),
+          });
+        } catch {
+          setSelectedItemForPhotos(updatedItem);
+        }
+      }
       setPhotoFile(null);
       setCompressionStatus(null);
       showSnackbar("Photo added successfully", "success");
@@ -800,9 +812,25 @@ const LeadClearanceItems = () => {
       setPhotosToDelete(new Set());
       setLocalPhotoDescriptions({});
       await fetchData();
-      const updatedItems = await leadClearanceService.getItems(clearanceId);
+      const updatedItems = await leadClearanceService.getItems(clearanceId, { omitPhotoData: true });
       const updatedItem = updatedItems.find((i) => i._id === selectedItemForPhotos._id);
-      if (updatedItem) setSelectedItemForPhotos(updatedItem);
+      if (updatedItem) {
+        try {
+          const res = await leadClearanceService.getItemPhotosData(
+            clearanceId,
+            updatedItem._id,
+          );
+          setSelectedItemForPhotos({
+            ...updatedItem,
+            photographs: mergePhotoBlobFields(
+              updatedItem.photographs,
+              res?.photographs,
+            ),
+          });
+        } catch {
+          setSelectedItemForPhotos(updatedItem);
+        }
+      }
     } catch (err) {
       showSnackbar("Failed to save photo changes", "error");
     }
@@ -1098,43 +1126,23 @@ const LeadClearanceItems = () => {
           <Button
             variant="outlined"
             color="secondary"
-            onClick={() => setSitePlanDialogOpen(true)}
+            onClick={() =>
+              navigate(`/lead-clearances/${clearanceId}/site-plans`)
+            }
             startIcon={<MapIcon />}
           >
-            {clearance?.sitePlanFile ? "Edit Site Plan" : "Site Plan"}
+            {sitePlanCount > 0
+              ? `Site Plans (${sitePlanCount})`
+              : "Site Plans"}
           </Button>
-          {clearance?.sitePlanFile && (
-            <Button
-              variant="outlined"
-              color="error"
-              onClick={handleRemoveSitePlan}
-              disabled={removingSitePlan}
-              startIcon={
-                removingSitePlan ? (
-                  <CircularProgress size={18} color="inherit" />
-                ) : (
-                  <DeleteIcon />
-                )
-              }
-              sx={{
-                borderColor: "#d32f2f",
-                color: "#d32f2f",
-                "&:hover": {
-                  borderColor: "#b71c1c",
-                  backgroundColor: "rgba(211, 47, 47, 0.04)",
-                },
-              }}
-            >
-              Delete Site Plan
-            </Button>
-          )}
-          {clearance?.sitePlanFile ? (
+          {sitePlanCount > 0 ? (
             <Typography
               variant="body2"
               color="success.main"
               sx={{ fontWeight: "medium" }}
             >
-              ✓ Site Plan Attached
+              ✓ {sitePlanCount} site plan
+              {sitePlanCount === 1 ? "" : "s"} attached
             </Typography>
           ) : (
             <Typography
@@ -1142,7 +1150,7 @@ const LeadClearanceItems = () => {
               color="warning.main"
               sx={{ fontWeight: "medium" }}
             >
-              ⚠ No Site Plan
+              ⚠ No Site Plans
             </Typography>
           )}
         </Box>
@@ -1870,40 +1878,6 @@ const LeadClearanceItems = () => {
           </DialogActions>
         </Dialog>
 
-        {/* Site Plan Dialog */}
-        <Dialog
-          open={sitePlanDialogOpen}
-          onClose={() => setSitePlanDialogOpen(false)}
-          maxWidth="lg"
-          fullWidth
-          PaperProps={{ sx: { height: "90vh", maxHeight: "90vh" } }}
-        >
-          <DialogTitle
-            sx={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <Typography variant="h6">Site Plan Drawing</Typography>
-            <IconButton onClick={() => setSitePlanDialogOpen(false)}>
-              <CloseIcon />
-            </IconButton>
-          </DialogTitle>
-          <DialogContent sx={{ p: 2, height: "100%" }}>
-            <SitePlanDrawing
-              onSave={handleSitePlanSave}
-              onCancel={() => setSitePlanDialogOpen(false)}
-              existingSitePlan={clearance?.sitePlanFile}
-              existingLegend={clearance?.sitePlanLegend}
-              existingLegendTitle={clearance?.sitePlanLegendTitle}
-              existingFigureTitle={
-                clearance?.sitePlanFigureTitle || "Lead Clearance Site Plan"
-              }
-            />
-          </DialogContent>
-        </Dialog>
-
         {/* Photo Gallery Dialog */}
         <Dialog
           open={photoGalleryDialogOpen}
@@ -1972,6 +1946,26 @@ const LeadClearanceItems = () => {
           <DialogContent sx={{ px: 3, pt: 3, pb: 3, border: "none" }}>
             {selectedItemForPhotos && (
               <>
+                {galleryPhotosError && (
+                  <Alert severity="error" sx={{ mb: 2 }}>
+                    {galleryPhotosError}
+                  </Alert>
+                )}
+                {galleryPhotosLoading && (
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1.5,
+                      mb: 2,
+                    }}
+                  >
+                    <CircularProgress size={22} />
+                    <Typography variant="body2" color="text.secondary">
+                      Loading images…
+                    </Typography>
+                  </Box>
+                )}
                 {isPortrait && isMobile ? (
                   <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", py: 4, px: 2, textAlign: "center" }}>
                     <Alert severity="info" sx={{ mb: 2 }}>
@@ -2279,7 +2273,6 @@ const LeadClearanceItems = () => {
           }}
           maxWidth="lg"
           fullWidth
-          PaperProps={{ sx: { bgcolor: "rgba(0, 0, 0, 0.9)" } }}
         >
           <DialogContent sx={{ p: 0, position: "relative" }}>
             <IconButton
@@ -2291,10 +2284,10 @@ const LeadClearanceItems = () => {
                 position: "absolute",
                 top: 10,
                 right: 10,
-                color: "white",
-                bgcolor: "rgba(0, 0, 0, 0.5)",
+                color: "text.primary",
+                bgcolor: "grey.200",
                 zIndex: 10,
-                "&:hover": { bgcolor: "rgba(0, 0, 0, 0.7)" },
+                "&:hover": { bgcolor: "grey.300" },
               }}
             >
               <CloseIcon />

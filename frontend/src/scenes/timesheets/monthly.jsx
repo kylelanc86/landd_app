@@ -142,7 +142,7 @@ const MonthlyTimesheet = () => {
     return dayData?.status || "incomplete";
   };
 
-  // Calculate total time for a specific date
+  // Calculate chargeable time for a specific date (lunches and other breaks are excluded)
   const getTotalTimeForDate = (date) => {
     const dateStr = format(date, "yyyy-MM-dd");
     const dayEntries = timesheetEntries.filter((entry) => {
@@ -152,6 +152,9 @@ const MonthlyTimesheet = () => {
 
     let totalMinutes = 0;
     dayEntries.forEach((entry) => {
+      if (entry.isBreak) return;
+      if (!entry.startTime || !entry.endTime) return;
+
       const [startHours, startMinutes] = entry.startTime.split(":").map(Number);
       const [endHours, endMinutes] = entry.endTime.split(":").map(Number);
       const startTotalMinutes = startHours * 60 + startMinutes;

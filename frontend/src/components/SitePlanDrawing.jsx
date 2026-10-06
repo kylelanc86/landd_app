@@ -150,17 +150,12 @@ const legendArraysEqual = (a = [], b = []) => {
 const colorsEqual = (a, b) =>
   String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
 
-const REMINDER_CLOSE =
-  "You haven't added any items to the site plan key. Click OK to add key items, or Cancel to close anyway.";
-const REMINDER_SAVE =
-  "You haven't added any items to the site plan key. Click OK to add key items first, or Cancel to save anyway.";
-
 const SitePlanDrawing = forwardRef(function SitePlanDrawing(
   {
     onSave,
     onCancel,
     existingSitePlan,
-    existingLegend = [],
+    existingLegend,
     existingLegendTitle = "Key",
     existingFigureTitle = "Asbestos Removal Site Plan",
     /** Optional default description for newly auto-generated key entries. */
@@ -219,6 +214,8 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
   const [legendDialogOpen, setLegendDialogOpen] = useState(false);
   const [legendDraftEntries, setLegendDraftEntries] = useState([]);
   const [legendDraftTitle, setLegendDraftTitle] = useState("Key");
+  const [emptyKeyReminderOpen, setEmptyKeyReminderOpen] = useState(false);
+  const [emptyKeyReminderMode, setEmptyKeyReminderMode] = useState("save"); // 'save' | 'close'
   const [selectedSampleRef, setSelectedSampleRef] = useState("");
   const renderForExportRef = useRef(false);
   const activePointerIdRef = useRef(null);
@@ -270,6 +267,12 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
     }
   }, [usedSampleRefsOnCanvas, selectedSampleRef]);
 
+  const openLegendDialog = useCallback(() => {
+    setLegendDraftTitle(legendTitle || "Key");
+    setLegendDraftEntries(legendEntries.map((entry) => ({ ...entry })));
+    setLegendDialogOpen(true);
+  }, [legendEntries, legendTitle]);
+
   useImperativeHandle(
     ref,
     () => ({
@@ -278,15 +281,31 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
       hasKeyItemsWithMissingDescriptions: () =>
         legendEntries.length > 0 &&
         legendEntries.some((e) => !(e.description || "").trim()),
-      openLegendDialog: () => setLegendDialogOpen(true),
+      openLegendDialog,
     }),
-    [legendEntries]
+    [legendEntries, openLegendDialog]
   );
 
   useEffect(() => {
-    setLegendEntries(normalizeLegendEntries(existingLegend));
-    setLegendDraftEntries(normalizeLegendEntries(existingLegend));
-  }, [existingLegend]);
+    const normalized = normalizeLegendEntries(
+      Array.isArray(existingLegend) ? existingLegend : [],
+    );
+    setLegendEntries(normalized);
+    setLegendDraftEntries(normalized);
+    // Only re-apply when the *content* of the loaded key changes. Comparing the
+    // `existingLegend` array reference is unsafe (undefined defaulted to a new []
+    // each render) and would wipe colours auto-added from drawings.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional content fingerprint
+  }, [
+    JSON.stringify(
+      normalizeLegendEntries(
+        Array.isArray(existingLegend) ? existingLegend : [],
+      ).map((e) => ({
+        color: e.color,
+        description: e.description || "",
+      })),
+    ),
+  ]);
 
   useEffect(() => {
     const nextTitle = existingLegendTitle || "Key";
@@ -299,12 +318,6 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
       setFigureTitle(existingFigureTitle);
     }
   }, [existingFigureTitle]);
-
-  const openLegendDialog = () => {
-    setLegendDraftTitle(legendTitle || "Key");
-    setLegendDraftEntries(legendEntries.map((entry) => ({ ...entry })));
-    setLegendDialogOpen(true);
-  };
 
   const handleLegendDialogClose = () => {
     setLegendDialogOpen(false);
@@ -383,14 +396,14 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
           : colorsEqual(item.fillColor, LEAD_SAMPLE_MARKER_COLORS.negative)),
     );
 
-    if (hasPositiveMarker) {
+    if (enableSampleMarkers && hasPositiveMarker) {
       semanticMarkerEntries.push({
         id: "lead-marker-positive",
         color: LEAD_SAMPLE_MARKER_COLORS.positive,
         description: "Lead paint / Exceedance",
       });
     }
-    if (hasNegativeMarker) {
+    if (enableSampleMarkers && hasNegativeMarker) {
       semanticMarkerEntries.push({
         id: "lead-marker-negative",
         color: LEAD_SAMPLE_MARKER_COLORS.negative,
@@ -403,10 +416,11 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
       if (!rawColor) return;
       const colorValue = String(rawColor).trim();
       if (!colorValue) return;
-      // Sample marker semantics own red/green key entries; avoid duplicate generic red/green items.
+      // When sample markers are enabled, red/green are owned by semantic key entries.
       if (
-        colorsEqual(colorValue, LEAD_SAMPLE_MARKER_COLORS.positive) ||
-        colorsEqual(colorValue, LEAD_SAMPLE_MARKER_COLORS.negative)
+        enableSampleMarkers &&
+        (colorsEqual(colorValue, LEAD_SAMPLE_MARKER_COLORS.positive) ||
+          colorsEqual(colorValue, LEAD_SAMPLE_MARKER_COLORS.negative))
       ) {
         return;
       }
@@ -461,7 +475,7 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
 
       return legendArraysEqual(nextEntries, prev) ? prev : nextEntries;
     });
-  }, [defaultLegendDescription, drawnItems]);
+  }, [defaultLegendDescription, drawnItems, enableSampleMarkers]);
 
   // Initialize Google Maps when showGoogleMaps changes
   useEffect(() => {
@@ -1393,19 +1407,15 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
   }, [selectedItem, saveToHistory]);
 
   const handleCancelClick = () => {
-    if (legendEntries.length === 0 && window.confirm(REMINDER_CLOSE)) {
-      setLegendDialogOpen(true);
+    if (legendEntries.length === 0) {
+      setEmptyKeyReminderMode("close");
+      setEmptyKeyReminderOpen(true);
       return;
     }
     onCancel();
   };
 
-  const handleSave = async () => {
-    if (legendEntries.length === 0 && window.confirm(REMINDER_SAVE)) {
-      setLegendDialogOpen(true);
-      return;
-    }
-
+  const performSave = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -1434,6 +1444,28 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
       legendTitle,
       figureTitle,
     });
+  };
+
+  const handleSave = async () => {
+    if (legendEntries.length === 0) {
+      setEmptyKeyReminderMode("save");
+      setEmptyKeyReminderOpen(true);
+      return;
+    }
+    performSave();
+  };
+
+  const handleEmptyKeyReminderCancel = () => {
+    setEmptyKeyReminderOpen(false);
+  };
+
+  const handleEmptyKeyReminderProceedAnyway = () => {
+    setEmptyKeyReminderOpen(false);
+    if (emptyKeyReminderMode === "close") {
+      onCancel();
+      return;
+    }
+    performSave();
   };
 
   const handleInlineTextSubmit = () => {
@@ -2881,6 +2913,45 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
           </Box>
         </Box>
       </Box>
+
+      {/* Empty key reminder */}
+      <Dialog
+        open={emptyKeyReminderOpen}
+        onClose={handleEmptyKeyReminderCancel}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            boxShadow: "0 12px 40px rgba(0, 0, 0, 0.12)",
+          },
+        }}
+      >
+        <DialogTitle>No site plan key items</DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 0, pb: 1 }}>
+          <Typography variant="body1" color="text.secondary">
+            You haven&apos;t added any items to the site plan key.
+            {emptyKeyReminderMode === "save"
+              ? " You can cancel and add key items first, or save anyway."
+              : " You can cancel and add key items first, or close anyway."}
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2 }}>
+          <Button
+            onClick={handleEmptyKeyReminderCancel}
+            variant="outlined"
+            color="inherit"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleEmptyKeyReminderProceedAnyway}
+            variant="contained"
+          >
+            {emptyKeyReminderMode === "save" ? "Save anyway" : "Close anyway"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Legend Dialog */}
       <Dialog

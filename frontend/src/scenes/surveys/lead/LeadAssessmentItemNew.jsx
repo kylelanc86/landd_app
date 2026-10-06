@@ -245,7 +245,10 @@ const LeadAssessmentItemNew = () => {
         return;
       }
       try {
-        const response = await asbestosAssessmentService.getById(id);
+        const response = await asbestosAssessmentService.getById(id, {
+          omitPhotoData: true,
+          omitPlanFiles: true,
+        });
         const data = response?.data || response;
         if (cancelled) return;
         setAssessment(data);

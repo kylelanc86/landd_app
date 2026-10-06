@@ -215,9 +215,9 @@ const ResidentialAsbestosAssessment = () => {
   const [assessmentPdfStartingId, setAssessmentPdfStartingId] = useState(null); // job id while start request in flight
   const [assessmentPdfGeneratingForJobId, setAssessmentPdfGeneratingForJobId] = useState(null); // job id whose PDF is generating (until poll completes)
   const [assessmentDownloadDialogOpen, setAssessmentDownloadDialogOpen] = useState(false);
-  // After a PDF is generated, store jobId so the next download uses freshJobId (avoids 410 until backend grace period)
+  // After a PDF is generated, store jobId so the next download uses freshJobId
   const lastPdfJobIdByAssessmentId = useRef({});
-  const PDF_JOB_GRACE_MS = 2 * 60 * 1000; // 2 min, match backend ASSESSMENT_PDF_GRACE_MS
+  const PDF_JOB_GRACE_MS = 2 * 60 * 1000;
   const [generatingReportId, setGeneratingReportId] = useState(null); // legacy / other flows
 
   // Delete confirmation state
@@ -276,7 +276,7 @@ const ResidentialAsbestosAssessment = () => {
         const jobsResponse =
           await asbestosAssessmentService.getAsbestosAssessments({
             jobType: "residential-asbestos",
-            list: 1,
+            summary: 1,
           });
         const apiMs = (performance.now() - apiStart).toFixed(2);
         const jobs = jobsResponse.data || jobsResponse || [];
@@ -683,22 +683,43 @@ const ResidentialAsbestosAssessment = () => {
     }
   };
 
-  const handleEditClick = (event, job) => {
+  const handleEditClick = async (event, job) => {
     event.stopPropagation();
     if (isJobReportLocked(job)) return;
-    setJobToEdit(job);
+    let editJob = job;
+    try {
+      const response = await asbestosAssessmentService.getAsbestosAssessmentById(
+        job.id,
+        { header: 1 },
+      );
+      const header = response.data || {};
+      editJob = {
+        ...job,
+        LAA: header.LAA ?? job.LAA,
+        originalData: {
+          ...(job.originalData || {}),
+          ...header,
+          projectId: job.originalData?.projectId || header.projectId,
+        },
+      };
+    } catch (err) {
+      console.error("Error loading assessment details for edit:", err);
+      showSnackbar("Could not load assessment details to edit.", "error");
+      return;
+    }
+    setJobToEdit(editJob);
     setEditDate(
-      job.surveyDate
-        ? new Date(job.surveyDate).toISOString().split("T")[0]
+      editJob.surveyDate
+        ? new Date(editJob.surveyDate).toISOString().split("T")[0]
         : getTodaySydney(),
     );
-    setEditState(job.originalData?.state || job.state || "ACT");
-    setEditLAA(job.LAA || "");
+    setEditState(editJob.originalData?.state || editJob.state || "ACT");
+    setEditLAA(editJob.LAA || "");
     setEditSecondaryHeader(
-      job.originalData?.secondaryHeader || job.secondaryHeader || "",
+      editJob.originalData?.secondaryHeader || editJob.secondaryHeader || "",
     );
     setEditIntrusiveness(
-      job.originalData?.intrusiveness || job.intrusiveness || "non-intrusive",
+      editJob.originalData?.intrusiveness || editJob.intrusiveness || "non-intrusive",
     );
     setEditError(null);
     setEditDialogOpen(true);

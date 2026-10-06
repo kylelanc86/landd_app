@@ -1913,7 +1913,15 @@ const ProjectInformation = () => {
                         label="Client"
                         required
                         placeholder="Start typing to search clients..."
-                        onClick={() => {
+                        onClick={(e) => {
+                          // Ignore clear/popup indicator clicks so they only clear/open the list
+                          if (
+                            e.target.closest(
+                              ".MuiAutocomplete-clearIndicator, .MuiAutocomplete-popupIndicator",
+                            )
+                          ) {
+                            return;
+                          }
                           if (form.client) {
                             handleClientClick(form.client);
                           }

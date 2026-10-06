@@ -197,18 +197,29 @@ router.get('/clearance/:projectId', auth, checkPermission(['projects.view']), as
       .populate('createdBy', 'firstName lastName')
       .sort({ clearanceDate: -1 });
 
-    const reports = clearances.map(clearance => ({
-      id: clearance._id,
-      date: clearance.clearanceDate,
-      type: 'clearance',
-      reference: clearance.projectId?.projectID || 'Unknown',
-      description: `${clearance.clearanceType} Asbestos Clearance Report`,
-      status: clearance.status,
-      clearanceType: clearance.clearanceType,
-      LAA: clearance.LAA,
-      asbestosRemovalist: clearance.asbestosRemovalist,
-      additionalInfo: `${clearance.clearanceType} • ${clearance.LAA} • ${clearance.asbestosRemovalist}`
-    }));
+    const reports = clearances.map(clearance => {
+      const isEnclosureCertificate = Boolean(clearance.isEnclosureCertificate);
+      return {
+        id: clearance._id,
+        date: isEnclosureCertificate
+          ? (clearance.enclosureInspectionDateTime || clearance.clearanceDate)
+          : clearance.clearanceDate,
+        type: isEnclosureCertificate ? 'enclosure_certificate' : 'clearance',
+        reference: clearance.projectId?.projectID || 'Unknown',
+        description: isEnclosureCertificate
+          ? 'Enclosure Inspection Certificate'
+          : `${clearance.clearanceType} Asbestos Clearance Report`,
+        status: clearance.status,
+        clearanceType: clearance.clearanceType,
+        isEnclosureCertificate,
+        LAA: clearance.LAA,
+        asbestosRemovalist: clearance.asbestosRemovalist,
+        additionalInfo: isEnclosureCertificate
+          ? `Enclosure Certificate • ${clearance.LAA} • ${clearance.asbestosRemovalist}`
+          : `${clearance.clearanceType} • ${clearance.LAA} • ${clearance.asbestosRemovalist}`,
+        revision: clearance.revision || 0,
+      };
+    });
 
     res.json(reports);
   } catch (error) {
@@ -340,15 +351,23 @@ router.get('/download/:type/:id', auth, checkPermission(['projects.view']), asyn
         return res.redirect(`/api/pdf-docraptor-v2/generate-air-monitoring-report?shiftId=${id}`);
 
       case 'clearance':
-        // Get clearance data and generate clearance report
+      case 'enclosure_certificate': {
+        // Get clearance data and generate the appropriate report
         const AsbestosClearance = require('../models/clearanceTemplates/asbestos/AsbestosClearance');
         const clearance = await AsbestosClearance.findById(id);
         if (!clearance) {
           return res.status(404).json({ message: 'Clearance not found' });
         }
-        
+
+        if (type === 'enclosure_certificate' || clearance.isEnclosureCertificate) {
+          return res.redirect(
+            `/api/pdf-docraptor-v2/download-enclosure-certificate/${id}`,
+          );
+        }
+
         // Redirect to the existing clearance report generation endpoint
         return res.redirect(`/api/pdf-docraptor-v2/generate-asbestos-clearance-v2`);
+      }
 
       case 'fibre_id':
         // Get fibre ID job data and generate report
@@ -472,15 +491,23 @@ router.get('/print/:type/:id', auth, checkPermission(['projects.view']), async (
         return res.redirect(`/api/pdf-docraptor-v2/generate-air-monitoring-report?shiftId=${id}&print=true`);
 
       case 'clearance':
-        // Get clearance data and generate clearance report for printing
+      case 'enclosure_certificate': {
+        // Get clearance data and generate the appropriate report for printing
         const AsbestosClearance = require('../models/clearanceTemplates/asbestos/AsbestosClearance');
         const clearance = await AsbestosClearance.findById(id);
         if (!clearance) {
           return res.status(404).json({ message: 'Clearance not found' });
         }
-        
+
+        if (type === 'enclosure_certificate' || clearance.isEnclosureCertificate) {
+          return res.redirect(
+            `/api/pdf-docraptor-v2/download-enclosure-certificate/${id}`,
+          );
+        }
+
         // Redirect to the existing clearance report generation endpoint with print flag
         return res.redirect(`/api/pdf-docraptor-v2/generate-asbestos-clearance-v2?print=true`);
+      }
 
       case 'fibre_id':
         // Get fibre ID job data and generate report for printing

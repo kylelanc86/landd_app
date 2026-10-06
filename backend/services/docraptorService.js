@@ -254,11 +254,13 @@ class DocRaptorService {
    * @param {string} downloadUrl - From getStatus when status is 'completed'
    * @returns {Promise<Buffer>}
    */
-  async fetchDocument(downloadUrl) {
-    const response = await fetch(downloadUrl, {
+  async fetchDocument(downloadUrl, options = {}) {
+    const fetchOptions = {
       method: 'GET',
-      headers: this._authHeader()
-    });
+      headers: this._authHeader(),
+    };
+    if (options.timeoutMs) fetchOptions.timeout = options.timeoutMs;
+    const response = await fetch(downloadUrl, fetchOptions);
     if (!response.ok) {
       throw new Error(`DocRaptor download failed: ${response.status}`);
     }

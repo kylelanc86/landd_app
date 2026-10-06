@@ -49,15 +49,18 @@ import {
   Close as CloseIcon,
   Map as MapIcon,
   ArrowBack as ArrowBackIcon,
-  ArrowUpward as ArrowUpwardIcon,
   RotateRight as RotateRightIcon,
 } from "@mui/icons-material";
 import MicIcon from "@mui/icons-material/Mic";
+import AttachFileIcon from "@mui/icons-material/AttachFile";
 import { Checkbox, FormControlLabel } from "@mui/material";
 
 import { useNavigate, useParams } from "react-router-dom";
 import PermissionGate from "../../components/PermissionGate";
-import SitePlanDrawing from "../../components/SitePlanDrawing";
+import PhotoArrowEditor, {
+  PhotoArrowOverlays,
+} from "../../components/PhotoArrowEditor";
+import PhotoArrowToolbar from "../../components/PhotoArrowToolbar";
 import asbestosClearanceService from "../../services/asbestosClearanceService";
 import customDataFieldGroupService from "../../services/customDataFieldGroupService";
 import {
@@ -66,42 +69,46 @@ import {
   saveFileToDevice,
 } from "../../utils/imageCompression";
 import {
-  rotateArrowDegrees90Cw,
   rotateDataUrl90Cw,
-  rotateNormalizedPoint90Cw,
 } from "../../utils/rotateImageDataUrl";
+import {
+  DEFAULT_ARROW_COLOR,
+  DEFAULT_ARROW_ROTATION,
+  rotateArrowGeometry90Cw,
+} from "../../utils/photoArrows";
 import { formatDate } from "../../utils/dateUtils";
+import { countSitePlans } from "../../utils/sitePlanAppendices";
 
-const DEFAULT_ARROW_COLOR = "#f44336";
-const DEFAULT_ARROW_ROTATION = -45;
-function getArrowTipOffset(rotationDeg) {
-  const r = ((rotationDeg ?? 0) * Math.PI) / 180;
-  const tipX = (12 + 10 * Math.sin(r)) / 24;
-  const tipY = (12 - 10 * Math.cos(r)) / 24;
-  return { x: tipX, y: tipY };
+function isMongoPhotoId(id) {
+  return typeof id === "string" && /^[a-f\d]{24}$/i.test(id);
 }
-const ARROW_COLORS = [
-  { name: "Yellow", hex: "#ffeb3b" },
-  { name: "Red", hex: "#f44336" },
-  { name: "White", hex: "#ffffff" },
-  { name: "Black", hex: "#212121" },
-  { name: "Orange", hex: "#ff9800" },
-  { name: "Green", hex: "#4caf50" },
-];
 
-const ClearanceItems = () => {
+function mergePhotoBlobFields(photos, blobList) {
+  const blobById = new Map((blobList || []).map((b) => [String(b._id), b]));
+  return (photos || []).map((p) => {
+    const b = blobById.get(String(p._id));
+    if (!b) return p;
+    return { ...p, data: b.data, fullResolutionData: b.fullResolutionData };
+  });
+}
+
+const clearanceLiteGetOpts = {
+  omitPhotoData: true,
+  omitPlanFiles: true,
+};
+
+const ClearanceItems = ({ pageMode = "items" }) => {
+  const isAttachmentsPage = pageMode === "attachments";
   const theme = useTheme();
   const navigate = useNavigate();
   const { clearanceId } = useParams();
-  const isPortrait = useMediaQuery("(orientation: portrait)");
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  const showRotateAlert = isPortrait && isMobile;
-  const isMobileLandscape = useMediaQuery(
-    "(orientation: landscape) and (max-width: 950px)",
-  );
 
   const [items, setItems] = useState([]);
   const [clearance, setClearance] = useState(null);
+  const sitePlanCount = countSitePlans(clearance, {
+    defaultFigureTitle: "Asbestos Removal Site Plan",
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -118,6 +125,8 @@ const ClearanceItems = () => {
   });
   const [photoGalleryDialogOpen, setPhotoGalleryDialogOpen] = useState(false);
   const [selectedItemForPhotos, setSelectedItemForPhotos] = useState(null);
+  const [galleryPhotosLoading, setGalleryPhotosLoading] = useState(false);
+  const [galleryPhotosError, setGalleryPhotosError] = useState(null);
   const [localPhotoChanges, setLocalPhotoChanges] = useState({}); // Track local changes
   const [photosToDelete, setPhotosToDelete] = useState(new Set()); // Track photos to delete
   const [localPhotoDescriptions, setLocalPhotoDescriptions] = useState({}); // Track local description changes
@@ -131,7 +140,6 @@ const ClearanceItems = () => {
     useState(null);
   const [fullSizeArrowMode, setFullSizeArrowMode] = useState(false);
   const [selectedArrowId, setSelectedArrowId] = useState(null);
-  const [movingArrowId, setMovingArrowId] = useState(null);
   const [selectedArrowColor, setSelectedArrowColor] = useState(DEFAULT_ARROW_COLOR);
   const [compressionStatus, setCompressionStatus] = useState(null);
   const [rotatingPhotoId, setRotatingPhotoId] = useState(null);
@@ -148,14 +156,6 @@ const ClearanceItems = () => {
   const [isDictating, setIsDictating] = useState(false);
   const [dictationError, setDictationError] = useState("");
   const recognitionRef = useRef(null);
-  const [sitePlanDialogOpen, setSitePlanDialogOpen] = useState(false);
-  const [sitePlanFile, setSitePlanFile] = useState(null);
-  const [uploadingSitePlan, setUploadingSitePlan] = useState(false);
-  const [sitePlanDrawingDialogOpen, setSitePlanDrawingDialogOpen] =
-    useState(false);
-  const [sitePlanKeyReminderOpen, setSitePlanKeyReminderOpen] = useState(false);
-  const [pendingSitePlanData, setPendingSitePlanData] = useState(null);
-  const sitePlanDrawingRef = useRef(null);
   const [generatingAirMonitoringPDF, setGeneratingAirMonitoringPDF] =
     useState(false);
   const [attachmentsModalOpen, setAttachmentsModalOpen] = useState(false);
@@ -203,6 +203,28 @@ const ClearanceItems = () => {
   // Detect if device is a tablet/touch device
   const isTablet = () => {
     return "ontouchstart" in window || navigator.maxTouchPoints > 0;
+  };
+
+  // After a dropdown choice, keep the field from focusing so the phone
+  // keyboard stays closed. A later tap in the box can still open it.
+  const [selectionBlurField, setSelectionBlurField] = useState(null);
+  const selectionBlurTimerRef = useRef(null);
+
+  const blurFieldAfterOptionSelect = (field) => {
+    if (!isTablet()) return;
+    setSelectionBlurField(field);
+    window.setTimeout(() => {
+      const active = document.activeElement;
+      if (active instanceof HTMLElement) {
+        active.blur();
+      }
+    }, 0);
+    if (selectionBlurTimerRef.current) {
+      window.clearTimeout(selectionBlurTimerRef.current);
+    }
+    selectionBlurTimerRef.current = window.setTimeout(() => {
+      setSelectionBlurField((current) => (current === field ? null : current));
+    }, 350);
   };
 
   // Format status for display (remove underscores, capitalize)
@@ -361,6 +383,54 @@ const ClearanceItems = () => {
     }
   }, [clearanceId]);
 
+  // Lazy-load photo blobs when Manage Photos opens
+  useEffect(() => {
+    if (!photoGalleryDialogOpen || !clearanceId || !selectedItemForPhotos) return;
+    const photos = selectedItemForPhotos.photographs || [];
+    if (photos.length === 0) return;
+    const needsBlob = photos.some(
+      (p) => p && !p.data && isMongoPhotoId(p._id),
+    );
+    if (!needsBlob) {
+      setGalleryPhotosLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setGalleryPhotosLoading(true);
+      setGalleryPhotosError(null);
+      try {
+        const res = await asbestosClearanceService.getItemPhotosData(
+          clearanceId,
+          selectedItemForPhotos._id,
+        );
+        if (cancelled) return;
+        setSelectedItemForPhotos((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            photographs: mergePhotoBlobFields(prev.photographs, res?.photographs),
+          };
+        });
+      } catch (e) {
+        if (!cancelled) {
+          setGalleryPhotosError(
+            e.response?.data?.message ||
+              e.message ||
+              "Failed to load photos",
+          );
+        }
+      } finally {
+        if (!cancelled) setGalleryPhotosLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [photoGalleryDialogOpen, clearanceId, selectedItemForPhotos?._id]);
+
   const fetchCustomDataFields = async () => {
     console.log("[ClearanceItems] fetchCustomDataFields - Starting", {
       timestamp: new Date().toISOString(),
@@ -492,8 +562,8 @@ const ClearanceItems = () => {
       const apiStartTime = performance.now();
 
       const [itemsData, clearanceData] = await Promise.all([
-        asbestosClearanceService.getItems(clearanceId),
-        asbestosClearanceService.getById(clearanceId),
+        asbestosClearanceService.getItems(clearanceId, { omitPhotoData: true }),
+        asbestosClearanceService.getById(clearanceId, clearanceLiteGetOpts),
       ]);
 
       const apiEndTime = performance.now();
@@ -512,7 +582,11 @@ const ClearanceItems = () => {
       // Debug: Log clearance data to check site plan fields
       console.log("[ClearanceItems] fetchData - Clearance data loaded", {
         sitePlan: clearanceData?.sitePlan,
-        sitePlanFile: clearanceData?.sitePlanFile ? "Present" : "Missing",
+        sitePlanFile: clearanceData?.sitePlanFile
+          ? "Present"
+          : clearanceData?.hasSitePlanFile
+            ? "Omitted (present)"
+            : "Missing",
         sitePlanSource: clearanceData?.sitePlanSource,
         clearanceId,
         status: clearanceData?.status,
@@ -783,7 +857,7 @@ const ClearanceItems = () => {
 
         // Find the newly created item and open photo gallery
         const updatedItems =
-          await asbestosClearanceService.getItems(clearanceId);
+          await asbestosClearanceService.getItems(clearanceId, { omitPhotoData: true });
         const createdItem = updatedItems.find(
           (item) =>
             item.locationDescription === itemData.locationDescription &&
@@ -800,7 +874,7 @@ const ClearanceItems = () => {
       // Update clearance type based on all items (only for editing, since we already fetched items for new items)
       if (editingItem) {
         const updatedItems =
-          await asbestosClearanceService.getItems(clearanceId);
+          await asbestosClearanceService.getItems(clearanceId, { omitPhotoData: true });
         await updateClearanceTypeFromItems(updatedItems);
       }
     } catch (err) {
@@ -847,7 +921,7 @@ const ClearanceItems = () => {
       await fetchData();
 
       // Update clearance type based on remaining items
-      const updatedItems = await asbestosClearanceService.getItems(clearanceId);
+      const updatedItems = await asbestosClearanceService.getItems(clearanceId, { omitPhotoData: true });
       await updateClearanceTypeFromItems(updatedItems);
     } catch (err) {
       console.error("Error deleting item:", err);
@@ -1347,94 +1421,9 @@ const ClearanceItems = () => {
     setFullSizePhotoId(null);
     setFullSizeArrowMode(false);
     setSelectedArrowId(null);
-    setMovingArrowId(null);
     setSavingPhotoChanges(false);
 
     await fetchData({ silent: true });
-  };
-
-  // Handle site plan save
-  const performSitePlanSave = async (sitePlanData) => {
-    const imageData =
-      typeof sitePlanData === "string"
-        ? sitePlanData
-        : sitePlanData?.imageData;
-    const legendEntries = Array.isArray(sitePlanData?.legend)
-      ? sitePlanData.legend.map((entry) => ({
-          color: entry.color,
-          description: entry.description,
-        }))
-      : [];
-    const legendTitle =
-      sitePlanData?.legendTitle && sitePlanData.legendTitle.trim()
-        ? sitePlanData.legendTitle.trim()
-        : "Key";
-    const figureTitle =
-      sitePlanData?.figureTitle && sitePlanData.figureTitle.trim()
-        ? sitePlanData.figureTitle.trim()
-        : "Asbestos Removal Site Plan";
-
-    if (!imageData) {
-      showSnackbar("No site plan image data was provided", "error");
-      return;
-    }
-
-    await asbestosClearanceService.update(clearanceId, {
-      sitePlan: true,
-      sitePlanFile: imageData,
-      sitePlanLegend: legendEntries,
-      sitePlanLegendTitle: legendTitle,
-      sitePlanFigureTitle: figureTitle,
-      sitePlanSource: "drawn",
-    });
-
-    showSnackbar("Drawn site plan saved successfully!", "success");
-    setSitePlanDrawingDialogOpen(false);
-    fetchData();
-  };
-
-  const handleSitePlanSave = async (sitePlanData) => {
-    const hasMissingDescriptions =
-      Array.isArray(sitePlanData?.legend) &&
-      sitePlanData.legend.some((e) => !(e.description || "").trim());
-
-    if (hasMissingDescriptions) {
-      setPendingSitePlanData(sitePlanData);
-      setSitePlanKeyReminderOpen(true);
-      return;
-    }
-
-    try {
-      await performSitePlanSave(sitePlanData);
-    } catch (error) {
-      console.error("Error saving site plan:", error);
-      showSnackbar("Error saving site plan", "error");
-    }
-  };
-
-  // Handle site plan drawing dialog close (X button, backdrop click)
-  const handleSitePlanDrawingClose = () => {
-    setSitePlanDrawingDialogOpen(false);
-  };
-
-  const handleSitePlanKeyReminderAddDescriptions = () => {
-    setSitePlanKeyReminderOpen(false);
-    setPendingSitePlanData(null);
-    sitePlanDrawingRef.current?.openLegendDialog?.();
-  };
-
-  const handleSitePlanKeyReminderSaveAnyway = async () => {
-    setSitePlanKeyReminderOpen(false);
-    const data = pendingSitePlanData;
-    setPendingSitePlanData(null);
-    if (data) {
-      try {
-        await performSitePlanSave(data);
-      } catch (error) {
-        console.error("Error saving site plan:", error);
-        showSnackbar("Error saving site plan", "error");
-      }
-    }
   };
 
   // Add photo to existing item
@@ -1527,7 +1516,6 @@ const ClearanceItems = () => {
     setFullSizePhotoId(typeof photo === "object" && photo?._id ? photo._id : null);
     setFullSizeArrowMode(false);
     setSelectedArrowId(null);
-    setMovingArrowId(null);
     const firstArrow = typeof photo === "object" && getPhotoArrows(photo)[0];
     setSelectedArrowColor(firstArrow?.color || DEFAULT_ARROW_COLOR);
     setFullSizePhotoDialogOpen(true);
@@ -1589,31 +1577,6 @@ const ClearanceItems = () => {
     fullSizePhotoId && selectedItemForPhotos?.photographs
       ? selectedItemForPhotos.photographs.find((p) => p._id === fullSizePhotoId)
       : null;
-
-  const handleFullSizePhotoClickForArrow = (e) => {
-    if (!fullSizePhotoId || !fullSizePhoto) return;
-    const img = e.currentTarget;
-    const rect = img.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-    const clampedX = Math.max(0, Math.min(1, x));
-    const clampedY = Math.max(0, Math.min(1, y));
-    if (movingArrowId) {
-      handleUpdatePhotoArrow(fullSizePhotoId, movingArrowId, {
-        x: clampedX,
-        y: clampedY,
-      });
-      return;
-    }
-    if (fullSizeArrowMode) {
-      handleAddPhotoArrow(fullSizePhotoId, {
-        x: clampedX,
-        y: clampedY,
-        rotation: DEFAULT_ARROW_ROTATION,
-        color: selectedArrowColor,
-      });
-    }
-  };
 
   // Helper function to get current photo state (including local changes)
   const getCurrentPhotoState = (photoId) => {
@@ -1689,6 +1652,10 @@ const ClearanceItems = () => {
         {
           x: arrow.x ?? 0.5,
           y: arrow.y ?? 0.5,
+          x1: arrow.x1,
+          y1: arrow.y1,
+          x2: arrow.x2 ?? arrow.x,
+          y2: arrow.y2 ?? arrow.y,
           rotation: arrow.rotation ?? DEFAULT_ARROW_ROTATION,
           color: arrow.color ?? DEFAULT_ARROW_COLOR,
         },
@@ -1702,7 +1669,7 @@ const ClearanceItems = () => {
     }
   };
 
-  const handleUpdatePhotoArrow = async (photoId, arrowId, updates) => {
+  const handleUpdatePhotoArrow = async (photoId, arrowId, updates, options = {}) => {
     if (!selectedItemForPhotos || !clearanceId) return;
     try {
       const response = await asbestosClearanceService.updatePhotoArrow(
@@ -1713,9 +1680,9 @@ const ClearanceItems = () => {
         updates,
       );
       if (response?.item) setSelectedItemForPhotos(response.item);
-      setMovingArrowId(null);
-      setFullSizeArrowMode(false);
-      showSnackbar("Arrow updated", "success");
+      if (!options.silent) {
+        showSnackbar("Arrow updated", "success");
+      }
     } catch (err) {
       console.error("Error updating arrow:", err);
       showSnackbar("Failed to update arrow", "error");
@@ -1771,21 +1738,16 @@ const ClearanceItems = () => {
     try {
       const newData = await rotateDataUrl90Cw(photo.data, 0.92);
       const arrowList = getPhotoArrows(photo);
-      const newArrows = arrowList.map((arr) => {
-        const { x, y } = rotateNormalizedPoint90Cw(
-          arr.x ?? 0.5,
-          arr.y ?? 0.5,
-        );
-        return {
-          x: Math.max(0, Math.min(1, x)),
-          y: Math.max(0, Math.min(1, y)),
-          rotation: rotateArrowDegrees90Cw(
-            arr.rotation ?? DEFAULT_ARROW_ROTATION,
-          ),
-          color: arr.color || DEFAULT_ARROW_COLOR,
-          ...(arr._id ? { _id: arr._id } : {}),
-        };
-      });
+      const newArrows = arrowList
+        .map((arr) => {
+          const rotated = rotateArrowGeometry90Cw(arr);
+          if (!rotated) return null;
+          return {
+            ...rotated,
+            ...(arr._id ? { _id: arr._id } : {}),
+          };
+        })
+        .filter(Boolean);
       const payload = await asbestosClearanceService.updatePhotoContent(
         clearanceId,
         selectedItemForPhotos._id,
@@ -1914,13 +1876,27 @@ const ClearanceItems = () => {
       setPhotosToDelete(new Set());
       setLocalPhotoDescriptions({});
 
-      const updatedItems = await asbestosClearanceService.getItems(clearanceId);
+      const updatedItems = await asbestosClearanceService.getItems(clearanceId, { omitPhotoData: true });
       setItems(updatedItems || []);
       const updatedItem = updatedItems?.find(
         (item) => item._id === selectedItemForPhotos._id,
       );
       if (updatedItem) {
-        setSelectedItemForPhotos(updatedItem);
+        try {
+          const res = await asbestosClearanceService.getItemPhotosData(
+            clearanceId,
+            updatedItem._id,
+          );
+          setSelectedItemForPhotos({
+            ...updatedItem,
+            photographs: mergePhotoBlobFields(
+              updatedItem.photographs,
+              res?.photographs,
+            ),
+          });
+        } catch {
+          setSelectedItemForPhotos(updatedItem);
+        }
       }
     } catch (error) {
       console.error("Error saving photo changes:", error);
@@ -2014,13 +1990,27 @@ const ClearanceItems = () => {
     if (succeeded > 0 && selectedItemForPhotos?._id) {
       try {
         const updatedItems =
-          await asbestosClearanceService.getItems(clearanceId);
+          await asbestosClearanceService.getItems(clearanceId, { omitPhotoData: true });
         setItems(updatedItems || []);
         const updatedItem = updatedItems?.find(
           (item) => item._id === selectedItemForPhotos._id,
         );
         if (updatedItem) {
-          setSelectedItemForPhotos(updatedItem);
+          try {
+            const res = await asbestosClearanceService.getItemPhotosData(
+              clearanceId,
+              updatedItem._id,
+            );
+            setSelectedItemForPhotos({
+              ...updatedItem,
+              photographs: mergePhotoBlobFields(
+                updatedItem.photographs,
+                res?.photographs,
+              ),
+            });
+          } catch {
+            setSelectedItemForPhotos(updatedItem);
+          }
         }
       } catch (err) {
         console.error("Error refreshing items after upload:", err);
@@ -2220,78 +2210,6 @@ const ClearanceItems = () => {
     }
   };
 
-  const handleSitePlanFileUpload = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      setSitePlanFile(file);
-    }
-  };
-
-  const handleUploadSitePlan = async () => {
-    if (!sitePlanFile) {
-      showSnackbar("Please select a file first", "error");
-      return;
-    }
-
-    try {
-      setUploadingSitePlan(true);
-
-      // Convert file to base64
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        try {
-          // Extract just the base64 data from the data URL
-          const dataUrl = event.target.result;
-          const base64Data = dataUrl.split(",")[1]; // Remove the "data:application/pdf;base64," prefix
-
-          // Update the clearance with the site plan file
-          await asbestosClearanceService.update(clearanceId, {
-            sitePlanFile: base64Data,
-            sitePlanLegend: [],
-            sitePlanLegendTitle: null,
-          });
-
-          showSnackbar("Site plan uploaded successfully", "success");
-
-          setSitePlanDialogOpen(false);
-          setSitePlanFile(null);
-          fetchData(); // Refresh clearance data
-        } catch (error) {
-          console.error("Error uploading site plan:", error);
-          showSnackbar("Failed to upload site plan", "error");
-        } finally {
-          setUploadingSitePlan(false);
-        }
-      };
-      reader.readAsDataURL(sitePlanFile);
-    } catch (error) {
-      console.error("Error processing site plan file:", error);
-      showSnackbar("Failed to process site plan file", "error");
-      setUploadingSitePlan(false);
-    }
-  };
-
-  const handleRemoveSitePlan = async () => {
-    if (window.confirm("Are you sure you want to remove the site plan?")) {
-      try {
-        // Update the clearance to remove the site plan file
-        await asbestosClearanceService.update(clearanceId, {
-          sitePlanFile: null,
-          sitePlanSource: null, // Backend will convert null to undefined to remove the field
-          sitePlanLegend: [],
-          sitePlanLegendTitle: null,
-        });
-
-        showSnackbar("Site plan removed successfully", "success");
-
-        fetchData(); // Refresh clearance data
-      } catch (error) {
-        console.error("Error removing site plan:", error);
-        showSnackbar("Failed to remove site plan", "error");
-      }
-    }
-  };
-
   const handleCompleteJob = () => {
     setCompleteDialogOpen(true);
   };
@@ -2427,40 +2345,97 @@ const ClearanceItems = () => {
     timestamp: new Date().toISOString(),
   });
 
+  const renderPhotoStatus = (item) => {
+    const photoCount =
+      (item.photographs?.length || 0) + (item.photograph ? 1 : 0);
+    const selectedCount =
+      item.photographs?.filter((p) => p.includeInReport).length || 0;
+
+    if (photoCount <= 0) {
+      return <Chip label="No photos" color="default" size="small" />;
+    }
+
+    return (
+      <Box display="flex" flexDirection="column" alignItems="flex-start" gap={0.5}>
+        <Chip
+          label={`${photoCount} photo${photoCount !== 1 ? "s" : ""}`}
+          color="success"
+          size="small"
+        />
+        {item.photographs?.length > 0 && (
+          <Typography variant="caption" color="text.secondary">
+            {selectedCount} in report
+          </Typography>
+        )}
+      </Box>
+    );
+  };
+
+  const renderCompleteClearanceButton = (extraSx = {}) => (
+    <Button
+      variant="contained"
+      color={jobCompleted ? "error" : "primary"}
+      size={isMobile ? "small" : "medium"}
+      onClick={jobCompleted ? handleReopenJob : handleCompleteJob}
+      disabled={!items || items.length === 0}
+      sx={{
+        whiteSpace: "nowrap",
+        flexShrink: 0,
+        backgroundColor: jobCompleted ? "#d32f2f" : "#1976d2",
+        "&:hover": {
+          backgroundColor: jobCompleted ? "#b71c1c" : "#1565c0",
+        },
+        ...extraSx,
+      }}
+    >
+      {jobCompleted ? "REOPEN CLEARANCE" : "COMPLETE CLEARANCE"}
+    </Button>
+  );
+
+  const renderItemActions = (item) => (
+    <Box display="flex" gap={0.5} flexShrink={0}>
+      <IconButton
+        onClick={() => handleOpenPhotoGallery(item)}
+        color="secondary"
+        size="small"
+        title="Manage Photos"
+      >
+        <PhotoCameraIcon />
+      </IconButton>
+      <IconButton
+        onClick={() => handleEdit(item)}
+        color="primary"
+        size="small"
+        title="Edit"
+      >
+        <EditIcon />
+      </IconButton>
+      <IconButton
+        onClick={() => handleDelete(item)}
+        color="error"
+        size="small"
+        title="Delete"
+      >
+        <DeleteIcon />
+      </IconButton>
+    </Box>
+  );
+
   return (
     <PermissionGate requiredPermissions={["asbestos.view"]}>
-      <Box m="20px" sx={{ position: "relative" }}>
-        {/* Portrait on mobile: Rotate device alert overlay */}
-        {showRotateAlert && (
-          <Box
-            sx={{
-              position: "fixed",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              zIndex: 1300,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: "rgba(255, 255, 255, 0.97)",
-              p: 3,
-              textAlign: "center",
-            }}
-          >
-            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-              Please rotate your device to landscape mode
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              This page is best viewed in landscape orientation. Please rotate
-              your device to continue.
-            </Typography>
-          </Box>
-        )}
-
+      <Box
+        sx={{
+          position: "relative",
+          m: { xs: 1.5, sm: "20px" },
+        }}
+      >
         {/* Breadcrumbs */}
-        <Breadcrumbs sx={{ marginBottom: 3 }}>
+        <Breadcrumbs
+          sx={{
+            marginBottom: { xs: 2, sm: 3 },
+            "& .MuiBreadcrumbs-ol": { flexWrap: "wrap", rowGap: 0.5 },
+          }}
+        >
           <Link
             component="button"
             variant="body1"
@@ -2484,11 +2459,40 @@ const ClearanceItems = () => {
           >
             Job Details
           </Link>
+          {isAttachmentsPage && (
+            <Link
+              component="button"
+              variant="body1"
+              onClick={() => navigate(`/clearances/${clearanceId}/items`)}
+              sx={{ cursor: "pointer" }}
+            >
+              Clearance Items
+            </Link>
+          )}
         </Breadcrumbs>
 
-        <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
-          Clearance Items
-        </Typography>
+        <Box
+          sx={{
+            mb: { xs: 2, sm: 3 },
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 1,
+          }}
+        >
+          <Typography
+            variant="h4"
+            component="h1"
+            sx={{
+              fontSize: { xs: "1.35rem", sm: "2.125rem" },
+              lineHeight: 1.2,
+              minWidth: 0,
+            }}
+          >
+            {isAttachmentsPage ? "Attachments" : "Clearance Items"}
+          </Typography>
+          {!isAttachmentsPage && renderCompleteClearanceButton()}
+        </Box>
 
         {/* Project Info */}
         <Typography         variant="h6"
@@ -2511,8 +2515,26 @@ const ClearanceItems = () => {
           </Typography>
           
 
-        <Box display="flex" justifyContent="space-between" sx={{ mt: 2, mb: 2 }}>
-          <Box display="flex" gap={2} alignItems="center">
+        {!isMobile && !isAttachmentsPage && (
+        <Box
+          sx={{
+            mt: 2,
+            mb: 2,
+            display: "flex",
+            flexDirection: { xs: "column", md: "row" },
+            justifyContent: "space-between",
+            alignItems: { xs: "stretch", md: "flex-start" },
+            gap: 1.5,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 1.5,
+              alignItems: "center",
+            }}
+          >
             <Button
               variant="outlined"
               color="primary"
@@ -2523,7 +2545,15 @@ const ClearanceItems = () => {
             </Button>
             {(clearance?.airMonitoringReport ||
               (clearance?.airMonitoringReports?.length > 0)) && (
-              <Box display="flex" alignItems="center" gap={2}>
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: 1.5,
+                  minWidth: 0,
+                }}
+              >
                 <Button
                   variant="outlined"
                   color="error"
@@ -2544,7 +2574,7 @@ const ClearanceItems = () => {
                 <Typography
                   variant="body2"
                   color="success.main"
-                  sx={{ fontWeight: "medium" }}
+                  sx={{ fontWeight: "medium", minWidth: 0, flex: "1 1 180px" }}
                 >
                   ✓ Air Monitoring Report
                   {(clearance.airMonitoringReports?.length ?? 0) > 1
@@ -2585,23 +2615,10 @@ const ClearanceItems = () => {
             )}
           </Box>
 
-          <Button
-            variant="contained"
-            color={jobCompleted ? "error" : "primary"}
-            onClick={jobCompleted ? handleReopenJob : handleCompleteJob}
-            disabled={!items || items.length === 0}
-            sx={{
-              backgroundColor: jobCompleted ? "#d32f2f" : "#1976d2",
-              "&:hover": {
-                backgroundColor: jobCompleted ? "#b71c1c" : "#1565c0",
-              },
-            }}
-          >
-            {jobCompleted ? "REOPEN CLEARANCE" : "COMPLETE CLEARANCE"}
-          </Button>
         </Box>
+        )}
 
-        {/* Site Plan Actions */}
+        {!isMobile && !isAttachmentsPage && (
         <Box
           display="flex"
           gap={2}
@@ -2612,50 +2629,162 @@ const ClearanceItems = () => {
           <Button
             variant="outlined"
             color="secondary"
-            onClick={() => setSitePlanDrawingDialogOpen(true)}
+            onClick={() => navigate(`/clearances/${clearanceId}/site-plans`)}
             startIcon={<MapIcon />}
           >
-            {clearance.sitePlanFile ? "Edit Site Plan" : "Site Plan"}
+            {sitePlanCount > 0
+              ? `Site Plans (${sitePlanCount})`
+              : "Site Plans"}
           </Button>
-          {clearance.sitePlanFile && (
-            <Button
-              variant="outlined"
-              color="error"
-              onClick={handleRemoveSitePlan}
-              startIcon={<DeleteIcon />}
-              sx={{
-                borderColor: "#d32f2f",
-                color: "#d32f2f",
-                "&:hover": {
-                  borderColor: "#b71c1c",
-                  backgroundColor: "rgba(211, 47, 47, 0.04)",
-                },
-              }}
-            >
-              Delete Site Plan
-            </Button>
-          )}
-          {clearance?.sitePlanFile && (
+          {sitePlanCount > 0 ? (
             <Typography
               variant="body2"
               color="success.main"
               sx={{ fontWeight: "medium" }}
             >
-              ✓ Site Plan Attached
+              ✓ {sitePlanCount} site plan
+              {sitePlanCount === 1 ? "" : "s"} attached
             </Typography>
-          )}
-          {!clearance?.sitePlanFile && (
+          ) : (
             <Typography
               variant="body2"
               color="warning.main"
               sx={{ fontWeight: "medium" }}
             >
-              ⚠ No Site Plan
+              ⚠ No Site Plans
             </Typography>
           )}
         </Box>
+        )}
 
-        <Box display="flex" gap={2} sx={{ mt: 3 }}>
+        {isMobile && !isAttachmentsPage && (
+          <Button
+            fullWidth
+            variant="outlined"
+            startIcon={<AttachFileIcon />}
+            onClick={() => navigate(`/clearances/${clearanceId}/attachments`)}
+            sx={{ mt: 2 }}
+          >
+            Attachments
+          </Button>
+        )}
+
+        {isAttachmentsPage && (
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
+            <Paper variant="outlined" sx={{ p: 2 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+                Air Monitoring Report
+              </Typography>
+              {clearance?.airMonitoringReport ||
+              clearance?.airMonitoringReports?.length > 0 ? (
+                <Typography
+                  variant="body2"
+                  color="success.main"
+                  sx={{ fontWeight: "medium", mb: 1.5 }}
+                >
+                  ✓ Air Monitoring Report
+                  {(clearance.airMonitoringReports?.length ?? 0) > 1 ? "s" : ""}{" "}
+                  attached
+                  {(clearance.airMonitoringReports?.length ?? 0) > 0 ? (
+                    <Box component="span" sx={{ display: "block", mt: 0.5 }}>
+                      {clearance.airMonitoringReports
+                        .slice()
+                        .sort(
+                          (a, b) =>
+                            new Date(a.shiftDate || 0) -
+                            new Date(b.shiftDate || 0),
+                        )
+                        .map((r) => formatDate(r.shiftDate))
+                        .join(", ")}
+                    </Box>
+                  ) : clearance.airMonitoringShiftDate ? (
+                    <Box component="span" sx={{ display: "block", mt: 0.5 }}>
+                      {formatDate(clearance.airMonitoringShiftDate)}
+                    </Box>
+                  ) : null}
+                </Typography>
+              ) : (
+                <Typography
+                  variant="body2"
+                  color="warning.main"
+                  sx={{ fontWeight: "medium", mb: 1.5 }}
+                >
+                  ⚠ No air monitoring report attached
+                </Typography>
+              )}
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                <Button
+                  variant="outlined"
+                  color="primary"
+                  onClick={handleOpenAirMonitoringReportsDialog}
+                  startIcon={<DescriptionIcon />}
+                >
+                  {clearance?.airMonitoringReport ||
+                  clearance?.airMonitoringReports?.length > 0
+                    ? "Replace Air Monitoring Report(s)"
+                    : "Select Air Monitoring Report(s)"}
+                </Button>
+                {(clearance?.airMonitoringReport ||
+                  clearance?.airMonitoringReports?.length > 0) && (
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    onClick={handleRemoveAirMonitoringReport}
+                    startIcon={<DeleteIcon />}
+                  >
+                    Remove Attachment
+                  </Button>
+                )}
+              </Box>
+            </Paper>
+
+            <Paper variant="outlined" sx={{ p: 2 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+                Site Plans
+              </Typography>
+              {sitePlanCount > 0 ? (
+                <Typography
+                  variant="body2"
+                  color="success.main"
+                  sx={{ fontWeight: "medium", mb: 1.5 }}
+                >
+                  ✓ {sitePlanCount} site plan
+                  {sitePlanCount === 1 ? "" : "s"} attached
+                </Typography>
+              ) : (
+                <Typography
+                  variant="body2"
+                  color="warning.main"
+                  sx={{ fontWeight: "medium", mb: 1.5 }}
+                >
+                  ⚠ No site plans
+                </Typography>
+              )}
+              <Button
+                variant="outlined"
+                color="secondary"
+                fullWidth
+                onClick={() => navigate(`/clearances/${clearanceId}/site-plans`)}
+                startIcon={<MapIcon />}
+              >
+                {sitePlanCount > 0
+                  ? `Site Plans (${sitePlanCount})`
+                  : "Site Plans"}
+              </Button>
+            </Paper>
+          </Box>
+        )}
+
+        {!isAttachmentsPage && (
+        <>
+        <Box
+          sx={{
+            mt: 3,
+            display: "flex",
+            flexDirection: { xs: "column", sm: "row" },
+            gap: 1.5,
+          }}
+        >
           <Button
             variant="contained"
             color="secondary"
@@ -2665,6 +2794,7 @@ const ClearanceItems = () => {
               setDialogOpen(true);
             }}
             startIcon={<AddIcon />}
+            sx={{ width: { xs: "100%", sm: "auto" } }}
           >
             Add Item
           </Button>
@@ -2673,6 +2803,7 @@ const ClearanceItems = () => {
             onClick={() => setJobExclusionsModalOpen(true)}
             startIcon={<DescriptionIcon />}
             sx={{
+              width: { xs: "100%", sm: "auto" },
               backgroundColor: "#1976d2",
               color: "white",
               "&:hover": {
@@ -2685,7 +2816,91 @@ const ClearanceItems = () => {
         </Box>
 
         <Card sx={{ mt: 3 }}>
-          <CardContent>
+          <CardContent sx={{ px: { xs: 1.5, sm: 2 }, "&:last-child": { pb: { xs: 1.5, sm: 2 } } }}>
+            {isMobile ? (
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+                {(items || []).length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    No clearance items yet.
+                  </Typography>
+                ) : (
+                  (items || []).map((item) => {
+                    const hasLevelFloor = (items || []).some(
+                      (entry) => entry.levelFloor && entry.levelFloor.trim() !== "",
+                    );
+
+                    if (clearance?.clearanceType === "Vehicle/Equipment") {
+                      return (
+                        <Paper key={item._id} variant="outlined" sx={{ p: 1.5 }}>
+                          <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+                            {item.materialDescription}
+                          </Typography>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              gap: 1,
+                            }}
+                          >
+                            {renderPhotoStatus(item)}
+                            {renderItemActions(item)}
+                          </Box>
+                        </Paper>
+                      );
+                    }
+
+                    return (
+                      <Paper key={item._id} variant="outlined" sx={{ p: 1.5 }}>
+                        <Box
+                          sx={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "flex-start",
+                            gap: 1,
+                          }}
+                        >
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                              {item.roomArea || "Room not specified"}
+                            </Typography>
+                            {hasLevelFloor && (
+                              <Typography variant="caption" color="text.secondary">
+                                {item.levelFloor || "Level not specified"}
+                              </Typography>
+                            )}
+                          </Box>
+                          <Chip
+                            label={formatAsbestosType(item.asbestosType)}
+                            color={getAsbestosTypeColor(item.asbestosType)}
+                            size="small"
+                            sx={{ flexShrink: 0 }}
+                          />
+                        </Box>
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                          {item.locationDescription}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                          {item.materialDescription}
+                        </Typography>
+                        <Box
+                          sx={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            gap: 1,
+                            mt: 1.5,
+                          }}
+                        >
+                          {renderPhotoStatus(item)}
+                          {renderItemActions(item)}
+                        </Box>
+                      </Paper>
+                    );
+                  })
+                )}
+              </Box>
+            ) : (
             <TableContainer component={Paper}>
               <Table>
                 <TableHead>
@@ -2919,6 +3134,7 @@ const ClearanceItems = () => {
                 </TableBody>
               </Table>
             </TableContainer>
+            )}
           </CardContent>
         </Card>
 
@@ -2940,11 +3156,18 @@ const ClearanceItems = () => {
             placeholder="Optional notes"
           />
         </Box>
+        </>
+        )}
 
         {/* Add/Edit Dialog */}
         <Dialog
           open={dialogOpen}
-          onClose={() => setDialogOpen(false)}
+          onClose={(event, reason) => {
+            if (isMobile && reason === "backdropClick") {
+              return;
+            }
+            setDialogOpen(false);
+          }}
           maxWidth="md"
           fullWidth
           PaperProps={{
@@ -2988,13 +3211,14 @@ const ClearanceItems = () => {
             </Typography>
           </DialogTitle>
           <form onSubmit={handleSubmit}>
-            <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
-              <Grid container spacing={2}>
+            <DialogContent sx={{ px: 2, pt: 1, pb: 1, border: "none" }}>
+              <Grid container spacing={1}>
                 {clearance?.clearanceType === "Vehicle/Equipment" ? (
                   // Simplified view for Vehicle/Equipment
                   <Grid item xs={12}>
                     <TextField
                       fullWidth
+                      size="small"
                       label="Item Description"
                       value={form.materialDescription}
                       onChange={(e) =>
@@ -3014,7 +3238,7 @@ const ClearanceItems = () => {
                       item
                       xs={12}
                       container
-                      spacing={2}
+                      spacing={1}
                       alignItems="center"
                     >
                       <Grid item>
@@ -3034,6 +3258,7 @@ const ClearanceItems = () => {
                         <Grid item xs={6}>
                           <TextField
                             fullWidth
+                            size="small"
                             label="Level/Floor"
                             value={form.levelFloor}
                             onChange={(e) =>
@@ -3101,9 +3326,17 @@ const ClearanceItems = () => {
                           );
                         }}
                         freeSolo
+                        size="small"
+                        blurOnSelect="touch"
+                        onClose={(event, reason) => {
+                          if (reason === "selectOption") {
+                            blurFieldAfterOptionSelect("roomArea");
+                          }
+                        }}
                         renderInput={(params) => (
                           <TextField
                             {...params}
+                            size="small"
                             label="Room/Area"
                             required
                             onTouchStart={(e) => {
@@ -3137,7 +3370,9 @@ const ClearanceItems = () => {
                             }}
                             InputProps={{
                               ...params.InputProps,
-                              readOnly: isTablet() && !firstTapFields.roomArea,
+                              readOnly:
+                                selectionBlurField === "roomArea" ||
+                                (isTablet() && !firstTapFields.roomArea),
                             }}
                           />
                         )}
@@ -3173,9 +3408,17 @@ const ClearanceItems = () => {
                           }
                         }}
                         freeSolo
+                        size="small"
+                        blurOnSelect="touch"
+                        onClose={(event, reason) => {
+                          if (reason === "selectOption") {
+                            blurFieldAfterOptionSelect("locationDescription");
+                          }
+                        }}
                         renderInput={(params) => (
                           <TextField
                             {...params}
+                            size="small"
                             label="Location Description"
                             required
                             onTouchStart={(e) => {
@@ -3216,8 +3459,9 @@ const ClearanceItems = () => {
                             InputProps={{
                               ...params.InputProps,
                               readOnly:
-                                isTablet() &&
-                                !firstTapFields.locationDescription,
+                                selectionBlurField === "locationDescription" ||
+                                (isTablet() &&
+                                  !firstTapFields.locationDescription),
                             }}
                           />
                         )}
@@ -3253,9 +3497,17 @@ const ClearanceItems = () => {
                           }
                         }}
                         freeSolo
+                        size="small"
+                        blurOnSelect="touch"
+                        onClose={(event, reason) => {
+                          if (reason === "selectOption") {
+                            blurFieldAfterOptionSelect("materialDescription");
+                          }
+                        }}
                         renderInput={(params) => (
                           <TextField
                             {...params}
+                            size="small"
                             label="Materials Description"
                             required
                             onTouchStart={(e) => {
@@ -3296,15 +3548,16 @@ const ClearanceItems = () => {
                             InputProps={{
                               ...params.InputProps,
                               readOnly:
-                                isTablet() &&
-                                !firstTapFields.materialDescription,
+                                selectionBlurField === "materialDescription" ||
+                                (isTablet() &&
+                                  !firstTapFields.materialDescription),
                             }}
                           />
                         )}
                       />
                     </Grid>
                     <Grid item xs={12}>
-                      <FormControl fullWidth required>
+                      <FormControl fullWidth required size="small">
                         <InputLabel>Asbestos Type</InputLabel>
                         <Select
                           value={form.asbestosType}
@@ -3321,6 +3574,7 @@ const ClearanceItems = () => {
                     <Grid item xs={12}>
                       <TextField
                         fullWidth
+                        size="small"
                         label="Notes"
                         value={form.notes}
                         onChange={(e) =>
@@ -3334,9 +3588,10 @@ const ClearanceItems = () => {
                 )}
               </Grid>
             </DialogContent>
-            <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
+            <DialogActions sx={{ px: 2, pb: 2, pt: 1, gap: 1, border: "none" }}>
               <Button
                 onClick={() => setDialogOpen(false)}
+                size="small"
                 variant="outlined"
                 sx={{
                   minWidth: 100,
@@ -3349,6 +3604,7 @@ const ClearanceItems = () => {
               </Button>
               <Button
                 type="submit"
+                size="small"
                 variant="contained"
                 startIcon={editingItem ? <EditIcon /> : <AddIcon />}
                 disabled={
@@ -3619,119 +3875,6 @@ const ClearanceItems = () => {
                 : selectedReports.length > 1
                   ? `Attach ${selectedReports.length} Reports`
                   : "Attach Report"}
-            </Button>
-          </DialogActions>
-        </Dialog>
-
-        {/* Site Plan Upload Dialog */}
-        <Dialog
-          open={sitePlanDialogOpen}
-          onClose={() => setSitePlanDialogOpen(false)}
-          maxWidth="sm"
-          fullWidth
-          PaperProps={{
-            sx: {
-              borderRadius: 3,
-              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
-            },
-          }}
-        >
-          <DialogTitle
-            sx={{
-              pb: 2,
-              px: 3,
-              pt: 3,
-              border: "none",
-              display: "flex",
-              alignItems: "center",
-              gap: 2,
-            }}
-          >
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 40,
-                height: 40,
-                borderRadius: "50%",
-                bgcolor: "primary.main",
-                color: "white",
-              }}
-            >
-              <UploadIcon sx={{ fontSize: 20 }} />
-            </Box>
-            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
-              Upload Site Plan
-            </Typography>
-          </DialogTitle>
-          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Upload a site plan file (PDF, JPG, or PNG). This will be
-                included in the clearance report as Appendix B.
-              </Typography>
-
-              <Box sx={{ mb: 2 }}>
-                <input
-                  accept=".pdf,.jpg,.jpeg,.png"
-                  style={{ display: "none" }}
-                  id="site-plan-file-upload"
-                  type="file"
-                  onChange={handleSitePlanFileUpload}
-                />
-                <label htmlFor="site-plan-file-upload">
-                  <Button
-                    variant="outlined"
-                    component="span"
-                    startIcon={<UploadIcon />}
-                    fullWidth
-                  >
-                    {sitePlanFile ? sitePlanFile.name : "Choose Site Plan File"}
-                  </Button>
-                </label>
-              </Box>
-
-              {sitePlanFile && (
-                <Alert severity="info" sx={{ mb: 2 }}>
-                  Selected file: {sitePlanFile.name} (
-                  {(sitePlanFile.size / 1024 / 1024).toFixed(2)} MB)
-                </Alert>
-              )}
-            </Box>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
-            <Button
-              onClick={() => setSitePlanDialogOpen(false)}
-              variant="outlined"
-              sx={{
-                minWidth: 100,
-                borderRadius: 2,
-                textTransform: "none",
-                fontWeight: 500,
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleUploadSitePlan}
-              variant="contained"
-              disabled={!sitePlanFile || uploadingSitePlan}
-              startIcon={
-                uploadingSitePlan ? (
-                  <CircularProgress size={16} />
-                ) : (
-                  <UploadIcon />
-                )
-              }
-              sx={{
-                minWidth: 120,
-                borderRadius: 2,
-                textTransform: "none",
-                fontWeight: 500,
-              }}
-            >
-              {uploadingSitePlan ? "Uploading..." : "Upload Site Plan"}
             </Button>
           </DialogActions>
         </Dialog>
@@ -4452,9 +4595,10 @@ const ClearanceItems = () => {
           onClose={handleClosePhotoGallery}
           maxWidth="md"
           fullWidth
+          fullScreen={isMobile}
           PaperProps={{
             sx: {
-              borderRadius: 3,
+              borderRadius: isMobile ? 0 : 3,
               boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
             },
           }}
@@ -4496,30 +4640,26 @@ const ClearanceItems = () => {
           <DialogContent sx={{ px: 3, pt: 3, pb: 3, border: "none" }}>
             {selectedItemForPhotos && (
               <>
-                {isPortrait ? (
+                {galleryPhotosError && (
+                  <Alert severity="error" sx={{ mb: 2 }}>
+                    {galleryPhotosError}
+                  </Alert>
+                )}
+                {galleryPhotosLoading && (
                   <Box
                     sx={{
                       display: "flex",
-                      flexDirection: "column",
                       alignItems: "center",
-                      justifyContent: "center",
-                      py: 4,
-                      px: 2,
-                      textAlign: "center",
+                      gap: 1.5,
+                      mb: 2,
                     }}
                   >
-                    <Alert severity="info" sx={{ mb: 2 }}>
-                      <Typography variant="h6" sx={{ mb: 1, fontWeight: 600 }}>
-                        Please rotate your device to landscape mode
-                      </Typography>
-                      <Typography variant="body2" component="div">
-                        The manage photos form is best viewed in landscape
-                        orientation. Please rotate your device to continue.
-                      </Typography>
-                    </Alert>
+                    <CircularProgress size={22} />
+                    <Typography variant="body2" color="text.secondary">
+                      Loading images…
+                    </Typography>
                   </Box>
-                ) : (
-                  <>
+                )}
                 <Box
                   sx={{
                     mb: compressionStatus ? 2 : 3,
@@ -4556,7 +4696,8 @@ const ClearanceItems = () => {
                     sx={{
                       display: "flex",
                       gap: 1,
-                      flexShrink: 0,
+                      flexWrap: "wrap",
+                      width: { xs: "100%", sm: "auto" },
                       alignItems: "center",
                     }}
                   >
@@ -4565,6 +4706,7 @@ const ClearanceItems = () => {
                       startIcon={<PhotoCameraIcon />}
                       onClick={handleTakePhoto}
                       size="small"
+                      sx={{ flex: { xs: "1 1 140px", sm: "0 0 auto" } }}
                     >
                       Take Photo
                     </Button>
@@ -4573,6 +4715,7 @@ const ClearanceItems = () => {
                       startIcon={<UploadIcon />}
                       component="label"
                       size="small"
+                      sx={{ flex: { xs: "1 1 140px", sm: "0 0 auto" } }}
                     >
                       Upload Photos
                       <input
@@ -4614,7 +4757,7 @@ const ClearanceItems = () => {
                   <Grid container spacing={2}>
                     {/* New photos array */}
                     {selectedItemForPhotos.photographs?.map((photo, index) => (
-                      <Grid item xs={12} sm={6} md={4} key={photo._id}>
+                      <Grid item xs={6} sm={6} md={4} key={photo._id}>
                         <Card
                           sx={{
                             position: "relative",
@@ -4657,109 +4800,17 @@ const ClearanceItems = () => {
                             />
 
                             {/* Arrow overlays (multiple, with delete per arrow) */}
-                            {getPhotoArrows(photo).map((arr, arrIdx) => {
-                              const arrowColor =
-                                arr.color || DEFAULT_ARROW_COLOR;
-                              const arrowId = arr._id;
-                              const rot =
-                                arr.rotation ?? DEFAULT_ARROW_ROTATION;
-                              const tipOff = getArrowTipOffset(rot);
-                              return (
-                                <Box
-                                  key={arrowId || `arrow-${arrIdx}`}
-                                  sx={{
-                                    position: "absolute",
-                                    left: `${(arr.x ?? 0.5) * 100}%`,
-                                    top: `${(arr.y ?? 0.5) * 100}%`,
-                                    transform: `translate(${-tipOff.x * 100}%, ${-tipOff.y * 100}%)`,
-                                    zIndex: 2,
-                                    pointerEvents: "auto",
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    alignItems: "center",
-                                  }}
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <Box
-                                    sx={{
-                                      transform: `rotate(${rot}deg)`,
-                                    }}
-                                  >
-                                    <svg
-                                      width="40"
-                                      height="40"
-                                      viewBox="0 0 24 24"
-                                      fill="none"
-                                      xmlns="http://www.w3.org/2000/svg"
-                                      style={{ pointerEvents: "none" }}
-                                    >
-                                      <line
-                                        x1="12"
-                                        y1="22"
-                                        x2="12"
-                                        y2="10"
-                                        stroke="rgba(0,0,0,0.5)"
-                                        strokeWidth="2.5"
-                                        strokeLinecap="round"
-                                      />
-                                      <line
-                                        x1="12"
-                                        y1="22"
-                                        x2="12"
-                                        y2="10"
-                                        stroke={arrowColor}
-                                        strokeWidth="2"
-                                        strokeLinecap="round"
-                                      />
-                                      <path
-                                        d="M12 2 L8 10 L16 10 Z"
-                                        fill="rgba(0,0,0,0.4)"
-                                        stroke="rgba(0,0,0,0.6)"
-                                        strokeWidth="1"
-                                        strokeLinejoin="round"
-                                      />
-                                      <path
-                                        d="M12 2 L8 10 L16 10 Z"
-                                        fill={arrowColor}
-                                        stroke={arrowColor}
-                                        strokeWidth="0.5"
-                                        strokeLinejoin="round"
-                                      />
-                                    </svg>
-                                  </Box>
-                                  <IconButton
-                                    size="small"
-                                    sx={{
-                                      minWidth: 0,
-                                      width: 20,
-                                      height: 20,
-                                      color: "white",
-                                      bgcolor: "rgba(0,0,0,0.7)",
-                                      "&:hover": {
-                                        bgcolor: "rgba(244,67,54,0.9)",
-                                      },
-                                      mt: -0.5,
-                                    }}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (arrowId) {
-                                        handleDeletePhotoArrow(
-                                          photo._id,
-                                          arrowId,
-                                        );
-                                      } else {
-                                        handleClearAllArrows(photo._id);
-                                      }
-                                    }}
-                                    title="Remove this arrow"
-                                  >
-                                    <CloseIcon
-                                      sx={{ fontSize: "0.9rem" }}
-                                    />
-                                  </IconButton>
-                                </Box>
-                              );
-                            })}
+                            <PhotoArrowOverlays
+                              arrows={getPhotoArrows(photo)}
+                              showDelete
+                              onDeleteArrow={(arr) => {
+                                if (arr._id) {
+                                  handleDeletePhotoArrow(photo._id, arr._id);
+                                } else {
+                                  handleClearAllArrows(photo._id);
+                                }
+                              }}
+                            />
 
                             {/* Marked for deletion overlay */}
                             {isPhotoMarkedForDeletion(photo._id) && (
@@ -5013,8 +5064,6 @@ const ClearanceItems = () => {
                     ))}
                   </Grid>
                 )}
-                  </>
-                )}
               </>
             )}
           </DialogContent>
@@ -5116,15 +5165,9 @@ const ClearanceItems = () => {
             setFullSizePhotoId(null);
             setFullSizeArrowMode(false);
             setSelectedArrowId(null);
-            setMovingArrowId(null);
           }}
           maxWidth="lg"
           fullWidth
-          PaperProps={{
-            sx: {
-              bgcolor: "rgba(0, 0, 0, 0.9)",
-            },
-          }}
         >
           <DialogContent sx={{ p: 0, position: "relative" }}>
             <IconButton
@@ -5133,17 +5176,16 @@ const ClearanceItems = () => {
                 setFullSizePhotoId(null);
                 setFullSizeArrowMode(false);
                 setSelectedArrowId(null);
-                setMovingArrowId(null);
               }}
               sx={{
                 position: "absolute",
                 top: 10,
                 right: 10,
-                color: "white",
-                bgcolor: "rgba(0, 0, 0, 0.5)",
+                color: "text.primary",
+                bgcolor: "grey.200",
                 zIndex: 10,
                 "&:hover": {
-                  bgcolor: "rgba(0, 0, 0, 0.7)",
+                  bgcolor: "grey.300",
                 },
               }}
             >
@@ -5160,249 +5202,61 @@ const ClearanceItems = () => {
                   pt: 6,
                 }}
               >
-                <Box
-                  sx={{
-                    display: "flex",
-                    gap: 1,
-                    mb: 2,
-                    flexWrap: "wrap",
-                    justifyContent: "center",
+                <PhotoArrowToolbar
+                  drawMode={fullSizeArrowMode}
+                  onDrawModeChange={(next) => {
+                    setFullSizeArrowMode(next);
+                    if (next) setSelectedArrowId(null);
                   }}
-                >
-                  <Button
-                    variant="contained"
-                    size="small"
-                    startIcon={<ArrowUpwardIcon />}
-                    onClick={() => {
-                      setFullSizeArrowMode((prev) => !prev);
-                      setMovingArrowId(null);
-                    }}
-                    sx={{
-                      bgcolor: fullSizeArrowMode
-                        ? "primary.main"
-                        : "rgba(0, 0, 0, 0.65)",
-                      color: "white",
-                      border: "1px solid rgba(255,255,255,0.4)",
-                      "&:hover": {
-                        bgcolor: fullSizeArrowMode
-                          ? "primary.dark"
-                          : "rgba(0, 0, 0, 0.85)",
-                        borderColor: "rgba(255,255,255,0.6)",
-                      },
-                    }}
-                  >
-                    Add arrow
-                  </Button>
-                  <Button
-                    variant="contained"
-                    size="small"
-                    disabled={
-                      !selectedArrowId || selectedArrowId === "legacy"
+                  selectedArrowId={selectedArrowId}
+                  onDeleteSelected={() => {
+                    if (!selectedArrowId) return;
+                    if (selectedArrowId === "legacy") {
+                      handleClearAllArrows(fullSizePhotoId);
+                    } else {
+                      handleDeletePhotoArrow(
+                        fullSizePhotoId,
+                        selectedArrowId,
+                      );
                     }
-                    startIcon={<ArrowUpwardIcon />}
-                    onClick={() => {
-                      setMovingArrowId(selectedArrowId);
-                      setFullSizeArrowMode(false);
-                    }}
-                    sx={{
-                      bgcolor: movingArrowId
-                        ? "primary.main"
-                        : "rgba(0, 0, 0, 0.5)",
-                      color: "white",
-                      "&:hover":
-                        selectedArrowId && selectedArrowId !== "legacy"
-                          ? { bgcolor: "primary.dark" }
-                          : {},
-                    }}
-                  >
-                    Move selected
-                  </Button>
-                  <Button
-                    variant="contained"
-                    size="small"
-                    disabled={!selectedArrowId}
-                    startIcon={<CloseIcon />}
-                    onClick={() => {
-                      if (selectedArrowId) {
-                        if (selectedArrowId === "legacy") {
-                          handleClearAllArrows(fullSizePhotoId);
-                        } else {
-                          handleDeletePhotoArrow(
-                            fullSizePhotoId,
-                            selectedArrowId,
-                          );
-                        }
-                        setSelectedArrowId(null);
-                      }
-                    }}
-                    sx={{
-                      bgcolor: "rgba(244, 67, 54, 0.9)",
-                      color: "white",
-                      "&:hover": { bgcolor: "rgba(244, 67, 54, 1)" },
-                    }}
-                  >
-                    Delete selected
-                  </Button>
-                  <Typography
-                    component="span"
-                    sx={{
-                      color: "rgba(255,255,255,0.9)",
-                      fontSize: "0.85rem",
-                      alignSelf: "center",
-                      ml: 1,
-                    }}
-                  >
-                    Arrow color:
-                  </Typography>
-                  {ARROW_COLORS.map(({ name, hex }) => (
-                    <Box
-                      key={hex}
-                      onClick={() => {
-                        setSelectedArrowColor(hex);
-                        if (
-                          selectedArrowId &&
-                          selectedArrowId !== "legacy"
-                        ) {
-                          handleUpdatePhotoArrow(
-                            fullSizePhotoId,
-                            selectedArrowId,
-                            { color: hex },
-                          );
-                        }
-                      }}
-                      sx={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: "50%",
-                        bgcolor: hex,
-                        border:
-                          selectedArrowColor === hex
-                            ? "3px solid #2196f3"
-                            : "2px solid black",
-                        cursor: "pointer",
-                        flexShrink: 0,
-                        "&:hover": {
-                          borderColor:
-                            selectedArrowColor === hex
-                              ? "#2196f3"
-                              : "rgba(255,255,255,0.8)",
-                          transform: "scale(1.1)",
-                        },
-                        transition: "border-color 0.15s, transform 0.15s",
-                      }}
-                      title={name}
-                    />
-                  ))}
-                </Box>
-                {(fullSizeArrowMode || movingArrowId) && (
-                  <Typography
-                    variant="body2"
-                    sx={{ color: "rgba(0, 0, 0, 0.9)", mb: 1 }}
-                  >
-                    {movingArrowId
-                      ? "Click on the photo to move the selected arrow"
-                      : "Click on the photo to place a new arrow"}
-                  </Typography>
-                )}
-                <Box
-                  sx={{
-                    position: "relative",
-                    display: "inline-flex",
-                    justifyContent: "center",
-                    alignItems: "center",
+                    setSelectedArrowId(null);
                   }}
-                >
-                  <img
+                  selectedColor={selectedArrowColor}
+                  onColorChange={(hex) => {
+                    setSelectedArrowColor(hex);
+                    if (selectedArrowId && selectedArrowId !== "legacy") {
+                      handleUpdatePhotoArrow(fullSizePhotoId, selectedArrowId, {
+                        color: hex,
+                      });
+                    }
+                  }}
+                />
+                <Box sx={{ position: "relative" }}>
+                  <PhotoArrowEditor
                     src={fullSizePhoto.data}
                     alt="Full size"
-                    style={{
-                      maxWidth: "100%",
-                      maxHeight: "75vh",
-                      objectFit: "contain",
-                      cursor:
-                        fullSizeArrowMode || movingArrowId
-                          ? "crosshair"
-                          : "default",
+                    arrows={getPhotoArrows(fullSizePhoto)}
+                    drawMode={fullSizeArrowMode}
+                    selectedArrowId={selectedArrowId}
+                    selectedColor={selectedArrowColor}
+                    onSelectArrow={(id) => {
+                      setSelectedArrowId(id);
+                      if (id && id !== "legacy") {
+                        const arr = getPhotoArrows(fullSizePhoto).find(
+                          (a) => a._id === id,
+                        );
+                        if (arr?.color) setSelectedArrowColor(arr.color);
+                      }
                     }}
-                    onClick={handleFullSizePhotoClickForArrow}
+                    onDrawComplete={(arrow) => {
+                      handleAddPhotoArrow(fullSizePhotoId, arrow);
+                    }}
+                    onMoveComplete={(arrowId, updates) => {
+                      handleUpdatePhotoArrow(fullSizePhotoId, arrowId, updates, {
+                        silent: true,
+                      });
+                    }}
                   />
-                  {getPhotoArrows(fullSizePhoto).map((arr, arrIdx) => {
-                    const arrowColor =
-                      arr.color || DEFAULT_ARROW_COLOR;
-                    const isSelected = selectedArrowId === arr._id;
-                    const rot =
-                      arr.rotation ?? DEFAULT_ARROW_ROTATION;
-                    const tipOff = getArrowTipOffset(rot);
-                    return (
-                      <Box
-                        key={arr._id || `fs-arrow-${arrIdx}`}
-                        sx={{
-                          position: "absolute",
-                          left: `${(arr.x ?? 0.5) * 100}%`,
-                          top: `${(arr.y ?? 0.5) * 100}%`,
-                          transform: `translate(${-tipOff.x * 100}%, ${-tipOff.y * 100}%)`,
-                          pointerEvents: "auto",
-                          cursor: "pointer",
-                          outline: isSelected
-                            ? "3px solid white"
-                            : "none",
-                          outlineOffset: 2,
-                          borderRadius: 1,
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedArrowId(arr._id || "legacy");
-                          setSelectedArrowColor(
-                            arr.color || DEFAULT_ARROW_COLOR,
-                          );
-                        }}
-                      >
-                        <Box sx={{ transform: `rotate(${rot}deg)` }}>
-                          <svg
-                            width="56"
-                            height="56"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            xmlns="http://www.w3.org/2000/svg"
-                            style={{ pointerEvents: "none" }}
-                          >
-                            <line
-                              x1="12"
-                              y1="22"
-                              x2="12"
-                              y2="10"
-                              stroke="rgba(0,0,0,0.5)"
-                              strokeWidth="2.5"
-                              strokeLinecap="round"
-                            />
-                            <line
-                              x1="12"
-                              y1="22"
-                              x2="12"
-                              y2="10"
-                              stroke={arrowColor}
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                            />
-                            <path
-                              d="M12 2 L8 10 L16 10 Z"
-                              fill="rgba(0,0,0,0.4)"
-                              stroke="rgba(0,0,0,0.6)"
-                              strokeWidth="1"
-                              strokeLinejoin="round"
-                            />
-                            <path
-                              d="M12 2 L8 10 L16 10 Z"
-                              fill={arrowColor}
-                              stroke={arrowColor}
-                              strokeWidth="0.5"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        </Box>
-                      </Box>
-                    );
-                  })}
                   <IconButton
                     size="small"
                     sx={{
@@ -5454,87 +5308,6 @@ const ClearanceItems = () => {
           </DialogContent>
         </Dialog>
 
-        {/* Site Plan Drawing Modal */}
-        <Dialog
-          open={sitePlanDrawingDialogOpen}
-          onClose={handleSitePlanDrawingClose}
-          maxWidth="lg"
-          fullWidth
-          PaperProps={{
-            sx: {
-              height: "90vh",
-              maxHeight: "90vh",
-            },
-          }}
-        >
-          <DialogTitle>
-            <Box
-              display="flex"
-              justifyContent="space-between"
-              alignItems="center"
-            >
-              <Typography variant="h6">Site Plan Drawing</Typography>
-              <IconButton onClick={handleSitePlanDrawingClose}>
-                <CloseIcon />
-              </IconButton>
-            </Box>
-          </DialogTitle>
-          <DialogContent sx={{ p: 2, height: "100%" }}>
-            <SitePlanDrawing
-              ref={sitePlanDrawingRef}
-              onSave={handleSitePlanSave}
-              onCancel={() => setSitePlanDrawingDialogOpen(false)}
-              existingSitePlan={clearance?.sitePlanFile}
-              existingLegend={clearance?.sitePlanLegend}
-              existingLegendTitle={clearance?.sitePlanLegendTitle}
-              existingFigureTitle={clearance?.sitePlanFigureTitle}
-            />
-          </DialogContent>
-        </Dialog>
-
-        {/* Site plan key descriptions reminder */}
-        <Dialog
-          open={sitePlanKeyReminderOpen}
-          onClose={() => {
-            setSitePlanKeyReminderOpen(false);
-            setPendingSitePlanData(null);
-          }}
-          maxWidth="sm"
-          fullWidth
-          PaperProps={{
-            sx: {
-              borderRadius: 2,
-              boxShadow: "0 12px 40px rgba(0, 0, 0, 0.12)",
-            },
-          }}
-        >
-          <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-            <DescriptionIcon color="primary" />
-            <span>Add key descriptions</span>
-          </DialogTitle>
-          <DialogContent sx={{ px: 3, pt: 0, pb: 1 }}>
-            <Typography variant="body1" color="text.secondary">
-              Some key items don&apos;t have descriptions. Add descriptions so
-              the site plan key is clear, or save without adding them.
-            </Typography>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2 }}>
-            <Button
-              onClick={handleSitePlanKeyReminderSaveAnyway}
-              variant="outlined"
-              color="inherit"
-            >
-              Save anyway
-            </Button>
-            <Button
-              onClick={handleSitePlanKeyReminderAddDescriptions}
-              variant="contained"
-              startIcon={<DescriptionIcon />}
-            >
-              Add descriptions
-            </Button>
-          </DialogActions>
-        </Dialog>
       </Box>
     </PermissionGate>
   );

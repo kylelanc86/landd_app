@@ -20,6 +20,12 @@ const shiftSchema = new mongoose.Schema({
     type: Date,
     required: true
   },
+  // Optional override for this shift only. Empty means use the job's asbestosRemovalist.
+  asbestosRemovalist: {
+    type: String,
+    required: false,
+    trim: true
+  },
   startTime: {
     type: String,
     required: true

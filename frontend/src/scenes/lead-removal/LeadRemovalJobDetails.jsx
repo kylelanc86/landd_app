@@ -191,6 +191,8 @@ const LeadRemovalJobDetails = () => {
   const clearancePdfCompletionHandledRef = useRef(null); // guard against double-download when poll runs twice
   const [clearanceDownloadDialogOpen, setClearanceDownloadDialogOpen] =
     useState(false);
+  const [clearanceRegeneratePrompt, setClearanceRegeneratePrompt] =
+    useState(null);
   const [sendingAuthorisationRequests, setSendingAuthorisationRequests] =
     useState({});
   const [
@@ -747,7 +749,7 @@ const LeadRemovalJobDetails = () => {
           setClearances((prev) =>
             prev.map((c) =>
               String(c._id) === String(clearanceId)
-                ? { ...c, pdfReadyAt: now, updatedAt: now }
+                ? { ...c, pdfReadyAt: now, updatedAt: now, hasStoredPdf: true }
                 : c,
             ),
           );
@@ -1758,16 +1760,17 @@ const LeadRemovalJobDetails = () => {
     }
   };
 
-  // Green icon = retained PDF available → click only downloads. Orange = no PDF yet → click generates then downloads.
-  const hasRetainedValidPdf = (clearance) =>
-    !!(clearance.pdfReadyAt || clearance.pdfDownloadUrl);
+  // Green only when a PDF is stored on this server. Otherwise orange, and the click generates.
+  const hasRetainedValidPdf = (clearance) => clearance?.hasStoredPdf === true;
 
   const handleDownloadOrGenerateClearanceReport = async (clearance, event) => {
     event?.stopPropagation();
+    event?.currentTarget?.blur?.();
     if (hasRetainedValidPdf(clearance)) {
       setClearanceDownloadDialogOpen(true);
       const dialogOpenedAt = Date.now();
       const minDialogMs = 500;
+      let downloadFailed = false;
       try {
         const { filename } = await downloadLeadClearancePDFByClearanceId(
           clearance._id,
@@ -1781,29 +1784,32 @@ const LeadRemovalJobDetails = () => {
         }
       } catch (err) {
         console.error("Error downloading lead clearance PDF:", err);
-        const msg = err.message || "";
-        const isNoPdf =
-          /no pdf|not available|retention|generate the pdf first/i.test(msg);
-        if (isNoPdf) {
-          showSnackbar("No PDF available. Starting generation…", "info");
-          handleOpenLeadClearancePdfDialog(clearance, event);
-        } else {
-          showSnackbar(msg || "Failed to download PDF", "error");
-        }
+        downloadFailed = true;
+        setClearanceRegeneratePrompt(clearance);
       } finally {
-        const elapsed = Date.now() - dialogOpenedAt;
-        if (elapsed < minDialogMs) {
-          setTimeout(
-            () => setClearanceDownloadDialogOpen(false),
-            minDialogMs - elapsed,
-          );
-        } else {
+        if (downloadFailed) {
           setClearanceDownloadDialogOpen(false);
+        } else {
+          const elapsed = Date.now() - dialogOpenedAt;
+          if (elapsed < minDialogMs) {
+            setTimeout(
+              () => setClearanceDownloadDialogOpen(false),
+              minDialogMs - elapsed,
+            );
+          } else {
+            setClearanceDownloadDialogOpen(false);
+          }
         }
       }
     } else {
       handleOpenLeadClearancePdfDialog(clearance, event);
     }
+  };
+
+  const confirmRegenerateClearanceReport = () => {
+    const clearance = clearanceRegeneratePrompt;
+    setClearanceRegeneratePrompt(null);
+    if (clearance) handleOpenLeadClearancePdfDialog(clearance);
   };
 
   const handleAuthoriseClearanceReport = async (clearance, event) => {
@@ -2263,12 +2269,44 @@ const LeadRemovalJobDetails = () => {
         PaperProps={{ sx: { borderRadius: 2 } }}
       >
         <DialogTitle>Downloading report</DialogTitle>
-        <DialogContent>
+        <DialogContent tabIndex={-1}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 2, py: 2 }}>
             <CircularProgress size={24} />
             <Typography>The report is downloading. Please wait.</Typography>
           </Box>
         </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(clearanceRegeneratePrompt)}
+        onClose={() => setClearanceRegeneratePrompt(null)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 2 } }}
+      >
+        <DialogTitle>Report could not be downloaded</DialogTitle>
+        <DialogContent>
+          <Typography>
+            The saved report could not be downloaded. Would you like to regenerate it?
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            onClick={() => setClearanceRegeneratePrompt(null)}
+            variant="outlined"
+            sx={{ textTransform: "none" }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={confirmRegenerateClearanceReport}
+            variant="contained"
+            color="warning"
+            sx={{ textTransform: "none" }}
+          >
+            Regenerate
+          </Button>
+        </DialogActions>
       </Dialog>
 
       {/* Breadcrumbs */}

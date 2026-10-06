@@ -4,10 +4,11 @@ const { getNotificationSnapshot } = require("./calibrationCanonicalService");
 const { formatDateSydney, nowSydneyDateTime, SYDNEY_TZ } = require("../utils/dateUtils");
 
 const BRAND_GREEN = "rgb(25, 138, 44)";
-const SECTION_ORDER = ["Calibration", "IAQ", "Audit"];
+const SECTION_ORDER = ["Calibration", "IAQ", "Consumable", "Audit"];
 const SECTION_TITLES = {
   Calibration: "Calibrations",
   IAQ: "IAQ",
+  Consumable: "Consumables",
   Audit: "Audits",
 };
 
@@ -30,9 +31,12 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
-function formatDueText(daysUntilDue) {
+function formatDueText(daysUntilDue, recordType) {
   if (typeof daysUntilDue !== "number" || Number.isNaN(daysUntilDue)) {
     return "—";
+  }
+  if (recordType === "Consumable" && daysUntilDue < 0) {
+    return "Overdue";
   }
   if (daysUntilDue < 0) {
     const days = Math.abs(daysUntilDue);
@@ -57,6 +61,7 @@ function groupRowsByRecordType(rows = []) {
   const groups = {
     Calibration: [],
     IAQ: [],
+    Consumable: [],
     Audit: [],
   };
 
@@ -85,7 +90,7 @@ function buildSectionTableHtml(rows) {
           <td style="padding: 8px 10px; border-bottom: 1px solid #eee; color: ${color};">${escapeHtml(row.recordDescription || "—")}</td>
           <td style="padding: 8px 10px; border-bottom: 1px solid #eee; color: ${color};">${escapeHtml(row.equipmentReference || "—")}</td>
           <td style="padding: 8px 10px; border-bottom: 1px solid #eee; color: ${color};">${escapeHtml(formatDateSydney(row.dueDate) || "—")}</td>
-          <td style="padding: 8px 10px; border-bottom: 1px solid #eee; color: ${color}; font-weight: 600;">${escapeHtml(formatDueText(row.daysUntilDue))}</td>
+          <td style="padding: 8px 10px; border-bottom: 1px solid #eee; color: ${color}; font-weight: 600;">${escapeHtml(formatDueText(row.daysUntilDue, row.recordType))}</td>
         </tr>`;
     })
     .join("");
@@ -117,7 +122,7 @@ function buildSectionText(title, rows) {
       ? ` (${row.equipmentReference})`
       : "";
     const dueDate = formatDateSydney(row.dueDate) || "—";
-    return `  - ${description}${equipment} — ${dueDate} — ${formatDueText(row.daysUntilDue)}`;
+    return `  - ${description}${equipment} — ${dueDate} — ${formatDueText(row.daysUntilDue, row.recordType)}`;
   });
 
   return `${title} (${rows.length})\n${lines.join("\n")}\n`;

@@ -95,14 +95,53 @@ const LDsuppliedJobs = () => {
   useEffect(() => {
     fetchAsbestosAssessments();
     fetchStandaloneLDJobs();
-    fetchProjects();
   }, []);
+
+  const applySampleCounts = (setter, rows) => {
+    const byId = new Map(
+      (Array.isArray(rows) ? rows : []).map((row) => [String(row._id), row]),
+    );
+    setter((prev) =>
+      prev.map((row) => {
+        const match = byId.get(String(row._id));
+        if (!match) return { ...row, sampleCountLoaded: true };
+        return {
+          ...row,
+          sampleCount: match.sampleCount,
+          allSamplesAnalysed:
+            typeof match.allSamplesAnalysed === "boolean"
+              ? match.allSamplesAnalysed
+              : row.allSamplesAnalysed,
+          sampleCountLoaded: true,
+        };
+      }),
+    );
+  };
+
+  const loadSampleCounts = (ids, request, setter) => {
+    if (!ids.length) return;
+    request(ids)
+      .then((response) => applySampleCounts(setter, response.data))
+      .catch((error) => {
+        console.error("Error loading sample counts:", error);
+        setter((prev) => prev.map((row) => ({ ...row, sampleCountLoaded: true })));
+      });
+  };
 
   const fetchStandaloneLDJobs = async () => {
     try {
-      const response = await clientSuppliedJobsService.getAll({ supplyType: "ld" });
+      const response = await clientSuppliedJobsService.getAll({
+        supplyType: "ld",
+        summary: 1,
+      });
       const data = response.data || [];
-      setStandaloneJobs(Array.isArray(data) ? data : []);
+      const jobs = Array.isArray(data) ? data : [];
+      setStandaloneJobs(jobs);
+      loadSampleCounts(
+        jobs.map((job) => job._id).filter(Boolean),
+        clientSuppliedJobsService.getSampleCounts,
+        setStandaloneJobs,
+      );
     } catch (error) {
       console.error("Error fetching standalone L&D supplied jobs:", error);
       setStandaloneJobs([]);
@@ -155,34 +194,22 @@ const LDsuppliedJobs = () => {
   const fetchAsbestosAssessments = async () => {
     try {
       setLoading(true);
-      // Standard + residential asbestos assessments only (exclude lead-assessment rows).
-      const [standardRes, residentialRes] = await Promise.all([
-        asbestosAssessmentService.getAsbestosAssessments({
-          list: 1,
-          jobType: "asbestos-assessment",
-        }),
-        asbestosAssessmentService.getAsbestosAssessments({
-          list: 1,
-          jobType: "residential-asbestos",
-        }),
-      ]);
-
-      const standard = standardRes.data || [];
-      const residential = residentialRes.data || [];
-      const mergedById = new Map();
-      [...(Array.isArray(standard) ? standard : []), ...(Array.isArray(residential) ? residential : [])].forEach(
-        (a) => {
-          if (!a || !a._id) return;
-          mergedById.set(String(a._id), a);
-        },
-      );
-      const merged = Array.from(mergedById.values());
-
-      // Show only L&D supplied assessments where sample submission was confirmed (samplesReceivedDate set)
-      const submittedOnly = merged
+      // Submitted standard + residential assessments only. Summary omits item photos.
+      const response = await asbestosAssessmentService.getAsbestosAssessments({
+        summary: 1,
+        samplesSubmitted: 1,
+        jobType: "ld-supplied",
+      });
+      const jobs = response.data || [];
+      const submittedOnly = (Array.isArray(jobs) ? jobs : [])
         .filter(isLdSuppliedAssessmentRow)
         .filter(hasSamplesSubmittedToLab);
       setAssessments(submittedOnly);
+      loadSampleCounts(
+        submittedOnly.map((job) => job._id).filter(Boolean),
+        asbestosAssessmentService.getSampleCounts,
+        setAssessments,
+      );
     } catch (error) {
       console.error("Error fetching asbestos assessments:", error);
     } finally {
@@ -274,22 +301,10 @@ const LDsuppliedJobs = () => {
   };
 
   // Number of sampled items: unique sample numbers (distinct sampleReference, excluding visually assessed)
-  const getUniqueSampleCount = (assessment) => {
-    if (!assessment.items || assessment.items.length === 0) {
-      return 0;
-    }
-    const items = assessment.items;
-    const uniqueRefs = new Set();
-    items.forEach((item) => {
-      if (!item.sampleReference || item.sampleReference.trim() === "") return;
-      const isVisuallyAssessed =
-        item.asbestosContent === "Visually Assessed as Asbestos" ||
-        item.asbestosContent === "Visually Assessed as Non-Asbestos" ||
-        item.asbestosContent === "Visually Assessed as Non-asbestos";
-      if (isVisuallyAssessed) return;
-      uniqueRefs.add(item.sampleReference.trim());
-    });
-    return uniqueRefs.size;
+  const formatSampleCount = (record) => {
+    if (typeof record?.sampleCount === "number") return record.sampleCount;
+    if (record?.sampleCountLoaded) return "—";
+    return "…";
   };
 
   // L&D supplied jobs table status only (samples-in-lab | analysis-complete); not the linked assessment workflow status
@@ -628,7 +643,7 @@ const LDsuppliedJobs = () => {
         response.data?.message ||
           `Authorisation request emails sent successfully to ${
             response.data?.recipients?.length || 0
-          } report proofer user(s)`,
+          } lab signatory user(s)`,
         "success",
       );
       setAssessments((prev) =>
@@ -654,6 +669,9 @@ const LDsuppliedJobs = () => {
   };
 
   const areAllSamplesAnalysed = (job) => {
+    if (typeof job?.allSamplesAnalysed === "boolean") {
+      return job.allSamplesAnalysed;
+    }
     if (!job || !job.samples || job.samples.length === 0) return false;
     return job.samples.every(
       (sample) =>
@@ -753,7 +771,7 @@ const LDsuppliedJobs = () => {
       setSendingAuthorisationRequests((prev) => ({ ...prev, [job._id]: true }));
       await clientSuppliedJobsService.sendForAuthorisation(job._id);
       showSnackbar(
-        "Authorisation request emails sent successfully to report proofer user(s).",
+        "Authorisation request emails sent successfully to lab signatory user(s).",
         "success",
       );
       setStandaloneJobs((prev) =>
@@ -928,78 +946,13 @@ const LDsuppliedJobs = () => {
     return "success.main"; // Not overdue - green (same as ClientSuppliedJobs)
   };
 
-  const getAssessmentDueDate = (assessment) => {
-    if (assessment.analysisDueDate) {
-      const due = new Date(assessment.analysisDueDate);
-      return isNaN(due.getTime()) ? null : due;
-    }
-    if (assessment.samplesReceivedDate && assessment.turnaroundTime) {
-      const receivedDate = new Date(assessment.samplesReceivedDate);
-      const dueDate = new Date(receivedDate);
-      if (assessment.turnaroundTime === "3 day") {
-        dueDate.setDate(receivedDate.getDate() + 3);
-      } else if (assessment.turnaroundTime === "24 hours") {
-        dueDate.setHours(receivedDate.getHours() + 24);
-      } else {
-        dueDate.setDate(receivedDate.getDate() + 3);
-      }
-      return dueDate;
-    }
-    if (assessment.samplesReceivedDate) {
-      const receivedDate = new Date(assessment.samplesReceivedDate);
-      const dueDate = new Date(receivedDate);
-      dueDate.setDate(receivedDate.getDate() + 3);
-      return dueDate;
-    }
-    return null;
-  };
+  const projectIdNumber = (record) =>
+    parseInt(String(record?.projectId?.projectID || "").replace(/\D/g, ""), 10) || 0;
 
-  const compareByDueDateWithCompleteLast = (
-    aDueDate,
-    aIsComplete,
-    bDueDate,
-    bIsComplete,
-  ) => {
-    if (aIsComplete !== bIsComplete) {
-      return aIsComplete ? 1 : -1;
-    }
-    if (!aDueDate && !bDueDate) return 0;
-    if (!aDueDate) return 1;
-    if (!bDueDate) return -1;
-    return aDueDate.getTime() - bDueDate.getTime();
-  };
-
-  const sortedAssessments = [...assessments].sort((a, b) => {
-    const aLabStatus = getLabSamplesStatus(a);
-    const bLabStatus = getLabSamplesStatus(b);
-    const aIsComplete = aLabStatus === "analysis-complete";
-    const bIsComplete = bLabStatus === "analysis-complete";
-    const aDueDate = getAssessmentDueDate(a);
-    const bDueDate = getAssessmentDueDate(b);
-    return compareByDueDateWithCompleteLast(
-      aDueDate,
-      aIsComplete,
-      bDueDate,
-      bIsComplete,
-    );
-  });
-
-  const sortedStandaloneJobs = [...standaloneJobs].sort((a, b) => {
-    const aStatus = (a.status || "").trim().toLowerCase();
-    const bStatus = (b.status || "").trim().toLowerCase();
-    const aIsComplete =
-      aStatus === "analysis complete" || aStatus === "analysis-complete";
-    const bIsComplete =
-      bStatus === "analysis complete" || bStatus === "analysis-complete";
-    const aDueDate = a.analysisDueDate ? new Date(a.analysisDueDate) : null;
-    const bDueDate = b.analysisDueDate ? new Date(b.analysisDueDate) : null;
-    return compareByDueDateWithCompleteLast(
-      aDueDate && !isNaN(aDueDate.getTime()) ? aDueDate : null,
-      aIsComplete,
-      bDueDate && !isNaN(bDueDate.getTime()) ? bDueDate : null,
-      bIsComplete,
-    );
-  });
+  const sortedRows = [
+    ...assessments.map((row) => ({ kind: "assessment", row })),
+    ...standaloneJobs.map((row) => ({ kind: "job", row })),
+  ].sort((a, b) => projectIdNumber(b.row) - projectIdNumber(a.row));
 
   return (
     <Container maxWidth="xl">
@@ -1020,7 +973,10 @@ const LDsuppliedJobs = () => {
               variant="contained"
               color="primary"
               startIcon={<AddIcon />}
-              onClick={() => setCreateDialogOpen(true)}
+              onClick={() => {
+                setCreateDialogOpen(true);
+                if (projects.length === 0) fetchProjects();
+              }}
               sx={{ minWidth: "200px" }}
             >
               Add New Job
@@ -1111,8 +1067,9 @@ const LDsuppliedJobs = () => {
                   </TableRow>
                 ) : (
                   <>
-                  {sortedAssessments.map((assessment) => {
-                    const sampleCount = getUniqueSampleCount(assessment);
+                  {sortedRows.map((entry) => entry.kind === "assessment" ? (() => {
+                    const assessment = entry.row;
+                    const sampleCount = formatSampleCount(assessment);
                     const labStatus = getLabSamplesStatus(assessment);
                     const isAnalysisComplete = labStatus === "analysis-complete";
                     const projectClientName = getProjectClientName(
@@ -1280,12 +1237,11 @@ const LDsuppliedJobs = () => {
                                   currentUser,
                                   "asbestos.edit",
                                 ),
-                                isReportProofer: Boolean(
-                                  currentUser?.reportProofer,
+                                isLabSignatory: Boolean(
+                                  currentUser?.labSignatory,
                                 ),
                               };
-                              const canAuthorise =
-                                conditions.isReportProofer;
+                              const canAuthorise = conditions.isLabSignatory;
                               // Authorise/Send: after viewing, when lab complete, Fibre ID not yet approved, and assessment not yet authorised
                               const baseVisibleAuthorise =
                                 conditions.reportViewed &&
@@ -1366,8 +1322,8 @@ const LDsuppliedJobs = () => {
                         </TableCell>
                       </TableRow>
                     );
-                  })}
-                  {sortedStandaloneJobs.map((job) => {
+                  })() : (() => {
+                    const job = entry.row;
                     const projectClientName = getProjectClientName(job.projectId);
                     const normalizedStatus = (job.status || "")
                       .trim()
@@ -1415,7 +1371,7 @@ const LDsuppliedJobs = () => {
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2" sx={{ fontWeight: "medium" }}>
-                          {job.samples?.length || 0}
+                          {formatSampleCount(job)}
                         </Typography>
                       </TableCell>
                       <TableCell sx={{ maxWidth: "120px" }}>
@@ -1464,7 +1420,7 @@ const LDsuppliedJobs = () => {
                               startIcon={<PdfIcon />}
                               disabled={
                                 generatingPDF[job._id] ||
-                                (job.samples?.length || 0) === 0 ||
+                                (job.sampleCount ?? job.samples?.length ?? 0) === 0 ||
                                 !areAllSamplesAnalysed(job)
                               }
                             >
@@ -1583,7 +1539,7 @@ const LDsuppliedJobs = () => {
                       </TableCell>
                     </TableRow>
                     );
-                  })}
+                  })())}
                   </>
                 )}
               </TableBody>

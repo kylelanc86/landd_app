@@ -1,7 +1,10 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const ClientSuppliedJob = require('../models/ClientSuppliedJob');
 const Project = require('../models/Project');
+const Client = require('../models/Client');
+const AsbestosAssessment = require('../models/assessmentTemplates/asbestos/AsbestosAssessment');
 const User = require('../models/User');
 const { sendMail } = require('../services/mailer');
 const {
@@ -15,17 +18,89 @@ const {
   buildFibreIDFilename,
   toReportReference,
 } = require('../utils/reportFilenames');
+const {
+  hasClientSuppliedReportApproval,
+  isReportableClientSuppliedJob,
+  unarchiveClientSuppliedJobsStuckAfterRevise,
+} = require('../utils/clientSuppliedJobStatus');
 
 /** AsbestosAssessment collection name in Mongo (mongoose default plural, lowercased). */
 const ASBESTOS_ASSESSMENT_COLLECTION = 'asbestosassessments';
+
+async function invalidateJobProjectCategories(job) {
+  if (!job?.projectId) return;
+  try {
+    const {
+      invalidateReportCategories,
+    } = require('../services/projectReportCategoriesService');
+    await invalidateReportCategories(job.projectId._id || job.projectId);
+  } catch (err) {
+    console.error('Error invalidating report categories for client supplied job:', err);
+  }
+}
 
 /**
  * Pipeline stages: populate project + client, then exclude LD jobs whose linked assessment is soft-deleted.
  * Optional query includeLinkedDeletedAssessments=1|true skips the linked-deleted filter.
  */
-function buildClientSuppliedJobListPipeline({ baseMatch, includeLinkedDeletedAssessments }) {
-  const pipeline = [
-    { $match: baseMatch },
+function buildClientSuppliedJobListPipeline({
+  baseMatch,
+  includeLinkedDeletedAssessments,
+  summary = false,
+}) {
+  const pipeline = [{ $match: baseMatch }];
+
+  // Drop chain-of-custody files and sample bodies before lookups. The table only needs
+  // project, client, receipt date, status, sample count, and whether analysis is finished.
+  if (summary) {
+    pipeline.push({
+      $project: {
+        projectId: 1,
+        status: 1,
+        jobType: 1,
+        supplyType: 1,
+        sampleReceiptDate: 1,
+        analysisDueDate: 1,
+        turnaroundTime: 1,
+        sampledBy: 1,
+        archived: 1,
+        reportApprovedBy: 1,
+        reportIssueDate: 1,
+        reportViewedAt: 1,
+        authorisationRequestedBy: 1,
+        linkedAssessmentId: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        sampleCount: { $size: { $ifNull: ['$samples', []] } },
+        allSamplesAnalysed: {
+          $let: {
+            vars: { samples: { $ifNull: ['$samples', []] } },
+            in: {
+              $and: [
+                { $gt: [{ $size: '$$samples' }, 0] },
+                {
+                  $allElementsTrue: {
+                    $map: {
+                      input: '$$samples',
+                      as: 'sample',
+                      in: {
+                        $and: [
+                          { $eq: ['$$sample.analysisData.isAnalysed', true] },
+                          { $ne: [{ $ifNull: ['$$sample.analysedAt', null] }, null] },
+                        ],
+                      },
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        },
+      },
+    });
+  }
+
+  pipeline.push(
     { $sort: { createdAt: -1 } },
     {
       $lookup: {
@@ -66,7 +141,7 @@ function buildClientSuppliedJobListPipeline({ baseMatch, includeLinkedDeletedAss
       },
     },
     { $project: { projectIdArr: 0, clientArr: 0 } },
-  ];
+  );
 
   if (!includeLinkedDeletedAssessments) {
     pipeline.push(
@@ -96,10 +171,136 @@ function buildClientSuppliedJobListPipeline({ baseMatch, includeLinkedDeletedAss
   return pipeline;
 }
 
+const LD_STANDALONE_INDEX = 'clientSuppliedJob_ld_table';
+const LD_STANDALONE_SELECT = {
+  supplyType: 1,
+  archived: 1,
+  projectId: 1,
+  status: 1,
+  jobType: 1,
+  sampleReceiptDate: 1,
+  analysisDueDate: 1,
+  reportApprovedBy: 1,
+  reportViewedAt: 1,
+  authorisationRequestedBy: 1,
+  linkedAssessmentId: 1,
+};
+
+async function attachLdProjectSummary(jobs) {
+  const projectIds = [];
+  const seen = new Set();
+  for (const job of jobs) {
+    if (!job?.projectId) continue;
+    const key = String(job.projectId);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    projectIds.push(job.projectId);
+  }
+  const projects = projectIds.length
+    ? await Project.find({ _id: { $in: projectIds } }).select('projectID name client').lean()
+    : [];
+  const clientIds = [];
+  const seenClients = new Set();
+  for (const project of projects) {
+    if (!project.client) continue;
+    const key = String(project.client);
+    if (seenClients.has(key)) continue;
+    seenClients.add(key);
+    clientIds.push(project.client);
+  }
+  const clients = clientIds.length
+    ? await Client.find({ _id: { $in: clientIds } }).select('name').lean()
+    : [];
+  const clientById = new Map(clients.map((client) => [String(client._id), client]));
+  const projectById = new Map(
+    projects.map((project) => {
+      const client = project.client ? clientById.get(String(project.client)) : null;
+      return [
+        String(project._id),
+        {
+          _id: project._id,
+          projectID: project.projectID,
+          name: project.name,
+          client: client ? { _id: client._id, name: client.name } : null,
+        },
+      ];
+    }),
+  );
+  return jobs.map((job) => ({
+    ...job,
+    projectId: job.projectId ? projectById.get(String(job.projectId)) || null : null,
+  }));
+}
+
+/** Index-only standalone L&D rows. Sample counts are loaded by a later request. */
+async function loadLdStandaloneSummary() {
+  let rows;
+  try {
+    rows = await ClientSuppliedJob.find({ supplyType: 'ld' })
+      .select(LD_STANDALONE_SELECT)
+      .hint(LD_STANDALONE_INDEX)
+      .lean();
+  } catch (err) {
+    console.error('L&D standalone index hint failed, falling back:', err.message);
+    rows = await ClientSuppliedJob.find({ supplyType: 'ld' })
+      .select(LD_STANDALONE_SELECT)
+      .lean();
+  }
+  let openRows = (rows || []).filter((row) => row?.archived !== true);
+  const linkedIds = openRows.map((row) => row.linkedAssessmentId).filter(Boolean);
+  if (linkedIds.length > 0) {
+    const deleted = await AsbestosAssessment.find({
+      _id: { $in: linkedIds },
+      deletedAt: { $type: 'date' },
+    })
+      .select('_id')
+      .lean();
+    const deletedIds = new Set(deleted.map((doc) => String(doc._id)));
+    openRows = openRows.filter(
+      (row) => !row.linkedAssessmentId || !deletedIds.has(String(row.linkedAssessmentId)),
+    );
+  }
+  return attachLdProjectSummary(openRows);
+}
+
+function allSamplesAnalysedExpression() {
+  return {
+    $let: {
+      vars: { samples: { $ifNull: ['$samples', []] } },
+      in: {
+        $and: [
+          { $gt: [{ $size: '$$samples' }, 0] },
+          {
+            $allElementsTrue: {
+              $map: {
+                input: '$$samples',
+                as: 'sample',
+                in: {
+                  $and: [
+                    { $eq: ['$$sample.analysisData.isAnalysed', true] },
+                    { $ne: [{ $ifNull: ['$$sample.analysedAt', null] }, null] },
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      },
+    },
+  };
+}
+
 // GET /api/client-supplied-jobs - get all client supplied jobs (excludes archived by default)
 // Query: supplyType=client | ld — when 'ld', return only L&D supplied (standalone) jobs; when 'client' or omitted, return only client supplied jobs
 router.get('/', auth, checkPermission('clientSup.view'), async (req, res) => {
   try {
+    const healed = await unarchiveClientSuppliedJobsStuckAfterRevise();
+    await Promise.all(
+      healed.projectIds.map((projectId) =>
+        invalidateJobProjectCategories({ projectId }),
+      ),
+    );
+
     // Filter out archived jobs by default
     const filter = { archived: { $ne: true } };
     const supplyType = req.query.supplyType;
@@ -115,9 +316,15 @@ router.get('/', auth, checkPermission('clientSup.view'), async (req, res) => {
     }
 
     if (supplyType === 'ld') {
+      const summary = req.query.summary === '1' || req.query.summary === 'true';
+      if (summary) {
+        const jobs = await loadLdStandaloneSummary();
+        return res.json(jobs);
+      }
       const pipeline = buildClientSuppliedJobListPipeline({
         baseMatch: filter,
         includeLinkedDeletedAssessments,
+        summary,
       });
       const jobs = await ClientSuppliedJob.aggregate(pipeline);
       return res.json(jobs);
@@ -151,6 +358,11 @@ router.get('/by-project/:projectId', auth, checkPermission('clientSup.view'), as
     
     console.log('Fetching client supplied jobs by project:', projectId);
 
+    const healed = await unarchiveClientSuppliedJobsStuckAfterRevise(projectId);
+    await Promise.all(
+      healed.projectIds.map((id) => invalidateJobProjectCategories({ projectId: id })),
+    );
+
     const filter = { projectId };
     if (!includeArchived) {
       filter.archived = { $ne: true };
@@ -175,6 +387,31 @@ router.get('/by-project/:projectId', auth, checkPermission('clientSup.view'), as
       message: 'Failed to fetch client supplied jobs by project', 
       error: err.message 
     });
+  }
+});
+
+// POST /api/client-supplied-jobs/sample-counts - sample totals after the table is shown
+router.post('/sample-counts', auth, checkPermission('clientSup.view'), async (req, res) => {
+  try {
+    const rawIds = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    const ids = rawIds
+      .map((id) => String(id))
+      .filter((id) => mongoose.Types.ObjectId.isValid(id))
+      .slice(0, 500)
+      .map((id) => new mongoose.Types.ObjectId(id));
+    if (ids.length === 0) return res.json([]);
+    const rows = await ClientSuppliedJob.aggregate([
+      { $match: { _id: { $in: ids } } },
+      {
+        $project: {
+          sampleCount: { $size: { $ifNull: ['$samples', []] } },
+          allSamplesAnalysed: allSamplesAnalysedExpression(),
+        },
+      },
+    ]);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to count samples', error: err.message });
   }
 });
 
@@ -360,7 +597,7 @@ router.post('/', auth, checkPermission('clientSup.create'), async (req, res) => 
 router.put('/:id', auth, checkPermission('clientSup.edit'), async (req, res) => {
   try {
     const existing = await ClientSuppliedJob.findById(req.params.id).select(
-      'reportIssueDate reportReference',
+      'reportIssueDate reportReference reportApprovedBy projectId',
     );
     if (!existing) {
       return res.status(404).json({ message: 'Client supplied job not found' });
@@ -374,6 +611,11 @@ router.put('/:id', auth, checkPermission('clientSup.edit'), async (req, res) => 
     if (existing.reportReference) {
       delete updatePayload.reportReference;
     }
+
+    const approvalCleared =
+      hasClientSuppliedReportApproval(existing) &&
+      Object.prototype.hasOwnProperty.call(req.body, 'reportApprovedBy') &&
+      !hasClientSuppliedReportApproval(req.body);
 
     const job = await ClientSuppliedJob.findByIdAndUpdate(
       req.params.id,
@@ -392,6 +634,10 @@ router.put('/:id', auth, checkPermission('clientSup.edit'), async (req, res) => 
     if (!job) {
       return res.status(404).json({ message: 'Client supplied job not found' });
     }
+
+    if (approvalCleared) {
+      await invalidateJobProjectCategories(job);
+    }
     
     res.json(job);
   } catch (err) {
@@ -402,22 +648,97 @@ router.put('/:id', auth, checkPermission('clientSup.edit'), async (req, res) => 
 // PUT /api/client-supplied-jobs/:id/archive - archive job
 router.put('/:id/archive', auth, checkPermission('clientSup.edit'), async (req, res) => {
   try {
-    const job = await ClientSuppliedJob.findByIdAndUpdate(
-      req.params.id,
-      {
-        archived: true,
-        archivedAt: new Date()
-      },
-      { new: true }
-    );
+    const existing = await ClientSuppliedJob.findById(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ message: 'Client supplied job not found' });
+    }
 
+    if (!isReportableClientSuppliedJob(existing)) {
+      return res.status(400).json({
+        message: 'Job must be authorised before it can be closed',
+      });
+    }
+
+    existing.archived = true;
+    existing.archivedAt = new Date();
+    existing.updatedAt = new Date();
+    await existing.save();
+
+    res.json({ message: 'Job archived successfully', job: existing });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to archive job', error: err.message });
+  }
+});
+
+// POST /api/client-supplied-jobs/:id/revise-report — from Project Reports
+router.post('/:id/revise-report', auth, checkPermission('clientSup.edit'), async (req, res) => {
+  try {
+    const job = await ClientSuppliedJob.findById(req.params.id);
     if (!job) {
       return res.status(404).json({ message: 'Client supplied job not found' });
     }
 
-    res.json({ message: 'Job archived successfully', job });
+    const stuckAfterClose =
+      job.archived === true &&
+      job.status === 'Analysis Complete' &&
+      !hasClientSuppliedReportApproval(job);
+
+    if (!isReportableClientSuppliedJob(job) && !stuckAfterClose) {
+      return res.status(400).json({
+        message:
+          'This report cannot be revised from Project Reports. It must be authorised.',
+      });
+    }
+
+    job.revision = (typeof job.revision === 'number' ? job.revision : 0) + 1;
+    job.status = 'Analysis Complete';
+    job.reportApprovedBy = undefined;
+    job.markModified('reportApprovedBy');
+    job.authorisationRequestedBy = undefined;
+    job.authorisationRequestedByEmail = undefined;
+    job.markModified('authorisationRequestedBy');
+    job.archived = false;
+    job.archivedAt = undefined;
+    job.markModified('archived');
+    job.markModified('archivedAt');
+    job.updatedAt = new Date();
+    await job.save();
+    await ClientSuppliedJob.updateOne(
+      { _id: job._id },
+      {
+        $unset: {
+          reportApprovedBy: 1,
+          archivedAt: 1,
+          authorisationRequestedBy: 1,
+          authorisationRequestedByEmail: 1,
+          reportViewedAt: 1,
+        },
+      },
+    );
+
+    await invalidateJobProjectCategories(job);
+
+    const populated = await ClientSuppliedJob.findById(job._id).populate({
+      path: 'projectId',
+      select: 'name projectID d_Date createdAt',
+      populate: {
+        path: 'client',
+        select: 'name contact1Name contact1Email',
+      },
+    });
+
+    const jobType = job.jobType === 'Fibre Count' ? 'Fibre Count' : 'Fibre ID';
+    res.json({
+      message:
+        `${jobType} report reopened for editing. The job is back on the Fibre ID jobs list — re-authorise when ready.`,
+      job: populated,
+    });
   } catch (err) {
-    res.status(500).json({ message: 'Failed to archive job', error: err.message });
+    console.error('Error revising client supplied report:', err);
+    res.status(500).json({
+      message: 'Failed to revise report',
+      error: err.message,
+    });
   }
 });
 
@@ -429,6 +750,8 @@ router.delete('/:id', auth, checkPermission('clientSup.delete'), async (req, res
     if (!job) {
       return res.status(404).json({ message: 'Client supplied job not found' });
     }
+
+    await invalidateJobProjectCategories(job);
     
     // Samples are now embedded in the job, so they'll be deleted automatically
     

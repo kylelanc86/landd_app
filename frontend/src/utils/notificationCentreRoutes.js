@@ -35,6 +35,10 @@ export const getNotificationTargetPath = (row) => {
       : "/records/indoor-air-quality";
   }
 
+  if (recordType === "Consumable") {
+    return "/records/laboratory/calibrations/ri-liquid";
+  }
+
   if (recordType === "Audit") {
     // TODO(audit-notifications): Deep link to a specific audit when audit routes support it.
     return "/records/audits";

@@ -28,7 +28,10 @@ const NC_COLORS = {
   dueThisMonth: "#2e7d32",
 };
 
-const formatDueText = (daysUntilDue) => {
+const formatDueText = (daysUntilDue, kind) => {
+  if (kind === "Consumable" && daysUntilDue < 0) {
+    return "Overdue";
+  }
   if (daysUntilDue < 0) {
     return `${Math.abs(daysUntilDue)} day${Math.abs(daysUntilDue) === 1 ? "" : "s"} overdue`;
   }
@@ -203,7 +206,7 @@ const NotificationCentre = () => {
                       {row.equipmentReference || "-"}
                     </TableCell>
                     <TableCell sx={rowTextSx(textColor)}>
-                      {formatDueText(row.daysUntilDue)}
+                      {formatDueText(row.daysUntilDue, row.kind)}
                     </TableCell>
                     <TableCell sx={{ whiteSpace: "nowrap" }}>
                       {targetPath ? (

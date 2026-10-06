@@ -96,8 +96,11 @@ const asbestosAssessmentService = {
   },
 
   // Get assessment items
-  getItems: async (id) => {
-    const response = await api.get(`/assessments/${id}/items`);
+  // options.omitPhotoData: omit base64 from item photos (lazy-load via getItemPhotosData)
+  getItems: async (id, options = {}) => {
+    const params = {};
+    if (options.omitPhotoData) params.omitPhotoData = '1';
+    const response = await api.get(`/assessments/${id}/items`, { params });
     return response.data;
   },
 
@@ -207,13 +210,17 @@ const asbestosAssessmentService = {
     return response.data;
   },
 
-  // Add arrow to photo. Defaults: red, -45deg.
+  // Add arrow to photo. Supports drawn endpoints (x1,y1 → x2,y2) or legacy tip + rotation.
   addPhotoArrow: async (assessmentId, itemId, photoId, arrow) => {
     const response = await api.post(
       `/assessments/${assessmentId}/items/${itemId}/photos/${photoId}/arrows`,
       {
         x: arrow.x ?? 0.5,
         y: arrow.y ?? 0.5,
+        x1: arrow.x1,
+        y1: arrow.y1,
+        x2: arrow.x2 ?? arrow.x,
+        y2: arrow.y2 ?? arrow.y,
         rotation: arrow.rotation ?? -45,
         color: arrow.color ?? '#f44336',
       }

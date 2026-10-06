@@ -433,15 +433,15 @@ export async function generateLeadMonitoringShiftReport({
         table: {
           headerRows: 1,
           dontBreakRows: true,
-          widths: ["14%", "34%", "10%", "10%", "10%", "11%", "11%"],
+          widths: ["14%", "44.3%", "7%", "7%", "9%", "7.7%", "11%"],
           body: [
             [
               { text: "Sample ref.", style: "tableHeader" },
-              { text: "Sample location", style: "tableHeader" },
+              { text: "Sample location", style: "tableHeader", alignment: "left" },
               { text: "Start time", style: "tableHeader" },
               { text: "Finish time", style: "tableHeader" },
               { text: "Flowrate (L/min)", style: "tableHeader" },
-              { text: "Lead Content (µg/filter)", style: "tableHeader" },
+              { text: "Lead Content (µg)", style: "tableHeader" },
               { text: "Lead Conc. (mg/m³)", style: "tableHeader" },
             ],
             ...sortedSamples.map((s) => [
@@ -452,6 +452,7 @@ export async function generateLeadMonitoringShiftReport({
                     ? "Field blank"
                     : (s.location || "-"),
                 style: "tableContent",
+                alignment: "left",
               },
               {
                 text: s.startTime ? formatTime(s.startTime) : "-",

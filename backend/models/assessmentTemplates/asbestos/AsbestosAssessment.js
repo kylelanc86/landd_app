@@ -51,6 +51,11 @@ const AssessmentItemSchema = new mongoose.Schema({
     arrows: [{
       x: { type: Number, required: true },
       y: { type: Number, required: true },
+      // Optional drawn endpoints (tail → tip). Tip mirrors x/y when set.
+      x1: { type: Number, required: false },
+      y1: { type: Number, required: false },
+      x2: { type: Number, required: false },
+      y2: { type: Number, required: false },
       rotation: { type: Number, default: -45 },
       color: { type: String, default: '#f44336' },
     }],
@@ -256,6 +261,15 @@ const AsbestosAssessmentSchema = new mongoose.Schema({
   sitePlanFigureTitle: {
     type: String,
   },
+  /** Asbestos/residential assessments: multiple appendix site plans (array order = PDF order). */
+  sitePlanAppendices: [{
+    sitePlan: { type: Boolean, default: true },
+    sitePlanFile: { type: String },
+    sitePlanSource: { type: String, enum: ['uploaded', 'drawn'] },
+    sitePlanLegend: [{ color: String, description: String }],
+    sitePlanLegendTitle: { type: String },
+    sitePlanFigureTitle: { type: String },
+  }],
   /** Lead assessments: multiple appendix site plans (with optional sample markers baked into image). */
   leadSitePlanAppendices: [{
     sitePlan: { type: Boolean, default: true },
@@ -326,5 +340,53 @@ AsbestosAssessmentSchema.pre('findOneAndUpdate', function (next) {
   }
   next();
 });
+
+AsbestosAssessmentSchema.index(
+  { jobType: 1, samplesReceivedDate: 1, archived: 1, deletedAt: 1 },
+  { name: 'asbestosAssessment_list_summary' },
+);
+
+// Covered by the residential table query so MongoDB can return the row without opening the assessment document (items/photos).
+AsbestosAssessmentSchema.index(
+  {
+    jobType: 1,
+    projectId: 1,
+    assessmentDate: 1,
+    status: 1,
+    reportAuthorisedBy: 1,
+    archived: 1,
+    deletedAt: 1,
+    pdfReadyAt: 1,
+    pdfFilename: 1,
+    authorisationRequestedBy: 1,
+    noSamplesCollected: 1,
+    LAA: 1,
+    state: 1,
+    intrusiveness: 1,
+    _id: 1,
+  },
+  { name: 'asbestosAssessment_residential_table' },
+);
+
+// Covered by the L&D supplied jobs table so sample items and photos are not read with the row.
+AsbestosAssessmentSchema.index(
+  {
+    jobType: 1,
+    projectId: 1,
+    samplesReceivedDate: 1,
+    status: 1,
+    labSamplesStatus: 1,
+    analysisDueDate: 1,
+    turnaroundTime: 1,
+    reportApprovedBy: 1,
+    reportAuthorisedBy: 1,
+    reportViewedAt: 1,
+    authorisationRequestedBy: 1,
+    archived: 1,
+    deletedAt: 1,
+    _id: 1,
+  },
+  { name: 'asbestosAssessment_ld_table' },
+);
 
 module.exports = mongoose.model('AsbestosAssessment', AsbestosAssessmentSchema); 

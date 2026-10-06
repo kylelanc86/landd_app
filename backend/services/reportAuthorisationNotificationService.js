@@ -202,7 +202,7 @@ async function resolveShiftProjectContext(shiftId) {
     reportTypeLabel:
       jobModel === "LeadRemovalJob"
         ? "Lead air monitoring shift"
-        : "Air monitoring shift",
+        : "Asbestos air monitoring shift",
   };
 }
 

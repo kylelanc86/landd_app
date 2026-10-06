@@ -265,24 +265,33 @@ const ProjectLogModal = ({ open, onClose, project }) => {
         );
       }
 
-      // Process clearance reports
+      // Process clearance reports (includes enclosure certificates)
       if (clearanceReportsResult.status === "fulfilled") {
         const clearanceReports = clearanceReportsResult.value || [];
         allReports.push(
-          ...clearanceReports.map((report) => ({
-            id: report.id || report._id,
-            date: report.date || report.clearanceDate,
-            reference: report.reference || report.projectId?.projectID || "N/A",
-            description:
-              report.description ||
-              `${report.clearanceType || "Asbestos"} Clearance`,
-            additionalInfo:
-              report.additionalInfo || report.asbestosRemovalist || "N/A",
-            status: report.status || "Unknown",
-            type: "Asbestos Clearance",
-            category: "clearance",
-            data: report,
-          }))
+          ...clearanceReports.map((report) => {
+            const isEnclosure =
+              report.type === "enclosure_certificate" ||
+              report.isEnclosureCertificate;
+            return {
+              id: report.id || report._id,
+              date: report.date || report.clearanceDate,
+              reference: report.reference || report.projectId?.projectID || "N/A",
+              description:
+                report.description ||
+                (isEnclosure
+                  ? "Enclosure Inspection Certificate"
+                  : `${report.clearanceType || "Asbestos"} Clearance`),
+              additionalInfo:
+                report.additionalInfo || report.asbestosRemovalist || "N/A",
+              status: report.status || "Unknown",
+              type: isEnclosure
+                ? "Enclosure Certificate"
+                : "Asbestos Clearance",
+              category: "clearance",
+              data: report,
+            };
+          })
         );
       }
 

@@ -179,6 +179,27 @@ clientSuppliedJobSchema.pre('save', function(next) {
 clientSuppliedJobSchema.index({ projectId: 1 });
 clientSuppliedJobSchema.index({ status: 1 });
 clientSuppliedJobSchema.index(
+  { archived: 1, status: 1, projectId: 1 },
+  { name: 'clientSuppliedJob_archived_status' },
+);
+clientSuppliedJobSchema.index(
+  {
+    supplyType: 1,
+    archived: 1,
+    projectId: 1,
+    status: 1,
+    jobType: 1,
+    sampleReceiptDate: 1,
+    analysisDueDate: 1,
+    reportApprovedBy: 1,
+    reportViewedAt: 1,
+    authorisationRequestedBy: 1,
+    linkedAssessmentId: 1,
+    _id: 1,
+  },
+  { name: 'clientSuppliedJob_ld_table' },
+);
+clientSuppliedJobSchema.index(
   { jobNumber: 1 },
   {
     unique: true,

@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { stripPdfBuffer } = require("../../../utils/clearanceStoredPdf");
 
 const asbestosClearanceSchema = new mongoose.Schema(
   {
@@ -88,6 +89,15 @@ const asbestosClearanceSchema = new mongoose.Schema(
     sitePlanFigureTitle: {
       type: String,
     },
+    /** Multiple appendix site plans (array order = PDF order). */
+    sitePlanAppendices: [{
+      sitePlan: { type: Boolean, default: true },
+      sitePlanFile: { type: String },
+      sitePlanSource: { type: String, enum: ['uploaded', 'drawn'] },
+      sitePlanLegend: [{ color: String, description: String }],
+      sitePlanLegendTitle: { type: String },
+      sitePlanFigureTitle: { type: String },
+    }],
     /** When the friable enclosure inspection was performed (optional; used on enclosure certificate). */
     enclosureInspectionDateTime: {
       type: Date,
@@ -183,6 +193,11 @@ const asbestosClearanceSchema = new mongoose.Schema(
         arrows: [{
           x: { type: Number, required: true },
           y: { type: Number, required: true },
+          // Optional drawn endpoints (tail → tip). Tip mirrors x/y when set.
+          x1: { type: Number, required: false },
+          y1: { type: Number, required: false },
+          x2: { type: Number, required: false },
+          y2: { type: Number, required: false },
           rotation: { type: Number, default: -45 },
           color: { type: String, default: "#f44336" },
         }],
@@ -268,7 +283,9 @@ const asbestosClearanceSchema = new mongoose.Schema(
     pdfJobId: { type: String, required: false },
     pdfReadyAt: { type: Date, required: false },
     pdfFilename: { type: String, required: false },
-    /** Path to merged PDF (main + appendices) on disk; when set, download streams this file (no fetch/merge). */
+    /** Finished report PDF, kept until clearance content changes. Same role as an assessment pdfBuffer. */
+    pdfBuffer: { type: Buffer, required: false },
+    /** Path to a merged PDF on disk when the buffer would not fit on the document. */
     mergedPdfPath: { type: String, required: false },
     /** Persisted enclosure inspection certificate PDF (separate from main clearance report). */
     enclosureCertificatePdfReadyAt: { type: Date, required: false },
@@ -292,6 +309,8 @@ const asbestosClearanceSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+    toJSON: { transform: stripPdfBuffer },
+    toObject: { transform: stripPdfBuffer },
   }
 );
 

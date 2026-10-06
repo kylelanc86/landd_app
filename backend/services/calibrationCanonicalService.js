@@ -12,6 +12,7 @@ const MycometerCalibration = require("../models/MycometerCalibration");
 const SieveCalibration = require("../models/SieveCalibration");
 const AcetoneVaporiserCalibration = require("../models/AcetoneVaporiserCalibration");
 const RiLiquidCalibration = require("../models/RiLiquidCalibration");
+const RiLiquidBottle = require("../models/RiLiquidBottle");
 const EFACalibration = require("../models/EFACalibration");
 const GraticuleCalibration = require("../models/GraticuleCalibration");
 const HSETestSlideCalibration = require("../models/HSETestSlideCalibration");
@@ -258,6 +259,60 @@ const buildIaqMissingMonthRows = async ({ today, daysWindow }) => {
   return rows;
 };
 
+const REQUIRED_RI_LIQUID_INDEXES = [1.55, 1.67, 1.7];
+
+const formatRiLiquidIndex = (value) => {
+  const numeric = Number(value);
+  if (Number.isNaN(numeric)) return String(value);
+  return numeric.toFixed(2);
+};
+
+const buildMissingRiLiquidBottleRows = async ({ today }) => {
+  const [bottles, activeCalibrations] = await Promise.all([
+    RiLiquidBottle.find({ isEmpty: { $ne: true } })
+      .select("bottleId refractiveIndex")
+      .lean(),
+    RiLiquidCalibration.find({ isEmpty: { $ne: true } })
+      .select("bottleId refractiveIndex")
+      .lean(),
+  ]);
+
+  const presentIndexes = new Set();
+  bottles.forEach((bottle) => {
+    if (bottle.refractiveIndex != null) {
+      presentIndexes.add(formatRiLiquidIndex(bottle.refractiveIndex));
+    }
+  });
+
+  // Legacy bottles may exist only as calibration rows
+  const bottleIds = new Set(bottles.map((bottle) => bottle.bottleId));
+  activeCalibrations.forEach((calibration) => {
+    if (
+      calibration.bottleId &&
+      !bottleIds.has(calibration.bottleId) &&
+      calibration.refractiveIndex != null
+    ) {
+      presentIndexes.add(formatRiLiquidIndex(calibration.refractiveIndex));
+    }
+  });
+
+  return REQUIRED_RI_LIQUID_INDEXES.filter(
+    (ri) => !presentIndexes.has(formatRiLiquidIndex(ri)),
+  ).map((ri) => {
+    const refractiveIndex = formatRiLiquidIndex(ri);
+    return {
+      id: `RI-LIQUID-MISSING-${refractiveIndex}`,
+      recordType: "Consumable",
+      recordDescription: `Missing RI Liquid (${refractiveIndex})`,
+      equipmentReference: null,
+      sourceType: "RI Liquid Bottle",
+      recordId: null,
+      dueDate: today.toISOString(),
+      daysUntilDue: -1,
+    };
+  });
+};
+
 // TODO(audit-notifications): When audit notifications are added, populate auditRows
 // with recordDescription built from audit type + due month, e.g. "Internal Audit - July 2026".
 const buildAuditRecordDescription = (auditType, dueDate) => {
@@ -297,13 +352,21 @@ const buildNotificationRows = async (
     })
     .filter((row) => row.daysUntilDue <= daysWindow);
 
-  const iaqRows = await buildIaqMissingMonthRows({ today: todayUtc, daysWindow });
+  const [iaqRows, missingRiLiquidRows] = await Promise.all([
+    buildIaqMissingMonthRows({ today: todayUtc, daysWindow }),
+    buildMissingRiLiquidBottleRows({ today: todayUtc }),
+  ]);
 
   // TODO(audit-notifications): Load audit records due within daysWindow and map rows with:
   // recordType: "Audit", recordDescription: buildAuditRecordDescription(auditType, dueDate)
   const auditRows = [];
 
-  const allRows = [...rows, ...iaqRows, ...auditRows].map((row) => {
+  const allRows = [
+    ...rows,
+    ...iaqRows,
+    ...missingRiLiquidRows,
+    ...auditRows,
+  ].map((row) => {
     if (row.daysUntilDue < 0) return { ...row, bucket: "overdue", sortOrder: 0 };
     if (row.daysUntilDue < 7) return { ...row, bucket: "dueSoon", sortOrder: 1 };
     return { ...row, bucket: "dueThisMonth", sortOrder: 2 };

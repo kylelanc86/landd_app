@@ -6,17 +6,22 @@ import {
   Paper,
   CircularProgress,
   Alert,
-  Card,
-  CardActionArea,
+  LinearProgress,
   Pagination,
   TextField,
   InputAdornment,
   IconButton,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Autocomplete,
 } from "@mui/material";
-import FolderOpenRoundedIcon from "@mui/icons-material/FolderOpenRounded";
 import { Search as SearchIcon, Clear as ClearIcon } from "@mui/icons-material";
 
-import { projectService } from "../../services/api";
+import { projectService, clientService } from "../../services/api";
 
 const useDebounce = (value, delay) => {
   const [debouncedValue, setDebouncedValue] = useState(value);
@@ -35,6 +40,14 @@ const useDebounce = (value, delay) => {
 };
 
 const ITEMS_PER_PAGE = 100;
+const PROJECT_ID_COL_WIDTH = 160;
+const CLIENT_COL_WIDTH = 300;
+
+const clippedCellSx = {
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
 
 const sortProjectsByID = (list) =>
   [...list].sort((a, b) =>
@@ -44,10 +57,18 @@ const sortProjectsByID = (list) =>
     })
   );
 
+const getClientName = (project) => {
+  const client = project?.client;
+  if (!client) return "—";
+  if (typeof client === "string") return client;
+  return client.name || "—";
+};
+
 const Reports = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const requestIdRef = useRef(0);
+  const hasLoadedOnceRef = useRef(false);
 
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -57,17 +78,21 @@ const Reports = () => {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const [clients, setClients] = useState([]);
+  const [clientsLoading, setClientsLoading] = useState(true);
+  const [selectedClient, setSelectedClient] = useState(null);
 
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
+  const selectedClientId = selectedClient?._id || "";
 
-  const loadProjects = useCallback(async (search, currentPage) => {
+  const loadProjects = useCallback(async (search, currentPage, clientId) => {
     const requestId = ++requestIdRef.current;
 
     try {
-      if (search.trim()) {
-        setSearching(true);
-      } else {
+      if (!hasLoadedOnceRef.current) {
         setLoading(true);
+      } else {
+        setSearching(true);
       }
       setError("");
 
@@ -81,6 +106,10 @@ const Reports = () => {
 
       if (search.trim()) {
         params.search = search.trim();
+      }
+
+      if (clientId) {
+        params.client = clientId;
       }
 
       const response = await projectService.getAll(params);
@@ -123,6 +152,7 @@ const Reports = () => {
       setTotalPages(1);
     } finally {
       if (requestId === requestIdRef.current) {
+        hasLoadedOnceRef.current = true;
         setLoading(false);
         setSearching(false);
       }
@@ -137,18 +167,61 @@ const Reports = () => {
   }, [searchParams]);
 
   const prevSearchRef = useRef(debouncedSearchTerm);
+  const prevClientRef = useRef(selectedClientId);
 
   useEffect(() => {
     const searchChanged = prevSearchRef.current !== debouncedSearchTerm;
+    const clientChanged = prevClientRef.current !== selectedClientId;
     prevSearchRef.current = debouncedSearchTerm;
+    prevClientRef.current = selectedClientId;
 
-    if (searchChanged && page !== 1) {
+    if ((searchChanged || clientChanged) && page !== 1) {
       setPage(1);
       return;
     }
 
-    loadProjects(debouncedSearchTerm, searchChanged ? 1 : page);
-  }, [debouncedSearchTerm, page, loadProjects]);
+    loadProjects(
+      debouncedSearchTerm,
+      searchChanged || clientChanged ? 1 : page,
+      selectedClientId
+    );
+  }, [debouncedSearchTerm, selectedClientId, page, loadProjects]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadClients = async () => {
+      try {
+        setClientsLoading(true);
+        const response = await clientService.getAll();
+        const list = Array.isArray(response.data)
+          ? response.data
+          : response.data?.clients || [];
+        if (cancelled) return;
+        setClients(
+          [...list].sort((a, b) =>
+            String(a.name || "").localeCompare(String(b.name || ""), undefined, {
+              sensitivity: "base",
+            })
+          )
+        );
+      } catch (err) {
+        if (!cancelled) {
+          console.error("Error loading clients:", err);
+          setClients([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setClientsLoading(false);
+        }
+      }
+    };
+
+    loadClients();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleClearSearch = () => {
     setSearchTerm("");
@@ -219,103 +292,106 @@ const Reports = () => {
         </Box>
       ) : (
         <>
-          <Paper sx={{ p: 2, mb: 3 }}>
-            {projects.length === 0 ? (
-              <Box sx={{ py: 6, textAlign: "center" }}>
-                <Typography color="text.secondary">
-                  {searchTerm.trim()
-                    ? "No projects match your search."
-                    : "No projects found."}
-                </Typography>
-              </Box>
-            ) : (
-              <Box
-                sx={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(10, minmax(90px, 1fr))",
-                  gap: 1,
-                  maxWidth: "100%",
-                  "@media (max-width: 1000px)": {
-                    gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))",
-                  },
-                  "@media (max-width: 768px)": {
-                    gridTemplateColumns: "repeat(auto-fit, minmax(80px, 1fr))",
-                    gap: 0.5,
-                  },
-                  "@media (max-width: 600px)": {
-                    gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
-                  },
-                }}
-              >
-                {projects.map((project) => (
-                  <Card
-                    key={project._id}
+          {searching && <LinearProgress sx={{ mb: 1 }} />}
+          <TableContainer component={Paper} sx={{ mb: 3 }}>
+            <Table
+              sx={{
+                tableLayout: "fixed",
+                width: "100%",
+                minWidth: PROJECT_ID_COL_WIDTH + CLIENT_COL_WIDTH + 240,
+              }}
+            >
+              <colgroup>
+                <col style={{ width: PROJECT_ID_COL_WIDTH }} />
+                <col />
+                <col style={{ width: CLIENT_COL_WIDTH }} />
+              </colgroup>
+              <TableHead>
+                <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
+                  <TableCell
+                    sx={{ fontWeight: 600, width: PROJECT_ID_COL_WIDTH }}
+                  >
+                    Project ID
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Job Name</TableCell>
+                  <TableCell
                     sx={{
-                      height: "100%",
-                      display: "flex",
-                      flexDirection: "column",
-                      cursor: "pointer",
-                      transition: "all 0.2s ease-in-out",
-                      boxShadow: "none",
-                      border: "none",
-                      outline: "none",
-                      minWidth: 0,
-                      "&:hover": {
-                        transform: "translateY(-2px)",
-                      },
-                      "&:focus": {
-                        outline: "none",
-                      },
-                      "&:focus-visible": {
-                        outline: "none",
-                      },
+                      fontWeight: 600,
+                      width: CLIENT_COL_WIDTH,
+                      verticalAlign: "top",
                     }}
                   >
-                    <CardActionArea
-                      onClick={() => handleProjectClick(project)}
+                    Client
+                    <Autocomplete
+                      size="small"
+                      options={clients}
+                      value={selectedClient}
+                      loading={clientsLoading}
+                      onChange={(event, value) => setSelectedClient(value)}
+                      getOptionLabel={(option) => option?.name || ""}
+                      isOptionEqualToValue={(option, value) =>
+                        option?._id === value?._id
+                      }
                       sx={{
-                        flex: 1,
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        p: 1.5,
-                        minHeight: "100px",
-                        "&:focus": {
-                          outline: "none",
-                        },
-                        "&:focus-visible": {
-                          outline: "none",
-                        },
+                        mt: 1,
+                        width: "100%",
+                        "& .MuiInputBase-root": { minWidth: 0 },
                       }}
-                    >
-                      <FolderOpenRoundedIcon
-                        sx={{
-                          fontSize: 50,
-                          color: "primary.main",
-                          mb: 1,
-                        }}
-                      />
-                      <Typography
-                        variant="body2"
-                        align="center"
-                        sx={{
-                          fontWeight: 450,
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          width: "100%",
-                          fontSize: "0.7875rem",
-                        }}
-                      >
-                        {project.projectID || "N/A"}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          placeholder="All clients"
+                          onClick={(event) => event.stopPropagation()}
+                        />
+                      )}
+                    />
+                  </TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {projects.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={3} align="center" sx={{ py: 6 }}>
+                      <Typography color="text.secondary">
+                        {searchTerm.trim() || selectedClient
+                          ? "No projects match your search."
+                          : "No projects found."}
                       </Typography>
-                    </CardActionArea>
-                  </Card>
-                ))}
-              </Box>
-            )}
-          </Paper>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  projects.map((project) => {
+                    const jobName = project.name || "—";
+                    const clientName = getClientName(project);
+                    return (
+                      <TableRow
+                        key={project._id}
+                        hover
+                        onClick={() => handleProjectClick(project)}
+                        sx={{ cursor: "pointer" }}
+                      >
+                        <TableCell
+                          sx={{ width: PROJECT_ID_COL_WIDTH, ...clippedCellSx }}
+                          title={project.projectID || "N/A"}
+                        >
+                          {project.projectID || "N/A"}
+                        </TableCell>
+                        <TableCell sx={clippedCellSx} title={jobName}>
+                          {jobName}
+                        </TableCell>
+                        <TableCell
+                          sx={{ width: CLIENT_COL_WIDTH, ...clippedCellSx }}
+                          title={clientName}
+                        >
+                          {clientName}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
 
           {totalPages > 1 && (
             <Box sx={{ display: "flex", justifyContent: "center", mt: 3 }}>

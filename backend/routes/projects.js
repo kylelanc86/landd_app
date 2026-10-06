@@ -5,6 +5,7 @@ const Client = require('../models/Client');
 const User = require('../models/User');
 const Timesheet = require('../models/Timesheet');
 const ClientSuppliedJob = require('../models/ClientSuppliedJob');
+const AsbestosRemovalJob = require('../models/AsbestosRemovalJob');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const { ROLE_PERMISSIONS } = require('../config/permissions');
@@ -170,7 +171,8 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
       search,
       department,
       status,
-      userId: userFilter
+      userId: userFilter,
+      client: clientFilter
     } = req.query;
 
     // Get status arrays from custom data fields
@@ -182,6 +184,17 @@ router.get('/', auth, checkPermission(['projects.view']), async (req, res) => {
     // Add department filter if specified
     if (department && department !== 'all') {
       query.department = department;
+    }
+
+    // Add client filter
+    if (clientFilter && clientFilter !== 'all') {
+      const mongoose = require('mongoose');
+      const clientId = mongoose.Types.ObjectId.isValid(clientFilter) && String(clientFilter).length === 24
+        ? new mongoose.Types.ObjectId(clientFilter)
+        : null;
+      if (clientId) {
+        query.client = clientId;
+      }
     }
 
     // Add user filter: only projects where this user is in the users (assigned) array
@@ -635,6 +648,7 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
 
     // Store old status and users before updating
     const oldStatus = project.status;
+    const previousName = project.name;
     const oldUserIds = (project.users || []).map(u => u.toString());
     
     // Check if user is trying to set status to "Job complete" and if they have permission
@@ -767,6 +781,20 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
     }
     
     const updatedProject = await project.save();
+
+    if (updatedProject.name && updatedProject.name !== previousName) {
+      try {
+        await AsbestosRemovalJob.updateMany(
+          { projectId: updatedProject._id },
+          { $set: { projectName: updatedProject.name } }
+        );
+      } catch (nameSyncError) {
+        console.error(
+          "Error syncing asbestos removal job names after project rename:",
+          nameSyncError
+        );
+      }
+    }
     
     // Update dashboard stats if status changed
     if (req.body.status && req.body.status !== oldStatus) {

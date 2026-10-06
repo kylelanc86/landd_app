@@ -7,6 +7,7 @@ const Shift = require("../models/Shift");
 const LeadAirSample = require("../models/LeadAirSample");
 const auth = require("../middleware/auth");
 const checkPermission = require("../middleware/checkPermission");
+const { markClearanceStoredPdf } = require("../utils/clearanceStoredPdf");
 
 const notDeletedShiftFilter = {
   $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
@@ -20,7 +21,7 @@ const permDelete = "asbestos.delete";
 // Include edit-form fields (projectId, consultant, etc.) so Edit on the job
 // details clearance list does not crash on missing properties.
 const CLEARANCE_TABLE_SELECT =
-  "_id projectId clearanceDate status inspectionTime consultant leadAbatementContractor jurisdiction secondaryHeader descriptionOfWorks vehicleEquipmentDescription notes useComplexTemplate jobSpecificExclusions reportApprovedBy reportIssueDate reportViewedAt authorisationRequestedBy pdfDownloadUrl pdfJobId pdfReadyAt pdfFilename";
+  "_id projectId clearanceDate status inspectionTime consultant leadAbatementContractor jurisdiction secondaryHeader descriptionOfWorks vehicleEquipmentDescription notes useComplexTemplate jobSpecificExclusions reportApprovedBy reportIssueDate reportViewedAt authorisationRequestedBy pdfDownloadUrl pdfJobId pdfReadyAt pdfFilename mergedPdfPath";
 
 // Get all lead removal jobs with filtering and pagination
 router.get("/", auth, checkPermission(permView), async (req, res) => {
@@ -220,6 +221,7 @@ router.get(
             select: "projectID name",
           })
           .lean();
+        await markClearanceStoredPdf(LeadClearance, clearances);
       }
 
       // Lead monitoring shifts only (jobModel = LeadRemovalJob); exclude soft-deleted
@@ -301,6 +303,7 @@ router.get(
           select: "projectID name",
         })
         .lean();
+      await markClearanceStoredPdf(LeadClearance, clearances);
       res.json({ clearances });
     } catch (error) {
       console.error("Error fetching lead clearances for job:", error);

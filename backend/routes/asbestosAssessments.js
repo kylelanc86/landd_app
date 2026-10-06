@@ -3,6 +3,7 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const AsbestosAssessment = require('../models/assessmentTemplates/asbestos/AsbestosAssessment');
 const Project = require('../models/Project');
+const Client = require('../models/Client');
 const ClientSuppliedJob = require('../models/ClientSuppliedJob');
 const User = require('../models/User');
 const { sendMail } = require('../services/mailer');
@@ -22,15 +23,7 @@ const {
   isPlaceholderReportReference,
 } = require('../utils/reportFilenames');
 const { healReferredFlags } = require('../utils/asbestosAssessmentItems');
-
-/** Assessment report PDF retention (days) – matches DocRaptor; after this, report is no longer offered for download. */
-const ASSESSMENT_PDF_RETENTION_DAYS = 7;
-const ASSESSMENT_PDF_RETENTION_MS = ASSESSMENT_PDF_RETENTION_DAYS * 24 * 60 * 60 * 1000;
-
-function isAssessmentPdfExpired(pdfReadyAt) {
-  if (!pdfReadyAt) return true;
-  return Date.now() - new Date(pdfReadyAt).getTime() > ASSESSMENT_PDF_RETENTION_MS;
-}
+const { mapPhotoArrow, applyArrowUpdates } = require('../utils/photoArrows');
 
 /** Clear persisted PDF fields when assessment content changes so the UI shows Generate instead of Download. */
 function clearAssessmentPdfFields(doc) {
@@ -68,9 +61,70 @@ function stripItemPhotoBinaryFromPlainItems(items) {
   }
 }
 
+function sanitizePlanAppendixList(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') return null;
+      const sitePlanFile =
+        typeof entry.sitePlanFile === 'string' && entry.sitePlanFile.trim()
+          ? entry.sitePlanFile.trim()
+          : null;
+      if (!sitePlanFile) return null;
+      const legend = Array.isArray(entry.sitePlanLegend)
+        ? entry.sitePlanLegend
+            .filter((e) => e && e.color)
+            .map((e) => ({
+              color: String(e.color || '').trim(),
+              description: typeof e.description === 'string' ? e.description.trim() : '',
+            }))
+        : [];
+      return {
+        sitePlan: true,
+        sitePlanFile,
+        sitePlanSource: ['uploaded', 'drawn'].includes(entry.sitePlanSource)
+          ? entry.sitePlanSource
+          : 'drawn',
+        sitePlanLegend: legend,
+        sitePlanLegendTitle:
+          typeof entry.sitePlanLegendTitle === 'string' && entry.sitePlanLegendTitle.trim()
+            ? entry.sitePlanLegendTitle.trim()
+            : 'Key',
+        sitePlanFigureTitle:
+          typeof entry.sitePlanFigureTitle === 'string' && entry.sitePlanFigureTitle.trim()
+            ? entry.sitePlanFigureTitle.trim()
+            : null,
+      };
+    })
+    .filter(Boolean);
+}
+
+/** Keep legacy single sitePlan* fields in sync with the first appendix entry. */
+function syncLegacySitePlanFieldsFromAppendices(updateData, appendices) {
+  if (!appendices || appendices.length === 0) {
+    updateData.sitePlan = false;
+    updateData.sitePlanFile = null;
+    updateData.sitePlanSource = null;
+    updateData.sitePlanLegend = [];
+    updateData.sitePlanLegendTitle = null;
+    updateData.sitePlanFigureTitle = null;
+    return;
+  }
+  const first = appendices[0];
+  updateData.sitePlan = true;
+  updateData.sitePlanFile = first.sitePlanFile;
+  updateData.sitePlanSource = first.sitePlanSource;
+  updateData.sitePlanLegend = first.sitePlanLegend;
+  updateData.sitePlanLegendTitle = first.sitePlanLegendTitle;
+  updateData.sitePlanFigureTitle = first.sitePlanFigureTitle;
+}
+
 /** Strip large plan image payloads; keep counts for UI badges. */
 function applyOmitPlanFilesToPlain(plain) {
   if (!plain || typeof plain !== 'object') return;
+  plain.sitePlanAppendixFileCount = Array.isArray(plain.sitePlanAppendices)
+    ? plain.sitePlanAppendices.filter((p) => p && p.sitePlanFile).length
+    : (plain.sitePlanFile ? 1 : 0);
   plain.leadSitePlanAppendixFileCount = Array.isArray(plain.leadSitePlanAppendices)
     ? plain.leadSitePlanAppendices.filter((p) => p && p.sitePlanFile).length
     : 0;
@@ -78,6 +132,11 @@ function applyOmitPlanFilesToPlain(plain) {
     ? plain.leadAssessmentPlanAppendices.filter((p) => p && p.sitePlanFile).length
     : 0;
   if (plain.sitePlanFile) delete plain.sitePlanFile;
+  if (Array.isArray(plain.sitePlanAppendices)) {
+    plain.sitePlanAppendices.forEach((p) => {
+      if (p && typeof p === 'object') delete p.sitePlanFile;
+    });
+  }
   if (Array.isArray(plain.leadSitePlanAppendices)) {
     plain.leadSitePlanAppendices.forEach((p) => {
       if (p && typeof p === 'object') delete p.sitePlanFile;
@@ -104,9 +163,294 @@ const notDeletedAssessmentFilter = {
   $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
 };
 
+/** Closed asbestos/residential surveys stay on Project Reports and are view-only. */
+function isClosedSurveyAssessment(job) {
+  if (!job || job.archived !== true) return false;
+  const jobType = job.jobType || 'asbestos-assessment';
+  if (jobType !== 'asbestos-assessment' && jobType !== 'residential-asbestos') {
+    return false;
+  }
+  const authorisedBy = job.reportAuthorisedBy;
+  return authorisedBy != null && String(authorisedBy).trim() !== '';
+}
+
+const CLOSED_ASSESSMENT_WRITE_EXEMPT = new Set([
+  'unlock',
+  'revise-report',
+  'archive',
+  'restore',
+  'report-viewed',
+]);
+
+/** Top-level fields for assessment tables. Excludes items, photos, site plans, and PDF blobs. */
+const ASSESSMENT_SUMMARY_SELECT =
+  'jobType projectId assessmentDate status LAA state secondaryHeader intrusiveness reportApprovedBy reportAuthorisedBy authorisationRequestedBy reportViewedAt reportIssueDate noSamplesCollected samplesReceivedDate labSamplesStatus analysisDueDate turnaroundTime pdfReadyAt pdfFilename updatedAt';
+
+const ASSESSMENT_SUMMARY_PROJECT = {
+  jobType: 1,
+  projectId: 1,
+  assessmentDate: 1,
+  status: 1,
+  LAA: 1,
+  state: 1,
+  secondaryHeader: 1,
+  intrusiveness: 1,
+  reportApprovedBy: 1,
+  reportAuthorisedBy: 1,
+  authorisationRequestedBy: 1,
+  reportViewedAt: 1,
+  reportIssueDate: 1,
+  noSamplesCollected: 1,
+  samplesReceivedDate: 1,
+  labSamplesStatus: 1,
+  analysisDueDate: 1,
+  turnaroundTime: 1,
+  pdfReadyAt: 1,
+  pdfFilename: 1,
+  updatedAt: 1,
+};
+
+/** Distinct sampled item references, excluding visually assessed rows. */
+function uniqueSampledItemCountExpression() {
+  const visuallyAssessed = [
+    'Visually Assessed as Asbestos',
+    'Visually Assessed as Non-Asbestos',
+    'Visually Assessed as Non-asbestos',
+  ];
+  return {
+    $size: {
+      $setUnion: [
+        {
+          $map: {
+            input: {
+              $filter: {
+                input: { $ifNull: ['$items', []] },
+                as: 'item',
+                cond: {
+                  $let: {
+                    vars: {
+                      ref: {
+                        $trim: {
+                          input: {
+                            $convert: {
+                              input: { $ifNull: ['$$item.sampleReference', ''] },
+                              to: 'string',
+                              onError: '',
+                              onNull: '',
+                            },
+                          },
+                        },
+                      },
+                    },
+                    in: {
+                      $and: [
+                        { $gt: [{ $strLenCP: '$$ref' }, 0] },
+                        {
+                          $not: {
+                            $in: [
+                              { $ifNull: ['$$item.asbestosContent', ''] },
+                              visuallyAssessed,
+                            ],
+                          },
+                        },
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+            as: 'item',
+            in: {
+              $trim: {
+                input: {
+                  $convert: {
+                    input: { $ifNull: ['$$item.sampleReference', ''] },
+                    to: 'string',
+                    onError: '',
+                    onNull: '',
+                  },
+                },
+              },
+            },
+          },
+        },
+        [],
+      ],
+    },
+  };
+}
+
+async function attachProjectClientSummary(jobs) {
+  const projectIds = [];
+  const seenProjects = new Set();
+  for (const job of jobs) {
+    const rawId = job?.projectId && job.projectId._id ? job.projectId._id : job?.projectId;
+    if (!rawId) continue;
+    const key = String(rawId);
+    if (seenProjects.has(key)) continue;
+    seenProjects.add(key);
+    projectIds.push(rawId);
+  }
+
+  const projects = projectIds.length
+    ? await Project.find({ _id: { $in: projectIds } }).select('projectID name client').lean()
+    : [];
+
+  const clientIds = [];
+  const seenClients = new Set();
+  for (const project of projects) {
+    if (!project.client) continue;
+    const key = String(project.client);
+    if (seenClients.has(key)) continue;
+    seenClients.add(key);
+    clientIds.push(project.client);
+  }
+
+  const clients = clientIds.length
+    ? await Client.find({ _id: { $in: clientIds } }).select('name').lean()
+    : [];
+  const clientById = new Map(clients.map((client) => [String(client._id), client]));
+  const projectById = new Map(
+    projects.map((project) => {
+      const client = project.client ? clientById.get(String(project.client)) : null;
+      return [
+        String(project._id),
+        {
+          _id: project._id,
+          projectID: project.projectID,
+          name: project.name,
+          client: client ? { _id: client._id, name: client.name } : null,
+        },
+      ];
+    }),
+  );
+
+  return jobs.map((job) => {
+    const rawId = job?.projectId && job.projectId._id ? job.projectId._id : job?.projectId;
+    return {
+      ...job,
+      projectId: rawId ? projectById.get(String(rawId)) || null : null,
+    };
+  });
+}
+
+const RESIDENTIAL_TABLE_INDEX = 'asbestosAssessment_residential_table';
+const RESIDENTIAL_TABLE_SELECT = {
+  jobType: 1,
+  projectId: 1,
+  assessmentDate: 1,
+  status: 1,
+  reportAuthorisedBy: 1,
+  archived: 1,
+  deletedAt: 1,
+  pdfReadyAt: 1,
+  pdfFilename: 1,
+  authorisationRequestedBy: 1,
+  noSamplesCollected: 1,
+  LAA: 1,
+  state: 1,
+  intrusiveness: 1,
+};
+
+function isOpenAssessmentRow(row) {
+  if (row?.deletedAt) return false;
+  if (row?.archived === true) {
+    const authorised = row.reportAuthorisedBy;
+    const notAuthorised = authorised == null || authorised === '';
+    return row.status === 'report-ready-for-review' && notAuthorised;
+  }
+  return true;
+}
+
+/** Index-only residential rows. Avoids a collection scan and does not read item/photo bytes. */
+async function loadResidentialTableSummary() {
+  let rows;
+  try {
+    rows = await AsbestosAssessment.find({ jobType: 'residential-asbestos' })
+      .select(RESIDENTIAL_TABLE_SELECT)
+      .hint(RESIDENTIAL_TABLE_INDEX)
+      .lean();
+  } catch (err) {
+    console.error('Residential table index hint failed, falling back to jobType query:', err.message);
+    rows = await AsbestosAssessment.find({ jobType: 'residential-asbestos' })
+      .select(RESIDENTIAL_TABLE_SELECT)
+      .lean();
+  }
+  return attachProjectClientSummary((rows || []).filter(isOpenAssessmentRow));
+}
+
+const LD_TABLE_INDEX = 'asbestosAssessment_ld_table';
+const LD_TABLE_SELECT = {
+  jobType: 1,
+  projectId: 1,
+  samplesReceivedDate: 1,
+  status: 1,
+  labSamplesStatus: 1,
+  analysisDueDate: 1,
+  turnaroundTime: 1,
+  reportApprovedBy: 1,
+  reportAuthorisedBy: 1,
+  reportViewedAt: 1,
+  authorisationRequestedBy: 1,
+  archived: 1,
+  deletedAt: 1,
+};
+
+async function findCoveredByJobType(jobType, select, indexName) {
+  try {
+    return await AsbestosAssessment.find({ jobType }).select(select).hint(indexName).lean();
+  } catch (err) {
+    console.error(`${indexName} hint failed for ${jobType}, falling back:`, err.message);
+    return AsbestosAssessment.find({ jobType }).select(select).lean();
+  }
+}
+
+/** Index-only L&D rows. Sample counts are loaded by a later request. */
+async function loadLdTableSummary() {
+  const [standard, residential] = await Promise.all([
+    findCoveredByJobType('asbestos-assessment', LD_TABLE_SELECT, LD_TABLE_INDEX),
+    findCoveredByJobType('residential-asbestos', LD_TABLE_SELECT, LD_TABLE_INDEX),
+  ]);
+  const submitted = [...(standard || []), ...(residential || [])].filter((row) => {
+    if (!row?.samplesReceivedDate) return false;
+    return isOpenAssessmentRow(row);
+  });
+  return attachProjectClientSummary(submitted);
+}
+
+function parseObjectIds(rawIds) {
+  const list = Array.isArray(rawIds) ? rawIds : [];
+  return list
+    .map((id) => String(id))
+    .filter((id) => mongoose.Types.ObjectId.isValid(id))
+    .slice(0, 500)
+    .map((id) => new mongoose.Types.ObjectId(id));
+}
+
+async function loadAssessmentSummary(filter, { includeSampleCount }) {
+  const jobs = includeSampleCount
+    ? await AsbestosAssessment.aggregate([
+        { $match: filter },
+        { $sort: { createdAt: -1 } },
+        {
+          $project: {
+            ...ASSESSMENT_SUMMARY_PROJECT,
+            sampleCount: uniqueSampledItemCountExpression(),
+          },
+        },
+      ])
+    : await AsbestosAssessment.find(filter)
+        .select(ASSESSMENT_SUMMARY_SELECT)
+        .sort({ createdAt: -1 })
+        .lean();
+  return attachProjectClientSummary(jobs);
+}
+
 // GET /api/assessments - list all assessment jobs (populate project and assessor); excludes archived and soft-deleted
-// Query param jobType: 'asbestos-assessment' | 'residential-asbestos' - when set, only jobs of that type are returned
+// Query param jobType: 'asbestos-assessment' | 'residential-asbestos' | 'lead-assessment' | 'ld-supplied'
 // Query param list=1 - return minimal fields for table display (no full items, photos, blobs); faster and smaller payload
+// Query param summary=1 - table rows only: project id/name/client, survey date, status, and other short root fields. Does not return items or photos.
+// Query param samplesSubmitted=1 - with summary, only assessments whose samples were submitted to the lab, plus a sample count
 // Query param projectId (ObjectId) - restrict to assessments for that project
 router.get('/', async (req, res) => {
   try {
@@ -129,8 +473,19 @@ router.get('/', async (req, res) => {
       notDeletedAssessmentFilter,
     ];
     const { jobType, list, projectId: projectIdQuery } = req.query;
+    const summary = req.query.summary === '1' || req.query.summary === 'true';
+    const samplesSubmitted =
+      req.query.samplesSubmitted === '1' || req.query.samplesSubmitted === 'true';
     if (projectIdQuery && mongoose.Types.ObjectId.isValid(String(projectIdQuery))) {
       filterClauses.push({ projectId: new mongoose.Types.ObjectId(String(projectIdQuery)) });
+    }
+    if (summary && jobType === 'residential-asbestos' && !projectIdQuery && !samplesSubmitted) {
+      const jobs = await loadResidentialTableSummary();
+      return res.json(jobs);
+    }
+    if (summary && jobType === 'ld-supplied' && !projectIdQuery) {
+      const jobs = await loadLdTableSummary();
+      return res.json(jobs);
     }
     if (jobType === 'residential-asbestos') {
       const legacyJobTypeClause = {
@@ -170,17 +525,31 @@ router.get('/', async (req, res) => {
       }
     } else if (jobType === 'lead-assessment') {
       filterClauses.push({ jobType: 'lead-assessment' });
+    } else if (jobType === 'ld-supplied') {
+      filterClauses.push({
+        jobType: { $in: ['asbestos-assessment', 'residential-asbestos'] },
+      });
     } else if (jobType === 'asbestos-assessment') {
       // Include docs with jobType 'asbestos-assessment' or missing (legacy)
       filterClauses.push({
         $or: [
-        { jobType: 'asbestos-assessment' },
-        { jobType: { $exists: false } },
-        { jobType: null },
+          { jobType: 'asbestos-assessment' },
+          { jobType: { $exists: false } },
+          { jobType: null },
         ],
       });
     }
+    if (samplesSubmitted) {
+      filterClauses.push({ samplesReceivedDate: { $type: 'date' } });
+    }
     const filter = { $and: filterClauses };
+
+    if (summary) {
+      const jobs = await loadAssessmentSummary(filter, {
+        includeSampleCount: samplesSubmitted,
+      });
+      return res.json(jobs);
+    }
 
     if (list === '1' || list === 'true') {
       // Minimal payload for table lists: lean aggregation with only fields needed for display and row actions
@@ -269,13 +638,6 @@ router.get('/', async (req, res) => {
         },
       ];
       const jobs = await AsbestosAssessment.aggregate(pipeline);
-      // Hide PDF availability when past retention (download icon disappears)
-      jobs.forEach((job) => {
-        if (isAssessmentPdfExpired(job.pdfReadyAt)) {
-          job.pdfReadyAt = null;
-          job.pdfFilename = null;
-        }
-      });
       return res.json(jobs);
     }
 
@@ -291,13 +653,6 @@ router.get('/', async (req, res) => {
         }
       })
       .populate('assessorId');
-    // Hide PDF availability when past retention (download icon disappears)
-    jobs.forEach((job) => {
-      if (isAssessmentPdfExpired(job.pdfReadyAt)) {
-        job.pdfReadyAt = null;
-        job.pdfFilename = null;
-      }
-    });
     res.json(jobs);
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch jobs', error: err.message });
@@ -365,10 +720,32 @@ router.post('/', async (req, res) => {
   }
 });
 
+// POST /api/assessments/sample-counts - unique sampled-item counts after the table is shown
+router.post('/sample-counts', async (req, res) => {
+  try {
+    const ids = parseObjectIds(req.body?.ids);
+    if (ids.length === 0) return res.json([]);
+    const rows = await AsbestosAssessment.aggregate([
+      { $match: { _id: { $in: ids } } },
+      { $project: { sampleCount: uniqueSampledItemCountExpression() } },
+    ]);
+    res.json(rows.map((row) => ({ _id: row._id, sampleCount: row.sampleCount })));
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to count samples', error: err.message });
+  }
+});
+
 // GET /api/assessments/:id - get single assessment job (populate project and assessor)
 router.get('/:id', async (req, res) => {
   try {
     const qTrue = (v) => v === '1' || v === 'true';
+    if (qTrue(req.query.header)) {
+      const header = await AsbestosAssessment.findById(req.params.id)
+        .select('projectId assessmentDate state LAA secondaryHeader intrusiveness status jobType')
+        .lean();
+      if (!header) return res.status(404).json({ message: 'Assessment job not found' });
+      return res.json(header);
+    }
     const omitPhotoData = qTrue(req.query.omitPhotoData);
     const omitPlanFiles = qTrue(req.query.omitPlanFiles);
     const omitFibreReport = qTrue(req.query.omitFibreReport);
@@ -553,7 +930,8 @@ router.get('/:id', async (req, res) => {
     // Heal duplicate sample refs before responding (persists when flags were wrong)
     if (!omitItems && job.items && job.items.length > 0) {
       const { changed } = healReferredFlags(job.items);
-      if (changed) {
+      // Viewing a closed report must not write healed flags back to the database.
+      if (changed && !isClosedSurveyAssessment(job)) {
         job.markModified('items');
         await job.save();
       }
@@ -592,6 +970,36 @@ router.get('/:id', async (req, res) => {
     return res.json(plain);
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch assessment job', error: err.message });
+  }
+});
+
+// Closed asbestos and residential assessments can be read, not changed.
+// Unlock, revise, archive, restore, and soft-delete of the whole job stay available.
+router.use('/:id', async (req, res, next) => {
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
+    return next();
+  }
+  const id = String(req.params.id || '');
+  const path = String(req.originalUrl || req.url || '').split('?')[0];
+  const idToken = `/${id}`;
+  const idIndex = id ? path.lastIndexOf(idToken) : -1;
+  const afterId =
+    idIndex >= 0 ? path.slice(idIndex + idToken.length) : String(req.url || '');
+  const action = afterId.split('/').filter(Boolean)[0] || '';
+  if (CLOSED_ASSESSMENT_WRITE_EXEMPT.has(action)) return next();
+  if (req.method === 'DELETE' && action === '') return next();
+  try {
+    const job = await AsbestosAssessment.findById(req.params.id)
+      .select('archived reportAuthorisedBy jobType')
+      .lean();
+    if (job && isClosedSurveyAssessment(job)) {
+      return res.status(403).json({
+        message: 'This assessment is closed and cannot be edited.',
+      });
+    }
+    return next();
+  } catch (err) {
+    return next(err);
   }
 });
 
@@ -640,6 +1048,7 @@ router.put('/:id', async (req, res) => {
       sitePlanLegendTitle,
       sitePlanFigureTitle,
       sitePlanSource,
+      sitePlanAppendices,
       LAA,
       state,
       secondaryHeader,
@@ -708,6 +1117,11 @@ router.put('/:id', async (req, res) => {
     if (sitePlanLegendTitle !== undefined) updateData.sitePlanLegendTitle = sitePlanLegendTitle;
     if (sitePlanFigureTitle !== undefined) updateData.sitePlanFigureTitle = sitePlanFigureTitle;
     if (sitePlanSource !== undefined) updateData.sitePlanSource = sitePlanSource;
+    if (sitePlanAppendices !== undefined) {
+      const sanitizedAppendices = sanitizePlanAppendixList(sitePlanAppendices);
+      updateData.sitePlanAppendices = sanitizedAppendices;
+      syncLegacySitePlanFieldsFromAppendices(updateData, sanitizedAppendices);
+    }
     if (LAA !== undefined) {
       updateData.LAA = LAA;
     }
@@ -749,6 +1163,11 @@ router.put('/:id', async (req, res) => {
       reportApprovedBy !== undefined &&
       reportApprovedBy &&
       !existingJob.reportApprovedBy;
+    if (isBecomingFibreIdApproved && req.user?.labSignatory !== true) {
+      return res.status(403).json({
+        message: 'Only lab signatories can authorise Fibre ID reports',
+      });
+    }
     if (isBecomingFibreIdApproved && isPlaceholderReportReference(existingJob.fibreIdReportReference)) {
       const issueDate =
         existingJob.reportIssueDate ||
@@ -927,49 +1346,11 @@ router.put('/:id', async (req, res) => {
         }
       }
 
-      const sanitizeLeadPlanAppendixList = (raw) => {
-        if (!Array.isArray(raw)) return [];
-        return raw
-          .map((entry) => {
-            if (!entry || typeof entry !== 'object') return null;
-            const sitePlanFile =
-              typeof entry.sitePlanFile === 'string' && entry.sitePlanFile.trim()
-                ? entry.sitePlanFile.trim()
-                : null;
-            if (!sitePlanFile) return null;
-            const legend = Array.isArray(entry.sitePlanLegend)
-              ? entry.sitePlanLegend
-                  .filter((e) => e && e.color)
-                  .map((e) => ({
-                    color: String(e.color || '').trim(),
-                    description: typeof e.description === 'string' ? e.description.trim() : '',
-                  }))
-              : [];
-            return {
-              sitePlan: true,
-              sitePlanFile,
-              sitePlanSource: ['uploaded', 'drawn'].includes(entry.sitePlanSource)
-                ? entry.sitePlanSource
-                : 'drawn',
-              sitePlanLegend: legend,
-              sitePlanLegendTitle:
-                typeof entry.sitePlanLegendTitle === 'string' && entry.sitePlanLegendTitle.trim()
-                  ? entry.sitePlanLegendTitle.trim()
-                  : 'Key',
-              sitePlanFigureTitle:
-                typeof entry.sitePlanFigureTitle === 'string' && entry.sitePlanFigureTitle.trim()
-                  ? entry.sitePlanFigureTitle.trim()
-                  : null,
-            };
-          })
-          .filter(Boolean);
-      };
-
       if (leadSitePlanAppendices !== undefined) {
-        updateData.leadSitePlanAppendices = sanitizeLeadPlanAppendixList(leadSitePlanAppendices);
+        updateData.leadSitePlanAppendices = sanitizePlanAppendixList(leadSitePlanAppendices);
       }
       if (leadAssessmentPlanAppendices !== undefined) {
-        updateData.leadAssessmentPlanAppendices = sanitizeLeadPlanAppendixList(leadAssessmentPlanAppendices);
+        updateData.leadAssessmentPlanAppendices = sanitizePlanAppendixList(leadAssessmentPlanAppendices);
       }
     }
 
@@ -1142,10 +1523,10 @@ router.patch('/:id/archive', auth, async (req, res) => {
   }
 });
 
-// POST /api/assessments/:id/send-for-authorisation - send authorisation request emails to report proofers
+// POST /api/assessments/:id/send-for-authorisation
 // Used for both:
-// 1) Fibre ID report approval (status sample-analysis-complete, reportApprovedBy not set) — from L&D Supplied Jobs
-// 2) Assessment report authorisation (status report-ready-for-review / complete) — from Surveys
+// 1) Fibre ID report approval (reportApprovedBy not set) — emails lab signatories, from L&D Supplied Jobs
+// 2) Assessment report authorisation (status report-ready-for-review / complete) — emails report proofers, from Surveys
 router.post('/:id/send-for-authorisation', auth, checkPermission('asbestos.edit'), async (req, res) => {
   try {
     const assessment = await AsbestosAssessment.findById(req.params.id)
@@ -1196,14 +1577,18 @@ router.post('/:id/send-for-authorisation', auth, checkPermission('asbestos.edit'
       });
     }
 
-    const reportProoferUsers = await User.find({
-      reportProofer: true,
-      isActive: true
-    }).select('firstName lastName email');
+    const recipientRoleLabel = isFibreIdAuthorisationRequest
+      ? 'lab signatory'
+      : 'report proofer';
+    const recipientUsers = await User.find(
+      isFibreIdAuthorisationRequest
+        ? { labSignatory: true, isActive: true }
+        : { reportProofer: true, isActive: true }
+    ).select('firstName lastName email');
 
-    if (reportProoferUsers.length === 0) {
+    if (recipientUsers.length === 0) {
       return res.status(400).json({
-        message: 'No report proofer users found'
+        message: `No ${recipientRoleLabel} users found`
       });
     }
 
@@ -1233,7 +1618,7 @@ router.post('/:id/send-for-authorisation', auth, checkPermission('asbestos.edit'
       ? `Report Authorisation Required - ${projectID}: Fibre ID Report`
       : `Report Authorisation Required - ${projectID}: ${assessmentReportLabel} Report`;
 
-    const emailPromises = reportProoferUsers.map(async (user) => {
+    const emailPromises = recipientUsers.map(async (user) => {
       try {
         await sendMail({
           to: user.email,
@@ -1279,8 +1664,8 @@ Please review and authorise the report at: ${jobUrl}
     await Promise.all(emailPromises);
 
     res.json({
-      message: `Authorisation request emails sent successfully to ${reportProoferUsers.length} report proofer user(s)`,
-      recipients: reportProoferUsers.map(u => ({ email: u.email, name: `${u.firstName} ${u.lastName}` })),
+      message: `Authorisation request emails sent successfully to ${recipientUsers.length} ${recipientRoleLabel} user(s)`,
+      recipients: recipientUsers.map(u => ({ email: u.email, name: `${u.firstName} ${u.lastName}` })),
       stage: isFibreIdAuthorisationRequest ? 'fibre-id' : 'assessment-report',
     });
   } catch (err) {
@@ -1333,8 +1718,11 @@ router.get('/:id/items/:itemId/referred-locations/:referredIndex/photos/data', a
 });
 
 // GET /api/assessments/:id/items - list items for a job (populate project and assessor)
+// Query: omitPhotoData=1 strips photograph base64 (lazy-load via .../photos/data)
 router.get('/:id/items', async (req, res) => {
   try {
+    const omitPhotoData =
+      req.query.omitPhotoData === '1' || req.query.omitPhotoData === 'true';
     const job = await AsbestosAssessment.findById(req.params.id)
       .populate({
         path: "projectId",
@@ -1354,7 +1742,15 @@ router.get('/:id/items', async (req, res) => {
       await job.save();
     }
 
-    res.json(job.items || []);
+    if (!omitPhotoData) {
+      return res.json(job.items || []);
+    }
+
+    const items = (job.items || []).map((item) =>
+      typeof item.toObject === 'function' ? item.toObject() : { ...item },
+    );
+    stripItemPhotoBinaryFromPlainItems(items);
+    res.json(items);
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch items', error: err.message });
   }
@@ -1581,10 +1977,32 @@ router.patch('/:id/revise-report', auth, checkPermission('asbestos.edit'), async
     job.markModified('archived');
     job.reportAuthorisedBy = undefined;
     job.markModified('reportAuthorisedBy');
+    job.authorisationRequestedBy = undefined;
+    job.authorisationRequestedByEmail = undefined;
+    job.markModified('authorisationRequestedBy');
     // Preserve first authorisation date for stable filename date across revisions.
     job.updatedAt = new Date();
     clearAssessmentPdfFields(job);
     await job.save();
+    await AsbestosAssessment.updateOne(
+      { _id: job._id },
+      {
+        $unset: {
+          reportAuthorisedBy: 1,
+          authorisationRequestedBy: 1,
+          authorisationRequestedByEmail: 1,
+        },
+      },
+    );
+
+    try {
+      const {
+        invalidateReportCategories,
+      } = require('../services/projectReportCategoriesService');
+      await invalidateReportCategories(job.projectId);
+    } catch (err) {
+      console.error('Error invalidating report categories after assessment revise:', err);
+    }
 
     const populated = await AsbestosAssessment.findById(job._id)
       .populate({
@@ -1733,18 +2151,7 @@ router.patch('/:id/items/:itemId/photos/:photoId', async (req, res) => {
 
     if (Array.isArray(arrows)) {
       delete photo.arrow;
-      photo.arrows = arrows.map((a) => {
-        const sub = {
-          x: typeof a.x === 'number' ? a.x : 0.5,
-          y: typeof a.y === 'number' ? a.y : 0.5,
-          rotation: typeof a.rotation === 'number' ? a.rotation : -45,
-          color: a.color || '#f44336',
-        };
-        if (a._id) {
-          sub._id = a._id;
-        }
-        return sub;
-      });
+      photo.arrows = arrows.map((a) => mapPhotoArrow(a));
     }
 
     item.updatedAt = new Date();
@@ -1861,8 +2268,6 @@ function ensureArrowsArray(photo) {
 // POST /api/assessments/:id/items/:itemId/photos/:photoId/arrows - add arrow
 router.post('/:id/items/:itemId/photos/:photoId/arrows', async (req, res) => {
   try {
-    const { x, y, rotation, color } = req.body;
-
     const job = await AsbestosAssessment.findById(req.params.id);
     if (!job) return res.status(404).json({ message: 'Assessment job not found' });
 
@@ -1873,12 +2278,7 @@ router.post('/:id/items/:itemId/photos/:photoId/arrows', async (req, res) => {
     if (!photo) return res.status(404).json({ message: 'Photo not found' });
 
     ensureArrowsArray(photo);
-    photo.arrows.push({
-      x: typeof x === 'number' ? x : 0.5,
-      y: typeof y === 'number' ? y : 0.5,
-      rotation: typeof rotation === 'number' ? rotation : -45,
-      color: color || '#f44336',
-    });
+    photo.arrows.push(mapPhotoArrow(req.body));
     item.updatedAt = new Date();
     clearAssessmentPdfFields(job);
     await job.save();
@@ -1893,7 +2293,6 @@ router.post('/:id/items/:itemId/photos/:photoId/arrows', async (req, res) => {
 // PATCH /api/assessments/:id/items/:itemId/photos/:photoId/arrows/:arrowId - update one arrow
 router.patch('/:id/items/:itemId/photos/:photoId/arrows/:arrowId', async (req, res) => {
   try {
-    const { x, y, rotation, color } = req.body;
     const { arrowId } = req.params;
 
     const job = await AsbestosAssessment.findById(req.params.id);
@@ -1909,10 +2308,7 @@ router.patch('/:id/items/:itemId/photos/:photoId/arrows/:arrowId', async (req, r
     const arrow = photo.arrows.id(arrowId);
     if (!arrow) return res.status(404).json({ message: 'Arrow not found' });
 
-    if (typeof x === 'number') arrow.x = x;
-    if (typeof y === 'number') arrow.y = y;
-    if (typeof rotation === 'number') arrow.rotation = rotation;
-    if (color !== undefined) arrow.color = color;
+    applyArrowUpdates(arrow, req.body);
 
     item.updatedAt = new Date();
     clearAssessmentPdfFields(job);

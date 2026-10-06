@@ -102,8 +102,20 @@ const AddUserPage = lazy(() => import("./scenes/users/AddUserPage"));
 const Profile = lazy(() => import("./scenes/profile"));
 
 const ClearanceItems = lazy(() => import("./scenes/clearances/ClearanceItems"));
+const ClearanceSitePlansPage = lazy(
+  () => import("./scenes/clearances/ClearanceSitePlansPage"),
+);
+const ClearanceSitePlanEditPage = lazy(
+  () => import("./scenes/clearances/ClearanceSitePlanEditPage"),
+);
 const EnclosureInspection = lazy(
   () => import("./scenes/clearances/EnclosureInspection"),
+);
+const EnclosureSitePlansPage = lazy(
+  () => import("./scenes/clearances/EnclosureSitePlansPage"),
+);
+const EnclosureSitePlanEditPage = lazy(
+  () => import("./scenes/clearances/EnclosureSitePlanEditPage"),
 );
 
 const Clients = lazy(() => import("./scenes/clients"));
@@ -134,6 +146,12 @@ const LeadAssessment = lazy(
 const LeadAssessmentItems = lazy(
   () => import("./scenes/surveys/lead/LeadAssessmentItems"),
 );
+const LeadAssessmentSitePlansPage = lazy(
+  () => import("./scenes/surveys/lead/LeadAssessmentSitePlansPage"),
+);
+const LeadAssessmentSitePlanEditPage = lazy(
+  () => import("./scenes/surveys/lead/LeadAssessmentSitePlanEditPage"),
+);
 const LeadAssessmentItemNew = lazy(
   () => import("./scenes/surveys/lead/LeadAssessmentItemNew"),
 );
@@ -147,6 +165,12 @@ const AsbestosAssessment = lazy(
 );
 const AssessmentItems = lazy(
   () => import("./scenes/surveys/asbestos-assessment/AssessmentItems"),
+);
+const AssessmentSitePlansPage = lazy(
+  () => import("./scenes/surveys/asbestos-assessment/AssessmentSitePlansPage"),
+);
+const AssessmentSitePlanEditPage = lazy(
+  () => import("./scenes/surveys/asbestos-assessment/AssessmentSitePlanEditPage"),
 );
 const ResidentialAsbestosAssessment = lazy(
   () => import("./scenes/surveys/residential-asbestos"),
@@ -176,6 +200,12 @@ const LeadRemovalJobDetails = lazy(
 );
 const LeadClearanceItems = lazy(
   () => import("./scenes/lead-removal/LeadClearanceItems"),
+);
+const LeadClearanceSitePlansPage = lazy(
+  () => import("./scenes/lead-removal/LeadClearanceSitePlansPage"),
+);
+const LeadClearanceSitePlanEditPage = lazy(
+  () => import("./scenes/lead-removal/LeadClearanceSitePlanEditPage"),
 );
 const LeadClearanceSampling = lazy(
   () => import("./scenes/lead-removal/LeadClearanceSampling"),
@@ -230,6 +260,9 @@ const ProjectReports = lazy(
 );
 const ArchivedDataPage = lazy(
   () => import("./scenes/reports/ArchivedDataPage"),
+);
+const ReportSummaryPage = lazy(
+  () => import("./scenes/reports/ReportSummaryPage"),
 );
 
 function App() {
@@ -387,6 +420,30 @@ function App() {
                                     >
                                       <Suspense fallback={<LoadingSpinner />}>
                                         <LeadClearanceItems />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/lead-clearances/:clearanceId/site-plans"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["asbestos.view"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <LeadClearanceSitePlansPage />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/lead-clearances/:clearanceId/site-plans/:planIndex/edit"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["asbestos.view"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <LeadClearanceSitePlanEditPage />
                                       </Suspense>
                                     </PermissionRoute>
                                   }
@@ -583,6 +640,38 @@ function App() {
                                         </PermissionRoute>
                                       }
                                     />
+                                    <Route
+                                      path="/surveys/asbestos-assessment/:id/site-plans"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={[
+                                            "asbestos.view",
+                                          ]}
+                                        >
+                                          <Suspense
+                                            fallback={<LoadingSpinner />}
+                                          >
+                                            <AssessmentSitePlansPage />
+                                          </Suspense>
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                    <Route
+                                      path="/surveys/asbestos-assessment/:id/site-plans/:planIndex/edit"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={[
+                                            "asbestos.view",
+                                          ]}
+                                        >
+                                          <Suspense
+                                            fallback={<LoadingSpinner />}
+                                          >
+                                            <AssessmentSitePlanEditPage />
+                                          </Suspense>
+                                        </PermissionRoute>
+                                      }
+                                    />
                                   </>
                                 )}
 
@@ -616,6 +705,38 @@ function App() {
                                             fallback={<LoadingSpinner />}
                                           >
                                             <AssessmentItems />
+                                          </Suspense>
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                    <Route
+                                      path="/surveys/residential-asbestos/:id/site-plans"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={[
+                                            "asbestos.view",
+                                          ]}
+                                        >
+                                          <Suspense
+                                            fallback={<LoadingSpinner />}
+                                          >
+                                            <AssessmentSitePlansPage />
+                                          </Suspense>
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                    <Route
+                                      path="/surveys/residential-asbestos/:id/site-plans/:planIndex/edit"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={[
+                                            "asbestos.view",
+                                          ]}
+                                        >
+                                          <Suspense
+                                            fallback={<LoadingSpinner />}
+                                          >
+                                            <AssessmentSitePlanEditPage />
                                           </Suspense>
                                         </PermissionRoute>
                                       }
@@ -675,6 +796,54 @@ function App() {
                                         >
                                           <Suspense fallback={<LoadingSpinner />}>
                                             <LeadAssessmentItems />
+                                          </Suspense>
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                    <Route
+                                      path="/surveys/lead/:id/site-plans"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={["asbestos.view"]}
+                                        >
+                                          <Suspense fallback={<LoadingSpinner />}>
+                                            <LeadAssessmentSitePlansPage kind="site" />
+                                          </Suspense>
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                    <Route
+                                      path="/surveys/lead/:id/site-plans/:planIndex/edit"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={["asbestos.view"]}
+                                        >
+                                          <Suspense fallback={<LoadingSpinner />}>
+                                            <LeadAssessmentSitePlanEditPage kind="site" />
+                                          </Suspense>
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                    <Route
+                                      path="/surveys/lead/:id/assessment-area-plans"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={["asbestos.view"]}
+                                        >
+                                          <Suspense fallback={<LoadingSpinner />}>
+                                            <LeadAssessmentSitePlansPage kind="assessment" />
+                                          </Suspense>
+                                        </PermissionRoute>
+                                      }
+                                    />
+                                    <Route
+                                      path="/surveys/lead/:id/assessment-area-plans/:planIndex/edit"
+                                      element={
+                                        <PermissionRoute
+                                          requiredPermissions={["asbestos.view"]}
+                                        >
+                                          <Suspense fallback={<LoadingSpinner />}>
+                                            <LeadAssessmentSitePlanEditPage kind="assessment" />
                                           </Suspense>
                                         </PermissionRoute>
                                       }
@@ -750,6 +919,7 @@ function App() {
                                 {isFeatureEnabled(
                                   "ADVANCED.ASBESTOS_REMOVAL",
                                 ) && (
+                                  <>
                                   <Route
                                     path="/clearances/:clearanceId/items"
                                     element={
@@ -762,11 +932,48 @@ function App() {
                                       </PermissionRoute>
                                     }
                                   />
+                                  <Route
+                                    path="/clearances/:clearanceId/attachments"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["asbestos.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <ClearanceItems pageMode="attachments" />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                  <Route
+                                    path="/clearances/:clearanceId/site-plans"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["asbestos.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <ClearanceSitePlansPage />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                  <Route
+                                    path="/clearances/:clearanceId/site-plans/:planIndex/edit"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["asbestos.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <ClearanceSitePlanEditPage />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                  </>
                                 )}
                                 {isFeatureEnabled(
                                   "ADVANCED.ASBESTOS_REMOVAL",
                                 ) && (
-
+                                  <>
                                   <Route
                                     path="/asbestos-removal/jobs/:jobId/enclosure-inspection/:clearanceId"
                                     element={
@@ -779,6 +986,31 @@ function App() {
                                       </PermissionRoute>
                                     }
                                   />
+                                  <Route
+                                    path="/asbestos-removal/jobs/:jobId/enclosure-inspection/:clearanceId/site-plans"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["asbestos.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <EnclosureSitePlansPage />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                  <Route
+                                    path="/asbestos-removal/jobs/:jobId/enclosure-inspection/:clearanceId/site-plans/:planIndex/edit"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["asbestos.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <EnclosureSitePlanEditPage />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                  </>
                                 )}
 
                                 <Route
@@ -1783,6 +2015,20 @@ function App() {
                                       >
                                         <Suspense fallback={<LoadingSpinner />}>
                                           <ProjectReports />
+                                        </Suspense>
+                                      </PermissionRoute>
+                                    }
+                                  />
+                                )}
+                                {isFeatureEnabled("ADVANCED.REPORTS") && (
+                                  <Route
+                                    path="/reports/project/:projectId/summary/:reportType/:reportId"
+                                    element={
+                                      <PermissionRoute
+                                        requiredPermissions={["projects.view"]}
+                                      >
+                                        <Suspense fallback={<LoadingSpinner />}>
+                                          <ReportSummaryPage />
                                         </Suspense>
                                       </PermissionRoute>
                                     }

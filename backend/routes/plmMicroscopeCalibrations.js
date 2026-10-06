@@ -182,9 +182,15 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Update PLM microscope calibration
+// Update PLM microscope calibration (super admin only)
 router.put('/:id', async (req, res) => {
   try {
+    if (req.user?.role !== 'super_admin') {
+      return res.status(403).json({
+        error: 'Only a super admin can edit PLM microscope calibration records',
+      });
+    }
+
     const {
       microscopeReference,
       date,
@@ -268,9 +274,15 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// Delete PLM microscope calibration
+// Delete PLM microscope calibration (super admin only)
 router.delete('/:id', async (req, res) => {
   try {
+    if (req.user?.role !== 'super_admin') {
+      return res.status(403).json({
+        error: 'Only a super admin can delete PLM microscope calibration records',
+      });
+    }
+
     const calibration = await PLMMicroscopeCalibration.findByIdAndDelete(req.params.id);
 
     if (!calibration) {

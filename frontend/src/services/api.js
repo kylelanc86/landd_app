@@ -236,6 +236,7 @@ export const projectService = {
     if (params.status) queryParams.append('status', params.status);
     if (params.department) queryParams.append('department', params.department);
     if (params.userId) queryParams.append('userId', params.userId);
+    if (params.client) queryParams.append('client', params.client);
     if (params.projectType) queryParams.append('projectType', params.projectType);
     if (params.sortBy) queryParams.append('sortBy', params.sortBy);
     if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
@@ -314,6 +315,7 @@ export const shiftService = {
   create: (data) => api.post('/air-monitoring-shifts', data),
   update: (id, data) => api.patch(`/air-monitoring-shifts/${id}`, data),
   reopen: (id) => api.patch(`/air-monitoring-shifts/${id}/reopen`),
+  reviseReport: (id) => api.post(`/air-monitoring-shifts/${id}/revise-report`),
   restore: (id) => api.patch(`/air-monitoring-shifts/${id}/restore`),
   delete: (id) => api.delete(`/air-monitoring-shifts/${id}`),
   sendForAuthorisation: (id) =>
@@ -478,7 +480,8 @@ export const timesheetService = {
 // Asbestos Assessment service
 export const asbestosAssessmentService = {
   getAsbestosAssessments: (params = {}) => api.get('/assessments', { params }),
-  getAsbestosAssessmentById: (id) => api.get(`/assessments/${id}`),
+  getSampleCounts: (ids) => api.post('/assessments/sample-counts', { ids }),
+  getAsbestosAssessmentById: (id, params) => api.get(`/assessments/${id}`, { params }),
   createAsbestosAssessment: (data) => api.post('/assessments', data),
   updateAsbestosAssessment: (id, data) => api.put(`/assessments/${id}`, data),
   addItem: (assessmentId, itemData) => api.post(`/assessments/${assessmentId}/items`, itemData),
@@ -545,15 +548,18 @@ export const clientSuppliedJobsService = {
     if (params.projectId) queryParams.append('projectId', params.projectId);
     if (params.status) queryParams.append('status', params.status);
     if (params.supplyType) queryParams.append('supplyType', params.supplyType);
+    if (params.summary != null) queryParams.append('summary', params.summary);
     if (params.sortBy) queryParams.append('sortBy', params.sortBy);
     if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
     return api.get(`/client-supplied-jobs?${queryParams.toString()}`);
   },
   getById: (id) => api.get(`/client-supplied-jobs/${id}`),
+  getSampleCounts: (ids) => api.post('/client-supplied-jobs/sample-counts', { ids }),
   create: (data) => api.post('/client-supplied-jobs', data),
   update: (id, data) => api.put(`/client-supplied-jobs/${id}`, data),
   delete: (id) => api.delete(`/client-supplied-jobs/${id}`),
   archive: (id) => api.put(`/client-supplied-jobs/${id}/archive`),
+  reviseReport: (id) => api.post(`/client-supplied-jobs/${id}/revise-report`),
   getByProject: (projectId) => api.get(`/client-supplied-jobs/by-project/${projectId}`),
   sendForApproval: (id) => api.post(`/client-supplied-jobs/${id}/send-for-approval`),
   authorise: (id) => api.post(`/client-supplied-jobs/${id}/authorise`),

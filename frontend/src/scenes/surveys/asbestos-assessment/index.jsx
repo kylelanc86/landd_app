@@ -212,9 +212,9 @@ const AsbestosAssessment = () => {
   const [assessmentPdfStartingId, setAssessmentPdfStartingId] = useState(null); // job id while start request in flight
   const [assessmentPdfGeneratingForJobId, setAssessmentPdfGeneratingForJobId] = useState(null); // job id whose PDF is generating (until poll completes)
   const [assessmentDownloadDialogOpen, setAssessmentDownloadDialogOpen] = useState(false);
-  // After a PDF is generated, store jobId so the next download uses freshJobId (avoids 410 until backend grace period)
+  // After a PDF is generated, store jobId so the next download uses freshJobId
   const lastPdfJobIdByAssessmentId = useRef({});
-  const PDF_JOB_GRACE_MS = 2 * 60 * 1000; // 2 min, match backend ASSESSMENT_PDF_GRACE_MS
+  const PDF_JOB_GRACE_MS = 2 * 60 * 1000;
   const [generatingReportId, setGeneratingReportId] = useState(null); // legacy / other flows
 
   // Fibre ID report and approval state

@@ -12,13 +12,25 @@ const {
 } = require("../services/reportAuthorisationNotificationService");
 const { formatDateSydney } = require("../utils/dateUtils");
 const {
+  sanitizePlanAppendixList,
+  syncLegacySitePlanFieldsFromAppendices,
+} = require("../utils/sitePlanAppendices");
+const {
+  applyClearanceOmitToPlain,
+  parseClearanceOmitQuery,
+  stripItemPhotographBlobs,
+} = require("../utils/clearancePhotoOmit");
+const {
   buildLeadClearanceFilename,
   toReportReference,
 } = require("../utils/reportFilenames");
-
-const notDeletedShiftFilter = {
-  $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
-};
+const {
+  hasNonEmptyApproval,
+  reportableShiftFindFilter,
+  reopenRemovalJob,
+  invalidateProjectReportCategories,
+} = require("../utils/reportReviseHelpers");
+const { removeClearancePdfFileIfExists } = require("../utils/clearanceStoredPdf");
 
 // Use same permission names as asbestos for role consistency
 const permView = "asbestos.view";
@@ -28,7 +40,8 @@ const permDelete = "asbestos.delete";
 
 /** Clear persisted PDF fields when clearance content changes so the UI shows Generate instead of Download. */
 function clearClearancePdfFields(clearance) {
-  const pdfFields = ["pdfDownloadUrl", "pdfJobId", "pdfReadyAt", "pdfFilename", "mergedPdfPath"];
+  removeClearancePdfFileIfExists(clearance.mergedPdfPath);
+  const pdfFields = ["pdfDownloadUrl", "pdfJobId", "pdfReadyAt", "pdfFilename", "mergedPdfPath", "pdfBuffer"];
   pdfFields.forEach((field) => {
     clearance[field] = undefined;
     clearance.markModified(field);
@@ -72,8 +85,15 @@ router.get("/", auth, checkPermission(permView), async (req, res) => {
       .exec();
 
     const count = await LeadClearance.countDocuments(filter);
+    const slimClearances = clearances.map((c) =>
+      applyClearanceOmitToPlain(c, {
+        omitPhotoData: true,
+        omitPlanFiles: true,
+        omitEnclosurePhotos: true,
+      }),
+    );
     res.json({
-      clearances,
+      clearances: slimClearances,
       totalPages: Math.ceil(count / limit),
       currentPage: page,
       totalCount: count,
@@ -109,12 +129,7 @@ router.get(
         const shifts = await Shift.find({
           job: job._id,
           jobModel: "LeadRemovalJob",
-          ...notDeletedShiftFilter,
-          $or: [
-            { status: "analysis_complete" },
-            { status: "shift_complete" },
-            { reportApprovedBy: { $exists: true, $ne: null } },
-          ],
+          ...reportableShiftFindFilter(["analysis_complete", "shift_complete"]),
         })
           .populate("supervisor", "firstName lastName")
           .populate("defaultSampler", "firstName lastName");
@@ -166,12 +181,7 @@ router.get(
       const shifts = await Shift.find({
         job: jobId,
         jobModel: "LeadRemovalJob",
-        ...notDeletedShiftFilter,
-        $or: [
-          { status: "analysis_complete" },
-          { status: "shift_complete" },
-          { reportApprovedBy: { $exists: true, $ne: null } },
-        ],
+        ...reportableShiftFindFilter(["analysis_complete", "shift_complete"]),
       }).populate("defaultSampler", "firstName lastName");
 
       const leadMonitoringReports = shifts.map((shift) => ({
@@ -198,8 +208,10 @@ router.get(
 );
 
 // Get lead clearance by ID
+// Query: omitPhotoData, omitPlanFiles, keepEnclosurePhotos
 router.get("/:id", auth, checkPermission(permView), async (req, res) => {
   try {
+    const omitOpts = parseClearanceOmitQuery(req.query);
     const clearance = await LeadClearance.findById(req.params.id)
       .populate({
         path: "projectId",
@@ -212,6 +224,13 @@ router.get("/:id", auth, checkPermission(permView), async (req, res) => {
 
     if (!clearance) {
       return res.status(404).json({ message: "Lead clearance not found" });
+    }
+    if (
+      omitOpts.omitPhotoData ||
+      omitOpts.omitPlanFiles ||
+      omitOpts.omitEnclosurePhotos
+    ) {
+      return res.json(applyClearanceOmitToPlain(clearance, omitOpts));
     }
     res.json(clearance);
   } catch (error) {
@@ -339,6 +358,7 @@ router.put("/:id", auth, checkPermission(permEdit), async (req, res) => {
       sitePlanLegend,
       sitePlanLegendTitle,
       sitePlanFigureTitle,
+      sitePlanAppendices,
     } = req.body;
 
     const clearance = await LeadClearance.findById(req.params.id);
@@ -397,6 +417,15 @@ router.put("/:id", auth, checkPermission(permEdit), async (req, res) => {
       clearance.sitePlanSource = sitePlanSource;
     } else if (sitePlanSource === null) {
       clearance.sitePlanSource = undefined;
+    }
+    if (sitePlanAppendices !== undefined) {
+      const sanitized = sanitizePlanAppendixList(sitePlanAppendices);
+      clearance.sitePlanAppendices = sanitized;
+      clearance.markModified("sitePlanAppendices");
+      syncLegacySitePlanFieldsFromAppendices(clearance, sanitized);
+      if (sanitized.length > 0) {
+        clearance.markModified("sitePlanLegend");
+      }
     }
     clearance.updatedBy = req.user.id;
 
@@ -557,6 +586,78 @@ router.delete("/:id", auth, checkPermission(permDelete), async (req, res) => {
   }
 });
 
+// POST /api/lead-clearances/:id/revise-report — from Project Reports
+router.post("/:id/revise-report", auth, checkPermission(permEdit), async (req, res) => {
+  try {
+    const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
+    if (!reason) {
+      return res.status(400).json({
+        message: "A revision reason is required",
+      });
+    }
+
+    const clearance = await LeadClearance.findById(req.params.id);
+    if (!clearance) {
+      return res.status(404).json({ message: "Lead clearance not found" });
+    }
+
+    const completeLike = ["complete", "Site Work Complete"].includes(clearance.status);
+    if (!completeLike && !hasNonEmptyApproval(clearance.reportApprovedBy)) {
+      return res.status(400).json({
+        message: "This report cannot be revised from Project Reports until it is complete or authorised.",
+      });
+    }
+
+    const newRevision = (typeof clearance.revision === "number" ? clearance.revision : 0) + 1;
+    clearance.revision = newRevision;
+    clearance.revisionReasons = [
+      ...(clearance.revisionReasons || []),
+      {
+        revisionNumber: newRevision,
+        reason,
+        revisedBy: req.user.id,
+        revisedAt: new Date(),
+      },
+    ];
+    clearance.status = "in progress";
+    clearance.reportApprovedBy = undefined;
+    clearance.authorisationRequestedBy = undefined;
+    clearance.authorisationRequestedByEmail = undefined;
+    clearance.reportViewedAt = undefined;
+    clearance.markModified("reportApprovedBy");
+    clearance.updatedBy = req.user.id;
+    clearClearancePdfFields(clearance);
+    await clearance.save();
+    await LeadClearance.updateOne(
+      { _id: clearance._id },
+      {
+        $unset: {
+          reportApprovedBy: 1,
+          authorisationRequestedBy: 1,
+          authorisationRequestedByEmail: 1,
+          reportViewedAt: 1,
+        },
+      },
+    );
+
+    await reopenRemovalJob({
+      jobId: clearance.leadRemovalJobId,
+      jobModel: "LeadRemovalJob",
+      projectId: clearance.projectId,
+    });
+    await invalidateProjectReportCategories(clearance.projectId);
+
+    res.json({
+      message:
+        "Lead clearance report reopened for editing. The removal job is back in progress — re-authorise when ready.",
+      clearance,
+    });
+  } catch (error) {
+    console.error("Error revising lead clearance report:", error);
+    res.status(500).json({ message: error.message || "Failed to revise report" });
+  }
+});
+
 // Authorise report (parity with asbestos)
 router.post("/:id/authorise", auth, checkPermission(permEdit), async (req, res) => {
   try {
@@ -674,18 +775,56 @@ router.patch("/:id/sampling", auth, checkPermission(permEdit), async (req, res) 
 });
 
 // Get lead clearance items (embedded in clearance document)
+// Query: omitPhotoData=1 strips photograph base64
 router.get("/:id/items", auth, checkPermission(permView), async (req, res) => {
   try {
+    const omitPhotoData =
+      req.query.omitPhotoData === "1" || req.query.omitPhotoData === "true";
     const clearance = await LeadClearance.findById(req.params.id);
     if (!clearance) {
       return res.status(404).json({ message: "Lead clearance not found" });
     }
-    res.json(clearance.items || []);
+    if (!omitPhotoData) {
+      return res.json(clearance.items || []);
+    }
+    const items = (clearance.items || []).map((item) =>
+      typeof item.toObject === "function" ? item.toObject() : { ...item },
+    );
+    stripItemPhotographBlobs(items);
+    res.json(items);
   } catch (error) {
     console.error("Error fetching lead clearance items:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
+
+// Full image payloads for one lead clearance item's photos
+router.get(
+  "/:id/items/:itemId/photos/data",
+  auth,
+  checkPermission(permView),
+  async (req, res) => {
+    try {
+      const clearance = await LeadClearance.findById(req.params.id).select("items");
+      if (!clearance) {
+        return res.status(404).json({ message: "Lead clearance not found" });
+      }
+      const item = clearance.items.id(req.params.itemId);
+      if (!item) {
+        return res.status(404).json({ message: "Clearance item not found" });
+      }
+      const photographs = (item.photographs || []).map((p) => ({
+        _id: p._id,
+        data: p.data,
+        fullResolutionData: p.fullResolutionData,
+      }));
+      res.json({ photographs });
+    } catch (error) {
+      console.error("Error fetching lead clearance item photo data:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  },
+);
 
 // Add lead clearance item (no asbestosType)
 router.post("/:id/items", auth, checkPermission(permEdit), async (req, res) => {

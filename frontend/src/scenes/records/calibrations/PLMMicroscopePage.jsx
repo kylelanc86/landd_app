@@ -36,6 +36,7 @@ import { formatDate, formatDateForInput } from "../../../utils/dateFormat";
 import { equipmentService } from "../../../services/equipmentService";
 import plmMicroscopeService from "../../../services/plmMicroscopeService";
 import { useAuth } from "../../../context/AuthContext";
+import { usePermissions } from "../../../hooks/usePermissions";
 import LookupField from "../../../components/LookupField";
 import { equipmentOptionsFromList, buildEquipmentDisplayLabel } from "../../../utils/lookupOptions";
 import {
@@ -47,6 +48,7 @@ const PLMMicroscopePage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const { currentUser } = useAuth();
+  const { isSuperAdmin } = usePermissions();
 
   const [microscopes, setMicroscopes] = useState([]);
   const [microscopesLoading, setMicroscopesLoading] = useState(false);
@@ -139,20 +141,20 @@ const PLMMicroscopePage = () => {
               await plmMicroscopeService.getByEquipment(
                 microscope.equipmentReference
               );
-            const calibrations =
-              calibrationResponse.data || calibrationResponse || [];
+            const calibrations = (
+              calibrationResponse.data ||
+              calibrationResponse ||
+              []
+            )
+              .slice()
+              .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            const currentCalibration = calibrations[0] || null;
 
             // Calculate lastCalibration (most recent calibration date)
-            const lastCalibration =
-              calibrations.length > 0
-                ? new Date(
-                    Math.max(
-                      ...calibrations
-                        .map((cal) => new Date(cal.date).getTime())
-                        .filter((time) => !isNaN(time))
-                    )
-                  )
-                : null;
+            const lastCalibration = currentCalibration?.date
+              ? new Date(currentCalibration.date)
+              : null;
 
             // Calculate calibrationDue (most recent nextCalibration date)
             const calibrationDue =
@@ -169,6 +171,7 @@ const PLMMicroscopePage = () => {
 
             return {
               ...microscope,
+              currentCalibration,
               lastCalibration,
               calibrationDue,
             };
@@ -180,6 +183,7 @@ const PLMMicroscopePage = () => {
             // Return microscope without calibration data if fetch fails
             return {
               ...microscope,
+              currentCalibration: null,
               lastCalibration: null,
               calibrationDue: null,
             };
@@ -248,6 +252,11 @@ const PLMMicroscopePage = () => {
   };
 
   const handleEdit = (calibration) => {
+    if (!isSuperAdmin) {
+      setError("Only a super admin can edit current calibration records");
+      return;
+    }
+
     setEditingCalibration(calibration);
     setIsEditMode(false);
     const microscopeEquipment = microscopes.find(
@@ -268,6 +277,11 @@ const PLMMicroscopePage = () => {
   };
 
   const handleEditFromHistory = (calibration) => {
+    if (!isSuperAdmin) {
+      setError("Only a super admin can edit current calibration records");
+      return;
+    }
+
     // Find the microscope equipment for this calibration
     const microscopeEquipment = microscopes.find(
       (m) => m.equipmentReference === calibration.microscopeReference
@@ -297,11 +311,23 @@ const PLMMicroscopePage = () => {
   };
 
   const handleDelete = (calibration) => {
+    if (!isSuperAdmin) {
+      setError("Only a super admin can delete current calibration records");
+      return;
+    }
+
     setCalibrationToDelete(calibration);
     setDeleteDialogOpen(true);
   };
 
   const handleConfirmDelete = async () => {
+    if (!isSuperAdmin) {
+      setError("Only a super admin can delete current calibration records");
+      setDeleteDialogOpen(false);
+      setCalibrationToDelete(null);
+      return;
+    }
+
     if (calibrationToDelete) {
       try {
         setLoading(true);
@@ -351,6 +377,11 @@ const PLMMicroscopePage = () => {
 
       if (!currentUser || !currentUser._id) {
         throw new Error("User not authenticated");
+      }
+
+      if (editingCalibration && !isSuperAdmin) {
+        setError("Only a super admin can edit current calibration records");
+        return;
       }
 
       if (
@@ -745,6 +776,30 @@ const PLMMicroscopePage = () => {
                         >
                           <HistoryIcon />
                         </IconButton>
+                        {isSuperAdmin && microscope.currentCalibration && (
+                          <>
+                            <IconButton
+                              onClick={() =>
+                                handleEdit(microscope.currentCalibration)
+                              }
+                              size="small"
+                              title="Edit Current Calibration"
+                              sx={{ color: theme.palette.primary.main }}
+                            >
+                              <EditIcon />
+                            </IconButton>
+                            <IconButton
+                              onClick={() =>
+                                handleDelete(microscope.currentCalibration)
+                              }
+                              size="small"
+                              title="Delete Current Calibration"
+                              sx={{ color: theme.palette.error.main }}
+                            >
+                              <DeleteIcon />
+                            </IconButton>
+                          </>
+                        )}
                       </TableCell>
                     </TableRow>
                   );
@@ -776,7 +831,7 @@ const PLMMicroscopePage = () => {
                     : "Edit Servicing"
                   : "Add New Servicing"}
               </Typography>
-              {lookupViewMode && (
+              {lookupViewMode && isSuperAdmin && (
                 <Button
                   variant="outlined"
                   size="small"
@@ -786,7 +841,7 @@ const PLMMicroscopePage = () => {
                   Edit Record
                 </Button>
               )}
-              {editingCalibration && isEditMode && (
+              {editingCalibration && isEditMode && isSuperAdmin && (
                 <Button
                   variant="outlined"
                   size="small"
@@ -1004,57 +1059,75 @@ const PLMMicroscopePage = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {microscopeHistory.map((calibration) => (
-                    <TableRow key={calibration._id}>
-                      <TableCell>
-                        {calibration.date ? formatDate(calibration.date) : "-"}
-                      </TableCell>
-                      <TableCell>
-                        {calibration.servicingCompany || "-"}
-                      </TableCell>
-                      <TableCell>
-                        {calibration.calibratedBy?.name ||
-                          (calibration.calibratedBy?.firstName &&
-                          calibration.calibratedBy?.lastName
-                            ? `${calibration.calibratedBy.firstName} ${calibration.calibratedBy.lastName}`
-                            : "-")}
-                      </TableCell>
-                      <TableCell>
-                        {calibration.serviceReportUrl ? (
-                          <IconButton
-                            size="small"
-                            onClick={() =>
-                              handleServiceReport(calibration.serviceReportUrl)
-                            }
-                            title="View Service Report"
-                          >
-                            <PictureAsPdfIcon />
-                          </IconButton>
-                        ) : (
-                          "-"
-                        )}
-                      </TableCell>
-                      <TableCell>{calibration.notes || "-"}</TableCell>
-                      <TableCell>
-                        <IconButton
-                          onClick={() => handleEditFromHistory(calibration)}
-                          size="small"
-                          title="Edit Calibration"
-                          sx={{ color: theme.palette.primary.main }}
-                        >
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton
-                          onClick={() => handleDelete(calibration)}
-                          size="small"
-                          title="Delete Calibration"
-                          sx={{ color: theme.palette.error.main }}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {microscopeHistory.map((calibration, index) => {
+                    const isCurrentCalibration = index === 0;
+                    const canManageCurrent =
+                      isSuperAdmin && isCurrentCalibration;
+
+                    return (
+                      <TableRow key={calibration._id}>
+                        <TableCell>
+                          {calibration.date
+                            ? formatDate(calibration.date)
+                            : "-"}
+                        </TableCell>
+                        <TableCell>
+                          {calibration.servicingCompany || "-"}
+                        </TableCell>
+                        <TableCell>
+                          {calibration.calibratedBy?.name ||
+                            (calibration.calibratedBy?.firstName &&
+                            calibration.calibratedBy?.lastName
+                              ? `${calibration.calibratedBy.firstName} ${calibration.calibratedBy.lastName}`
+                              : "-")}
+                        </TableCell>
+                        <TableCell>
+                          {calibration.serviceReportUrl ? (
+                            <IconButton
+                              size="small"
+                              onClick={() =>
+                                handleServiceReport(
+                                  calibration.serviceReportUrl,
+                                )
+                              }
+                              title="View Service Report"
+                            >
+                              <PictureAsPdfIcon />
+                            </IconButton>
+                          ) : (
+                            "-"
+                          )}
+                        </TableCell>
+                        <TableCell>{calibration.notes || "-"}</TableCell>
+                        <TableCell>
+                          {canManageCurrent ? (
+                            <>
+                              <IconButton
+                                onClick={() =>
+                                  handleEditFromHistory(calibration)
+                                }
+                                size="small"
+                                title="Edit Current Calibration"
+                                sx={{ color: theme.palette.primary.main }}
+                              >
+                                <EditIcon />
+                              </IconButton>
+                              <IconButton
+                                onClick={() => handleDelete(calibration)}
+                                size="small"
+                                title="Delete Current Calibration"
+                                sx={{ color: theme.palette.error.main }}
+                              >
+                                <DeleteIcon />
+                              </IconButton>
+                            </>
+                          ) : (
+                            "-"
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </TableContainer>

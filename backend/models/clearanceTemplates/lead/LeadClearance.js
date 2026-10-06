@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { stripPdfBuffer } = require("../../../utils/clearanceStoredPdf");
 
 /**
  * Lead-specific clearance schema.
@@ -79,6 +80,15 @@ const leadClearanceSchema = new mongoose.Schema(
     ],
     sitePlanLegendTitle: { type: String },
     sitePlanFigureTitle: { type: String },
+    /** Multiple appendix site plans (array order = PDF order). */
+    sitePlanAppendices: [{
+      sitePlan: { type: Boolean, default: true },
+      sitePlanFile: { type: String },
+      sitePlanSource: { type: String, enum: ['uploaded', 'drawn'] },
+      sitePlanLegend: [{ color: String, description: String }],
+      sitePlanLegendTitle: { type: String },
+      sitePlanFigureTitle: { type: String },
+    }],
     jobSpecificExclusions: { type: String },
     notes: { type: String },
     /** Description of works (free text, optional) */
@@ -154,12 +164,16 @@ const leadClearanceSchema = new mongoose.Schema(
     pdfJobId: { type: String, required: false },
     pdfReadyAt: { type: Date, required: false },
     pdfFilename: { type: String, required: false },
-    /** Path to merged PDF (main + appendices) on disk; when set, download streams this file (no regeneration). */
+    /** Finished report PDF, kept until clearance content changes. Same role as an assessment pdfBuffer. */
+    pdfBuffer: { type: Buffer, required: false },
+    /** Path to a merged PDF on disk when the buffer would not fit on the document. */
     mergedPdfPath: { type: String, required: false },
   },
   {
     timestamps: true,
     collection: "lead_clearances",
+    toJSON: { transform: stripPdfBuffer },
+    toObject: { transform: stripPdfBuffer },
   }
 );
 

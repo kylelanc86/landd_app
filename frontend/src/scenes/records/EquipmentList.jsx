@@ -33,6 +33,7 @@ import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import CloseIcon from "@mui/icons-material/Close";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import HistoryIcon from "@mui/icons-material/History";
 import { formatDate } from "../../utils/dateFormat";
 import { equipmentService } from "../../services/equipmentService";
@@ -85,6 +86,10 @@ const EquipmentList = () => {
   const [markingOutOfService, setMarkingOutOfService] = useState(false);
   const [outOfServiceLabellingConfirmed, setOutOfServiceLabellingConfirmed] =
     useState(false);
+  const [returnToServiceDialog, setReturnToServiceDialog] = useState(false);
+  const [equipmentToReturnToService, setEquipmentToReturnToService] =
+    useState(null);
+  const [returningToService, setReturningToService] = useState(false);
   const [selectedEquipment, setSelectedEquipment] = useState(null);
   const [calibrationHistory, setCalibrationHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -419,6 +424,48 @@ const EquipmentList = () => {
       setError(err.message || "Failed to mark equipment as out of service");
     } finally {
       setMarkingOutOfService(false);
+    }
+  };
+
+  const handleReturnToServiceClick = (equipment) => {
+    setEquipmentToReturnToService(equipment);
+    setReturnToServiceDialog(true);
+    setError(null);
+  };
+
+  const handleReturnToServiceCancel = () => {
+    setReturnToServiceDialog(false);
+    setEquipmentToReturnToService(null);
+    setError(null);
+  };
+
+  const handleReturnToServiceConfirm = async () => {
+    if (!equipmentToReturnToService?._id) {
+      setError("Equipment information not available");
+      return;
+    }
+
+    try {
+      setReturningToService(true);
+      setError(null);
+      await equipmentService.update(equipmentToReturnToService._id, {
+        status: "active",
+      });
+
+      setReturnToServiceDialog(false);
+      setEquipmentToReturnToService(null);
+      fetchEquipment(true);
+
+      window.dispatchEvent(
+        new CustomEvent("equipmentDataUpdated", {
+          detail: { equipmentId: equipmentToReturnToService._id },
+        }),
+      );
+    } catch (err) {
+      console.error("Error returning equipment to service:", err);
+      setError(err.message || "Failed to return equipment to service");
+    } finally {
+      setReturningToService(false);
     }
   };
 
@@ -1167,7 +1214,16 @@ const EquipmentList = () => {
                     >
                       <EditIcon fontSize="small" />
                     </IconButton>
-                    {!isExplicitlyOutOfService && (
+                    {isExplicitlyOutOfService ? (
+                      <IconButton
+                        size="small"
+                        onClick={() => handleReturnToServiceClick(row)}
+                        title="Return to Service"
+                        sx={{ color: theme.palette.success.main }}
+                      >
+                        <CheckCircleIcon fontSize="small" />
+                      </IconButton>
+                    ) : (
                       <IconButton
                         size="small"
                         onClick={() => handleOutOfServiceClick(row)}
@@ -1861,6 +1917,95 @@ const EquipmentList = () => {
             startIcon={markingOutOfService ? <CircularProgress size={20} /> : null}
           >
             {markingOutOfService ? "Updating..." : "Confirm Out-of-Service"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Return to Service Confirmation Dialog */}
+      <Dialog
+        open={returnToServiceDialog}
+        onClose={handleReturnToServiceCancel}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+          >
+            <Typography variant="h6">Return Equipment to Service</Typography>
+            <IconButton onClick={handleReturnToServiceCancel}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            Are you sure you want to return{" "}
+            <strong>
+              {equipmentToReturnToService?.equipmentReference ||
+                "this equipment"}
+            </strong>{" "}
+            to service?
+          </Typography>
+          {equipmentToReturnToService && (
+            <Box
+              sx={{
+                p: 2,
+                backgroundColor: theme.palette.grey[100],
+                borderRadius: 1,
+                mb: 2,
+              }}
+            >
+              <Typography variant="body2" sx={{ fontWeight: "bold", mb: 1 }}>
+                Equipment Type:
+              </Typography>
+              <Typography variant="body1" sx={{ mb: 1 }}>
+                {equipmentToReturnToService.equipmentType}
+              </Typography>
+              {equipmentToReturnToService.brandModel && (
+                <>
+                  <Typography variant="body2" sx={{ fontWeight: "bold", mb: 1 }}>
+                    Brand/Model:
+                  </Typography>
+                  <Typography variant="body1">
+                    {equipmentToReturnToService.brandModel}
+                  </Typography>
+                </>
+              )}
+            </Box>
+          )}
+          <Alert severity="info">
+            <Typography variant="body2">
+              Status will be set to active. If calibration is overdue, the
+              equipment may still show as Calibration Overdue based on its
+              calibration records.
+            </Typography>
+          </Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={handleReturnToServiceCancel}
+            disabled={returningToService}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleReturnToServiceConfirm}
+            variant="contained"
+            color="success"
+            disabled={returningToService}
+            startIcon={
+              returningToService ? <CircularProgress size={20} /> : null
+            }
+          >
+            {returningToService ? "Updating..." : "Return to Service"}
           </Button>
         </DialogActions>
       </Dialog>

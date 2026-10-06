@@ -181,6 +181,7 @@ const LeadMonitoringSampleList = () => {
   const [cocSaving, setCocSaving] = useState(false);
   const [sitePlanDialogOpen, setSitePlanDialogOpen] = useState(false);
   const [sitePlanData, setSitePlanData] = useState(null);
+  const [removeSitePlanDialogOpen, setRemoveSitePlanDialogOpen] = useState(false);
   const [descriptionSectionExpanded, setDescriptionSectionExpanded] =
     useState(true);
   const [descriptionModalOpen, setDescriptionModalOpen] = useState(false);
@@ -1479,18 +1480,7 @@ const LeadMonitoringSampleList = () => {
             <Button
               variant="outlined"
               startIcon={<DeleteIcon />}
-              onClick={() => {
-                if (
-                  window.confirm(
-                    "Are you sure you want to delete this site plan? This action cannot be undone.",
-                  )
-                ) {
-                  handleSaveSitePlan({
-                    sitePlan: false,
-                    sitePlanData: null,
-                  });
-                }
-              }}
+              onClick={() => setRemoveSitePlanDialogOpen(true)}
               disabled={isReportAuthorized}
               sx={{
                 "& .MuiButton-startIcon": {
@@ -2673,6 +2663,50 @@ const LeadMonitoringSampleList = () => {
             }}
           >
             Delete Sample
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete site plan confirmation */}
+      <Dialog
+        open={removeSitePlanDialogOpen}
+        onClose={() => setRemoveSitePlanDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            boxShadow: "0 12px 40px rgba(0, 0, 0, 0.12)",
+          },
+        }}
+      >
+        <DialogTitle>Delete site plan</DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 0, pb: 1 }}>
+          <Typography variant="body1" color="text.secondary">
+            Are you sure you want to delete this site plan? This action cannot
+            be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2 }}>
+          <Button
+            onClick={() => setRemoveSitePlanDialogOpen(false)}
+            variant="outlined"
+            color="inherit"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              setRemoveSitePlanDialogOpen(false);
+              handleSaveSitePlan({
+                sitePlan: false,
+                sitePlanData: null,
+              });
+            }}
+            variant="contained"
+            color="error"
+          >
+            Delete
           </Button>
         </DialogActions>
       </Dialog>

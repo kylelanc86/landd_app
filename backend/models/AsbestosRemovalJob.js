@@ -70,6 +70,35 @@ const deriveJobType = (airMonitoring = false, clearance = false) => {
   return "none";
 };
 
+function liveProjectName(source) {
+  if (!source) return "";
+  const project = source.projectId;
+  if (
+    project &&
+    typeof project === "object" &&
+    typeof project.name === "string" &&
+    project.name.trim()
+  ) {
+    return project.name.trim();
+  }
+  return typeof source.projectName === "string" ? source.projectName : "";
+}
+
+function applyLiveProjectName(job) {
+  if (!job) return job;
+  const name = liveProjectName(job);
+  if (name) job.projectName = name;
+  return job;
+}
+
+asbestosRemovalJobSchema.set("toJSON", {
+  transform(doc, ret) {
+    const name = liveProjectName(ret);
+    if (name) ret.projectName = name;
+    return ret;
+  },
+});
+
 asbestosRemovalJobSchema.pre("save", function (next) {
   if (
     this.isModified("airMonitoring") ||
@@ -88,3 +117,5 @@ asbestosRemovalJobSchema.index({ createdBy: 1 });
 
 module.exports = mongoose.model("AsbestosRemovalJob", asbestosRemovalJobSchema);
 module.exports.deriveJobType = deriveJobType;
+module.exports.liveProjectName = liveProjectName;
+module.exports.applyLiveProjectName = applyLiveProjectName;

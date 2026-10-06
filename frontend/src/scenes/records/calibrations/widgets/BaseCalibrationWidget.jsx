@@ -32,6 +32,16 @@ const BaseCalibrationWidget = ({
   const navigate = useNavigate();
   const isTablet = useMediaQuery(theme.breakpoints.down("md"));
 
+  const hasOverdueItems = (() => {
+    if (!nextCalibrationDue) return false;
+    const dueDate = new Date(nextCalibrationDue);
+    if (Number.isNaN(dueDate.getTime())) return false;
+    const today = new Date();
+    dueDate.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    return dueDate < today;
+  })();
+
   return (
     <Card
       sx={{
@@ -129,6 +139,19 @@ const BaseCalibrationWidget = ({
             }}
           >
             {title}
+            {hasOverdueItems && (
+              <Typography
+                component="span"
+                sx={{
+                  ml: 0.75,
+                  fontSize: "14px",
+                  fontWeight: 500,
+                  color: theme.palette.error.main,
+                }}
+              >
+                (Items Overdue)
+              </Typography>
+            )}
           </Typography>
           {!hideNextCalibrationDue && (
             <Box mb={2}>

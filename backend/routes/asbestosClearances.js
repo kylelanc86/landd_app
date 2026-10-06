@@ -11,6 +11,15 @@ const {
 const { getLegislationForReportTemplate } = require("../services/templateService");
 const { formatDateSydney } = require("../utils/dateUtils");
 const {
+  sanitizePlanAppendixList,
+  syncLegacySitePlanFieldsFromAppendices,
+} = require("../utils/sitePlanAppendices");
+const {
+  applyClearanceOmitToPlain,
+  parseClearanceOmitQuery,
+  stripItemPhotographBlobs,
+} = require("../utils/clearancePhotoOmit");
+const {
   buildAsbestosClearanceFilename,
   buildEnclosureCertificateFilename,
   toReportReference,
@@ -19,6 +28,13 @@ const {
   notifyClearanceAuthorisationRequesterOnApproval,
   resolveAsbestosClearanceJobUrl,
 } = require("../services/reportAuthorisationNotificationService");
+const { mapPhotoArrow, applyArrowUpdates } = require("../utils/photoArrows");
+const {
+  hasNonEmptyApproval,
+  reportableShiftFindFilter,
+  reopenRemovalJob,
+  invalidateProjectReportCategories,
+} = require("../utils/reportReviseHelpers");
 
 // Exclude soft-deleted clearances from list queries
 const notDeletedClearanceFilter = {
@@ -85,7 +101,7 @@ function isEnclosureOnlyUpdate(body) {
 /** Clear persisted PDF fields when clearance content changes so the UI shows Generate instead of Download. */
 function clearClearancePdfFields(clearance) {
   removeAsbestosClearanceMergedPdfFileIfExists(clearance.mergedPdfPath);
-  const pdfFields = ["pdfDownloadUrl", "pdfJobId", "pdfReadyAt", "pdfFilename", "mergedPdfPath"];
+  const pdfFields = ["pdfDownloadUrl", "pdfJobId", "pdfReadyAt", "pdfFilename", "mergedPdfPath", "pdfBuffer"];
   pdfFields.forEach((field) => {
     clearance[field] = undefined;
     clearance.markModified(field);
@@ -135,8 +151,17 @@ router.get("/", auth, checkPermission("asbestos.view"), async (req, res) => {
 
     const count = await AsbestosClearance.countDocuments(filter);
 
+    // Never ship photo/plan blobs on list endpoints
+    const slimClearances = clearances.map((c) =>
+      applyClearanceOmitToPlain(c, {
+        omitPhotoData: true,
+        omitPlanFiles: true,
+        omitEnclosurePhotos: true,
+      }),
+    );
+
     res.json({
-      clearances,
+      clearances: slimClearances,
       totalPages: Math.ceil(count / limit),
       currentPage: page,
       totalCount: count,
@@ -148,8 +173,10 @@ router.get("/", auth, checkPermission("asbestos.view"), async (req, res) => {
 });
 
 // Get asbestos clearance by ID
+// Query: omitPhotoData, omitPlanFiles, keepEnclosurePhotos (when omitting photos)
 router.get("/:id", auth, checkPermission("asbestos.view"), async (req, res) => {
   try {
+    const omitOpts = parseClearanceOmitQuery(req.query);
     const clearance = await AsbestosClearance.findById(req.params.id)
       .populate({
         path: "projectId",
@@ -165,6 +192,14 @@ router.get("/:id", auth, checkPermission("asbestos.view"), async (req, res) => {
 
     if (!clearance) {
       return res.status(404).json({ message: "Asbestos clearance not found" });
+    }
+
+    if (
+      omitOpts.omitPhotoData ||
+      omitOpts.omitPlanFiles ||
+      omitOpts.omitEnclosurePhotos
+    ) {
+      return res.json(applyClearanceOmitToPlain(clearance, omitOpts));
     }
 
     res.json(clearance);
@@ -349,6 +384,7 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
       sitePlanLegend,
       sitePlanLegendTitle,
       sitePlanFigureTitle,
+      sitePlanAppendices,
       enclosureInspectionDateTime,
       enclosureInspectedBy,
       enclosureDescription,
@@ -419,6 +455,15 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
       clearance.sitePlanSource = sitePlanSource;
     } else     if (sitePlanSource === null) {
       clearance.sitePlanSource = undefined; // Remove the field instead of setting to null
+    }
+    if (sitePlanAppendices !== undefined) {
+      const sanitized = sanitizePlanAppendixList(sitePlanAppendices);
+      clearance.sitePlanAppendices = sanitized;
+      clearance.markModified("sitePlanAppendices");
+      syncLegacySitePlanFieldsFromAppendices(clearance, sanitized);
+      if (sanitized.length > 0) {
+        clearance.markModified("sitePlanLegend");
+      }
     }
     if (enclosureInspectionDateTime !== undefined) {
       clearance.enclosureInspectionDateTime = enclosureInspectionDateTime
@@ -754,12 +799,11 @@ router.get("/air-monitoring-reports/:projectId", auth, async (req, res) => {
     for (const job of allJobs) {
       const shifts = await Shift.find({
         job: job._id,
-        $or: [
-          { status: "analysis_complete" },
-          { status: "shift_complete" },
-          { status: "complete" },
-          { reportApprovedBy: { $exists: true, $ne: null } }
-        ]
+        ...reportableShiftFindFilter([
+          "analysis_complete",
+          "shift_complete",
+          "complete",
+        ]),
       })
         .populate('job', 'name')
         .populate('supervisor', 'firstName lastName')
@@ -768,6 +812,10 @@ router.get("/air-monitoring-reports/:projectId", auth, async (req, res) => {
       console.log(`Found ${shifts.length} shifts for job ${job._id} (${job.name})`);
       
       shifts.forEach(shift => {
+        const shiftRemovalistOverride =
+          typeof shift.asbestosRemovalist === "string"
+            ? shift.asbestosRemovalist.trim()
+            : "";
         airMonitoringReports.push({
           _id: shift._id,
           name: shift.name,
@@ -782,7 +830,9 @@ router.get("/air-monitoring-reports/:projectId", auth, async (req, res) => {
           jobId: job._id,
           projectName: job.projectId?.name,
           projectId: job.projectId?._id,
-          asbestosRemovalist: job.asbestosRemovalist || null
+          asbestosRemovalist:
+            shiftRemovalistOverride || job.asbestosRemovalist || null,
+          asbestosRemovalistOverride: shiftRemovalistOverride || null
         });
       });
     }
@@ -817,30 +867,37 @@ router.get("/air-monitoring-reports-by-job/:jobId", auth, async (req, res) => {
     // Get shifts for this specific job
     const shifts = await Shift.find({ 
       job: jobId,
-      $or: [
-        { status: "analysis_complete" },
-        { status: "shift_complete" },
-        { status: "complete" },
-        { reportApprovedBy: { $exists: true, $ne: null } }
-      ]
+      ...reportableShiftFindFilter([
+        "analysis_complete",
+        "shift_complete",
+        "complete",
+      ]),
     })
     .populate('defaultSampler', 'firstName lastName');
     
     console.log(`Found ${shifts.length} shifts for job ${jobId}`);
     
-    const airMonitoringReports = shifts.map(shift => ({
+    const airMonitoringReports = shifts.map(shift => {
+      const shiftRemovalistOverride =
+        typeof shift.asbestosRemovalist === "string"
+          ? shift.asbestosRemovalist.trim()
+          : "";
+      return {
       _id: shift._id,
       name: shift.name,
       date: shift.date,
       status: shift.status,
       reportApprovedBy: shift.reportApprovedBy,
       reportIssueDate: shift.reportIssueDate,
-      asbestosRemovalist: asbestosRemovalJob.asbestosRemovalist,
+      asbestosRemovalist:
+        shiftRemovalistOverride || asbestosRemovalJob.asbestosRemovalist,
+      asbestosRemovalistOverride: shiftRemovalistOverride || null,
       defaultSampler: shift.defaultSampler,
       descriptionOfWorks: shift.descriptionOfWorks,
       revision: shift.revision || 0,
       jobId: jobId
-    }));
+    };
+    });
     
     // Sort by date (newest first)
     airMonitoringReports.sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -931,19 +988,60 @@ router.patch("/:id/restore", auth, checkPermission("asbestos.edit"), async (req,
 });
 
 // Get clearance items
+// Query: omitPhotoData=1 strips photograph base64 (lazy-load via .../photos/data)
 router.get("/:id/items", auth, checkPermission("asbestos.view"), async (req, res) => {
   try {
+    const omitPhotoData =
+      req.query.omitPhotoData === "1" || req.query.omitPhotoData === "true";
     const clearance = await AsbestosClearance.findById(req.params.id);
     if (!clearance) {
       return res.status(404).json({ message: "Asbestos clearance not found" });
     }
 
-    res.json(clearance.items || []);
+    if (!omitPhotoData) {
+      return res.json(clearance.items || []);
+    }
+
+    const items = (clearance.items || []).map((item) =>
+      typeof item.toObject === "function" ? item.toObject() : { ...item },
+    );
+    stripItemPhotographBlobs(items);
+    res.json(items);
   } catch (error) {
     console.error("Error fetching clearance items:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
+
+// Full image payloads for one clearance item's photos (lazy gallery load)
+router.get(
+  "/:id/items/:itemId/photos/data",
+  auth,
+  checkPermission("asbestos.view"),
+  async (req, res) => {
+    try {
+      const clearance = await AsbestosClearance.findById(req.params.id).select(
+        "items",
+      );
+      if (!clearance) {
+        return res.status(404).json({ message: "Asbestos clearance not found" });
+      }
+      const item = clearance.items.id(req.params.itemId);
+      if (!item) {
+        return res.status(404).json({ message: "Clearance item not found" });
+      }
+      const photographs = (item.photographs || []).map((p) => ({
+        _id: p._id,
+        data: p.data,
+        fullResolutionData: p.fullResolutionData,
+      }));
+      res.json({ photographs });
+    } catch (error) {
+      console.error("Error fetching clearance item photo data:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  },
+);
 
 // Add clearance item
 router.post("/:id/items", auth, checkPermission("asbestos.edit"), async (req, res) => {
@@ -1242,18 +1340,7 @@ router.patch("/:id/items/:itemId/photos/:photoId", auth, checkPermission("asbest
 
     if (Array.isArray(arrows)) {
       delete photo.arrow;
-      photo.arrows = arrows.map((a) => {
-        const sub = {
-          x: typeof a.x === "number" ? a.x : 0.5,
-          y: typeof a.y === "number" ? a.y : 0.5,
-          rotation: typeof a.rotation === "number" ? a.rotation : -45,
-          color: a.color || "#f44336",
-        };
-        if (a._id) {
-          sub._id = a._id;
-        }
-        return sub;
-      });
+      photo.arrows = arrows.map((a) => mapPhotoArrow(a));
     }
 
     clearance.updatedBy = req.user.id;
@@ -1378,7 +1465,6 @@ function ensureArrowsArray(photo) {
 
 router.post("/:id/items/:itemId/photos/:photoId/arrows", auth, checkPermission("asbestos.edit"), async (req, res) => {
   try {
-    const { x, y, rotation, color } = req.body;
     const clearance = await AsbestosClearance.findById(req.params.id);
     if (!clearance) return res.status(404).json({ message: "Asbestos clearance not found" });
     const item = clearance.items.id(req.params.itemId);
@@ -1386,12 +1472,7 @@ router.post("/:id/items/:itemId/photos/:photoId/arrows", auth, checkPermission("
     const photo = item.photographs.id(req.params.photoId);
     if (!photo) return res.status(404).json({ message: "Photo not found" });
     ensureArrowsArray(photo);
-    photo.arrows.push({
-      x: typeof x === "number" ? x : 0.5,
-      y: typeof y === "number" ? y : 0.5,
-      rotation: typeof rotation === "number" ? rotation : -45,
-      color: color || "#f44336",
-    });
+    photo.arrows.push(mapPhotoArrow(req.body));
     clearance.updatedBy = req.user.id;
     clearClearancePdfFields(clearance);
     await clearance.save();
@@ -1404,7 +1485,6 @@ router.post("/:id/items/:itemId/photos/:photoId/arrows", auth, checkPermission("
 
 router.patch("/:id/items/:itemId/photos/:photoId/arrows/:arrowId", auth, checkPermission("asbestos.edit"), async (req, res) => {
   try {
-    const { x, y, rotation, color } = req.body;
     const clearance = await AsbestosClearance.findById(req.params.id);
     if (!clearance) return res.status(404).json({ message: "Asbestos clearance not found" });
     const item = clearance.items.id(req.params.itemId);
@@ -1414,10 +1494,7 @@ router.patch("/:id/items/:itemId/photos/:photoId/arrows/:arrowId", auth, checkPe
     ensureArrowsArray(photo);
     const arrow = photo.arrows.id(req.params.arrowId);
     if (!arrow) return res.status(404).json({ message: "Arrow not found" });
-    if (typeof x === "number") arrow.x = x;
-    if (typeof y === "number") arrow.y = y;
-    if (typeof rotation === "number") arrow.rotation = rotation;
-    if (color !== undefined) arrow.color = color;
+    applyArrowUpdates(arrow, req.body);
     clearance.updatedBy = req.user.id;
     clearClearancePdfFields(clearance);
     await clearance.save();
@@ -1479,6 +1556,104 @@ router.patch("/:id/items/:itemId/photos/:photoId/arrow", auth, checkPermission("
   } catch (err) {
     console.error("Error updating photo arrow:", err);
     res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// POST /api/asbestos-clearances/:id/revise-report — from Project Reports
+router.post("/:id/revise-report", auth, checkPermission("asbestos.edit"), async (req, res) => {
+  try {
+    const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
+    if (!reason) {
+      return res.status(400).json({
+        message: "A revision reason is required",
+      });
+    }
+
+    const clearance = await AsbestosClearance.findById(req.params.id);
+    if (!clearance) {
+      return res.status(404).json({ message: "Asbestos clearance not found" });
+    }
+
+    const isEnclosure = Boolean(clearance.isEnclosureCertificate);
+    const completeLike = ["complete", "Site Work Complete"].includes(clearance.status);
+    const authorised = isEnclosure
+      ? hasNonEmptyApproval(clearance.enclosureCertificateApprovedBy)
+      : hasNonEmptyApproval(clearance.reportApprovedBy);
+
+    if (!completeLike && !authorised) {
+      return res.status(400).json({
+        message: "This report cannot be revised from Project Reports until it is complete or authorised.",
+      });
+    }
+
+    const newRevision = (typeof clearance.revision === "number" ? clearance.revision : 0) + 1;
+    clearance.revision = newRevision;
+    clearance.revisionReasons = [
+      ...(clearance.revisionReasons || []),
+      {
+        revisionNumber: newRevision,
+        reason,
+        revisedBy: req.user.id,
+        revisedAt: new Date(),
+      },
+    ];
+    clearance.status = "in progress";
+    clearance.updatedBy = req.user.id;
+
+    if (isEnclosure) {
+      clearEnclosureCertificateApprovalFields(clearance);
+      clearance.enclosureCertificateViewedAt = undefined;
+      clearance.markModified("enclosureCertificateViewedAt");
+      clearEnclosureCertificatePdfFields(clearance);
+    } else {
+      if (clearance.reportApprovedBy) {
+        clearance.reportApprovedBy = undefined;
+        clearance.authorisationRequestedBy = undefined;
+        clearance.authorisationRequestedByEmail = undefined;
+        clearance.markModified("reportApprovedBy");
+      }
+      clearance.reportViewedAt = undefined;
+      clearance.markModified("reportViewedAt");
+      clearClearancePdfFields(clearance);
+    }
+
+    await clearance.save();
+    await AsbestosClearance.updateOne(
+      { _id: clearance._id },
+      isEnclosure
+        ? {
+            $unset: {
+              enclosureCertificateApprovedBy: 1,
+              enclosureCertificateAuthorisationRequestedBy: 1,
+              enclosureCertificateAuthorisationRequestedByEmail: 1,
+              enclosureCertificateViewedAt: 1,
+            },
+          }
+        : {
+            $unset: {
+              reportApprovedBy: 1,
+              authorisationRequestedBy: 1,
+              authorisationRequestedByEmail: 1,
+              reportViewedAt: 1,
+            },
+          },
+    );
+
+    await reopenRemovalJob({
+      jobId: clearance.asbestosRemovalJobId,
+      jobModel: "AsbestosRemovalJob",
+      projectId: clearance.projectId,
+    });
+    await invalidateProjectReportCategories(clearance.projectId);
+
+    const label = isEnclosure ? "Enclosure certificate" : "Clearance report";
+    res.json({
+      message: `${label} reopened for editing. The removal job is back in progress — re-authorise when ready.`,
+      clearance,
+    });
+  } catch (err) {
+    console.error("Error revising asbestos clearance report:", err);
+    res.status(500).json({ message: err.message || "Failed to revise report" });
   }
 });
 

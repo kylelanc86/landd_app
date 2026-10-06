@@ -1,0 +1,22 @@
+---
+description: Never auto commit/push; confirm before any terminal use
+alwaysApply: true
+---
+
+# Git and terminal confirmation
+
+## Commit and push
+
+**Never** commit or push unless the user explicitly asks in that message.
+
+- Do not commit “because the fix is done”
+- Do not push after a commit unless they also asked to push
+- If unsure, ask first
+
+## Terminal
+
+Before running **any** Shell / terminal command, **ask the user and wait for confirmation**.
+
+- Include a short list of the command(s) you want to run and why
+- Only proceed after they clearly approve
+- Applies to git, installs, builds, tests, scripts, and one-off checks

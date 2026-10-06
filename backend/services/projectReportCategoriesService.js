@@ -27,9 +27,14 @@ const completedClientSuppliedJobFilter = {
 };
 
 const reportableAsbestosShiftMatch = {
-  $or: [
-    { status: { $in: ['analysis_complete', 'shift_complete', 'complete'] } },
-    { reportApprovedBy: { $exists: true, $ne: null } },
+  $and: [
+    notDeleted,
+    {
+      $or: [
+        { status: { $in: ['analysis_complete', 'shift_complete', 'complete'] } },
+        { reportApprovedBy: { $exists: true, $nin: [null, ''] } },
+      ],
+    },
   ],
 };
 
@@ -40,7 +45,7 @@ const reportableLeadShiftMatch = {
     {
       $or: [
         { status: { $in: ['analysis_complete', 'shift_complete'] } },
-        { reportApprovedBy: { $exists: true, $ne: null } },
+        { reportApprovedBy: { $exists: true, $nin: [null, ''] } },
       ],
     },
   ],
@@ -184,6 +189,13 @@ async function getReportCategories(projectId) {
     throw new Error('Invalid project ID');
   }
 
+  const {
+    unarchiveClientSuppliedJobsStuckAfterRevise,
+  } = require('../utils/clientSuppliedJobStatus');
+  const healed = await unarchiveClientSuppliedJobsStuckAfterRevise(
+    projectObjectId,
+  );
+
   const project = await Project.findById(projectObjectId)
     .select('reportCategories reportCategoriesCachedAt')
     .lean();
@@ -192,7 +204,7 @@ async function getReportCategories(projectId) {
     throw new Error('Project not found');
   }
 
-  if (project.reportCategoriesCachedAt) {
+  if (project.reportCategoriesCachedAt && healed.count === 0) {
     return Array.isArray(project.reportCategories) ? project.reportCategories : [];
   }
 

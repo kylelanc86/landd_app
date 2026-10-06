@@ -29,6 +29,11 @@ const {
 } = require('../utils/reportFilenames');
 const AsbestosRemovalJob = require('../models/AsbestosRemovalJob');
 const LeadRemovalJob = require('../models/LeadRemovalJob');
+const {
+  hasNonEmptyApproval,
+  reopenRemovalJob,
+  invalidateProjectReportCategories,
+} = require('../utils/reportReviseHelpers');
 
 async function freezeShiftReportReference(shift) {
   const issueDate = shift.reportIssueDate || new Date();
@@ -458,7 +463,9 @@ router.patch('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports
       'sitePlan',
       'sitePlanData',
       'analysisReportPath',
-      'analysisReportOriginalName'
+      'analysisReportOriginalName',
+      'date',
+      'asbestosRemovalist'
     ];
 
     // Filter out any fields that aren't in allowedUpdates
@@ -468,6 +475,22 @@ router.patch('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports
         obj[key] = req.body[key];
         return obj;
       }, {});
+
+    // Date edits from the shift dialog send YYYY-MM-DD. Ignore other shapes so a
+    // full-object patch (for example authorisation) does not rewrite the stored date.
+    if (
+      updates.date !== undefined &&
+      !(typeof updates.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(updates.date))
+    ) {
+      delete updates.date;
+    }
+
+    if (updates.asbestosRemovalist !== undefined) {
+      updates.asbestosRemovalist =
+        typeof updates.asbestosRemovalist === 'string'
+          ? updates.asbestosRemovalist.trim()
+          : '';
+    }
 
     // Preserve the first authorisation date for filename continuity across revisions.
     if (
@@ -526,6 +549,24 @@ router.patch('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports
 
       if (shift.job && shift.jobModel === 'AsbestosRemovalJob') {
         await syncAirMonitoringForJob(shift.job);
+      }
+
+      const approvalCleared =
+        hasNonEmptyApproval(shiftBeforeUpdate.reportApprovedBy) &&
+        !hasNonEmptyApproval(updatedShift.reportApprovedBy);
+      if (approvalCleared) {
+        try {
+          const populatedShift = await Shift.findById(updatedShift._id)
+            .populate({
+              path: 'job',
+              populate: { path: 'projectId', select: '_id' },
+            });
+          const projectId =
+            populatedShift?.job?.projectId?._id || populatedShift?.job?.projectId;
+          await invalidateProjectReportCategories(projectId);
+        } catch (err) {
+          console.error('Error invalidating report categories after shift approval cleared:', err);
+        }
       }
 
       // Update project's reports_present field if shift is completed
@@ -670,15 +711,32 @@ router.patch('/:id/reopen', auth, checkPermission(['admin.update']), async (req,
     // Reopen by resetting status to "in progress" (ongoing) so the shift can be edited again.
     // Preserve first reportIssueDate / reportReference for stable filenames across revisions.
     shift.status = 'ongoing';
-    if (shift.reportApprovedBy) {
+    if (hasNonEmptyApproval(shift.reportApprovedBy)) {
       shift.revision = (typeof shift.revision === 'number' ? shift.revision : 0) + 1;
     }
-    shift.reportApprovedBy = '';
+    shift.reportApprovedBy = undefined;
+    shift.markModified('reportApprovedBy');
     shift.reportViewedAt = null;
 
     const updatedShift = await shift.save();
+    await Shift.updateOne(
+      { _id: shift._id },
+      { $unset: { reportApprovedBy: 1 } },
+    );
     if (shift.job && (shift.jobModel === 'AsbestosRemovalJob' || !shift.jobModel)) {
       await syncAirMonitoringForJob(shift.job);
+    }
+    try {
+      const populatedShift = await Shift.findById(shift._id)
+        .populate({
+          path: 'job',
+          populate: { path: 'projectId', select: '_id' },
+        });
+      const projectId =
+        populatedShift?.job?.projectId?._id || populatedShift?.job?.projectId;
+      await invalidateProjectReportCategories(projectId);
+    } catch (err) {
+      console.error('Error invalidating report categories after shift reopen:', err);
     }
     res.json({
       message: 'Shift reopened successfully',
@@ -687,6 +745,62 @@ router.patch('/:id/reopen', auth, checkPermission(['admin.update']), async (req,
   } catch (error) {
     console.error('Error reopening shift:', error);
     res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/air-monitoring-shifts/:id/revise-report — from Project Reports
+router.post('/:id/revise-report', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports']), async (req, res) => {
+  try {
+    const shift = await Shift.findById(req.params.id);
+    if (!shift) {
+      return res.status(404).json({ message: 'Shift not found' });
+    }
+
+    const reportable =
+      ['analysis_complete', 'shift_complete', 'complete'].includes(shift.status) ||
+      hasNonEmptyApproval(shift.reportApprovedBy);
+    if (!reportable) {
+      return res.status(400).json({
+        message: 'This shift report cannot be revised from Project Reports until it is complete or authorised.',
+      });
+    }
+
+    shift.status = 'ongoing';
+    shift.revision = (typeof shift.revision === 'number' ? shift.revision : 0) + 1;
+    shift.reportApprovedBy = undefined;
+    shift.markModified('reportApprovedBy');
+    shift.reportViewedAt = null;
+    if (shift.deletedAt) {
+      shift.deletedAt = null;
+    }
+    await shift.save();
+    await Shift.updateOne(
+      { _id: shift._id },
+      { $unset: { reportApprovedBy: 1 } },
+    );
+
+    const isLead = shift.jobModel === 'LeadRemovalJob';
+    if (shift.job && (shift.jobModel === 'AsbestosRemovalJob' || !shift.jobModel)) {
+      await syncAirMonitoringForJob(shift.job);
+    }
+
+    const job = await reopenRemovalJob({
+      jobId: shift.job?._id || shift.job,
+      jobModel: isLead ? 'LeadRemovalJob' : 'AsbestosRemovalJob',
+    });
+
+    const projectId = job?.projectId;
+    await invalidateProjectReportCategories(projectId);
+
+    const label = isLead ? 'Lead monitoring' : 'Air monitoring';
+    res.json({
+      message: `${label} report reopened for editing. The job is back in progress — re-authorise when ready.`,
+      shift,
+      job,
+    });
+  } catch (error) {
+    console.error('Error revising shift report:', error);
+    res.status(500).json({ message: error.message || 'Failed to revise shift report' });
   }
 });
 
@@ -1338,6 +1452,10 @@ router.post(
           ? shift.job.id
           : shift.job?._id?.toString() || shift.job?.toString();
       const isLeadJob = shift.jobModel === 'LeadRemovalJob';
+      const reportTypeLabel = isLeadJob
+        ? 'Lead air monitoring shift'
+        : 'Asbestos air monitoring shift';
+      const reportTypeArticle = isLeadJob ? 'A' : 'An';
       const jobUrl = jobId
         ? `${frontendUrl}/${isLeadJob ? 'lead-removal' : 'asbestos-removal'}/jobs/${jobId}/details`
         : `${frontendUrl}/projects`;
@@ -1353,15 +1471,17 @@ router.post(
         shiftDate,
         requesterName,
         jobUrl,
+        reportTypeLabel,
+        reportTypeArticle,
       };
       setImmediate(() => {
         Promise.all(
           emailPayload.signatoryUsers.map(async (user) => {
             await emailPayload.sendMail({
               to: user.email,
-              subject: `Report Authorisation Required - ${emailPayload.projectID}: ${emailPayload.shiftName}`,
+              subject: `Report Authorisation Required - ${emailPayload.projectID}: ${emailPayload.reportTypeLabel}`,
               text: `
-An air monitoring shift report is ready for authorisation.
+${emailPayload.reportTypeArticle} ${emailPayload.reportTypeLabel.toLowerCase()} report is ready for authorisation.
 
 Project: ${emailPayload.projectName} (${emailPayload.projectID})
 Client: ${emailPayload.clientName}
@@ -1379,8 +1499,9 @@ Review the report at: ${emailPayload.jobUrl}
                 <div style="color: #333; line-height: 1.6;">
                   <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Report Authorisation Required</h2>
                   <p>Hello ${user.firstName},</p>
-                  <p>An air monitoring shift report is ready for your authorisation:</p>
+                  <p>${emailPayload.reportTypeArticle} ${emailPayload.reportTypeLabel.toLowerCase()} report is ready for your authorisation:</p>
                   <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
+                    <p style="margin: 5px 0;"><strong>Type:</strong> ${emailPayload.reportTypeLabel}</p>
                     <p style="margin: 5px 0;"><strong>Project:</strong> ${emailPayload.projectName}</p>
                     <p style="margin: 5px 0;"><strong>Project ID:</strong> ${emailPayload.projectID}</p>
                     <p style="margin: 5px 0;"><strong>Client:</strong> ${emailPayload.clientName}</p>

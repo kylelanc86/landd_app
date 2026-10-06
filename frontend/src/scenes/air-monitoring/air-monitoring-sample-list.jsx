@@ -83,6 +83,7 @@ const SampleList = () => {
   const [submittedBySignature, setSubmittedBySignature] = useState("");
   const [sitePlanDialogOpen, setSitePlanDialogOpen] = useState(false);
   const [sitePlanData, setSitePlanData] = useState(null);
+  const [removeSitePlanDialogOpen, setRemoveSitePlanDialogOpen] = useState(false);
   const [descriptionSectionExpanded, setDescriptionSectionExpanded] =
     useState(true);
   const [descriptionModalOpen, setDescriptionModalOpen] = useState(false);
@@ -462,7 +463,7 @@ const SampleList = () => {
 
       const csvRows = [
         ["Project ID", job?.projectId?.projectID || ""],
-        ["Project Name", job?.projectName || job?.name || ""],
+        ["Project Name", job?.projectId?.name || job?.projectName || job?.name || ""],
         ["Sample Date", shift?.date ? formatDate(shift.date) : ""],
         ["Description of Works", descriptionOfWorks || ""],
         [],
@@ -1024,7 +1025,7 @@ const SampleList = () => {
         }}
       >
         {job?.projectId?.projectID ? `${job.projectId.projectID}: ` : ""}
-        {job?.projectName || job?.name || "Loading..."}
+        {job?.projectId?.name || job?.projectName || job?.name || "Loading..."}
         {" - "}
         {shift?.name ? `${formatDate(shift.date)}` : "Loading..."}
       </Typography>
@@ -1270,18 +1271,7 @@ const SampleList = () => {
             <Button
               variant="outlined"
               startIcon={<DeleteIcon />}
-              onClick={() => {
-                if (
-                  window.confirm(
-                    "Are you sure you want to delete this site plan? This action cannot be undone.",
-                  )
-                ) {
-                  handleSaveSitePlan({
-                    sitePlan: false,
-                    sitePlanData: null,
-                  });
-                }
-              }}
+              onClick={() => setRemoveSitePlanDialogOpen(true)}
               disabled={isReportAuthorized}
               sx={{
                 "& .MuiButton-startIcon": {
@@ -2327,6 +2317,50 @@ const SampleList = () => {
             disabled={duplicateInProgress}
           >
             {duplicateInProgress ? "Creating…" : "Confirm"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete site plan confirmation */}
+      <Dialog
+        open={removeSitePlanDialogOpen}
+        onClose={() => setRemoveSitePlanDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            boxShadow: "0 12px 40px rgba(0, 0, 0, 0.12)",
+          },
+        }}
+      >
+        <DialogTitle>Delete site plan</DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 0, pb: 1 }}>
+          <Typography variant="body1" color="text.secondary">
+            Are you sure you want to delete this site plan? This action cannot
+            be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2 }}>
+          <Button
+            onClick={() => setRemoveSitePlanDialogOpen(false)}
+            variant="outlined"
+            color="inherit"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              setRemoveSitePlanDialogOpen(false);
+              handleSaveSitePlan({
+                sitePlan: false,
+                sitePlanData: null,
+              });
+            }}
+            variant="contained"
+            color="error"
+          >
+            Delete
           </Button>
         </DialogActions>
       </Dialog>

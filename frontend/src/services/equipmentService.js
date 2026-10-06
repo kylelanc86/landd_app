@@ -152,7 +152,6 @@ export const equipmentService = {
     "Phase Contrast Microscope",
     "Pneumatic tester",
     "Polarised Light Microscope",
-    "RI Liquids",
     "Site flowmeter",
     "Sieves",
     "Stereomicroscope"

@@ -24,10 +24,18 @@ const {
 } = require('../utils/reportFilenames');
 const { buildContentDispositionAttachment } = require('../utils/contentDisposition');
 const {
+  clearanceHasPdfBuffer,
+  mergedPdfFileExists,
+  mergedPdfFullPath,
+  saveClearancePdfCopy,
+} = require('../utils/clearanceStoredPdf');
+const {
   isAssessmentItemReferred,
   findPrimarySampledItemForRef,
   getPrimarySampledItems,
 } = require('../utils/asbestosAssessmentItems');
+const { resolveSitePlanAppendices } = require('../utils/sitePlanAppendices');
+const { buildArrowOverlaysHtml: buildPdfArrowOverlaysHtml } = require('../utils/photoArrows');
 
 // Initialize DocRaptor service
 const docRaptorService = new DocRaptorService();
@@ -39,31 +47,9 @@ const asyncPdfJobs = new Map();
 // Remove completed/failed jobs older than 1 hour to prevent unbounded growth
 const JOB_RETENTION_MS = 60 * 60 * 1000;
 
-/** Base directory for generated lead clearance merged PDFs (main + appendices). Green-icon download streams from here. */
-const LEAD_CLEARANCE_MERGED_PDF_DIR = path.join(__dirname, '..', 'generated-pdfs', 'lead-clearances');
-
-/** Base directory for generated asbestos clearance merged PDFs (main + air reports + site plan). */
-const ASBESTOS_CLEARANCE_MERGED_PDF_DIR = path.join(__dirname, '..', 'generated-pdfs', 'asbestos-clearances');
-
 /** Persisted enclosure inspection certificate PDFs (one file per clearance). */
 const ENCLOSURE_CERTIFICATE_PDF_DIR = path.join(__dirname, '..', 'generated-pdfs', 'enclosure-certificates');
 
-/** Assessment report PDF retention (days) – matches DocRaptor; after this, report is no longer available. */
-const ASSESSMENT_PDF_RETENTION_DAYS = 7;
-const ASSESSMENT_PDF_RETENTION_MS = ASSESSMENT_PDF_RETENTION_DAYS * 24 * 60 * 60 * 1000;
-
-/** Grace period: PDFs written in the last 2 minutes are never considered expired (avoids race after regeneration). */
-const ASSESSMENT_PDF_GRACE_MS = 2 * 60 * 1000;
-
-function isAssessmentPdfExpired(pdfReadyAt) {
-  if (!pdfReadyAt) return true;
-  const readyAtMs = new Date(pdfReadyAt).getTime();
-  if (Number.isNaN(readyAtMs)) return true;
-  const ageMs = Date.now() - readyAtMs;
-  if (ageMs < 0) return false; // future date, treat as valid
-  if (ageMs < ASSESSMENT_PDF_GRACE_MS) return false; // just generated, never expire
-  return ageMs > ASSESSMENT_PDF_RETENTION_MS;
-}
 function pruneOldJobs() {
   const now = Date.now();
   for (const [jobId, job] of asyncPdfJobs.entries()) {
@@ -411,7 +397,11 @@ const generateAttachmentText = (clearanceData) => {
   const hasPhotos = clearanceData.items && clearanceData.items.some(item => 
     item.photographs && item.photographs.some(photo => photo.includeInReport)
   );
-  const hasSitePlan = clearanceData.sitePlan && clearanceData.sitePlanFile;
+  const sitePlans = resolveSitePlanAppendices(clearanceData);
+  const hasSitePlan = sitePlans.length > 0;
+  const sitePlanPhrase = sitePlans.length > 1
+    ? 'site plans are presented in Appendix B'
+    : 'a site plan is presented in Appendix B';
   const hasAirMonitoring = clearanceData.airMonitoring && (
     clearanceData.airMonitoringReport ||
     (clearanceData.airMonitoringReports && clearanceData.airMonitoringReports.length > 0)
@@ -429,12 +419,12 @@ const generateAttachmentText = (clearanceData) => {
 
   // Site plan but no air monitoring report
   if (hasSitePlan && !hasAirMonitoring) {
-    return 'Photographs of the Asbestos Removal Area are presented in Appendix A and a site plan is presented in Appendix B.';
+    return `Photographs of the Asbestos Removal Area are presented in Appendix A and ${sitePlanPhrase}.`;
   }
 
   // Site plan and air monitoring report attached
   if (hasSitePlan && hasAirMonitoring) {
-    return 'Photographs of the Asbestos Removal Area are presented in Appendix A and a site plan is presented in Appendix B. The air monitoring report for these works is presented in Appendix C.';
+    return `Photographs of the Asbestos Removal Area are presented in Appendix A and ${sitePlanPhrase}. The air monitoring report for these works is presented in Appendix C.`;
   }
 
   // Only air monitoring report (no site plan)
@@ -643,17 +633,7 @@ function assembleClearanceSingleHTML({
   const mainCss = `${flowCss}\n.main-section-start { counter-reset: page 1; box-sizing: border-box; }\n`;
 
   const photoPageCss = getLeadPhotoPageStyles(frontendUrl).replace(/@page\s*\{/g, '@page appendix-photos {');
-  const sitePlanLandscapeCss = `
-    @page appendix-landscape { size: A4 landscape; margin: 0; }
-    .site-plan-page { page: appendix-landscape; height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden; page-break-after: avoid; page-break-inside: avoid; box-sizing: border-box; }
-    .site-plan-page .header { flex-shrink: 0; display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 48px 0 48px; margin: 0; font-family: "Gothic", Arial, sans-serif; box-sizing: border-box; }
-    .site-plan-page .header-line, .site-plan-page .green-line { flex-shrink: 0; width: calc(100% - 96px); height: 1.5px; background: #16b12b; margin: 8px auto 0 auto; border-radius: 0; display: block; }
-    .site-plan-page .content { flex: 1; min-height: 0; overflow: hidden; padding: 5px 48px 10px 48px; display: flex; flex-direction: column; box-sizing: border-box; }
-    .site-plan-page .footer { flex-shrink: 0; position: relative; left: 0; right: 0; bottom: 0; width: calc(100% - 96px); margin: 0 auto; padding: 0 0 16px 0; text-align: justify; font-size: 0.75rem; color: #222; font-family: "Gothic", Arial, sans-serif; box-sizing: border-box; }
-    .site-plan-page .footer-border-line { width: 100%; height: 1.5px; background: #16b12b; margin: 0 0 6px 0; border-radius: 0; display: block; }
-    .site-plan-page .footer-content { width: 100%; display: flex; justify-content: space-between; align-items: flex-end; }
-    .site-plan-page .footer-text { flex: 1; }
-  `;
+  const sitePlanLandscapeCss = getSitePlanFillLayoutCss();
 
   const singleDocLayoutCss = `
     @page { size: A4; margin: 0; }
@@ -772,6 +752,27 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
     console.log("=== PDF GENERATION STARTED ===");
     console.log("ClearanceData received:", clearanceData);
     console.log("ClearanceData items:", clearanceData?.items);
+
+    // Prefer site plan appendices (and legacy fields) from DB when available
+    const clearanceIdForPlans = clearanceData?._id || clearanceData?.id;
+    if (clearanceIdForPlans) {
+      try {
+        const doc = await AsbestosClearance.findById(clearanceIdForPlans)
+          .select('sitePlan sitePlanFile sitePlanSource sitePlanLegend sitePlanLegendTitle sitePlanFigureTitle sitePlanAppendices')
+          .lean();
+        if (doc) {
+          if (doc.sitePlan != null) clearanceData.sitePlan = doc.sitePlan;
+          if (doc.sitePlanFile != null) clearanceData.sitePlanFile = doc.sitePlanFile;
+          if (doc.sitePlanSource != null) clearanceData.sitePlanSource = doc.sitePlanSource;
+          if (doc.sitePlanLegend != null) clearanceData.sitePlanLegend = doc.sitePlanLegend;
+          if (doc.sitePlanLegendTitle != null) clearanceData.sitePlanLegendTitle = doc.sitePlanLegendTitle;
+          if (doc.sitePlanFigureTitle != null) clearanceData.sitePlanFigureTitle = doc.sitePlanFigureTitle;
+          if (doc.sitePlanAppendices != null) clearanceData.sitePlanAppendices = doc.sitePlanAppendices;
+        }
+      } catch (hydrateErr) {
+        console.warn(`[${pdfId}] Could not hydrate clearance site plans from DB:`, hydrateErr.message);
+      }
+    }
     
     // Load DocRaptor-optimized templates
     const templateDir = path.join(__dirname, '../templates/DocRaptor/AsbestosClearance');
@@ -1369,7 +1370,8 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
 
     const appendixSegments = [];
 
-    const hasSitePlan = clearanceData.sitePlan && clearanceData.sitePlanFile;
+    const sitePlans = resolveSitePlanAppendices(clearanceData);
+    const hasSitePlan = sitePlans.length > 0;
     const hasAirMonitoring = clearanceData.airMonitoring;
 
     const clearanceItems = clearanceData.items || clearanceData.clearanceItems || clearanceData.removalItems || clearanceData.asbestosItems || [];
@@ -1408,25 +1410,42 @@ const generateClearanceHTMLV2 = async (clearanceData, pdfId = 'unknown') => {
         css: extractStyleContent(appendixBCoverTemplateWithUrl),
       });
 
-      const isSitePlanImage = clearanceData.sitePlanFile && (
-        clearanceData.sitePlanFile.startsWith('/9j/') ||
-        clearanceData.sitePlanFile.startsWith('iVBORw0KGgo') ||
-        clearanceData.sitePlanFile.startsWith('data:image/')
-      );
+      let figureNum = 1;
+      for (const plan of sitePlans) {
+        const fileData = plan.sitePlanFile;
+        const isSitePlanImage = fileData && (
+          fileData.startsWith('/9j/') ||
+          fileData.startsWith('iVBORw0KGgo') ||
+          fileData.startsWith('data:image/')
+        );
+        if (!isSitePlanImage) continue;
 
-      if (isSitePlanImage) {
-        const trimmedSitePlan = await trimSitePlanImage(clearanceData.sitePlanFile);
-        const clearanceDataTrimmed = { ...clearanceData, sitePlanFile: trimmedSitePlan };
-        const figureTitle = clearanceData.sitePlanFigureTitle || 'Asbestos Removal Site Plan';
+        const trimmedSitePlan = await trimSitePlanImage(fileData);
+        const planMerged = {
+          ...clearanceData,
+          sitePlanFile: trimmedSitePlan,
+          sitePlanLegend: Array.isArray(plan.sitePlanLegend) ? plan.sitePlanLegend : [],
+          sitePlanLegendTitle: plan.sitePlanLegendTitle || 'Key',
+          sitePlanFigureTitle: plan.sitePlanFigureTitle,
+        };
+        const figureTitle = (plan.sitePlanFigureTitle && plan.sitePlanFigureTitle.trim())
+          ? plan.sitePlanFigureTitle.trim()
+          : 'Asbestos Removal Site Plan';
         const sitePlanContentPage = generateSitePlanContentPage(
-          clearanceDataTrimmed,
+          planMerged,
           'B',
           logoBase64,
           footerText,
           'sitePlanFile',
           'SITE PLAN',
-          figureTitle
+          figureTitle,
+          'sitePlanLegend',
+          'sitePlanLegendTitle',
+          0,
+          figureNum,
+          { fillAvailable: true }
         );
+        figureNum += 1;
         appendixSegments.push({ type: 'site-plan', body: sitePlanContentPage });
       }
 
@@ -1488,6 +1507,30 @@ const generateEnclosureCertificateHTML = async (
   enclosureData = {},
   pdfId = "unknown",
 ) => {
+  // Prefer site plan appendices (and legacy fields) from DB when available
+  const clearanceIdForPlans = clearanceData?._id || clearanceData?.id;
+  if (clearanceIdForPlans) {
+    try {
+      const doc = await AsbestosClearance.findById(clearanceIdForPlans)
+        .select('sitePlan sitePlanFile sitePlanSource sitePlanLegend sitePlanLegendTitle sitePlanFigureTitle sitePlanAppendices')
+        .lean();
+      if (doc) {
+        clearanceData = { ...clearanceData };
+        if (doc.sitePlan != null) clearanceData.sitePlan = doc.sitePlan;
+        if (doc.sitePlanFile != null) clearanceData.sitePlanFile = doc.sitePlanFile;
+        if (doc.sitePlanSource != null) clearanceData.sitePlanSource = doc.sitePlanSource;
+        if (doc.sitePlanLegend != null) clearanceData.sitePlanLegend = doc.sitePlanLegend;
+        if (doc.sitePlanLegendTitle != null) clearanceData.sitePlanLegendTitle = doc.sitePlanLegendTitle;
+        if (doc.sitePlanFigureTitle != null) clearanceData.sitePlanFigureTitle = doc.sitePlanFigureTitle;
+        if (doc.sitePlanAppendices != null) clearanceData.sitePlanAppendices = doc.sitePlanAppendices;
+      }
+    } catch (hydrateErr) {
+      console.warn(`[${pdfId}] Could not hydrate enclosure site plans from DB:`, hydrateErr.message);
+    }
+  }
+
+  const sitePlans = resolveSitePlanAppendices(clearanceData);
+
   const templateDir = path.join(
     __dirname,
     "../templates/DocRaptor/AsbestosClearance",
@@ -1631,10 +1674,12 @@ const generateEnclosureCertificateHTML = async (
       "Enclosure inspection photographs are presented in Appendix A.",
     );
   }
-  if (clearanceData?.sitePlanFile) {
+  if (sitePlans.length > 0) {
     const sitePlanLetter = enclosurePhotos.length > 0 ? "B" : "A";
     attachmentsTextParts.push(
-      `The enclosure plan is presented in Appendix ${sitePlanLetter}.`,
+      sitePlans.length > 1
+        ? `The enclosure plans are presented in Appendix ${sitePlanLetter}.`
+        : `The enclosure plan is presented in Appendix ${sitePlanLetter}.`,
     );
   }
   const attachmentsText = attachmentsTextParts.join(" ");
@@ -1646,13 +1691,7 @@ const generateEnclosureCertificateHTML = async (
     enclosureCertificateApprovedBy =
       '<span style="color: red;">Awaiting Authorisation</span>';
   }
-  const enclosureSitePlanFigureTitle = (() => {
-    const t = (clearanceData?.sitePlanFigureTitle || "").trim();
-    if (!t || t === "Asbestos Removal Site Plan") {
-      return "Asbestos Removal Enclosure Site Plan";
-    }
-    return t;
-  })();
+  const defaultEnclosureFigureTitle = "Asbestos Removal Enclosure Site Plan";
 
   let populatedCover = coverTemplate
     .replace(/\[REPORT_TYPE\]/g, "Enclosure Inspection")
@@ -1806,7 +1845,7 @@ const generateEnclosureCertificateHTML = async (
     appendixContent += `${appendixACover}${photoPages.join('<div class="page-break"></div>')}`;
   }
 
-  if (clearanceData?.sitePlanFile) {
+  if (sitePlans.length > 0) {
     const sitePlanLetter = enclosurePhotos.length > 0 ? "B" : "A";
     const sitePlanCover = appendixBCoverTemplate
       .replace(/\[LOGO_PATH\]/g, `data:image/png;base64,${logoBase64}`)
@@ -1814,18 +1853,51 @@ const generateEnclosureCertificateHTML = async (
       .replace(/\[FOOTER_TEXT\]/g, footerText)
       .replace(/APPENDIX B/g, `APPENDIX ${sitePlanLetter}`)
       .replace(/SITE PLAN/g, "ENCLOSURE PLAN");
-    const trimmedSitePlan = await trimSitePlanImage(clearanceData.sitePlanFile);
-    const sitePlanPage = generateSitePlanContentPage(
-      { ...clearanceData, sitePlanFile: trimmedSitePlan },
-      sitePlanLetter,
-      logoBase64,
-      footerText,
-      "sitePlanFile",
-      "ENCLOSURE PLAN",
-      enclosureSitePlanFigureTitle,
-    );
 
-    appendixContent += `<div class="page-break"></div>${sitePlanCover}${sitePlanPage}`;
+    const sitePlanPages = [];
+    let figureNum = 1;
+    for (const plan of sitePlans) {
+      const fileData = plan.sitePlanFile;
+      if (!fileData) continue;
+      const isSitePlanImage =
+        fileData.startsWith("/9j/") ||
+        fileData.startsWith("iVBORw0KGgo") ||
+        fileData.startsWith("data:image/");
+      if (!isSitePlanImage) continue;
+
+      const trimmedSitePlan = await trimSitePlanImage(fileData);
+      const planMerged = {
+        ...clearanceData,
+        sitePlanFile: trimmedSitePlan,
+        sitePlanLegend: Array.isArray(plan.sitePlanLegend) ? plan.sitePlanLegend : [],
+        sitePlanLegendTitle: plan.sitePlanLegendTitle || "Key",
+        sitePlanFigureTitle: plan.sitePlanFigureTitle,
+      };
+      const rawFigTitle = (plan.sitePlanFigureTitle && plan.sitePlanFigureTitle.trim())
+        ? plan.sitePlanFigureTitle.trim()
+        : "";
+      const figTitle = (!rawFigTitle || rawFigTitle === "Asbestos Removal Site Plan")
+        ? defaultEnclosureFigureTitle
+        : rawFigTitle;
+      const sitePlanPage = generateSitePlanContentPage(
+        planMerged,
+        sitePlanLetter,
+        logoBase64,
+        footerText,
+        "sitePlanFile",
+        "ENCLOSURE PLAN",
+        figTitle,
+        "sitePlanLegend",
+        "sitePlanLegendTitle",
+        0,
+        figureNum,
+        { fillAvailable: true }
+      );
+      figureNum += 1;
+      sitePlanPages.push(sitePlanPage);
+    }
+
+    appendixContent += `<div class="page-break"></div>${sitePlanCover}${sitePlanPages.join("")}`;
   }
 
   const completeHTML = `
@@ -1885,120 +1957,10 @@ const generateEnclosureCertificateHTML = async (
           .page.enclosure-inspection-cert .signature-block .paragraph:last-child {
             margin-bottom: 0 !important;
           }
-          /* Enclosure appendix: landscape site plan (matches clearance V2) */
-          @page site-plan-landscape {
-            size: A4 landscape;
-          }
+          /* Enclosure appendix: landscape site plan (fill-available layout) */
+          ${getSitePlanFillLayoutCss({ pageName: 'site-plan-landscape' })}
           .site-plan-page {
-            page: site-plan-landscape;
             page-break-before: always;
-            page-break-after: avoid !important;
-            page-break-inside: avoid;
-            position: relative;
-            transform: rotate(0deg);
-            width: 100vh !important;
-            height: 100vw !important;
-            box-sizing: border-box !important;
-          }
-          .site-plan-page + * {
-            page-break-before: avoid !important;
-          }
-          .site-plan-page:last-child {
-            page-break-after: avoid !important;
-          }
-          .site-plan-page .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            width: 100vh !important;
-            box-sizing: border-box !important;
-            padding: 16px 48px 0 48px !important;
-            margin: 0;
-          }
-          .site-plan-page .green-line {
-            width: calc(100vh - 96px) !important;
-            height: 1.5px;
-            background: #16b12b;
-            margin: 8px auto 0 auto;
-            border-radius: 0;
-          }
-          .site-plan-page .footer {
-            width: calc(100vh - 96px) !important;
-            box-sizing: border-box !important;
-            position: absolute !important;
-            left: 48px !important;
-            right: auto !important;
-            bottom: 16px !important;
-            margin: 0 !important;
-            text-align: justify;
-            font-size: 0.75rem;
-            color: #222;
-          }
-          .site-plan-page .logo {
-            width: 243px;
-            height: auto;
-            display: block;
-            background: #fff;
-            margin: 0;
-          }
-          .site-plan-page .company-details {
-            text-align: right;
-            font-size: 0.75rem;
-            color: #222;
-            line-height: 1.5;
-            margin: 0;
-          }
-          .site-plan-page .company-details .website {
-            color: #16b12b;
-            font-weight: 500;
-          }
-          .site-plan-page .footer-border-line {
-            width: 100%;
-            height: 1.5px;
-            background: #16b12b;
-            margin-bottom: 6px;
-            border-radius: 0;
-          }
-          .site-plan-page .footer-content {
-            width: 100%;
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-end;
-          }
-          .site-plan-page .content {
-            padding: 5px 48px 10px 48px !important;
-            min-height: auto !important;
-            height: auto !important;
-            max-height: calc(100vh - 150px) !important;
-            overflow: hidden !important;
-          }
-          .site-plan-container {
-            box-shadow: none !important;
-            padding: 0 !important;
-            width: fit-content !important;
-            max-width: 93.5% !important;
-            box-sizing: border-box !important;
-            margin: 12px 0 0 0 !important;
-            border: none !important;
-            border-radius: 0 !important;
-          }
-          .site-plan-container img {
-            border-radius: 0 !important;
-            max-height: calc((100vw - 200px) * 0.99 * 1.1) !important;
-            object-fit: contain !important;
-            width: auto !important;
-            height: auto !important;
-            max-width: 100% !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            border: 1.5px solid #999 !important;
-            box-sizing: border-box !important;
-            background: transparent !important;
-          }
-          .site-plan-legend-container {
-            border: none !important;
-            border-radius: 0 !important;
-            box-shadow: none !important;
           }
         </style>
       </head>
@@ -2037,10 +1999,11 @@ function getSharp() {
 }
 
 /**
- * Trim whitespace from site plan image so only the drawn content is shown.
- * If Sharp is unavailable (e.g. missing native bindings on Windows), returns the original without warning.
+ * Crop unused canvas margins from a site plan image so sparse drawings can
+ * scale up in the PDF. Treats transparent and near-white pixels as empty.
+ * If Sharp is unavailable, returns the original image unchanged.
  * @param {string} base64OrDataUrl - Base64 image data or data URL
- * @returns {Promise<string>} - Trimmed base64 (no data URL prefix)
+ * @returns {Promise<string>} - Cropped base64 (no data URL prefix)
  */
 const trimSitePlanImage = async (base64OrDataUrl) => {
   if (!base64OrDataUrl || typeof base64OrDataUrl !== 'string') return base64OrDataUrl;
@@ -2051,14 +2014,111 @@ const trimSitePlanImage = async (base64OrDataUrl) => {
   }
   const sharp = getSharp();
   if (!sharp) return base64;
+
   try {
     const buf = Buffer.from(base64, 'base64');
-    const trimmed = await sharp(buf).trim({ threshold: 10 }).toBuffer();
-    return trimmed.toString('base64');
+    const { data, info } = await sharp(buf)
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    const { width, height, channels } = info;
+    if (!width || !height || channels < 4) {
+      return base64;
+    }
+
+    const isEmptyPixel = (offset) => {
+      const alpha = data[offset + 3];
+      if (alpha < 12) return true;
+      const r = data[offset];
+      const g = data[offset + 1];
+      const b = data[offset + 2];
+      // Empty canvas / white page background (not photo content)
+      return r >= 248 && g >= 248 && b >= 248;
+    };
+
+    let minX = width;
+    let minY = height;
+    let maxX = -1;
+    let maxY = -1;
+
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const offset = (y * width + x) * channels;
+        if (!isEmptyPixel(offset)) {
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+
+    // No detectable content — leave original
+    if (maxX < 0 || maxY < 0) {
+      return base64;
+    }
+
+    const pad = Math.max(12, Math.round(Math.max(width, height) * 0.02));
+    const left = Math.max(0, minX - pad);
+    const top = Math.max(0, minY - pad);
+    const right = Math.min(width - 1, maxX + pad);
+    const bottom = Math.min(height - 1, maxY + pad);
+    const cropWidth = right - left + 1;
+    const cropHeight = bottom - top + 1;
+
+    // Already nearly full-frame — no useful crop
+    if (cropWidth * cropHeight >= width * height * 0.92) {
+      return base64;
+    }
+
+    const cropped = await sharp(buf)
+      .extract({ left, top, width: cropWidth, height: cropHeight })
+      .flatten({ background: { r: 255, g: 255, b: 255 } })
+      .png()
+      .toBuffer();
+
+    return cropped.toString('base64');
   } catch (err) {
+    console.warn('Site plan content crop failed; using original image.', err.message);
     return base64;
   }
 };
+
+/**
+ * Shared CSS for site plan pages that trim unused canvas then scale the image
+ * to fill remaining space (header/footer/caption/key reserved).
+ * @param {Object} [options]
+ * @param {string} [options.pageName='appendix-landscape'] - CSS named page
+ * @param {boolean} [options.includePageRule=true] - Include @page rule
+ */
+function getSitePlanFillLayoutCss(options = {}) {
+  const pageName = options.pageName || 'appendix-landscape';
+  const includePageRule = options.includePageRule !== false;
+  const pageRule = includePageRule
+    ? `@page ${pageName} { size: A4 landscape; margin: 0; }\n`
+    : '';
+  return `
+    ${pageRule}
+    .site-plan-page { page: ${pageName}; width: 297mm; min-width: 297mm; height: 210mm; min-height: 210mm; display: flex; flex-direction: column; overflow: hidden; page-break-after: avoid; page-break-inside: avoid; box-sizing: border-box; }
+    .site-plan-page .header { flex-shrink: 0; display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 48px 0 48px; margin: 0; font-family: "Gothic", Arial, sans-serif; box-sizing: border-box; }
+    .site-plan-page .header-line, .site-plan-page .green-line { flex-shrink: 0; width: calc(100% - 96px); height: 1.5px; background: #16b12b; margin: 8px auto 0 auto; border-radius: 0; display: block; }
+    .site-plan-page .content { flex: 1 1 auto; min-height: 0; overflow: hidden; padding: 16px 48px 14px 48px; display: flex; flex-direction: column; box-sizing: border-box; }
+    .site-plan-page .footer { flex-shrink: 0; position: relative; left: 0; right: 0; bottom: 0; width: 100%; padding: 0 48px 16px 48px; text-align: justify; font-size: 0.75rem; color: #222; font-family: "Gothic", Arial, sans-serif; box-sizing: border-box; }
+    .site-plan-page .logo, .logo { width: 243px; height: auto; display: block; background: #fff; margin: 0; }
+    .site-plan-page .company-details, .company-details { text-align: right; font-size: 0.75rem; color: #222; line-height: 1.5; margin: 0; }
+    .site-plan-page .company-details .website, .company-details .website { color: #16b12b; font-weight: 500; }
+    .site-plan-page .footer-border-line, .footer-border-line { width: 100%; height: 1.5px; background: #16b12b; margin: 0 0 6px 0; border-radius: 0; display: block; }
+    .site-plan-page .footer-content, .footer-content { width: 100%; display: flex; justify-content: space-between; align-items: flex-end; }
+    .site-plan-page .footer-text, .footer-text { flex: 1; }
+    .site-plan-layout.site-plan-fill { flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: row; justify-content: flex-start; align-items: stretch; gap: 12px; margin: 0; padding: 0; width: 100%; height: 100%; box-sizing: border-box; }
+    .site-plan-fill .site-plan-container { flex: 1 1 auto; min-width: 0; min-height: 0; height: 100%; overflow: hidden; display: flex; flex-direction: column; padding: 0; margin: 0; border: none; background: transparent; box-shadow: none; }
+    .site-plan-fill .site-plan-image-wrapper { flex: 1 1 auto; min-height: 0; width: 100%; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+    .site-plan-fill .site-plan-image { display: block; width: 100% !important; height: 100% !important; max-width: 100% !important; max-height: 100% !important; object-fit: contain !important; object-position: center; border: 1.5px solid #999; box-sizing: border-box; margin: 0; padding: 0; background: transparent; }
+    .site-plan-fill .site-plan-figure-caption { flex-shrink: 0; font-size: 14px; font-weight: 400; color: #222; text-align: left; margin-top: 8px; font-family: "Gothic", Arial, sans-serif; }
+    .site-plan-fill .site-plan-legend-container { flex: 0 0 190px; max-width: 190px; min-width: 190px; align-self: stretch; overflow: hidden; font-family: "Gothic", Arial, sans-serif; border: none; box-shadow: none; }
+  `;
+}
 
 /**
  * Generate site plan content page HTML
@@ -2066,6 +2126,11 @@ const trimSitePlanImage = async (base64OrDataUrl) => {
  * @param {string} appendixLetter - Appendix letter (B, C, etc.)
  * @param {string} logoBase64 - Base64 encoded logo
  * @param {string} footerText - Footer text to display
+ * @param {number} cropTopBottomPx - Optional top/bottom crop in px
+ * @param {number} figureNumber - Figure number (reserved for callers)
+ * @param {Object} [options]
+ * @param {boolean} [options.fillAvailable] - When true, image fills remaining page
+ *   area (scales up after trim) without overlapping header, footer, caption, or key
  * @returns {string} - HTML for site plan content page
  */
 const generateSitePlanContentPage = (
@@ -2079,8 +2144,10 @@ const generateSitePlanContentPage = (
   legendField = 'sitePlanLegend',
   legendTitleField = 'sitePlanLegendTitle',
   cropTopBottomPx = 0,
-  figureNumber = 1
+  figureNumber = 1,
+  options = {}
 ) => {
+  const fillAvailable = options && options.fillAvailable === true;
   const fileData = data[fileField];
   const legendEntries = Array.isArray(data[legendField])
     ? data[legendField]
@@ -2176,10 +2243,14 @@ const generateSitePlanContentPage = (
   
   let content = '';
   
+  const legendColumnWidthStyle = fillAvailable
+    ? 'flex: 0 0 190px; max-width: 190px; min-width: 190px;'
+    : 'flex: 0 0 280px; max-width: 280px; min-width: 260px;';
+
   const legendColumn =
     legendEntries.length > 0
         ? `
-          <div class="site-plan-legend-container" style="flex: 0 0 280px; max-width: 280px; min-width: 260px; border: 3px; border-radius: 0; background-color: #ffffff; padding: 12px 14px; align-self: stretch; box-shadow: none;">
+          <div class="site-plan-legend-container" style="${legendColumnWidthStyle} border: 3px; border-radius: 0; background-color: #ffffff; padding: 12px 10px; align-self: stretch; box-shadow: none; box-sizing: border-box; overflow: hidden;">
             <div style="font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; color: #1f2937;">
               ${escapeHtml(
                 (data[legendTitleField] && data[legendTitleField].trim()) ||
@@ -2203,7 +2274,7 @@ const generateSitePlanContentPage = (
                 return `
                   <div style="display:flex; align-items:center; margin-bottom:8px;">
                     <span style="display:inline-flex; align-items:center; justify-content:center; width:29px; height:29px; min-width:29px; max-width:29px; min-height:29px; max-height:29px; border-radius:4px; border:1px solid rgba(55,65,81,0.45); background:${normalizeColorForDisplay(entry.color)}; flex-shrink:0; box-sizing:border-box; color:#fff; font-size:8px; font-weight:700; letter-spacing:0.2px;">${semanticMarkerLabel}</span>
-                    <span style="font-size:10px; color:#334155; margin-left:16px; line-height:1.4; flex:1; min-width:0; padding-right:12px; white-space:normal; overflow-wrap:anywhere; word-break:break-word;">${description}</span>
+                    <span style="font-size:10px; color:#334155; margin-left:12px; line-height:1.4; flex:1; min-width:0; padding-right:8px; white-space:normal; overflow-wrap:anywhere; word-break:break-word;">${description}</span>
                   </div>
                 `;
               })
@@ -2214,17 +2285,37 @@ const generateSitePlanContentPage = (
   if (fileType.startsWith('image/') || isDataUrl) {
     const safeFigureTitle = escapeHtml(figureTitle || 'Site Plan');
     const cropPx = Math.max(0, Number(cropTopBottomPx) || 0);
-    const imgTag = `<img src="${imageSrc}" 
+    const imgTag = fillAvailable
+      ? `<img src="${imageSrc}"
+                 alt="${escapeHtml(title)}"
+                 class="site-plan-image"
+                 style="width: 100%; height: 100%; max-width: 100%; max-height: 100%; object-fit: contain; object-position: center; display: block; border: 1.5px solid #999; margin: 0; padding: 0; box-sizing: border-box;" />`
+      : `<img src="${imageSrc}" 
                  alt="${escapeHtml(title)}" 
                  class="site-plan-image"
                  style="width: auto; height: auto; max-width: 100%; max-height: 96vh; object-fit: contain; display: block; border: 1.5px solid #999; margin: 0; padding: 0; box-sizing: border-box;" />`;
+    const layoutClass = fillAvailable
+      ? 'site-plan-layout site-plan-fill'
+      : 'site-plan-layout';
+    const layoutStyle = fillAvailable
+      ? 'display: flex; flex-direction: row; justify-content: flex-start; gap: 10px; align-items: stretch; margin: 0; padding: 0; width: 100%; height: 100%; min-height: 0; box-sizing: border-box;'
+      : 'display: flex; flex-direction: row; justify-content: flex-start; gap: 10px; align-items: flex-start; margin: 0; padding: 0 8px 0 0; width: 100%;';
+    const containerStyle = fillAvailable
+      ? 'flex: 1 1 auto; width: auto; max-width: none; min-width: 0; min-height: 0; height: 100%; padding: 0; margin: 0; border: none; background: transparent; border-radius: 0; box-sizing: border-box; box-shadow: none; display: flex; flex-direction: column;'
+      : 'flex: 1 1 auto; width: auto; max-width: none; min-width: 0; padding: 0; margin: 12px 0 0 0; border: none; background: transparent; border-radius: 0; box-sizing: border-box; box-shadow: none;';
+    const wrapperStyle = fillAvailable
+      ? 'flex: 1 1 auto; min-height: 0; width: 100%; height: auto; overflow: hidden; display: flex; align-items: center; justify-content: center; padding: 0; margin: 0; background: transparent;'
+      : 'flex: 0 0 auto; width: fit-content; overflow: hidden; display: flex; align-items: center; justify-content: center; padding: 0; margin: 0; background: transparent;';
+    const captionStyle = fillAvailable
+      ? 'flex-shrink: 0; font-size: 14px; font-weight: 400; color: #1f2937; text-align: left; margin-top: 8px; padding: 0;'
+      : 'font-size: 14px; font-weight: 400; color: #1f2937; text-align: left; margin-top: 12px;';
     content = `
-      <div class="site-plan-layout" style="display: flex; flex-direction: row; justify-content: flex-start; gap: 10px; align-items: flex-start; margin: 0; padding: 0 8px 0 0; width: 100%;">
-        <div class="site-plan-container" style="flex: 1 1 auto; width: auto; max-width: none; min-width: 0; padding: 0; margin: 12px 0 0 0; border: none; background: transparent; border-radius: 0; box-sizing: border-box; box-shadow: none;">
-          <div class="site-plan-image-wrapper" style="flex: 0 0 auto; width: fit-content; overflow: hidden; display: flex; align-items: center; justify-content: center; padding: 0; margin: 0; background: transparent;">
+      <div class="${layoutClass}" style="${layoutStyle}">
+        <div class="site-plan-container" style="${containerStyle}">
+          <div class="site-plan-image-wrapper" style="${wrapperStyle}">
             ${cropPx > 0 ? `<div class="site-plan-crop" style="width: 100%; height: calc(100% - ${2 * cropPx}px); overflow: hidden;"><img src="${imageSrc}" alt="${escapeHtml(title)}" class="site-plan-image site-plan-image-cropped" style="display: block; width: 100%; height: calc(100% + ${2 * cropPx}px); object-fit: contain; object-position: center; margin-top: -${cropPx}px;" /></div>` : imgTag}
           </div>
-          <div class="site-plan-figure-caption" style="font-size: 14px; font-weight: 400; color: #1f2937; text-align: left; margin-top: 12px;">
+          <div class="site-plan-figure-caption" style="${captionStyle}">
             ${safeFigureTitle}
           </div>
         </div>
@@ -2331,6 +2422,27 @@ const mergePDFs = async (pdf1Buffer, pdf2Base64OrBuffer) => {
  * Uses same assets and styling as asbestos clearance; content from leadClearance report template.
  */
 const generateLeadClearanceHTML = async (clearanceData, pdfId = 'unknown') => {
+  // Prefer site plan appendices (and legacy fields) from DB when available
+  const clearanceIdForPlans = clearanceData?._id || clearanceData?.id;
+  if (clearanceIdForPlans) {
+    try {
+      const doc = await LeadClearance.findById(clearanceIdForPlans)
+        .select('sitePlan sitePlanFile sitePlanSource sitePlanLegend sitePlanLegendTitle sitePlanFigureTitle sitePlanAppendices')
+        .lean();
+      if (doc) {
+        if (doc.sitePlan != null) clearanceData.sitePlan = doc.sitePlan;
+        if (doc.sitePlanFile != null) clearanceData.sitePlanFile = doc.sitePlanFile;
+        if (doc.sitePlanSource != null) clearanceData.sitePlanSource = doc.sitePlanSource;
+        if (doc.sitePlanLegend != null) clearanceData.sitePlanLegend = doc.sitePlanLegend;
+        if (doc.sitePlanLegendTitle != null) clearanceData.sitePlanLegendTitle = doc.sitePlanLegendTitle;
+        if (doc.sitePlanFigureTitle != null) clearanceData.sitePlanFigureTitle = doc.sitePlanFigureTitle;
+        if (doc.sitePlanAppendices != null) clearanceData.sitePlanAppendices = doc.sitePlanAppendices;
+      }
+    } catch (hydrateErr) {
+      console.warn(`[${pdfId}] Could not hydrate lead clearance site plans from DB:`, hydrateErr.message);
+    }
+  }
+
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const logoPath = path.join(__dirname, '../assets/logo.png');
   const logoBase64 = fs.existsSync(logoPath) ? fs.readFileSync(logoPath).toString('base64') : '';
@@ -2739,9 +2851,13 @@ const LEAD_CLEARANCE_APPENDIX_DEFS = [
  */
 const generateLeadAttachmentText = (appendices) => {
   if (!appendices || appendices.length === 0) return '';
-  const parts = appendices.map(({ letter, label }) => {
+  const parts = appendices.map(({ letter, label, planCount }) => {
     if (label === 'Photographs') return `Photographs of the lead removal area are presented in Appendix ${letter}.`;
-    if (label === 'Site Plan') return `A site plan is presented in Appendix ${letter}.`;
+    if (label === 'Site Plan') {
+      return planCount > 1
+        ? `Site plans are presented in Appendix ${letter}.`
+        : `A site plan is presented in Appendix ${letter}.`;
+    }
     if (label === 'Pre-works samples (soil/dust)') return `Pre-works samples (soil/dust) are presented in Appendix ${letter}.`;
     if (label === 'Validation samples (soil/dust)') return `Validation samples (soil/dust) are presented in Appendix ${letter}.`;
     if (label === 'Air Monitoring Reports') return `The air monitoring report(s) for these works are presented in Appendix ${letter}.`;
@@ -2758,7 +2874,8 @@ const getLeadClearanceAppendices = (clearanceData) => {
   const hasPhotographs = clearanceData.items && clearanceData.items.some(item =>
     item.photographs && item.photographs.some(photo => photo.includeInReport !== false)
   );
-  const hasSitePlan = !!clearanceData.sitePlanFile;
+  const sitePlans = resolveSitePlanAppendices(clearanceData);
+  const hasSitePlan = sitePlans.length > 0;
   const hasPreWorks = !!(clearanceData.sampling && Array.isArray(clearanceData.sampling.preWorksSamples) && clearanceData.sampling.preWorksSamples.length > 0);
   const hasValidation = !!(clearanceData.sampling && Array.isArray(clearanceData.sampling.validationSamples) && clearanceData.sampling.validationSamples.length > 0);
   const hasAirMonitoring = !!(clearanceData.leadMonitoringReports && clearanceData.leadMonitoringReports.length > 0);
@@ -2772,6 +2889,7 @@ const getLeadClearanceAppendices = (clearanceData) => {
         letter: letters[appendices.length],
         label: def.label,
         key: def.key,
+        ...(def.key === 'sitePlan' ? { planCount: sitePlans.length } : {}),
       });
     }
   });
@@ -2927,52 +3045,26 @@ const generateLeadClearancePhotographsHTML = (clearanceData, options) => {
 };
 
 function getLeadSitePlanPageStyles(frontendUrl) {
-  const A4_LANDSCAPE_HEIGHT = '210mm';
-  const A4_LANDSCAPE_WIDTH = '297mm';
   return `
     @font-face { font-family: "Gothic"; src: url("${frontendUrl}/fonts/static/Gothic-Regular.ttf") format("truetype"); font-weight: normal; font-style: normal; }
     @font-face { font-family: "Gothic"; src: url("${frontendUrl}/fonts/static/Gothic-Bold.ttf") format("truetype"); font-weight: bold; font-style: normal; }
-    @page appendix-landscape { size: A4 landscape; margin: 0; }
     @page { size: A4 landscape; margin: 0; }
     * { box-sizing: border-box; hyphens: none !important; -webkit-hyphens: none !important; word-break: keep-all !important; overflow-wrap: normal !important; }
     html, body { margin: 0; padding: 0; font-family: "Gothic", Arial, sans-serif; background: #fff; }
     .single-doc-site-plan-section {
-      width: ${A4_LANDSCAPE_WIDTH};
-      min-width: ${A4_LANDSCAPE_WIDTH};
-      height: ${A4_LANDSCAPE_HEIGHT};
-      min-height: ${A4_LANDSCAPE_HEIGHT};
+      width: 297mm;
+      min-width: 297mm;
+      height: 210mm;
+      min-height: 210mm;
       page: appendix-landscape;
       box-sizing: border-box;
     }
     .single-doc-site-plan-section .site-plan-page {
-      page: appendix-landscape;
       width: 100% !important;
       height: 100% !important;
       min-height: 100% !important;
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-      overflow: hidden;
-      page-break-after: avoid;
-      page-break-inside: avoid;
-      box-sizing: border-box;
     }
-    .site-plan-page .header { flex-shrink: 0; display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 48px 0 48px; margin: 0; font-family: "Gothic", Arial, sans-serif; }
-    .site-plan-page .green-line { flex-shrink: 0; width: calc(100% - 96px); height: 1.5px; background: #16b12b; margin: 8px auto 0 auto; border-radius: 0; }
-    .site-plan-page .content { flex: 1; min-height: 0; overflow: hidden; padding: 5px 48px 10px 48px; display: flex; flex-direction: column; }
-    .site-plan-page .footer { flex-shrink: 0; position: relative; left: 0; right: 0; bottom: 0; width: 100%; padding: 0 48px 16px 48px; text-align: justify; font-size: 0.75rem; color: #222; font-family: "Gothic", Arial, sans-serif; }
-    .logo { width: 243px; height: auto; display: block; background: #fff; margin: 0; }
-    .company-details { text-align: right; font-size: 0.75rem; color: #222; line-height: 1.5; margin-top: 8px; margin: 0; }
-    .company-details .website { color: #16b12b; font-weight: 500; }
-    .footer-border-line { width: 100%; height: 1.5px; background: #16b12b; margin-bottom: 6px; border-radius: 0; }
-    .footer-content { width: 100%; display: flex; justify-content: space-between; align-items: flex-end; }
-    .footer-text { flex: 1; }
-    .site-plan-layout { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: row; justify-content: flex-start; gap: 10px; align-items: flex-start; margin: 0; width: 100%; padding: 0 8px 0 0; }
-    .site-plan-container { flex: 1 1 auto; width: auto; max-width: none; min-width: 0; overflow: hidden; display: flex; flex-direction: column; padding: 0; margin: 12px 0 0 0; border: none; background: transparent; border-radius: 0; box-shadow: none; }
-    .site-plan-container .site-plan-image-wrapper { flex: 0 0 auto; width: fit-content; max-width: 100%; overflow: hidden; display: flex; align-items: center; justify-content: center; }
-    .site-plan-container .site-plan-image { display: block; width: auto; height: auto; max-width: 100%; max-height: 72vh; object-fit: contain; border: 1.5px solid #999; box-sizing: border-box; margin: 0; padding: 0; background: transparent; }
-    .site-plan-container .site-plan-figure-caption { flex-shrink: 0; font-size: 14px; font-weight: 400; color: #222; text-align: left; margin-top: 8px; font-family: "Gothic", Arial, sans-serif; }
-    .site-plan-legend-container { flex: 0 0 280px; max-width: 280px; min-width: 260px; font-family: "Gothic", Arial, sans-serif; }
+    ${getSitePlanFillLayoutCss()}
   `;
 }
 
@@ -2981,27 +3073,51 @@ const isLeadClearanceSitePlanImage = (file) =>
   (file.startsWith('/9j/') || file.startsWith('iVBORw0KGgo') || file.startsWith('data:image/'));
 
 /**
- * Generate HTML for lead clearance site plan appendix content page (drawn/uploaded image site plans).
+ * Generate HTML for lead clearance site plan appendix content pages (drawn/uploaded image site plans).
+ * One landscape page per plan in order; figure numbers increment.
  */
 const generateLeadClearanceSitePlanHTML = async (clearanceData, options) => {
   const { logoBase64, footerText, frontendUrl, appendixLetter } = options;
-  const file = clearanceData.sitePlanFile;
-  if (!file || !isLeadClearanceSitePlanImage(file)) return '';
+  const plans = resolveSitePlanAppendices(clearanceData);
+  if (plans.length === 0) return '';
 
-  const trimmedSitePlan = await trimSitePlanImage(file);
-  const trimmedData = { ...clearanceData, sitePlanFile: trimmedSitePlan };
-  const figureTitle = clearanceData.sitePlanFigureTitle || 'Lead Clearance Site Plan';
-  const pageContent = generateSitePlanContentPage(
-    trimmedData,
-    appendixLetter || 'B',
-    logoBase64,
-    footerText,
-    'sitePlanFile',
-    'SITE PLAN',
-    figureTitle
-  );
+  const pageContents = [];
+  let figureNum = 1;
+  for (const plan of plans) {
+    const file = plan.sitePlanFile;
+    if (!file || !isLeadClearanceSitePlanImage(file)) continue;
 
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><title>Site Plan</title><style>${getLeadSitePlanPageStyles(frontendUrl)}</style></head><body><div class="single-doc-site-plan-section" style="page: appendix-landscape">${pageContent}</div></body></html>`;
+    const trimmedSitePlan = await trimSitePlanImage(file);
+    const trimmedData = {
+      ...clearanceData,
+      sitePlanFile: trimmedSitePlan,
+      sitePlanLegend: Array.isArray(plan.sitePlanLegend) ? plan.sitePlanLegend : [],
+      sitePlanLegendTitle: plan.sitePlanLegendTitle || 'Key',
+      sitePlanFigureTitle: plan.sitePlanFigureTitle,
+    };
+    const figureTitle = (plan.sitePlanFigureTitle && plan.sitePlanFigureTitle.trim())
+      ? plan.sitePlanFigureTitle.trim()
+      : 'Lead Clearance Site Plan';
+    pageContents.push(generateSitePlanContentPage(
+      trimmedData,
+      appendixLetter || 'B',
+      logoBase64,
+      footerText,
+      'sitePlanFile',
+      'SITE PLAN',
+      figureTitle,
+      'sitePlanLegend',
+      'sitePlanLegendTitle',
+      0,
+      figureNum,
+      { fillAvailable: true }
+    ));
+    figureNum += 1;
+  }
+
+  if (pageContents.length === 0) return '';
+
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><title>Site Plan</title><style>${getLeadSitePlanPageStyles(frontendUrl)}</style></head><body>${pageContents.map((c) => `<div class="single-doc-site-plan-section" style="page: appendix-landscape">${c}</div>`).join('')}</body></html>`;
 };
 
 function getLeadPhotoPageStyles(frontendUrl) {
@@ -3079,7 +3195,8 @@ router.post('/generate-asbestos-clearance-v2', async (req, res) => {
     const mergePayload = {
       airReports,
       sitePlan: clearanceData.sitePlan,
-      sitePlanFile: clearanceData.sitePlanFile
+      sitePlanFile: clearanceData.sitePlanFile,
+      sitePlanAppendices: clearanceData.sitePlanAppendices,
     };
 
     const { status_id } = await docRaptorService.createAsyncDocument(htmlContent, {
@@ -3294,27 +3411,7 @@ router.get('/status/:jobId', async (req, res) => {
       if (job.status === 'completed' && job.downloadUrl && job.clearanceId) {
         try {
           if (job.reportType === 'lead-clearance') {
-            let mergedPdfPath = null;
-            if (job.mergePayload) {
-              try {
-                const mainBuffer = await docRaptorService.fetchDocument(job.downloadUrl);
-                const mergedBuffer = await mergeLeadClearanceAppendices(mainBuffer, job.mergePayload);
-                fs.mkdirSync(LEAD_CLEARANCE_MERGED_PDF_DIR, { recursive: true });
-                const fileName = `${job.clearanceId}.pdf`;
-                const fullPath = path.join(LEAD_CLEARANCE_MERGED_PDF_DIR, fileName);
-                fs.writeFileSync(fullPath, mergedBuffer);
-                mergedPdfPath = `lead-clearances/${fileName}`;
-              } catch (mergeErr) {
-                console.error('Failed to merge/save lead clearance PDF for fast download:', mergeErr);
-              }
-            }
-            await LeadClearance.findByIdAndUpdate(job.clearanceId, {
-              pdfDownloadUrl: job.downloadUrl,
-              pdfJobId: jobId,
-              pdfReadyAt: new Date(),
-              pdfFilename: job.filename || null,
-              ...(mergedPdfPath && { mergedPdfPath })
-            });
+            await persistLeadClearancePdfFromJob(job);
           } else if (job.reportType === 'asbestos-clearance') {
             await persistAsbestosClearancePdfFromJob(job);
           }
@@ -3329,11 +3426,15 @@ router.get('/status/:jobId', async (req, res) => {
   }
 
   // Job may already be completed in memory (subsequent polls); ensure DB has persisted PDF
-  if (job.status === 'completed' && job.downloadUrl && job.clearanceId && job.reportType === 'asbestos-clearance') {
+  if (job.status === 'completed' && job.downloadUrl && job.clearanceId && (job.reportType === 'asbestos-clearance' || job.reportType === 'lead-clearance')) {
     try {
-      await persistAsbestosClearancePdfFromJob(job);
+      if (job.reportType === 'lead-clearance') {
+        await persistLeadClearancePdfFromJob(job);
+      } else {
+        await persistAsbestosClearancePdfFromJob(job);
+      }
     } catch (persistErr) {
-      console.error('Failed to persist asbestos clearance PDF on status poll:', persistErr);
+      console.error('Failed to persist clearance PDF on status poll:', persistErr);
     }
   }
 
@@ -3360,7 +3461,7 @@ router.get('/download/:jobId', async (req, res) => {
   try {
     let pdfBuffer = await docRaptorService.fetchDocument(job.downloadUrl);
     if (job.reportType === 'asbestos-clearance' && job.mergePayload) {
-      const { airReports, sitePlanFile } = job.mergePayload;
+      const { airReports } = job.mergePayload;
       for (const report of airReports || []) {
         const base64 = report.reportData || report;
         if (!base64) continue;
@@ -3370,11 +3471,15 @@ router.get('/download/:jobId', async (req, res) => {
           console.error('Error merging air monitoring PDF:', err);
         }
       }
-      if (sitePlanFile && !sitePlanFile.startsWith('/9j/') && !sitePlanFile.startsWith('iVBORw0KGgo') && !sitePlanFile.startsWith('data:image/')) {
-        try {
-          pdfBuffer = await mergePDFs(pdfBuffer, sitePlanFile);
-        } catch (err) {
-          console.error('Error merging site plan PDF:', err);
+      const sitePlans = resolveSitePlanAppendices(job.mergePayload);
+      for (const plan of sitePlans) {
+        const file = plan.sitePlanFile;
+        if (file && !file.startsWith('/9j/') && !file.startsWith('iVBORw0KGgo') && !file.startsWith('data:image/')) {
+          try {
+            pdfBuffer = await mergePDFs(pdfBuffer, file);
+          } catch (err) {
+            console.error('Error merging site plan PDF:', err);
+          }
         }
       }
     } else if (job.reportType === 'lead-clearance' && job.mergePayload) {
@@ -3410,118 +3515,110 @@ async function mergeAsbestosClearanceAppendices(pdfBuffer, payload) {
       console.error('Error merging air monitoring PDF:', err);
     }
   }
-  if (payload.sitePlan && payload.sitePlanFile && !payload.sitePlanFile.startsWith('/9j/') && !payload.sitePlanFile.startsWith('iVBORw0KGgo') && !payload.sitePlanFile.startsWith('data:image/')) {
-    try {
-      result = await mergePDFs(result, payload.sitePlanFile);
-    } catch (err) {
-      console.error('Error merging site plan PDF:', err);
+  if (payload.sitePlan || resolveSitePlanAppendices(payload).length > 0) {
+    const sitePlans = resolveSitePlanAppendices(payload);
+    for (const plan of sitePlans) {
+      const file = plan.sitePlanFile;
+      if (file && !file.startsWith('/9j/') && !file.startsWith('iVBORw0KGgo') && !file.startsWith('data:image/')) {
+        try {
+          result = await mergePDFs(result, file);
+        } catch (err) {
+          console.error('Error merging site plan PDF:', err);
+        }
+      }
     }
   }
   return result;
 }
 
-function asbestosClearanceMergedFileExists(mergedPdfPath) {
-  if (!mergedPdfPath) return false;
-  const fullPath = path.join(__dirname, '..', 'generated-pdfs', mergedPdfPath);
-  return fs.existsSync(fullPath);
-}
-
 /**
- * Persist asbestos clearance PDF URLs / merged file after async DocRaptor job completes.
- * Idempotent: skips when a merged file is already on disk.
+ * Persist asbestos clearance PDF on the clearance after the async DocRaptor job completes.
+ * Idempotent: skips when a buffer or file is already stored.
  */
 async function persistAsbestosClearancePdfFromJob(job) {
   if (job.reportType !== 'asbestos-clearance' || job.status !== 'completed' || !job.downloadUrl || !job.clearanceId) {
     return;
   }
-  const existing = await AsbestosClearance.findById(job.clearanceId)
-    .select('mergedPdfPath pdfDownloadUrl')
-    .lean();
-  if (existing?.mergedPdfPath && asbestosClearanceMergedFileExists(existing.mergedPdfPath)) {
+  const existing = await AsbestosClearance.findById(job.clearanceId).select('mergedPdfPath').lean();
+  if (
+    await clearanceHasPdfBuffer(AsbestosClearance, job.clearanceId) ||
+    mergedPdfFileExists(existing?.mergedPdfPath)
+  ) {
     return;
   }
 
-  let mergedPdfPath = null;
   const mergePayload = job.mergePayload || {};
-  try {
-    const mainBuffer = await docRaptorService.fetchDocument(job.downloadUrl);
-    const mergedBuffer = await mergeAsbestosClearanceAppendices(mainBuffer, mergePayload);
-    fs.mkdirSync(ASBESTOS_CLEARANCE_MERGED_PDF_DIR, { recursive: true });
-    const fileName = `${job.clearanceId}.pdf`;
-    const fullPath = path.join(ASBESTOS_CLEARANCE_MERGED_PDF_DIR, fileName);
-    fs.writeFileSync(fullPath, mergedBuffer);
-    mergedPdfPath = `asbestos-clearances/${fileName}`;
-  } catch (mergeErr) {
-    console.error('Failed to merge/save asbestos clearance PDF for fast download:', mergeErr);
-  }
-
-  await AsbestosClearance.findByIdAndUpdate(job.clearanceId, {
-    pdfDownloadUrl: job.downloadUrl,
-    pdfJobId: job.statusId,
-    pdfReadyAt: new Date(),
-    pdfFilename: job.filename || null,
-    ...(mergedPdfPath && { mergedPdfPath }),
+  const mainBuffer = await docRaptorService.fetchDocument(job.downloadUrl);
+  const mergedBuffer = await mergeAsbestosClearanceAppendices(mainBuffer, mergePayload);
+  await saveClearancePdfCopy({
+    Model: AsbestosClearance,
+    clearanceId: job.clearanceId,
+    buffer: mergedBuffer,
+    filename: job.filename,
+    downloadUrl: job.downloadUrl,
+    jobId: job.statusId,
+    relativeDir: 'asbestos-clearances',
   });
 }
 
-/**
- * Resolve clearance PDF bytes: prefer on-disk merged file, else DocRaptor URL + merge.
- */
-async function resolveAsbestosClearancePdfBuffer(clearance) {
-  if (clearance.mergedPdfPath && asbestosClearanceMergedFileExists(clearance.mergedPdfPath)) {
-    const fullPath = path.join(__dirname, '..', 'generated-pdfs', clearance.mergedPdfPath);
-    return fs.readFileSync(fullPath);
+async function persistLeadClearancePdfFromJob(job) {
+  if (job.reportType !== 'lead-clearance' || job.status !== 'completed' || !job.downloadUrl || !job.clearanceId) {
+    return;
   }
-  if (!clearance.pdfDownloadUrl) {
-    return null;
+  const existing = await LeadClearance.findById(job.clearanceId).select('mergedPdfPath').lean();
+  if (
+    await clearanceHasPdfBuffer(LeadClearance, job.clearanceId) ||
+    mergedPdfFileExists(existing?.mergedPdfPath)
+  ) {
+    return;
   }
-  const airReports =
-    clearance.airMonitoringReports && clearance.airMonitoringReports.length > 0
-      ? [...clearance.airMonitoringReports].sort(
-          (a, b) => new Date(a.shiftDate || 0) - new Date(b.shiftDate || 0),
-        )
-      : clearance.airMonitoringReport
-        ? [{ reportData: clearance.airMonitoringReport }]
-        : [];
-  let pdfBuffer = await docRaptorService.fetchDocument(clearance.pdfDownloadUrl);
-  pdfBuffer = await mergeAsbestosClearanceAppendices(pdfBuffer, {
-    airReports,
-    sitePlan: clearance.sitePlan,
-    sitePlanFile: clearance.sitePlanFile,
-    airMonitoringReport: clearance.airMonitoringReport,
+
+  const mainBuffer = await docRaptorService.fetchDocument(job.downloadUrl);
+  const mergedBuffer = job.mergePayload
+    ? await mergeLeadClearanceAppendices(mainBuffer, job.mergePayload)
+    : mainBuffer;
+  await saveClearancePdfCopy({
+    Model: LeadClearance,
+    clearanceId: job.clearanceId,
+    buffer: mergedBuffer,
+    filename: job.filename,
+    downloadUrl: job.downloadUrl,
+    jobId: job.statusId,
+    relativeDir: 'lead-clearances',
   });
-  try {
-    fs.mkdirSync(ASBESTOS_CLEARANCE_MERGED_PDF_DIR, { recursive: true });
-    const mergedPdfPath = `asbestos-clearances/${clearance._id}.pdf`;
-    const fullPath = path.join(__dirname, '..', 'generated-pdfs', mergedPdfPath);
-    fs.writeFileSync(fullPath, pdfBuffer);
-    await AsbestosClearance.findByIdAndUpdate(clearance._id, { mergedPdfPath });
-  } catch (saveErr) {
-    console.warn('Could not cache merged asbestos clearance PDF for future downloads:', saveErr);
-  }
-  return pdfBuffer;
+}
+
+function storedPdfBytes(value) {
+  if (!value) return null;
+  const buf = Buffer.isBuffer(value) ? value : Buffer.from(value.buffer || value);
+  return buf.length ? buf : null;
 }
 
 /**
  * Download asbestos clearance PDF by clearance ID.
- * When mergedPdfPath exists: streams pre-merged file from disk (fast, no fetch/merge).
- * Fallback: fetches main from pdfDownloadUrl and merges appendices.
+ * Serves the copy stored on the clearance, or an existing file on disk.
+ * A DocRaptor link alone is not downloaded here; the client can offer to regenerate.
  */
 router.get('/download-by-clearance/:clearanceId', async (req, res) => {
   const { clearanceId } = req.params;
   try {
-    const clearance = await AsbestosClearance.findById(clearanceId).lean();
-    if (!clearance) {
+    const stored = await AsbestosClearance.findById(clearanceId).select(
+      'pdfBuffer pdfFilename mergedPdfPath'
+    );
+    if (!stored) {
       return res.status(404).json({ error: 'Clearance not found' });
     }
-    const pdfBuffer = await resolveAsbestosClearancePdfBuffer(clearance);
+    let pdfBuffer = storedPdfBytes(stored.pdfBuffer);
+    if (!pdfBuffer && mergedPdfFileExists(stored.mergedPdfPath)) {
+      pdfBuffer = fs.readFileSync(mergedPdfFullPath(stored.mergedPdfPath));
+    }
     if (!pdfBuffer) {
       return res.status(404).json({
         error: 'No PDF available for this clearance',
         hint: 'Generate the PDF first using Generate PDF',
       });
     }
-    const filename = clearance.pdfFilename || `clearance_${clearanceId}.pdf`;
+    const filename = stored.pdfFilename || `clearance_${clearanceId}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', buildContentDispositionAttachment(filename));
     res.setHeader('Content-Length', pdfBuffer.length);
@@ -3590,9 +3687,12 @@ async function mergeLeadClearanceAppendices(pdfBuffer, leadClearanceData) {
         prince_options: { page_margin: '0.5in', media: 'print', html_mode: 'quirks' },
       });
       finalPdfBuffer = await mergePDFs(finalPdfBuffer, photosPdf);
-    } else if (app.key === 'sitePlan' && data.sitePlanFile) {
-      const file = data.sitePlanFile;
-      if (isLeadClearanceSitePlanImage(file)) {
+    } else if (app.key === 'sitePlan') {
+      const plans = resolveSitePlanAppendices(data);
+      const imagePlans = plans.filter((p) => isLeadClearanceSitePlanImage(p.sitePlanFile));
+      const pdfPlans = plans.filter((p) => p.sitePlanFile && !isLeadClearanceSitePlanImage(p.sitePlanFile));
+
+      if (imagePlans.length > 0) {
         try {
           const sitePlanHtml = await generateLeadClearanceSitePlanHTML(data, {
             logoBase64,
@@ -3611,9 +3711,10 @@ async function mergeLeadClearanceAppendices(pdfBuffer, leadClearanceData) {
         } catch (err) {
           console.error('Error generating lead clearance site plan PDF:', err);
         }
-      } else {
+      }
+      for (const plan of pdfPlans) {
         try {
-          finalPdfBuffer = await mergePDFs(finalPdfBuffer, file);
+          finalPdfBuffer = await mergePDFs(finalPdfBuffer, plan.sitePlanFile);
         } catch (err) {
           console.error('Error merging lead clearance site plan PDF:', err);
         }
@@ -3701,53 +3802,31 @@ router.post('/generate-lead-clearance-v2', async (req, res) => {
 
 /**
  * Download lead clearance PDF by clearance ID.
- * Green icon (download only): streams pre-merged file from disk when mergedPdfPath exists (no regeneration).
- * Fallback: fetches main report from pdfDownloadUrl and merges appendices (slower).
+ * Serves the copy stored on the clearance, or an existing file on disk.
+ * A DocRaptor link alone is not downloaded here; the client can offer to regenerate.
  */
 router.get('/download-by-lead-clearance/:clearanceId', async (req, res) => {
   const { clearanceId } = req.params;
   try {
-    const clearance = await LeadClearance.findById(clearanceId).lean();
-    if (!clearance) {
+    const stored = await LeadClearance.findById(clearanceId).select(
+      'pdfBuffer pdfFilename mergedPdfPath'
+    );
+    if (!stored) {
       return res.status(404).json({ error: 'Clearance not found' });
     }
-    if (!clearance.pdfDownloadUrl && !clearance.mergedPdfPath) {
+    let pdfBuffer = storedPdfBytes(stored.pdfBuffer);
+    if (!pdfBuffer && mergedPdfFileExists(stored.mergedPdfPath)) {
+      pdfBuffer = fs.readFileSync(mergedPdfFullPath(stored.mergedPdfPath));
+    }
+    if (!pdfBuffer) {
       return res.status(404).json({
         error: 'No PDF available for this clearance',
         hint: 'Generate the PDF first using Generate PDF'
       });
     }
-    const filename = clearance.pdfFilename || `lead_clearance_${clearanceId}.pdf`;
+    const filename = stored.pdfFilename || `lead_clearance_${clearanceId}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', buildContentDispositionAttachment(filename));
-
-    if (clearance.mergedPdfPath) {
-      const fullPath = path.join(__dirname, '..', 'generated-pdfs', clearance.mergedPdfPath);
-      if (fs.existsSync(fullPath)) {
-        const stat = fs.statSync(fullPath);
-        res.setHeader('Content-Length', stat.size);
-        const readStream = fs.createReadStream(fullPath);
-        return readStream.pipe(res);
-      }
-    }
-    if (!clearance.pdfDownloadUrl) {
-      return res.status(404).json({
-        error: 'No PDF available for this clearance',
-        hint: 'Generate the PDF first using Generate PDF'
-      });
-    }
-    let pdfBuffer = await docRaptorService.fetchDocument(clearance.pdfDownloadUrl);
-    pdfBuffer = await mergeLeadClearanceAppendices(pdfBuffer, clearance);
-    try {
-      fs.mkdirSync(LEAD_CLEARANCE_MERGED_PDF_DIR, { recursive: true });
-      const fileName = `${clearanceId}.pdf`;
-      const mergedPdfPath = `lead-clearances/${fileName}`;
-      const fullPath = path.join(__dirname, '..', 'generated-pdfs', mergedPdfPath);
-      fs.writeFileSync(fullPath, pdfBuffer);
-      await LeadClearance.findByIdAndUpdate(clearanceId, { mergedPdfPath });
-    } catch (saveErr) {
-      console.warn('Could not cache merged lead clearance PDF for future downloads:', saveErr);
-    }
     res.setHeader('Content-Length', pdfBuffer.length);
     res.send(pdfBuffer);
   } catch (error) {
@@ -4372,31 +4451,56 @@ router.post('/generate-asbestos-assessment', auth, async (req, res) => {
  * then merge pre-existing fibre analysis and site plan PDFs. Returns buffer and filename for sync or async use.
  */
 /**
+ * Resolve asbestos/residential assessment site plan appendices (array order = PDF order).
+ * Falls back to legacy single sitePlanFile when appendices array is empty.
+ */
+function resolveAsbestosSitePlanAppendices(assessmentData) {
+  return resolveSitePlanAppendices(assessmentData, 'sitePlanAppendices');
+}
+
+function isSitePlanFileImageData(f) {
+  return f && typeof f === 'string' && (
+    f.startsWith('/9j/') ||
+    f.startsWith('iVBORw0KGgo') ||
+    f.startsWith('data:image/')
+  );
+}
+
+/** Survey findings / flow text for site plan appendix reference (single appendix for all plans). */
+function formatAssessmentSitePlanAppendixReference(hasFibreIdReport, planCount) {
+  if (planCount <= 0) return null;
+  const letter = hasFibreIdReport ? 'B' : 'A';
+  return `Appendix ${letter}`;
+}
+
+/**
  * Count appendix + landscape pages at end of single-doc assessment PDF (for fibre merge split).
  */
 function countAssessmentAppendixTailPages(assessmentData, isLeadAssessment, hasSitePlan, isSitePlanImage) {
-  const isImg = (f) =>
-    f &&
-    typeof f === 'string' &&
-    (f.startsWith('/9j/') || f.startsWith('iVBORw0KGgo') || f.startsWith('data:image/'));
   if (isLeadAssessment) {
-    const entries = [];
-    for (const p of assessmentData.leadSitePlanAppendices || []) {
-      if (p && p.sitePlanFile) entries.push(p);
-    }
-    if (entries.length === 0) {
+    const leadPlans = resolveSitePlanAppendices(assessmentData, 'leadSitePlanAppendices');
+    if (leadPlans.length === 0) {
       if (!hasSitePlan || !assessmentData.sitePlanFile) return 0;
       return 1 + (isSitePlanImage ? 1 : 0);
     }
-    let n = 0;
-    for (const plan of entries) {
-      n += 1;
-      if (isImg(plan.sitePlanFile)) n += 1;
+    // One shared appendix cover, then one landscape page per image plan
+    let n = 1;
+    for (const plan of leadPlans) {
+      if (isSitePlanFileImageData(plan.sitePlanFile)) n += 1;
     }
     return n;
   }
-  if (!hasSitePlan) return 0;
-  return 1 + (isSitePlanImage ? 1 : 0);
+  const asbestosPlans = resolveAsbestosSitePlanAppendices(assessmentData);
+  if (asbestosPlans.length === 0) {
+    if (!hasSitePlan) return 0;
+    return 1 + (isSitePlanImage ? 1 : 0);
+  }
+  // One shared appendix cover, then one landscape page per image plan
+  let n = 1;
+  for (const plan of asbestosPlans) {
+    if (isSitePlanFileImageData(plan.sitePlanFile)) n += 1;
+  }
+  return n;
 }
 
 async function runAssessmentPdfV3(assessmentData, isResidential) {
@@ -4409,7 +4513,7 @@ async function runAssessmentPdfV3(assessmentData, isResidential) {
   if (idStr) {
     try {
       const doc = await AsbestosAssessment.findById(idStr)
-        .select('state fibreAnalysisReport sitePlan sitePlanFile sitePlanLegend sitePlanLegendTitle sitePlanFigureTitle leadSitePlanAppendices leadAssessmentPlanAppendices reportReference')
+        .select('state fibreAnalysisReport sitePlan sitePlanFile sitePlanLegend sitePlanLegendTitle sitePlanFigureTitle sitePlanAppendices leadSitePlanAppendices leadAssessmentPlanAppendices reportReference')
         .lean();
       if (doc) {
         if (doc.state != null) assessmentData.state = doc.state;
@@ -4421,6 +4525,7 @@ async function runAssessmentPdfV3(assessmentData, isResidential) {
         if (doc.sitePlanLegend != null) assessmentData.sitePlanLegend = doc.sitePlanLegend;
         if (doc.sitePlanLegendTitle != null) assessmentData.sitePlanLegendTitle = doc.sitePlanLegendTitle;
         if (doc.sitePlanFigureTitle != null) assessmentData.sitePlanFigureTitle = doc.sitePlanFigureTitle;
+        if (doc.sitePlanAppendices != null) assessmentData.sitePlanAppendices = doc.sitePlanAppendices;
         if (doc.leadSitePlanAppendices != null) assessmentData.leadSitePlanAppendices = doc.leadSitePlanAppendices;
         if (doc.leadAssessmentPlanAppendices != null) assessmentData.leadAssessmentPlanAppendices = doc.leadAssessmentPlanAppendices;
         if (doc.reportReference != null) assessmentData.reportReference = doc.reportReference;
@@ -4441,11 +4546,10 @@ async function runAssessmentPdfV3(assessmentData, isResidential) {
   let merged = await docRaptorService.generatePDF(fullHtml);
 
   const hasFibreIdReport = !!assessmentData.fibreAnalysisReport;
-  const hasSitePlan = !!(assessmentData.sitePlan && assessmentData.sitePlanFile);
-  const isSitePlanImage = hasSitePlan && (
-    assessmentData.sitePlanFile.startsWith('/9j/') ||
-    assessmentData.sitePlanFile.startsWith('iVBORw0KGgo') ||
-    assessmentData.sitePlanFile.startsWith('data:image/')
+  const asbestosSitePlans = resolveAsbestosSitePlanAppendices(assessmentData);
+  const hasSitePlan = asbestosSitePlans.length > 0;
+  const isSitePlanImage = hasSitePlan && asbestosSitePlans.some((p) =>
+    isSitePlanFileImageData(p.sitePlanFile),
   );
   const appendixTailPages = countAssessmentAppendixTailPages(
     assessmentData,
@@ -4476,11 +4580,16 @@ async function runAssessmentPdfV3(assessmentData, isResidential) {
       console.error(`[${pdfId}] Error merging fibre analysis PDFs:`, error);
     }
   }
-  if (hasSitePlan && assessmentData.sitePlanFile && !isSitePlanImage) {
-    try {
-      merged = await mergePDFs(merged, assessmentData.sitePlanFile);
-    } catch (error) {
-      console.error(`[${pdfId}] Error merging site plan PDF:`, error);
+  if (hasSitePlan) {
+    for (const plan of asbestosSitePlans) {
+      const fileData = plan.sitePlanFile;
+      if (fileData && !isSitePlanFileImageData(fileData)) {
+        try {
+          merged = await mergePDFs(merged, fileData);
+        } catch (error) {
+          console.error(`[${pdfId}] Error merging site plan PDF:`, error);
+        }
+      }
     }
   }
 
@@ -4636,8 +4745,8 @@ router.post('/start-asbestos-assessment-pdf', auth, async (req, res) => {
 
 /**
  * Download assessment PDF by assessment ID (uses persisted pdfBuffer; no regeneration).
- * After ASSESSMENT_PDF_RETENTION_DAYS (7), the report is no longer served.
- * Query param freshJobId: when provided and the job is completed for this assessment, skip expiry check (for immediate download after regeneration).
+ * The stored PDF stays available until assessment content changes and the buffer is cleared.
+ * Query param freshJobId: when provided and the job is completed for this assessment, skip the corrupt-cache check (for immediate download after regeneration).
  */
 router.get('/download-by-assessment/:assessmentId', auth, async (req, res) => {
   const { assessmentId } = req.params;
@@ -4671,19 +4780,6 @@ router.get('/download-by-assessment/:assessmentId', auth, async (req, res) => {
       return res.status(404).json({
         error: 'No PDF available for this assessment',
         hint: 'Generate the PDF first using Generate PDF',
-      });
-    }
-    // Retention: if PDF is past 7 days, return 410 Gone — unless we have a completed freshJobId or we're in development
-    const isDev = !process.env.NODE_ENV || process.env.NODE_ENV === 'development';
-    const readyAtMs = assessment.pdfReadyAt ? new Date(assessment.pdfReadyAt).getTime() : null;
-    const ageMs = readyAtMs != null ? Date.now() - readyAtMs : null;
-    const expired = readyAtMs != null && !Number.isNaN(readyAtMs) && isAssessmentPdfExpired(assessment.pdfReadyAt);
-    const definitelyOverRetention = ageMs != null && !Number.isNaN(ageMs) && ageMs > ASSESSMENT_PDF_RETENTION_MS;
-    console.log(`[download-by-assessment] assessmentId=${assessmentId} pdfReadyAt=${String(assessment.pdfReadyAt)} readyAtMs=${readyAtMs} ageMs=${ageMs} skipExpiry=${skipExpiryCheck} isDev=${isDev} expired=${expired} overRetention=${definitelyOverRetention}`);
-    if (!skipExpiryCheck && !isDev && assessment.pdfReadyAt && expired && definitelyOverRetention) {
-      return res.status(410).json({
-        error: 'Report no longer available',
-        hint: 'Retention period (7 days) has ended. Generate the PDF again if needed.',
       });
     }
     let buffer = assessment.pdfBuffer;
@@ -4962,14 +5058,7 @@ const generateAssessmentHTML = async (assessmentData) => {
       const count = items.slice(0, idx + 1).filter((i) => !hasNoAsbestosContent(i)).length;
       return String(count);
     };
-    // Arrow overlay for PDF: tip offset (viewBox 24x24, tip at 12,2, center 12,12)
-    const DEFAULT_ARROW_ROTATION_PDF = -45;
-    const getArrowTipOffsetPdf = (rotationDeg) => {
-      const r = ((rotationDeg ?? DEFAULT_ARROW_ROTATION_PDF) * Math.PI) / 180;
-      const tipX = (12 + 10 * Math.sin(r)) / 24;
-      const tipY = (12 - 10 * Math.cos(r)) / 24;
-      return { x: tipX, y: tipY };
-    };
+    // Arrow overlay for PDF: drawn endpoints or legacy tip+rotation stamp
     const getPhotoArrowsForPdf = (photo) => {
       if (!photo) return [];
       if (photo.arrows && photo.arrows.length > 0) return photo.arrows;
@@ -4977,20 +5066,7 @@ const generateAssessmentHTML = async (assessmentData) => {
       if (leg && typeof leg === 'object' && (leg.x != null || leg.y != null)) return [leg];
       return [];
     };
-    const buildArrowOverlaysHtml = (arrows) => {
-      if (!arrows || arrows.length === 0) return '';
-      const defaultColor = '#f44336';
-      return arrows.map((arr) => {
-        const rot = arr.rotation ?? DEFAULT_ARROW_ROTATION_PDF;
-        const tipOff = getArrowTipOffsetPdf(rot);
-        const color = (arr.color || defaultColor).replace(/"/g, '&quot;');
-        const leftPct = ((arr.x ?? 0.5) * 100).toFixed(2);
-        const topPct = ((arr.y ?? 0.5) * 100).toFixed(2);
-        const tx = (-tipOff.x * 100).toFixed(2);
-        const ty = (-tipOff.y * 100).toFixed(2);
-        return `<div class="pdf-arrow-overlay" style="left:${leftPct}%;top:${topPct}%;transform:translate(${tx}%,${ty}%);"><div class="pdf-arrow-rotated" style="transform:rotate(${rot}deg);"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="22" x2="12" y2="10" stroke="rgba(0,0,0,0.5)" stroke-width="2.5" stroke-linecap="round"/><line x1="12" y1="22" x2="12" y2="10" stroke="${color}" stroke-width="2" stroke-linecap="round"/><path d="M12 2 L8 10 L16 10 Z" fill="rgba(0,0,0,0.4)" stroke="rgba(0,0,0,0.6)" stroke-width="1" stroke-linejoin="round"/><path d="M12 2 L8 10 L16 10 Z" fill="${color}" stroke="${color}" stroke-width="0.5" stroke-linejoin="round"/></svg></div></div>`;
-      }).join('');
-    };
+    const buildArrowOverlaysHtml = (arrows) => buildPdfArrowOverlaysHtml(arrows);
     // Multiple images per item: include all photos marked includeInReport with arrows; fallback to legacy single photograph
     const getIncludedPhotos = (item) => {
       const fromArray = (item.photographs || []).filter(p => p.includeInReport !== false && (p.data || '').trim());
@@ -5123,11 +5199,15 @@ const generateAssessmentHTML = async (assessmentData) => {
     let surveyFindingsContentPopulated = surveyFindingsSource !== 'Survey findings content not found'
       ? await replacePlaceholders(surveyFindingsSource, { ...assessmentData, selectedLegislation })
       : surveyFindingsSource;
-    const hasSitePlan = !!(assessmentData.sitePlan && assessmentData.sitePlanFile);
+    const hasSitePlan = resolveAsbestosSitePlanAppendices(assessmentData).length > 0;
     const hasFibreIdReport = !!assessmentData.fibreAnalysisReport;
-    const sitePlanAppendix = hasFibreIdReport ? 'Appendix B' : 'Appendix A';
-    if (hasSitePlan) {
-      surveyFindingsContentPopulated += `\n\nA site plan illustrating the locations of asbestos-containing materials for this assessment is presented in ${sitePlanAppendix} of this report.`;
+    const sitePlanCount = resolveAsbestosSitePlanAppendices(assessmentData).length;
+    const sitePlanAppendix = formatAssessmentSitePlanAppendixReference(hasFibreIdReport, sitePlanCount);
+    if (hasSitePlan && sitePlanAppendix) {
+      const sitePlanSentence = sitePlanCount === 1
+        ? `\n\nA site plan illustrating the locations of asbestos-containing materials for this assessment is presented in ${sitePlanAppendix} of this report.`
+        : `\n\nSite plans illustrating the locations of asbestos-containing materials for this assessment are presented in ${sitePlanAppendix} of this report.`;
+      surveyFindingsContentPopulated += sitePlanSentence;
     }
     // Ensure newlines render in HTML (replacePlaceholders may not convert \n)
     surveyFindingsContentPopulated = surveyFindingsContentPopulated.replace(/\n/g, '<br />');
@@ -5479,7 +5559,20 @@ const generateAssessmentHTML = async (assessmentData) => {
         const trimmedSitePlan = await trimSitePlanImage(assessmentData.sitePlanFile);
         const assessmentDataTrimmed = { ...assessmentData, sitePlanFile: trimmedSitePlan };
         const sitePlanFigureTitle = assessmentData.sitePlanFigureTitle || 'Asbestos Survey Site Plan';
-        const sitePlanContentPage = generateSitePlanContentPage(assessmentDataTrimmed, sitePlanAppendixLetterLegacy, logoBase64, assessmentFooterText, 'sitePlanFile', 'SITE PLAN', sitePlanFigureTitle, 'sitePlanLegend', 'sitePlanLegendTitle');
+        const sitePlanContentPage = generateSitePlanContentPage(
+          assessmentDataTrimmed,
+          sitePlanAppendixLetterLegacy,
+          logoBase64,
+          assessmentFooterText,
+          'sitePlanFile',
+          'SITE PLAN',
+          sitePlanFigureTitle,
+          'sitePlanLegend',
+          'sitePlanLegendTitle',
+          0,
+          1,
+          { fillAvailable: true }
+        );
         appendixContent += `
             <!-- Appendix ${sitePlanAppendixLetterLegacy} Site Plan Content Page -->
             ${sitePlanContentPage}
@@ -5527,6 +5620,7 @@ const generateAssessmentHTML = async (assessmentData) => {
         padding: 0;
         margin: 0;
       }
+      .assessment-page .pdf-arrow-layer { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; overflow: visible; }
       .assessment-page .pdf-arrow-overlay { position: absolute; width: 36px; height: 36px; pointer-events: none; z-index: 2; }
       .assessment-page .pdf-arrow-rotated { width: 36px; height: 36px; }
       .assessment-page .sample-photo-cell-inner .sample-photo {
@@ -5558,17 +5652,8 @@ const generateAssessmentHTML = async (assessmentData) => {
       .assessment-page .asbestos-content-asbestos { color: #c62828; }
       .assessment-page .asbestos-content-non-asbestos { color: #2e7d32; }
       /* Site plan page styles (for appendix site plan when embedded in legacy assessment) */
-      .site-plan-page { width: 100%; min-height: 100vh; position: relative; background: #fff; margin: 0; padding: 0; }
-      .site-plan-page .header { display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 48px 0 48px; margin: 0; }
-      .site-plan-page .green-line { width: calc(100% - 96px); height: 1.5px; background: #16b12b; margin: 8px auto 0 auto; border-radius: 0; }
-      .site-plan-page .content { padding: 5px 48px 10px 48px; flex: 1; display: flex; flex-direction: column; margin: 0; min-height: 0; overflow: hidden; }
-      .site-plan-page .footer { position: relative; left: 0; right: 0; bottom: 0; width: 100%; padding: 0 48px 16px 48px; text-align: justify; font-size: 0.75rem; color: #222; }
-      .site-plan-page .footer-border-line { width: 100%; height: 1.5px; background: #16b12b; margin-bottom: 6px; border-radius: 0; }
-      .site-plan-page .footer-content { width: 100%; display: flex; justify-content: space-between; align-items: flex-end; }
-      .site-plan-page .footer-text { flex: 1; }
-      .site-plan-layout { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: row; justify-content: flex-start; gap: 10px; align-items: flex-start; margin: 0; width: 100%; padding: 0 8px 0 0; }
-      .site-plan-container { flex: 1 1 auto; width: auto; max-width: none; min-width: 0; overflow: hidden; display: flex; flex-direction: column; padding: 0; margin: 12px 0 0 0; border: none; background: transparent; border-radius: 0; box-shadow: none; }
-      .site-plan-legend-container { flex: 0 0 280px; max-width: 280px; min-width: 260px; }
+      ${getSitePlanFillLayoutCss({ includePageRule: false })}
+      .site-plan-page { page-break-before: always; }
     `;
 
     // Create complete HTML document
@@ -6416,13 +6501,6 @@ const generateLeadAssessmentFlowHTMLV3 = async (assessmentData) => {
     return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
   };
 
-  const DEFAULT_ARROW_ROTATION_PDF_LEAD = -45;
-  const getArrowTipOffsetPdfLead = (rotationDeg) => {
-    const r = ((rotationDeg ?? DEFAULT_ARROW_ROTATION_PDF_LEAD) * Math.PI) / 180;
-    const tipX = (12 + 10 * Math.sin(r)) / 24;
-    const tipY = (12 - 10 * Math.cos(r)) / 24;
-    return { x: tipX, y: tipY };
-  };
   const getPhotoArrowsForPdfLead = (photo) => {
     if (!photo) return [];
     if (photo.arrows && photo.arrows.length > 0) return photo.arrows;
@@ -6430,20 +6508,7 @@ const generateLeadAssessmentFlowHTMLV3 = async (assessmentData) => {
     if (leg && typeof leg === 'object' && (leg.x != null || leg.y != null)) return [leg];
     return [];
   };
-  const buildArrowOverlaysHtmlLead = (arrows) => {
-    if (!arrows || arrows.length === 0) return '';
-    const defaultColor = '#f44336';
-    return arrows.map((arr) => {
-      const rot = arr.rotation ?? DEFAULT_ARROW_ROTATION_PDF_LEAD;
-      const tipOff = getArrowTipOffsetPdfLead(rot);
-      const color = (arr.color || defaultColor).replace(/"/g, '&quot;');
-      const leftPct = ((arr.x ?? 0.5) * 100).toFixed(2);
-      const topPct = ((arr.y ?? 0.5) * 100).toFixed(2);
-      const tx = (-tipOff.x * 100).toFixed(2);
-      const ty = (-tipOff.y * 100).toFixed(2);
-      return `<div class="pdf-arrow-overlay" style="left:${leftPct}%;top:${topPct}%;transform:translate(${tx}%,${ty}%);"><div class="pdf-arrow-rotated" style="transform:rotate(${rot}deg);"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="22" x2="12" y2="10" stroke="rgba(0,0,0,0.5)" stroke-width="2.5" stroke-linecap="round"/><line x1="12" y1="22" x2="12" y2="10" stroke="${color}" stroke-width="2" stroke-linecap="round"/><path d="M12 2 L8 10 L16 10 Z" fill="rgba(0,0,0,0.4)" stroke="rgba(0,0,0,0.6)" stroke-width="1" stroke-linejoin="round"/><path d="M12 2 L8 10 L16 10 Z" fill="${color}" stroke="${color}" stroke-width="0.5" stroke-linejoin="round"/></svg></div></div>`;
-    }).join('');
-  };
+  const buildArrowOverlaysHtmlLead = (arrows) => buildPdfArrowOverlaysHtml(arrows);
 
   const getIncludedPhotosLead = (item) => {
     const fromArray = (item.photographs || []).filter((p) => p.includeInReport !== false && (p.data || '').trim());
@@ -6971,6 +7036,7 @@ const generateLeadAssessmentFlowHTMLV3 = async (assessmentData) => {
         padding: 0;
         margin: 0;
       }
+      .lead-sample-table .pdf-arrow-layer { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; overflow: visible; }
       .lead-sample-table .pdf-arrow-overlay { position: absolute; width: 36px; height: 36px; pointer-events: none; z-index: 2; }
       .lead-sample-table .pdf-arrow-rotated { width: 36px; height: 36px; }
       .lead-sample-table .sample-photo-cell-inner .sample-photo {
@@ -7280,14 +7346,7 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
     const count = items.slice(0, idx + 1).filter((i) => !hasNoAsbestosContentFlow(i)).length;
     return String(count);
   };
-  // Arrow overlay for PDF (flow): same helpers as non-flow
-  const DEFAULT_ARROW_ROTATION_PDF_FLOW = -45;
-  const getArrowTipOffsetPdfFlow = (rotationDeg) => {
-    const r = ((rotationDeg ?? DEFAULT_ARROW_ROTATION_PDF_FLOW) * Math.PI) / 180;
-    const tipX = (12 + 10 * Math.sin(r)) / 24;
-    const tipY = (12 - 10 * Math.cos(r)) / 24;
-    return { x: tipX, y: tipY };
-  };
+  // Arrow overlay for PDF (flow): drawn endpoints or legacy tip+rotation
   const getPhotoArrowsForPdfFlow = (photo) => {
     if (!photo) return [];
     if (photo.arrows && photo.arrows.length > 0) return photo.arrows;
@@ -7295,20 +7354,7 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
     if (leg && typeof leg === 'object' && (leg.x != null || leg.y != null)) return [leg];
     return [];
   };
-  const buildArrowOverlaysHtmlFlow = (arrows) => {
-    if (!arrows || arrows.length === 0) return '';
-    const defaultColor = '#f44336';
-    return arrows.map((arr) => {
-      const rot = arr.rotation ?? DEFAULT_ARROW_ROTATION_PDF_FLOW;
-      const tipOff = getArrowTipOffsetPdfFlow(rot);
-      const color = (arr.color || defaultColor).replace(/"/g, '&quot;');
-      const leftPct = ((arr.x ?? 0.5) * 100).toFixed(2);
-      const topPct = ((arr.y ?? 0.5) * 100).toFixed(2);
-      const tx = (-tipOff.x * 100).toFixed(2);
-      const ty = (-tipOff.y * 100).toFixed(2);
-      return `<div class="pdf-arrow-overlay" style="left:${leftPct}%;top:${topPct}%;transform:translate(${tx}%,${ty}%);"><div class="pdf-arrow-rotated" style="transform:rotate(${rot}deg);"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><line x1="12" y1="22" x2="12" y2="10" stroke="rgba(0,0,0,0.5)" stroke-width="2.5" stroke-linecap="round"/><line x1="12" y1="22" x2="12" y2="10" stroke="${color}" stroke-width="2" stroke-linecap="round"/><path d="M12 2 L8 10 L16 10 Z" fill="rgba(0,0,0,0.4)" stroke="rgba(0,0,0,0.6)" stroke-width="1" stroke-linejoin="round"/><path d="M12 2 L8 10 L16 10 Z" fill="${color}" stroke="${color}" stroke-width="0.5" stroke-linejoin="round"/></svg></div></div>`;
-    }).join('');
-  };
+  const buildArrowOverlaysHtmlFlow = (arrows) => buildPdfArrowOverlaysHtml(arrows);
   // Multiple images per item: one table per photo with identical item info and arrows
   const getIncludedPhotosFlow = (item) => {
     const fromArray = (item.photographs || []).filter(p => p.includeInReport !== false && (p.data || '').trim());
@@ -7427,11 +7473,18 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
   let surveyFindingsHtml = surveyFindingsSourceFlow !== 'Survey findings content not found'
     ? await replacePlaceholders(surveyFindingsSourceFlow, flowTemplateData)
     : surveyFindingsSourceFlow;
-  const hasSitePlanFlow = !!(assessmentData.sitePlan && assessmentData.sitePlanFile);
+  const asbestosSitePlansFlow = resolveAsbestosSitePlanAppendices(assessmentData);
+  const hasSitePlanFlow = asbestosSitePlansFlow.length > 0;
   const hasFibreIdReportFlow = !!assessmentData.fibreAnalysisReport;
-  const sitePlanAppendixFlow = hasFibreIdReportFlow ? 'Appendix B' : 'Appendix A';
-  if (hasSitePlanFlow) {
-    surveyFindingsHtml += `<p style="margin-top: 12px;">A site plan for this assessment is presented in ${escapeHtml(sitePlanAppendixFlow)} of this report.</p>`;
+  const sitePlanAppendixFlow = formatAssessmentSitePlanAppendixReference(
+    hasFibreIdReportFlow,
+    asbestosSitePlansFlow.length,
+  );
+  if (hasSitePlanFlow && sitePlanAppendixFlow) {
+    const sitePlanSentenceFlow = asbestosSitePlansFlow.length === 1
+      ? `A site plan for this assessment is presented in ${sitePlanAppendixFlow} of this report.`
+      : `Site plans for this assessment are presented in ${sitePlanAppendixFlow} of this report.`;
+    surveyFindingsHtml += `<p style="margin-top: 12px;">${escapeHtml(sitePlanSentenceFlow)}</p>`;
   }
 
   const registerTableHeaderHtml = '<div class="section-header assessment-register-header">Table 1: Assessment Register</div>';
@@ -7684,6 +7737,7 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
             object-position: center !important;
             padding: 0 !important;
           }
+          .pdf-arrow-layer { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; overflow: visible; }
           .pdf-arrow-overlay { position: absolute; width: 36px; height: 36px; pointer-events: none; z-index: 2; }
           .pdf-arrow-rotated { width: 36px; height: 36px; }
           .sample-photo {
@@ -7844,11 +7898,10 @@ async function generateAssessmentSingleHTMLV3(assessmentData, isResidential, isL
   const logoPath = path.join(__dirname, '../assets/logo.png');
   const logoBase64 = fs.existsSync(logoPath) ? fs.readFileSync(logoPath).toString('base64') : '';
   const hasFibreIdReport = !!assessmentData.fibreAnalysisReport;
-  const hasSitePlan = !!(assessmentData.sitePlan && assessmentData.sitePlanFile);
-  const isSitePlanImage = hasSitePlan && (
-    assessmentData.sitePlanFile.startsWith('/9j/') ||
-    assessmentData.sitePlanFile.startsWith('iVBORw0KGgo') ||
-    assessmentData.sitePlanFile.startsWith('data:image/')
+  const asbestosSitePlanEntries = resolveAsbestosSitePlanAppendices(assessmentData);
+  const hasSitePlan = asbestosSitePlanEntries.length > 0;
+  const isSitePlanImage = hasSitePlan && asbestosSitePlanEntries.some((p) =>
+    isSitePlanFileImageData(p.sitePlanFile),
   );
   const appendixFooterPrefix = isLeadAssessment ? 'Lead Assessment Report' : 'Asbestos Assessment Report';
 
@@ -7891,40 +7944,17 @@ async function generateAssessmentSingleHTMLV3(assessmentData, isResidential, isL
       ? `Residential Asbestos Assessment Report: ${assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site'}`
       : `Asbestos Assessment Report: ${assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site'}`);
 
-  const isPlanFileImageData = (f) => f && typeof f === 'string' && (
-    f.startsWith('/9j/') ||
-    f.startsWith('iVBORw0KGgo') ||
-    f.startsWith('data:image/')
-  );
+  const isPlanFileImageData = (f) => isSitePlanFileImageData(f);
 
-  const sitePlanLandscapeCssBlock = `
-        @page appendix-landscape { size: A4 landscape; margin: 0; }
-        .site-plan-page { page: appendix-landscape; height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden; page-break-after: avoid; page-break-inside: avoid; }
-        .site-plan-page .header { flex-shrink: 0; display: flex; justify-content: space-between; align-items: flex-start; padding: 16px 48px 0 48px; margin: 0; font-family: "Gothic", Arial, sans-serif; }
-        .site-plan-page .green-line { flex-shrink: 0; width: calc(100% - 96px); height: 1.5px; background: #16b12b; margin: 8px auto 0 auto; border-radius: 0; }
-        .site-plan-page .content { flex: 1; min-height: 0; overflow: hidden; padding: 5px 48px 10px 48px; display: flex; flex-direction: column; }
-        .site-plan-page .footer { flex-shrink: 0; position: relative; left: 0; right: 0; bottom: 0; width: 100%; padding: 0 48px 16px 48px; text-align: justify; font-size: 0.75rem; color: #222; font-family: "Gothic", Arial, sans-serif; }
-        .logo { width: 243px; height: auto; display: block; background: #fff; margin: 0; }
-        .company-details { text-align: right; font-size: 0.75rem; color: #222; line-height: 1.5; margin-top: 8px; margin: 0; }
-        .company-details .website { color: #16b12b; font-weight: 500; }
-        .footer-border-line { width: 100%; height: 1.5px; background: #16b12b; margin-bottom: 6px; border-radius: 0; }
-        .footer-content { width: 100%; display: flex; justify-content: space-between; align-items: flex-end; }
-        .footer-text { flex: 1; }
-        .site-plan-layout { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: row; justify-content: flex-start; gap: 10px; align-items: flex-start; margin: 0; width: 100%; padding: 0 8px 0 0; }
-        .site-plan-container { flex: 1 1 auto; width: auto; max-width: none; min-width: 0; overflow: hidden; display: flex; flex-direction: column; padding: 0; margin: 12px 0 0 0; border: none; background: transparent; border-radius: 0; box-shadow: none; }
-        .site-plan-container .site-plan-image-wrapper { flex: 0 0 auto; width: fit-content; overflow: hidden; display: flex; align-items: center; justify-content: center; }
-        .site-plan-container .site-plan-image { display: block; width: auto; height: auto; max-width: 100%; max-height: 96vh; object-fit: contain; border: 1.5px solid #999; box-sizing: border-box; margin: 0; padding: 0; background: transparent; }
-        .site-plan-container .site-plan-figure-caption { flex-shrink: 0; font-size: 14px; font-weight: 400; color: #222; text-align: left; margin-top: 8px; font-family: "Gothic", Arial, sans-serif; }
-        .site-plan-legend-container { flex: 0 0 280px; max-width: 280px; min-width: 260px; font-family: "Gothic", Arial, sans-serif; }
-      `;
+  const sitePlanLandscapeCssBlock = getSitePlanFillLayoutCss();
+
+  /* Shared fill layout (trim + scale) for asbestos and lead assessment site plans */
+  const sitePlanLandscapeCssBlockFill = sitePlanLandscapeCssBlock;
 
   if (isLeadAssessment) {
-    const leadEntries = [];
-    for (const p of assessmentData.leadSitePlanAppendices || []) {
-      if (p && p.sitePlanFile) leadEntries.push({ kind: 'site', plan: p });
-    }
+    const leadPlans = resolveSitePlanAppendices(assessmentData, 'leadSitePlanAppendices');
 
-    if (leadEntries.length === 0 && hasSitePlan && assessmentData.sitePlanFile) {
+    if (leadPlans.length === 0 && hasSitePlan && assessmentData.sitePlanFile) {
       const sitePlanAppendixLetter = hasFibreIdReport ? 'B' : 'A';
       const appendixBHtml = generateAppendixCoverHTMLV3('B', assessmentData, sitePlanAppendixLetter, { footerReportPrefix: appendixFooterPrefix });
       const coverBody = extractBodyContent(appendixBHtml);
@@ -7945,85 +7975,97 @@ async function generateAssessmentSingleHTMLV3(assessmentData, isResidential, isL
           'sitePlanLegend',
           'sitePlanLegendTitle',
           0,
-          1
+          1,
+          { fillAvailable: true }
         );
-        sitePlanCss = sitePlanLandscapeCssBlock;
+        sitePlanCss = sitePlanLandscapeCssBlockFill;
       }
       appendixPlanSegments.push({ coverBody, fragment, isImage: isSitePlanImage });
-    } else {
-      let letterIdx = hasFibreIdReport ? 1 : 0;
+    } else if (leadPlans.length > 0) {
+      const sitePlanAppendixLetter = hasFibreIdReport ? 'B' : 'A';
+      const appendixBHtml = generateAppendixCoverHTMLV3('B', assessmentData, sitePlanAppendixLetter, { footerReportPrefix: appendixFooterPrefix });
+      const coverBody = extractBodyContent(appendixBHtml);
+      appendixBCss = extractStyleContent(appendixBHtml).replace(/@page\s*\{/g, '@page appendix {');
+      // One shared cover, then each lead site plan page in list order
+      appendixPlanSegments.push({ coverBody, fragment: '', isImage: false });
       let figureNum = 1;
-      for (const { plan } of leadEntries) {
-        const appendixLetter = String.fromCharCode(65 + letterIdx);
-        letterIdx += 1;
-        const appendixBHtml = generateAppendixCoverHTMLV3('B', assessmentData, appendixLetter, { footerReportPrefix: appendixFooterPrefix });
-        const coverBody = extractBodyContent(appendixBHtml);
-        if (!appendixBCss) {
-          appendixBCss = extractStyleContent(appendixBHtml).replace(/@page\s*\{/g, '@page appendix {');
-        }
+      for (const plan of leadPlans) {
         const fileData = plan.sitePlanFile;
         const img = isPlanFileImageData(fileData);
-        let fragment = '';
-        if (img) {
-          const trimmedSitePlan = await trimSitePlanImage(fileData);
-          const planMerged = {
-            ...assessmentData,
-            sitePlanFile: trimmedSitePlan,
-            sitePlanLegend: Array.isArray(plan.sitePlanLegend) ? plan.sitePlanLegend : [],
-            sitePlanLegendTitle: plan.sitePlanLegendTitle || 'Key',
-            sitePlanFigureTitle: plan.sitePlanFigureTitle,
-          };
-          const figTitle = (plan.sitePlanFigureTitle && plan.sitePlanFigureTitle.trim())
-            ? plan.sitePlanFigureTitle.trim()
-            : 'Lead Assessment Site Plan';
-          const pageTitle = 'SITE PLAN';
-          fragment = generateSitePlanContentPage(
-            planMerged,
-            appendixLetter,
-            logoBase64,
-            assessmentFooterTextForPlan,
-            'sitePlanFile',
-            pageTitle,
-            figTitle,
-            'sitePlanLegend',
-            'sitePlanLegendTitle',
-            0,
-            figureNum
-          );
-          figureNum += 1;
-        }
-        if (fragment) {
-          sitePlanCss = sitePlanLandscapeCssBlock;
-        }
-        appendixPlanSegments.push({ coverBody, fragment, isImage: img });
+        if (!img) continue;
+        const trimmedSitePlan = await trimSitePlanImage(fileData);
+        const planMerged = {
+          ...assessmentData,
+          sitePlanFile: trimmedSitePlan,
+          sitePlanLegend: Array.isArray(plan.sitePlanLegend) ? plan.sitePlanLegend : [],
+          sitePlanLegendTitle: plan.sitePlanLegendTitle || 'Key',
+          sitePlanFigureTitle: plan.sitePlanFigureTitle,
+        };
+        const figTitle = (plan.sitePlanFigureTitle && plan.sitePlanFigureTitle.trim())
+          ? plan.sitePlanFigureTitle.trim()
+          : 'Lead Assessment Site Plan';
+        const fragment = generateSitePlanContentPage(
+          planMerged,
+          sitePlanAppendixLetter,
+          logoBase64,
+          assessmentFooterTextForPlan,
+          'sitePlanFile',
+          'SITE PLAN',
+          figTitle,
+          'sitePlanLegend',
+          'sitePlanLegendTitle',
+          0,
+          figureNum,
+          { fillAvailable: true }
+        );
+        figureNum += 1;
+        sitePlanCss = sitePlanLandscapeCssBlockFill;
+        appendixPlanSegments.push({ coverBody: null, fragment, isImage: true });
       }
     }
-  } else if (hasSitePlan) {
+  } else if (asbestosSitePlanEntries.length > 0) {
     const sitePlanAppendixLetter = hasFibreIdReport ? 'B' : 'A';
     const appendixBHtml = generateAppendixCoverHTMLV3('B', assessmentData, sitePlanAppendixLetter, { footerReportPrefix: appendixFooterPrefix });
     const coverBody = extractBodyContent(appendixBHtml);
     appendixBCss = extractStyleContent(appendixBHtml).replace(/@page\s*\{/g, '@page appendix {');
-    let fragment = '';
-    if (isSitePlanImage) {
-      const trimmedSitePlan = await trimSitePlanImage(assessmentData.sitePlanFile);
-      const assessmentDataTrimmed = { ...assessmentData, sitePlanFile: trimmedSitePlan };
-      const sitePlanFigureTitle = assessmentData.sitePlanFigureTitle || 'Asbestos Survey Site Plan';
-      fragment = generateSitePlanContentPage(
-        assessmentDataTrimmed,
-        sitePlanAppendixLetter,
-        logoBase64,
-        assessmentFooterTextForPlan,
-        'sitePlanFile',
-        'SITE PLAN',
-        sitePlanFigureTitle,
-        'sitePlanLegend',
-        'sitePlanLegendTitle',
-        0,
-        1
-      );
-      sitePlanCss = sitePlanLandscapeCssBlock;
+    // One shared cover, then each site plan page in list order
+    appendixPlanSegments.push({ coverBody, fragment: '', isImage: false });
+    let figureNum = 1;
+    for (const plan of asbestosSitePlanEntries) {
+      const fileData = plan.sitePlanFile;
+      const img = isPlanFileImageData(fileData);
+      let fragment = '';
+      if (img) {
+        const trimmedSitePlan = await trimSitePlanImage(fileData);
+        const planMerged = {
+          ...assessmentData,
+          sitePlanFile: trimmedSitePlan,
+          sitePlanLegend: Array.isArray(plan.sitePlanLegend) ? plan.sitePlanLegend : [],
+          sitePlanLegendTitle: plan.sitePlanLegendTitle || 'Key',
+          sitePlanFigureTitle: plan.sitePlanFigureTitle,
+        };
+        const figTitle = (plan.sitePlanFigureTitle && plan.sitePlanFigureTitle.trim())
+          ? plan.sitePlanFigureTitle.trim()
+          : 'Asbestos Survey Site Plan';
+        fragment = generateSitePlanContentPage(
+          planMerged,
+          sitePlanAppendixLetter,
+          logoBase64,
+          assessmentFooterTextForPlan,
+          'sitePlanFile',
+          'SITE PLAN',
+          figTitle,
+          'sitePlanLegend',
+          'sitePlanLegendTitle',
+          0,
+          figureNum,
+          { fillAvailable: true }
+        );
+        figureNum += 1;
+        sitePlanCss = sitePlanLandscapeCssBlockFill;
+        appendixPlanSegments.push({ coverBody: null, fragment, isImage: true });
+      }
     }
-    appendixPlanSegments.push({ coverBody, fragment, isImage: isSitePlanImage });
   }
 
   /* A4 portrait: 210mm x 297mm - use fixed size so percentage heights resolve (body has no height in single doc) */
@@ -8081,7 +8123,9 @@ async function generateAssessmentSingleHTMLV3(assessmentData, isResidential, isL
     bodyParts.push(`<div class="single-doc-appendix single-doc-section" style="page: appendix">${appendixABody}</div>`);
   }
   for (const seg of appendixPlanSegments) {
-    bodyParts.push(`<div class="single-doc-appendix single-doc-section" style="page: appendix">${seg.coverBody}</div>`);
+    if (seg.coverBody) {
+      bodyParts.push(`<div class="single-doc-appendix single-doc-section" style="page: appendix">${seg.coverBody}</div>`);
+    }
     if (seg.isImage && seg.fragment) {
       bodyParts.push(`<div class="single-doc-site-plan-section single-doc-section" style="page: appendix-landscape">${seg.fragment}</div>`);
     }

@@ -1,7 +1,45 @@
 import React, { useState, useEffect } from "react";
 import { Box, CircularProgress, useTheme } from "@mui/material";
 import BaseCalibrationWidget from "./BaseCalibrationWidget";
-import { equipmentService } from "../../../../services/equipmentService";
+import { riLiquidCalibrationService } from "../../../../services/riLiquidCalibrationService";
+import {
+  getCachedCalibrationData,
+  setCachedCalibrationData,
+} from "../../../../utils/calibrationCache";
+
+const CACHE_KEY = "ri-liquid";
+
+const computeRiLiquidWidgetStats = (bottles = []) => {
+  const calibratedBottles = bottles.filter(
+    (bottle) => bottle.latestCalibration?.nextCalibration,
+  );
+
+  const validNextCalibrations = calibratedBottles
+    .map((bottle) => new Date(bottle.latestCalibration.nextCalibration))
+    .filter((date) => !Number.isNaN(date.getTime()))
+    .sort((a, b) => a - b);
+
+  const nextCalibrationDue =
+    validNextCalibrations.length > 0 ? validNextCalibrations[0] : null;
+
+  const now = new Date();
+  const thirtyDaysFromNow = new Date(
+    now.getTime() + 30 * 24 * 60 * 60 * 1000,
+  );
+
+  let itemsDueInNextMonth = calibratedBottles.filter((bottle) => {
+    const nextCalDate = new Date(bottle.latestCalibration.nextCalibration);
+    if (Number.isNaN(nextCalDate.getTime())) return false;
+    return nextCalDate >= now && nextCalDate <= thirtyDaysFromNow;
+  }).length;
+
+  // Bottles with no calibration yet still need attention
+  itemsDueInNextMonth += bottles.filter(
+    (bottle) => !bottle.latestCalibration?.nextCalibration,
+  ).length;
+
+  return { nextCalibrationDue, itemsDueInNextMonth };
+};
 
 const RiLiquid = ({ viewCalibrationsPath }) => {
   const theme = useTheme();
@@ -13,25 +51,46 @@ const RiLiquid = ({ viewCalibrationsPath }) => {
     fetchRiLiquidData();
   }, []);
 
+  const applyStats = ({
+    nextCalibrationDue: nextDue,
+    itemsDueInNextMonth: dueCount,
+  }) => {
+    setNextCalibrationDue(nextDue);
+    setItemsDueInNextMonth(dueCount);
+  };
+
+  const fetchFreshData = async () => {
+    const response = await riLiquidCalibrationService.getActiveBottles();
+    const bottles = response.data || [];
+    const stats = computeRiLiquidWidgetStats(bottles);
+
+    applyStats(stats);
+    setCachedCalibrationData(CACHE_KEY, stats);
+  };
+
   const fetchRiLiquidData = async () => {
     try {
       setLoading(true);
 
-      // Fetch equipment of type RI Liquids
-      const response = await equipmentService.getAll({
-        equipmentType: "RI Liquids",
-        limit: 1000,
-      });
-      const equipment = response.equipment || [];
+      const cached = getCachedCalibrationData(CACHE_KEY);
+      if (cached) {
+        applyStats({
+          nextCalibrationDue: cached.nextCalibrationDue
+            ? new Date(cached.nextCalibrationDue)
+            : null,
+          itemsDueInNextMonth: cached.itemsDueInNextMonth || 0,
+        });
+        setLoading(false);
+        fetchFreshData().catch((error) => {
+          console.error("Error refreshing RI Liquid calibration data:", error);
+        });
+        return;
+      }
 
-      // For now, set defaults until calibration service is available
-      // TODO: Implement calibration service for RI Liquids
-      setNextCalibrationDue(null);
-      setItemsDueInNextMonth(0);
+      await fetchFreshData();
     } catch (error) {
       console.error("Error fetching RI Liquid data:", error);
-      setNextCalibrationDue(null);
-      setItemsDueInNextMonth(0);
+      applyStats({ nextCalibrationDue: null, itemsDueInNextMonth: 0 });
     } finally {
       setLoading(false);
     }

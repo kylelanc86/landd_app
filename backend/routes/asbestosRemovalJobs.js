@@ -3,6 +3,7 @@ const { performance } = require("perf_hooks");
 const router = express.Router();
 const mongoose = require("mongoose");
 const AsbestosRemovalJob = require("../models/AsbestosRemovalJob");
+const { liveProjectName, applyLiveProjectName } = AsbestosRemovalJob;
 const Project = require("../models/Project");
 const Shift = require("../models/Shift");
 const Sample = require("../models/Sample");
@@ -28,6 +29,7 @@ const JOB_CLEARANCE_LIST_FIELDS =
 const checkPermission = require("../middleware/checkPermission");
 const { formatDateSydney } = require("../utils/dateUtils");
 const { buildContentDispositionAttachment } = require("../utils/contentDisposition");
+const { markClearanceStoredPdf } = require("../utils/clearanceStoredPdf");
 
 const escapeCsvCell = (value) => {
   if (value === null || value === undefined) return "";
@@ -110,6 +112,8 @@ router.get("/", auth, checkPermission("asbestos.view"), async (req, res) => {
         .skip((page - 1) * limit)
         .lean()
         .exec();
+      jobs.forEach(applyLiveProjectName);
+
       metrics.timings.find = `${(performance.now() - queryStart).toFixed(2)}ms`;
 
       const countStart = performance.now();
@@ -242,7 +246,7 @@ router.get(
       const archivedJobsForResponse = archivedJobs.map((j) => ({
         _id: j._id.toString(),
         projectId: j.projectId,
-        projectName: j.projectName,
+        projectName: liveProjectName(j),
         asbestosRemovalist: j.asbestosRemovalist,
         createdAt: j.createdAt,
         updatedAt: j.updatedAt,
@@ -261,7 +265,7 @@ router.get(
         deletedAt: s.deletedAt,
         jobId: s.job?._id?.toString(),
         projectID: s.job?.projectId?.projectID ?? "—",
-        projectName: s.job?.projectName ?? "—",
+        projectName: liveProjectName(s.job) || "—",
         clientName:
           s.job?.projectId?.client && typeof s.job.projectId.client === "object"
             ? s.job.projectId.client.name
@@ -428,7 +432,7 @@ router.get(
       ];
       const jobVals = [
         job?._id?.toString() || "",
-        job?.projectName || "",
+        liveProjectName(job) || "",
         job?.asbestosRemovalist || "",
         job?.status || "",
         job?.airMonitoring ? "Yes" : "No",
@@ -702,6 +706,8 @@ router.get(
           .json({ message: "Asbestos removal job not found" });
       }
 
+      applyLiveProjectName(job);
+
       const projectId =
         job.projectId?._id?.toString() ||
         (typeof job.projectId === "string" ? job.projectId : null);
@@ -742,6 +748,7 @@ router.get(
             select: "projectID name",
           })
           .lean();
+        await markClearanceStoredPdf(AsbestosClearance, clearances);
         metrics.timings.clearances = `${(
           performance.now() - clearancesStart
         ).toFixed(2)}ms`;
@@ -776,7 +783,7 @@ router.get(
         return {
           ...shift,
           jobId: jobKey,
-          jobName: job.projectName || "Asbestos Removal Job",
+          jobName: liveProjectName(job) || "Asbestos Removal Job",
         };
       });
 
@@ -868,6 +875,7 @@ router.get(
           select: "projectID name",
         })
         .lean();
+      await markClearanceStoredPdf(AsbestosClearance, clearances);
       
       const queryTime = performance.now() - clearancesStart;
       console.log(`[AsbestosRemovalJobs] Fetched ${clearances.length} clearances in ${queryTime.toFixed(2)}ms`);
@@ -911,9 +919,14 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
   try {
     const { projectId, projectName, client, asbestosRemovalist, airMonitoring, clearance } = req.body;
 
+    const project = await Project.findById(projectId).select("name");
+    if (!project) {
+      return res.status(400).json({ message: "Project not found" });
+    }
+
     const job = new AsbestosRemovalJob({
       projectId,
-      projectName,
+      projectName: project.name || projectName,
       client,
       asbestosRemovalist,
       airMonitoring,
@@ -949,10 +962,67 @@ router.post("/", auth, checkPermission("asbestos.create"), async (req, res) => {
   }
 });
 
+// Completion uses the same records as the job page: this job's shifts and clearances.
+// A project-wide clearance query also dropped the deleted-record filter, because both
+// filters used $or and the second one replaced the first.
+async function getJobCompletionBlockers(job) {
+  const shifts = await Shift.find({
+    job: job._id,
+    $and: [
+      {
+        $or: [
+          { jobModel: { $exists: false } },
+          { jobModel: null },
+          { jobModel: "AsbestosRemovalJob" },
+        ],
+      },
+      notDeletedShiftFilter,
+    ],
+  })
+    .select("status reportApprovedBy")
+    .lean();
+
+  const unauthorisedShifts = shifts.filter(
+    (shift) =>
+      !["shift_complete", "complete"].includes(shift.status) ||
+      !shift.reportApprovedBy
+  );
+
+  const clearances = await AsbestosClearance.find({
+    asbestosRemovalJobId: job._id,
+    $and: [notDeletedClearanceFilter, notEnclosureCertificateFilter],
+  })
+    .select("status reportApprovedBy")
+    .lean();
+
+  const unauthorisedClearances = clearances.filter(
+    (clearance) =>
+      clearance.status !== "complete" || !clearance.reportApprovedBy
+  );
+
+  return { unauthorisedShifts, unauthorisedClearances };
+}
+
+function completionBlockedResponse(res, unauthorisedShifts, unauthorisedClearances) {
+  if (unauthorisedShifts.length > 0) {
+    return res.status(400).json({
+      message: `Cannot complete job: ${unauthorisedShifts.length} shift(s) are not complete or not authorised. All shifts must be complete and authorised before completing the job.`,
+    });
+  }
+
+  if (unauthorisedClearances.length > 0) {
+    return res.status(400).json({
+      message: `Cannot complete job: ${unauthorisedClearances.length} clearance(s) are not complete or not authorised. All clearances must be complete and authorised before completing the job.`,
+    });
+  }
+
+  return null;
+}
+
 // Update asbestos removal job
 router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
   try {
-    const { projectId, projectName, client, asbestosRemovalist, airMonitoring, clearance, status } = req.body;
+    const { projectId, client, asbestosRemovalist, airMonitoring, clearance, status } = req.body;
 
     const job = await AsbestosRemovalJob.findById(req.params.id);
     if (!job) {
@@ -963,61 +1033,20 @@ router.put("/:id", auth, checkPermission("asbestos.edit"), async (req, res) => {
 
     // If status is being set to "completed", validate that all shifts and clearances are authorised
     if (status === "completed" && previousStatus !== "completed") {
-      const Shift = require('../models/Shift');
-      const AsbestosClearance = require('../models/clearanceTemplates/asbestos/AsbestosClearance');
-      
-      // Check all shifts for this job are complete AND authorised (exclude soft-deleted)
-      const shifts = await Shift.find({
-        job: job._id,
-        $or: [
-          { jobModel: { $exists: false } },
-          { jobModel: null },
-          { jobModel: "AsbestosRemovalJob" },
-        ],
-        ...notDeletedShiftFilter,
-      }).select("status reportApprovedBy").lean();
-      
-      if (shifts.length > 0) {
-        const unauthorisedShifts = shifts.filter(
-          (shift) =>
-            !["shift_complete", "complete"].includes(shift.status) ||
-            !shift.reportApprovedBy
-        );
-        
-        if (unauthorisedShifts.length > 0) {
-          return res.status(400).json({
-            message: `Cannot complete job: ${unauthorisedShifts.length} shift(s) are not complete or not authorised. All shifts must be complete and authorised before completing the job.`
-          });
-        }
-      }
-      
-      // Check all clearances for this project are complete AND authorised
-      const projectIdToCheck = job.projectId?._id?.toString() || job.projectId?.toString() || job.projectId;
-      if (projectIdToCheck) {
-        const clearances = await AsbestosClearance.find({
-          projectId: projectIdToCheck,
-          ...notDeletedClearanceFilter,
-          ...notEnclosureCertificateFilter,
-        })
-          .select("status reportApprovedBy").lean();
-
-        if (clearances.length > 0) {
-          const unauthorisedClearances = clearances.filter(
-            (clearance) => clearance.status !== "complete" || !clearance.reportApprovedBy
-          );
-
-          if (unauthorisedClearances.length > 0) {
-            return res.status(400).json({
-              message: `Cannot complete job: ${unauthorisedClearances.length} clearance(s) are not complete or not authorised. All clearances must be complete and authorised before completing the job.`
-            });
-          }
-        }
-      }
+      const { unauthorisedShifts, unauthorisedClearances } =
+        await getJobCompletionBlockers(job);
+      const blocked = completionBlockedResponse(
+        res,
+        unauthorisedShifts,
+        unauthorisedClearances
+      );
+      if (blocked) return blocked;
     }
 
-    // Update fields
+    // Update fields. The job name always follows the linked project.
     if (projectId !== undefined) job.projectId = projectId;
-    if (projectName !== undefined) job.projectName = projectName;
+    const linkedProject = await Project.findById(job.projectId).select("name");
+    if (linkedProject?.name) job.projectName = linkedProject.name;
     if (client !== undefined) job.client = client;
     if (asbestosRemovalist !== undefined) job.asbestosRemovalist = asbestosRemovalist;
     if (airMonitoring !== undefined) job.airMonitoring = airMonitoring;
@@ -1060,56 +1089,14 @@ router.patch("/:id/status", auth, checkPermission("asbestos.edit"), async (req, 
     
     // If status is being set to "completed", validate that all shifts and clearances are authorised
     if (status === "completed" && previousStatus !== "completed") {
-      const Shift = require('../models/Shift');
-      const AsbestosClearance = require('../models/clearanceTemplates/asbestos/AsbestosClearance');
-      
-      // Check all shifts for this job are complete AND authorised (exclude soft-deleted)
-      const shifts = await Shift.find({
-        job: job._id,
-        $or: [
-          { jobModel: { $exists: false } },
-          { jobModel: null },
-          { jobModel: "AsbestosRemovalJob" },
-        ],
-        ...notDeletedShiftFilter,
-      }).select("status reportApprovedBy").lean();
-      
-      if (shifts.length > 0) {
-        const unauthorisedShifts = shifts.filter(
-          (shift) =>
-            !["shift_complete", "complete"].includes(shift.status) ||
-            !shift.reportApprovedBy
-        );
-        
-        if (unauthorisedShifts.length > 0) {
-          return res.status(400).json({
-            message: `Cannot complete job: ${unauthorisedShifts.length} shift(s) are not complete or not authorised. All shifts must be complete and authorised before completing the job.`
-          });
-        }
-      }
-      
-      // Check all clearances for this project are complete AND authorised
-      const projectIdToCheck = job.projectId?._id?.toString() || job.projectId?.toString() || job.projectId;
-      if (projectIdToCheck) {
-        const clearances = await AsbestosClearance.find({
-          projectId: projectIdToCheck,
-          ...notDeletedClearanceFilter,
-          ...notEnclosureCertificateFilter,
-        })
-          .select("status reportApprovedBy").lean();
-
-        if (clearances.length > 0) {
-          const unauthorisedClearances = clearances.filter(
-            (clearance) => clearance.status !== "complete" || !clearance.reportApprovedBy
-          );
-
-          if (unauthorisedClearances.length > 0) {
-            return res.status(400).json({
-              message: `Cannot complete job: ${unauthorisedClearances.length} clearance(s) are not complete or not authorised. All clearances must be complete and authorised before completing the job.`
-            });
-          }
-        }
-      }
+      const { unauthorisedShifts, unauthorisedClearances } =
+        await getJobCompletionBlockers(job);
+      const blocked = completionBlockedResponse(
+        res,
+        unauthorisedShifts,
+        unauthorisedClearances
+      );
+      if (blocked) return blocked;
     }
 
     job.status = status;

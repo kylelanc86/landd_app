@@ -10,8 +10,13 @@ const asbestosClearanceService = {
   },
 
   // Get single asbestos clearance by ID
-  getById: async (id) => {
-    const response = await axios.get(`${API_BASE_URL}/${id}`);
+  // options.omitPhotoData / omitPlanFiles / keepEnclosurePhotos — strip heavy blobs
+  getById: async (id, options = {}) => {
+    const params = {};
+    if (options.omitPhotoData) params.omitPhotoData = '1';
+    if (options.omitPlanFiles) params.omitPlanFiles = '1';
+    if (options.keepEnclosurePhotos) params.keepEnclosurePhotos = '1';
+    const response = await axios.get(`${API_BASE_URL}/${id}`, { params });
     return response.data;
   },
 
@@ -100,8 +105,21 @@ const asbestosClearanceService = {
   },
 
   // Get clearance items
-  getItems: async (clearanceId) => {
-    const response = await axios.get(`${API_BASE_URL}/${clearanceId}/items`);
+  // options.omitPhotoData: omit base64 from item photos
+  getItems: async (clearanceId, options = {}) => {
+    const params = {};
+    if (options.omitPhotoData) params.omitPhotoData = '1';
+    const response = await axios.get(`${API_BASE_URL}/${clearanceId}/items`, {
+      params,
+    });
+    return response.data;
+  },
+
+  /** Full image payloads for all photos on a clearance item (lazy gallery load). */
+  getItemPhotosData: async (clearanceId, itemId) => {
+    const response = await axios.get(
+      `${API_BASE_URL}/${clearanceId}/items/${itemId}/photos/data`,
+    );
     return response.data;
   },
 
@@ -198,6 +216,10 @@ const asbestosClearanceService = {
       {
         x: arrow.x ?? 0.5,
         y: arrow.y ?? 0.5,
+        x1: arrow.x1,
+        y1: arrow.y1,
+        x2: arrow.x2 ?? arrow.x,
+        y2: arrow.y2 ?? arrow.y,
         rotation: arrow.rotation ?? -45,
         color: arrow.color ?? '#f44336',
       }
@@ -231,6 +253,13 @@ const asbestosClearanceService = {
   // Authorise clearance report
   authorise: async (id) => {
     const response = await axios.post(`${API_BASE_URL}/${id}/authorise`);
+    return response.data;
+  },
+
+  reviseReport: async (id, reason) => {
+    const response = await axios.post(`${API_BASE_URL}/${id}/revise-report`, {
+      reason,
+    });
     return response.data;
   },
 

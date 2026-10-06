@@ -36,8 +36,20 @@ const ReportsList = ({
   onViewImages,
   onViewCOC,
   onExportCSV,
+  onRowClick,
   processingReport = { reportId: null, action: null },
 }) => {
+  const canOpenRow = (report) => {
+    if (typeof onRowClick !== "function") return false;
+    if (["shift", "clearance", "enclosure_certificate"].includes(report.type)) {
+      return true;
+    }
+    return (
+      category === "asbestos-assessment" &&
+      (report.type === "asbestos_assessment" ||
+        report.type === "residential_asbestos_assessment")
+    );
+  };
   const showReviseButton = (report) => {
     if (!onRevise) return false;
     const s = report.status;
@@ -46,7 +58,11 @@ const ReportsList = ({
       s === "completed" ||
       s === "Completed" ||
       s === "shift_complete";
-    if (category === "asbestos-assessment" && report.type === "asbestos_assessment") {
+    if (
+      category === "asbestos-assessment" &&
+      (report.type === "asbestos_assessment" ||
+        report.type === "residential_asbestos_assessment")
+    ) {
       const auth =
         report.reportAuthorisedBy ?? report.data?.reportAuthorisedBy;
       const hasAuth =
@@ -194,7 +210,18 @@ const ReportsList = ({
           </TableHead>
           <TableBody>
             {reports.map((report) => (
-              <TableRow key={report.id}>
+              <TableRow
+                key={report.id}
+                hover={canOpenRow(report)}
+                onClick={() => {
+                  if (canOpenRow(report)) onRowClick(report);
+                }}
+                sx={
+                  canOpenRow(report)
+                    ? { cursor: "pointer" }
+                    : undefined
+                }
+              >
                 <TableCell>
                   {format(new Date(report.date), "dd/MM/yyyy")}
                 </TableCell>
@@ -257,7 +284,10 @@ const ReportsList = ({
                     size="small"
                   />
                 </TableCell>
-                <TableCell align="center">
+                <TableCell
+                  align="center"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <Box
                     sx={{ display: "flex", gap: 1, justifyContent: "center" }}
                   >
@@ -285,6 +315,7 @@ const ReportsList = ({
                     </Tooltip>
                     {[
                       "clearance",
+                      "enclosure_certificate",
                       "asbestos_assessment",
                       "lead_clearance",
                       "lead_assessment",

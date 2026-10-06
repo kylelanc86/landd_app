@@ -15,15 +15,25 @@ const CalibrationPageHeader = ({
   calibrationTab = CALIBRATION_TABS.INTERNAL,
   parents = [],
   action = null,
+  note = null,
 }) => {
   const navigate = useNavigate();
   const currentLabel = breadcrumbCurrent ?? title;
 
   return (
     <>
-      <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
-        {title}
-      </Typography>
+      <Box
+        display="flex"
+        alignItems="center"
+        flexWrap="wrap"
+        gap={2}
+        mb={3}
+      >
+        <Typography variant="h4" component="h1">
+          {title}
+        </Typography>
+        {note}
+      </Box>
 
       <Box
         display="flex"

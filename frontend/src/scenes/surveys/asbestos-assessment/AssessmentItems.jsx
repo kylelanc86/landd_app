@@ -53,7 +53,6 @@ import {
   Check as CheckIcon,
   Description as DescriptionIcon,
   Map as MapIcon,
-  ArrowUpward as ArrowUpwardIcon,
   ContentCopy as ContentCopyIcon,
   RotateRight as RotateRightIcon,
   DragIndicator as DragIndicatorIcon,
@@ -64,7 +63,14 @@ import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import PermissionGate from "../../../components/PermissionGate";
-import SitePlanDrawing from "../../../components/SitePlanDrawing";
+import PhotoArrowEditor, {
+  PhotoArrowOverlays,
+} from "../../../components/PhotoArrowEditor";
+import PhotoArrowToolbar from "../../../components/PhotoArrowToolbar";
+import {
+  countAsbestosSitePlans,
+  getAssessmentSitePlansBasePath,
+} from "../../../utils/asbestosSitePlanAppendices";
 import { useAuth } from "../../../context/AuthContext";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
@@ -77,38 +83,36 @@ import {
   needsCompression,
   saveFileToDevice,
 } from "../../../utils/imageCompression";
+import { rotateDataUrl90Cw } from "../../../utils/rotateImageDataUrl";
 import {
-  rotateArrowDegrees90Cw,
-  rotateDataUrl90Cw,
-  rotateNormalizedPoint90Cw,
-} from "../../../utils/rotateImageDataUrl";
+  DEFAULT_ARROW_COLOR,
+  DEFAULT_ARROW_ROTATION,
+  rotateArrowGeometry90Cw,
+} from "../../../utils/photoArrows";
 import {
   isAssessmentItemReferred,
   getPrimarySampledItems,
   findPrimarySampledItemForRef,
 } from "../../../utils/asbestosAssessmentItems";
 
-/** Default arrow overlay color (hex) and rotation (degrees, anticlockwise). */
-const DEFAULT_ARROW_COLOR = "#f44336";
-const DEFAULT_ARROW_ROTATION = -45;
-
-/** Arrow SVG viewBox is 24x24; tip at (12,2), center (12,12). Returns tip position as 0–1 of box for given rotation (degrees). */
-function getArrowTipOffset(rotationDeg) {
-  const r = ((rotationDeg ?? 0) * Math.PI) / 180;
-  const tipX = (12 + 10 * Math.sin(r)) / 24;
-  const tipY = (12 - 10 * Math.cos(r)) / 24;
-  return { x: tipX, y: tipY };
+/** MongoDB ObjectId string — photo APIs only work with persisted item photos. */
+function isMongoPhotoId(id) {
+  return typeof id === "string" && /^[a-f\d]{24}$/i.test(id);
 }
 
-/** Preset arrow colors for the color picker. */
-const ARROW_COLORS = [
-  { name: "Yellow", hex: "#ffeb3b" },
-  { name: "Red", hex: "#f44336" },
-  { name: "White", hex: "#ffffff" },
-  { name: "Black", hex: "#212121" },
-  { name: "Orange", hex: "#ff9800" },
-  { name: "Green", hex: "#4caf50" },
-];
+function mergePhotoBlobFields(photos, blobList) {
+  const blobById = new Map((blobList || []).map((b) => [String(b._id), b]));
+  return (photos || []).map((p) => {
+    const b = blobById.get(String(p._id));
+    if (!b) return p;
+    return { ...p, data: b.data, fullResolutionData: b.fullResolutionData };
+  });
+}
+
+const assessmentLiteGetOpts = {
+  omitPhotoData: true,
+  omitPlanFiles: true,
+};
 
 /**
  * Add business days to a date, skipping weekends (Saturday and Sunday).
@@ -426,6 +430,7 @@ const AssessmentItems = () => {
 
   const [items, setItems] = useState([]);
   const [assessment, setAssessment] = useState(null);
+  const sitePlanCount = countAsbestosSitePlans(assessment);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -490,12 +495,13 @@ const AssessmentItems = () => {
   const [dictationErrorDiscussion, setDictationErrorDiscussion] = useState("");
   const recognitionRefDiscussion = useRef(null);
 
-  // Authorised: report is read-only (view only, no edits). Uses reportAuthorisedBy (final sign-off), not "ready for review" (reportApprovedBy). Closed jobs are removed from the list.
+  // Authorised reports are view-only, including closed jobs opened from Project Reports.
   const isReportLocked = (() => {
     const v = assessment?.reportAuthorisedBy;
     if (v == null) return false;
     return typeof v === "string" ? v.trim() !== "" : !!v;
   })();
+  const reportsReturnTo = location.state?.returnTo;
 
   // Assessment Complete state
   const [assessmentCompleted, setAssessmentCompleted] = useState(false);
@@ -518,16 +524,6 @@ const AssessmentItems = () => {
     useState(false);
   const [finalisingAssessment, setFinalisingAssessment] = useState(false);
 
-  // Site Plan state
-  const [sitePlanDialogOpen, setSitePlanDialogOpen] = useState(false);
-  const [sitePlanFile, setSitePlanFile] = useState(null);
-  const [uploadingSitePlan, setUploadingSitePlan] = useState(false);
-  const [sitePlanDrawingDialogOpen, setSitePlanDrawingDialogOpen] =
-    useState(false);
-  const [sitePlanKeyReminderOpen, setSitePlanKeyReminderOpen] = useState(false);
-  const [pendingSitePlanData, setPendingSitePlanData] = useState(null);
-  const sitePlanDrawingRef = useRef(null);
-
   // Dictation state (for recommendations)
   const [isDictating, setIsDictating] = useState(false);
   const [dictationError, setDictationError] = useState("");
@@ -536,6 +532,8 @@ const AssessmentItems = () => {
   // Photo state
   const [photoGalleryDialogOpen, setPhotoGalleryDialogOpen] = useState(false);
   const [selectedItemForPhotos, setSelectedItemForPhotos] = useState(null);
+  const [galleryPhotosLoading, setGalleryPhotosLoading] = useState(false);
+  const [galleryPhotosError, setGalleryPhotosError] = useState(null);
   const [localPhotoChanges, setLocalPhotoChanges] = useState({});
   const [photosToDelete, setPhotosToDelete] = useState(new Set());
   const [localPhotoDescriptions, setLocalPhotoDescriptions] = useState({});
@@ -549,7 +547,6 @@ const AssessmentItems = () => {
     useState(null);
   const [fullSizeArrowMode, setFullSizeArrowMode] = useState(false);
   const [selectedArrowId, setSelectedArrowId] = useState(null);
-  const [movingArrowId, setMovingArrowId] = useState(null);
   const [selectedArrowColor, setSelectedArrowColor] =
     useState(DEFAULT_ARROW_COLOR);
   const [compressionStatus, setCompressionStatus] = useState(null);
@@ -587,30 +584,32 @@ const AssessmentItems = () => {
         throw new Error("Assessment ID is missing from URL");
       }
 
-      const [itemsData, assessmentData] = await Promise.all([
-        asbestosAssessmentService.getItems(id),
-        asbestosAssessmentService.getById(id),
-      ]);
+      // One request: items + assessment fields, without photo/plan blobs
+      const assessmentData = await asbestosAssessmentService.getById(
+        id,
+        assessmentLiteGetOpts,
+      );
+      const job = assessmentData?.data ?? assessmentData;
 
-      setItems(itemsData || []);
-      setAssessment(assessmentData);
+      setItems(Array.isArray(job?.items) ? job.items : []);
+      setAssessment(job);
       // Set assessment completed state based on status (site-works-complete or later)
       setAssessmentCompleted(
-        assessmentData?.status === "site-works-complete" ||
-          assessmentData?.status === "samples-with-lab" ||
-          assessmentData?.status === "sample-analysis-complete" ||
-          assessmentData?.status === "report-ready-for-review" ||
-          assessmentData?.status === "complete",
+        job?.status === "site-works-complete" ||
+          job?.status === "samples-with-lab" ||
+          job?.status === "sample-analysis-complete" ||
+          job?.status === "report-ready-for-review" ||
+          job?.status === "complete",
       );
       // Load assessment scope if it exists (not used for residential asbestos)
       if (!(location.pathname || "").includes("residential-asbestos")) {
         if (
-          assessmentData?.assessmentScope &&
-          Array.isArray(assessmentData.assessmentScope)
+          job?.assessmentScope &&
+          Array.isArray(job.assessmentScope)
         ) {
           setScopeItems(
-            assessmentData.assessmentScope.length > 0
-              ? assessmentData.assessmentScope
+            job.assessmentScope.length > 0
+              ? job.assessmentScope
               : [""],
           );
         } else {
@@ -636,6 +635,54 @@ const AssessmentItems = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Lazy-load photo blobs when Manage Photos opens
+  useEffect(() => {
+    if (!photoGalleryDialogOpen || !id || !selectedItemForPhotos) return;
+    const photos = selectedItemForPhotos.photographs || [];
+    if (photos.length === 0) return;
+    const needsBlob = photos.some(
+      (p) => p && !p.data && isMongoPhotoId(p._id),
+    );
+    if (!needsBlob) {
+      setGalleryPhotosLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setGalleryPhotosLoading(true);
+      setGalleryPhotosError(null);
+      try {
+        const res = await asbestosAssessmentService.getItemPhotosData(
+          id,
+          selectedItemForPhotos._id,
+        );
+        if (cancelled) return;
+        setSelectedItemForPhotos((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            photographs: mergePhotoBlobFields(prev.photographs, res?.photographs),
+          };
+        });
+      } catch (e) {
+        if (!cancelled) {
+          setGalleryPhotosError(
+            e.response?.data?.message ||
+              e.message ||
+              "Failed to load photos",
+          );
+        }
+      } finally {
+        if (!cancelled) setGalleryPhotosLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [photoGalleryDialogOpen, id, selectedItemForPhotos?._id]);
 
   const fetchCustomDataFields = async () => {
     try {
@@ -1622,172 +1669,6 @@ const AssessmentItems = () => {
     }
   };
 
-  // Site Plan handlers
-  const performSitePlanSave = async (sitePlanData) => {
-    if (isReportLocked) return;
-    const imageData =
-      typeof sitePlanData === "string"
-        ? sitePlanData
-        : sitePlanData?.imageData;
-    const legendEntries = Array.isArray(sitePlanData?.legend)
-      ? sitePlanData.legend.map((entry) => ({
-          color: entry.color,
-          description: entry.description,
-        }))
-      : [];
-    const legendTitle =
-      sitePlanData?.legendTitle && sitePlanData.legendTitle.trim()
-        ? sitePlanData.legendTitle.trim()
-        : "Key";
-    const figureTitle =
-      sitePlanData?.figureTitle && sitePlanData.figureTitle.trim()
-        ? sitePlanData.figureTitle.trim()
-        : "Asbestos Assessment Site Plan";
-
-    if (!imageData) {
-      showSnackbar("No site plan image data was provided", "error");
-      return;
-    }
-
-    await asbestosAssessmentService.update(id, {
-      projectId: assessment.projectId?._id || assessment.projectId,
-      assessmentDate: assessment.assessmentDate,
-      sitePlan: true,
-      sitePlanFile: imageData,
-      sitePlanLegend: legendEntries,
-      sitePlanLegendTitle: legendTitle,
-      sitePlanFigureTitle: figureTitle,
-      sitePlanSource: "drawn",
-    });
-
-    showSnackbar("Drawn site plan saved successfully!", "success");
-    setSitePlanDrawingDialogOpen(false);
-    await fetchData();
-  };
-
-  const handleSitePlanSave = async (sitePlanData) => {
-    const hasMissingDescriptions =
-      Array.isArray(sitePlanData?.legend) &&
-      sitePlanData.legend.some((e) => !(e.description || "").trim());
-
-    if (hasMissingDescriptions) {
-      setPendingSitePlanData(sitePlanData);
-      setSitePlanKeyReminderOpen(true);
-      return;
-    }
-
-    try {
-      await performSitePlanSave(sitePlanData);
-    } catch (error) {
-      console.error("Error saving site plan:", error);
-      showSnackbar("Error saving site plan", "error");
-    }
-  };
-
-  const handleSitePlanDrawingClose = () => {
-    setSitePlanDrawingDialogOpen(false);
-  };
-
-  const handleSitePlanKeyReminderAddDescriptions = () => {
-    setSitePlanKeyReminderOpen(false);
-    setPendingSitePlanData(null);
-    sitePlanDrawingRef.current?.openLegendDialog?.();
-  };
-
-  const handleSitePlanKeyReminderSaveAnyway = async () => {
-    setSitePlanKeyReminderOpen(false);
-    const data = pendingSitePlanData;
-    setPendingSitePlanData(null);
-    if (data) {
-      try {
-        await performSitePlanSave(data);
-      } catch (error) {
-        console.error("Error saving site plan:", error);
-        showSnackbar("Error saving site plan", "error");
-      }
-    }
-  };
-
-  const handleSitePlanFileUpload = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      setSitePlanFile(file);
-    }
-  };
-
-  const handleUploadSitePlan = async () => {
-    if (!sitePlanFile) {
-      showSnackbar("Please select a file first", "error");
-      return;
-    }
-
-    try {
-      setUploadingSitePlan(true);
-
-      // Convert file to base64
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        try {
-          // Extract just the base64 data from the data URL
-          const dataUrl = event.target.result;
-          const base64Data = dataUrl.split(",")[1]; // Remove the "data:application/pdf;base64," prefix
-
-          // Update the assessment with the site plan file (preserve status; clear approval if changed)
-          await asbestosAssessmentService.update(id, {
-            projectId: assessment.projectId?._id || assessment.projectId,
-            assessmentDate: assessment.assessmentDate,
-            sitePlan: true,
-            sitePlanFile: base64Data,
-            sitePlanLegend: [],
-            sitePlanLegendTitle: null,
-            sitePlanSource: "uploaded",
-          });
-
-          showSnackbar("Site plan uploaded successfully", "success");
-
-          setSitePlanDialogOpen(false);
-          setSitePlanFile(null);
-          await fetchData(); // Refresh assessment data
-        } catch (error) {
-          console.error("Error uploading site plan:", error);
-          showSnackbar("Failed to upload site plan", "error");
-        } finally {
-          setUploadingSitePlan(false);
-        }
-      };
-      reader.readAsDataURL(sitePlanFile);
-    } catch (error) {
-      console.error("Error processing site plan file:", error);
-      showSnackbar("Failed to process site plan file", "error");
-      setUploadingSitePlan(false);
-    }
-  };
-
-  const handleRemoveSitePlan = async () => {
-    if (isReportLocked) return;
-    if (window.confirm("Are you sure you want to remove the site plan?")) {
-      try {
-        // Update the assessment to remove the site plan file (preserve status; clear approval if changed)
-        await asbestosAssessmentService.update(id, {
-          projectId: assessment.projectId?._id || assessment.projectId,
-          assessmentDate: assessment.assessmentDate,
-          sitePlan: false,
-          sitePlanFile: null,
-          sitePlanSource: null,
-          sitePlanLegend: [],
-          sitePlanLegendTitle: null,
-        });
-
-        showSnackbar("Site plan removed successfully", "success");
-
-        await fetchData(); // Refresh assessment data
-      } catch (error) {
-        console.error("Error removing site plan:", error);
-        showSnackbar("Failed to remove site plan", "error");
-      }
-    }
-  };
-
   // Cleanup: stop dictation when component unmounts
   useEffect(() => {
     return () => {
@@ -2233,7 +2114,6 @@ const AssessmentItems = () => {
     setFullSizePhotoId(typeof photo === "object" && photo?._id ? photo._id : null);
     setFullSizeArrowMode(false);
     setSelectedArrowId(null);
-    setMovingArrowId(null);
     const firstArrow = typeof photo === "object" && getPhotoArrows(photo)[0];
     setSelectedArrowColor(
       firstArrow?.color || DEFAULT_ARROW_COLOR,
@@ -2299,31 +2179,6 @@ const AssessmentItems = () => {
         )
       : null;
 
-  const handleFullSizePhotoClickForArrow = (e) => {
-    if (!fullSizePhotoId || !fullSizePhoto) return;
-    const img = e.currentTarget;
-    const rect = img.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-    const clampedX = Math.max(0, Math.min(1, x));
-    const clampedY = Math.max(0, Math.min(1, y));
-    if (movingArrowId) {
-      handleUpdatePhotoArrow(fullSizePhotoId, movingArrowId, {
-        x: clampedX,
-        y: clampedY,
-      });
-      return;
-    }
-    if (fullSizeArrowMode) {
-      handleAddPhotoArrow(fullSizePhotoId, {
-        x: clampedX,
-        y: clampedY,
-        rotation: DEFAULT_ARROW_ROTATION,
-        color: selectedArrowColor,
-      });
-    }
-  };
-
   const getCurrentPhotoState = (photoId) => {
     const localChange = localPhotoChanges[photoId];
     if (localChange !== undefined) {
@@ -2385,6 +2240,10 @@ const AssessmentItems = () => {
         {
           x: arrow.x ?? 0.5,
           y: arrow.y ?? 0.5,
+          x1: arrow.x1,
+          y1: arrow.y1,
+          x2: arrow.x2 ?? arrow.x,
+          y2: arrow.y2 ?? arrow.y,
           rotation: arrow.rotation ?? DEFAULT_ARROW_ROTATION,
           color: arrow.color ?? DEFAULT_ARROW_COLOR,
         },
@@ -2399,7 +2258,7 @@ const AssessmentItems = () => {
     }
   };
 
-  const handleUpdatePhotoArrow = async (photoId, arrowId, updates) => {
+  const handleUpdatePhotoArrow = async (photoId, arrowId, updates, options = {}) => {
     if (isReportLocked || !selectedItemForPhotos || !id) return;
     try {
       const response = await asbestosAssessmentService.updatePhotoArrow(
@@ -2410,9 +2269,9 @@ const AssessmentItems = () => {
         updates,
       );
       if (response?.item) setSelectedItemForPhotos(response.item);
-      setMovingArrowId(null);
-      setFullSizeArrowMode(false);
-      showSnackbar("Arrow updated", "success");
+      if (!options.silent) {
+        showSnackbar("Arrow updated", "success");
+      }
     } catch (err) {
       console.error("Error updating arrow:", err);
       showSnackbar("Failed to update arrow", "error");
@@ -2485,21 +2344,16 @@ const AssessmentItems = () => {
     try {
       const newData = await rotateDataUrl90Cw(photo.data, 0.92);
       const arrowList = getPhotoArrows(photo);
-      const newArrows = arrowList.map((arr) => {
-        const { x, y } = rotateNormalizedPoint90Cw(
-          arr.x ?? 0.5,
-          arr.y ?? 0.5,
-        );
-        return {
-          x: Math.max(0, Math.min(1, x)),
-          y: Math.max(0, Math.min(1, y)),
-          rotation: rotateArrowDegrees90Cw(
-            arr.rotation ?? DEFAULT_ARROW_ROTATION,
-          ),
-          color: arr.color || DEFAULT_ARROW_COLOR,
-          ...(arr._id ? { _id: arr._id } : {}),
-        };
-      });
+      const newArrows = arrowList
+        .map((arr) => {
+          const rotated = rotateArrowGeometry90Cw(arr);
+          if (!rotated) return null;
+          return {
+            ...rotated,
+            ...(arr._id ? { _id: arr._id } : {}),
+          };
+        })
+        .filter(Boolean);
       const payload = await asbestosAssessmentService.updatePhotoContent(
         id,
         selectedItemForPhotos._id,
@@ -2634,12 +2488,28 @@ const AssessmentItems = () => {
 
       await fetchData();
 
-      const updatedItems = await asbestosAssessmentService.getItems(id);
+      const updatedItems = await asbestosAssessmentService.getItems(id, {
+        omitPhotoData: true,
+      });
       const updatedItem = updatedItems.find(
         (item) => item._id === selectedItemForPhotos._id,
       );
       if (updatedItem) {
-        setSelectedItemForPhotos(updatedItem);
+        try {
+          const res = await asbestosAssessmentService.getItemPhotosData(
+            id,
+            updatedItem._id,
+          );
+          setSelectedItemForPhotos({
+            ...updatedItem,
+            photographs: mergePhotoBlobFields(
+              updatedItem.photographs,
+              res?.photographs,
+            ),
+          });
+        } catch {
+          setSelectedItemForPhotos(updatedItem);
+        }
       }
     } catch (error) {
       console.error("Error saving photo changes:", error);
@@ -2735,18 +2605,39 @@ const AssessmentItems = () => {
           <Link
             component="button"
             variant="body1"
-            onClick={() => navigate(listPath)}
+            onClick={() =>
+              navigate(
+                reportsReturnTo || listPath,
+                reportsReturnTo
+                  ? {
+                      state: {
+                        selectedCategory:
+                          location.state?.selectedCategory ||
+                          "asbestos-assessment",
+                      },
+                    }
+                  : undefined,
+              )
+            }
             sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
           >
             <ArrowBackIcon sx={{ mr: 1 }} />
-            {isResidential
-              ? "Residential Asbestos Surveys"
-              : "Asbestos Assessment"}
+            {reportsReturnTo
+              ? "Assessment Reports"
+              : isResidential
+                ? "Residential Asbestos Surveys"
+                : "Asbestos Assessment"}
           </Link>
         </Breadcrumbs>
         <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
           Assessment Items
         </Typography>
+        {isReportLocked && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            This report is view only. Items, photos, and site plans can be
+            opened, and nothing can be changed.
+          </Alert>
+        )}
 
  
 
@@ -2905,47 +2796,33 @@ const AssessmentItems = () => {
             <Button
               variant="outlined"
               color="secondary"
-              onClick={() => setSitePlanDrawingDialogOpen(true)}
+              onClick={() =>
+                navigate(getAssessmentSitePlansBasePath(location.pathname, id), {
+                  state: location.state,
+                })
+              }
               startIcon={<MapIcon />}
-              disabled={isReportLocked}
             >
-              {assessment?.sitePlanFile ? "Edit Site Plan" : "Site Plan"}
+              {sitePlanCount > 0
+                ? `Site Plans (${sitePlanCount})`
+                : "Site Plans"}
             </Button>
-            {assessment?.sitePlanFile && (
-              <Button
-                variant="outlined"
-                color="error"
-                onClick={handleRemoveSitePlan}
-                disabled={isReportLocked}
-                startIcon={<DeleteIcon />}
-                sx={{
-                  borderColor: "#d32f2f",
-                  color: "#d32f2f",
-                  "&:hover": {
-                    borderColor: "#b71c1c",
-                    backgroundColor: "rgba(211, 47, 47, 0.04)",
-                  },
-                }}
-              >
-                Delete Site Plan
-              </Button>
-            )}
-            {assessment?.sitePlanFile && (
+            {sitePlanCount > 0 ? (
               <Typography
                 variant="body2"
                 color="success.main"
                 sx={{ fontWeight: "medium" }}
               >
-                ✓ Site Plan Attached
+                ✓ {sitePlanCount} site plan
+                {sitePlanCount === 1 ? "" : "s"} attached
               </Typography>
-            )}
-            {!assessment?.sitePlanFile && (
+            ) : (
               <Typography
                 variant="body2"
                 color="warning.main"
                 sx={{ fontWeight: "medium" }}
               >
-                ⚠ No Site Plan
+                ⚠ No Site Plans
               </Typography>
             )}
           </Box>
@@ -3436,25 +3313,22 @@ const AssessmentItems = () => {
                                         <ContentCopyIcon />
                                       </IconButton>
                                     )}
-                                    <IconButton
-                                      onClick={() => handleEdit(item)}
-                                      color="primary"
-                                      size="small"
-                                      title={
-                                        isReportLocked
-                                          ? "View only (report approved)"
-                                          : "Edit"
-                                      }
-                                      disabled={isReportLocked}
-                                      sx={{
-                                        display: "inline-flex",
-                                        "@media (max-width: 600px)": {
-                                          display: "none",
-                                        },
-                                      }}
-                                    >
-                                      <EditIcon />
-                                    </IconButton>
+                                    {!isReportLocked && (
+                                      <IconButton
+                                        onClick={() => handleEdit(item)}
+                                        color="primary"
+                                        size="small"
+                                        title="Edit"
+                                        sx={{
+                                          display: "inline-flex",
+                                          "@media (max-width: 600px)": {
+                                            display: "none",
+                                          },
+                                        }}
+                                      >
+                                        <EditIcon />
+                                      </IconButton>
+                                    )}
                                     <IconButton
                                       onClick={() => handleDelete(item)}
                                       color="error"
@@ -3748,12 +3622,16 @@ const AssessmentItems = () => {
               )}
             </Box>
             <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
-              {editingItem ? "Edit Item" : "Add New Item"}
+              {isReportLocked && editingItem
+                ? "View Item"
+                : editingItem
+                  ? "Edit Item"
+                  : "Add New Item"}
             </Typography>
           </DialogTitle>
           {isReportLocked && (
             <Alert severity="info" sx={{ mx: 3, mt: 1 }}>
-              Report approved – view only. No changes can be saved.
+              This report is view only. No changes can be saved.
             </Alert>
           )}
           <form onSubmit={handleSubmit}>
@@ -4497,14 +4375,14 @@ const AssessmentItems = () => {
                   fontWeight: 500,
                 }}
               >
-                Cancel
+                {isReportLocked ? "Close" : "Cancel"}
               </Button>
+              {!isReportLocked && (
               <Button
                 type="submit"
                 variant="contained"
                 startIcon={editingItem ? <EditIcon /> : <AddIcon />}
                 disabled={
-                  isReportLocked ||
                   !form.roomArea.trim() ||
                   !form.locationDescription.trim() ||
                   !form.materialType.trim()
@@ -4518,6 +4396,7 @@ const AssessmentItems = () => {
               >
                 {editingItem ? "Update Item" : "Create Item"}
               </Button>
+              )}
             </DialogActions>
           </form>
         </Dialog>
@@ -4806,6 +4685,26 @@ const AssessmentItems = () => {
           <DialogContent sx={{ px: 3, pt: 3, pb: 3, border: "none" }}>
             {selectedItemForPhotos && (
               <>
+                {galleryPhotosError && (
+                  <Alert severity="error" sx={{ mb: 2 }}>
+                    {galleryPhotosError}
+                  </Alert>
+                )}
+                {galleryPhotosLoading && (
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1.5,
+                      mb: 2,
+                    }}
+                  >
+                    <CircularProgress size={22} />
+                    <Typography variant="body2" color="text.secondary">
+                      Loading images…
+                    </Typography>
+                  </Box>
+                )}
                 {isPortrait ? (
                   <Box
                     sx={{
@@ -5008,109 +4907,20 @@ const AssessmentItems = () => {
                                   />
 
                                   {/* Arrow overlays (multiple, with delete per arrow) */}
-                                  {getPhotoArrows(photo).map((arr, arrIdx) => {
-                                    const arrowColor =
-                                      arr.color || DEFAULT_ARROW_COLOR;
-                                    const arrowId = arr._id;
-                                    const rot =
-                                      arr.rotation ?? DEFAULT_ARROW_ROTATION;
-                                    const tipOff = getArrowTipOffset(rot);
-                                    return (
-                                      <Box
-                                        key={arrowId || `arrow-${arrIdx}`}
-                                        sx={{
-                                          position: "absolute",
-                                          left: `${(arr.x ?? 0.5) * 100}%`,
-                                          top: `${(arr.y ?? 0.5) * 100}%`,
-                                          transform: `translate(${-tipOff.x * 100}%, ${-tipOff.y * 100}%)`,
-                                          zIndex: 2,
-                                          pointerEvents: "auto",
-                                          display: "flex",
-                                          flexDirection: "column",
-                                          alignItems: "center",
-                                        }}
-                                        onClick={(e) => e.stopPropagation()}
-                                      >
-                                        <Box
-                                          sx={{
-                                            transform: `rotate(${rot}deg)`,
-                                          }}
-                                        >
-                                          <svg
-                                            width="40"
-                                            height="40"
-                                            viewBox="0 0 24 24"
-                                            fill="none"
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            style={{ pointerEvents: "none" }}
-                                          >
-                                            <line
-                                              x1="12"
-                                              y1="22"
-                                              x2="12"
-                                              y2="10"
-                                              stroke="rgba(0,0,0,0.5)"
-                                              strokeWidth="2.5"
-                                              strokeLinecap="round"
-                                            />
-                                            <line
-                                              x1="12"
-                                              y1="22"
-                                              x2="12"
-                                              y2="10"
-                                              stroke={arrowColor}
-                                              strokeWidth="2"
-                                              strokeLinecap="round"
-                                            />
-                                            <path
-                                              d="M12 2 L8 10 L16 10 Z"
-                                              fill="rgba(0,0,0,0.4)"
-                                              stroke="rgba(0,0,0,0.6)"
-                                              strokeWidth="1"
-                                              strokeLinejoin="round"
-                                            />
-                                            <path
-                                              d="M12 2 L8 10 L16 10 Z"
-                                              fill={arrowColor}
-                                              stroke={arrowColor}
-                                              strokeWidth="0.5"
-                                              strokeLinejoin="round"
-                                            />
-                                          </svg>
-                                        </Box>
-                                        <IconButton
-                                          size="small"
-                                          sx={{
-                                            minWidth: 0,
-                                            width: 20,
-                                            height: 20,
-                                            color: "white",
-                                            bgcolor: "rgba(0,0,0,0.7)",
-                                            "&:hover": {
-                                              bgcolor: "rgba(244,67,54,0.9)",
-                                            },
-                                            mt: -0.5,
-                                          }}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            if (arrowId) {
-                                              handleDeletePhotoArrow(
-                                                photo._id,
-                                                arrowId,
-                                              );
-                                            } else {
-                                              handleClearAllArrows(photo._id);
-                                            }
-                                          }}
-                                          title="Remove this arrow"
-                                        >
-                                          <CloseIcon
-                                            sx={{ fontSize: "0.9rem" }}
-                                          />
-                                        </IconButton>
-                                      </Box>
-                                    );
-                                  })}
+                                  <PhotoArrowOverlays
+                                    arrows={getPhotoArrows(photo)}
+                                    showDelete
+                                    onDeleteArrow={(arr) => {
+                                      if (arr._id) {
+                                        handleDeletePhotoArrow(
+                                          photo._id,
+                                          arr._id,
+                                        );
+                                      } else {
+                                        handleClearAllArrows(photo._id);
+                                      }
+                                    }}
+                                  />
 
                                   {editingArrowPhotoId === photo._id && (
                                     <Box
@@ -5815,15 +5625,9 @@ const AssessmentItems = () => {
             setFullSizePhotoId(null);
             setFullSizeArrowMode(false);
             setSelectedArrowId(null);
-            setMovingArrowId(null);
           }}
           maxWidth="lg"
           fullWidth
-          PaperProps={{
-            sx: {
-              bgcolor: "rgba(0, 0, 0, 0.9)",
-            },
-          }}
         >
           <DialogContent sx={{ p: 0, position: "relative" }}>
             <IconButton
@@ -5832,17 +5636,16 @@ const AssessmentItems = () => {
                 setFullSizePhotoId(null);
                 setFullSizeArrowMode(false);
                 setSelectedArrowId(null);
-                setMovingArrowId(null);
               }}
               sx={{
                 position: "absolute",
                 top: 10,
                 right: 10,
-                color: "white",
-                bgcolor: "rgba(0, 0, 0, 0.5)",
+                color: "text.primary",
+                bgcolor: "grey.200",
                 zIndex: 10,
                 "&:hover": {
-                  bgcolor: "rgba(0, 0, 0, 0.7)",
+                  bgcolor: "grey.300",
                 },
               }}
             >
@@ -5859,249 +5662,62 @@ const AssessmentItems = () => {
                   pt: 6,
                 }}
               >
-                <Box
-                  sx={{
-                    display: "flex",
-                    gap: 1,
-                    mb: 2,
-                    flexWrap: "wrap",
-                    justifyContent: "center",
+                <PhotoArrowToolbar
+                  drawMode={fullSizeArrowMode}
+                  disabled={isReportLocked}
+                  onDrawModeChange={(next) => {
+                    setFullSizeArrowMode(next);
+                    if (next) setSelectedArrowId(null);
                   }}
-                >
-                  <Button
-                    variant="contained"
-                    size="small"
-                    startIcon={<ArrowUpwardIcon />}
-                    onClick={() => {
-                      setFullSizeArrowMode((prev) => !prev);
-                      setMovingArrowId(null);
-                    }}
-                    sx={{
-                      bgcolor: fullSizeArrowMode
-                        ? "primary.main"
-                        : "rgba(0, 0, 0, 0.65)",
-                      color: "white",
-                      border: "1px solid rgba(255,255,255,0.4)",
-                      "&:hover": {
-                        bgcolor: fullSizeArrowMode
-                          ? "primary.dark"
-                          : "rgba(0, 0, 0, 0.85)",
-                        borderColor: "rgba(255,255,255,0.6)",
-                      },
-                    }}
-                  >
-                    Add arrow
-                  </Button>
-                  <Button
-                    variant="contained"
-                    size="small"
-                    disabled={
-                      !selectedArrowId || selectedArrowId === "legacy"
+                  selectedArrowId={selectedArrowId}
+                  onDeleteSelected={() => {
+                    if (!selectedArrowId) return;
+                    if (selectedArrowId === "legacy") {
+                      handleClearAllArrows(fullSizePhotoId);
+                    } else {
+                      handleDeletePhotoArrow(
+                        fullSizePhotoId,
+                        selectedArrowId,
+                      );
                     }
-                    startIcon={<ArrowUpwardIcon />}
-                    onClick={() => {
-                      setMovingArrowId(selectedArrowId);
-                      setFullSizeArrowMode(false);
-                    }}
-                    sx={{
-                      bgcolor: movingArrowId
-                        ? "primary.main"
-                        : "rgba(0, 0, 0, 0.5)",
-                      color: "white",
-                      "&:hover":
-                        selectedArrowId && selectedArrowId !== "legacy"
-                          ? { bgcolor: "primary.dark" }
-                          : {},
-                    }}
-                  >
-                    Move selected
-                  </Button>
-                  <Button
-                    variant="contained"
-                    size="small"
-                    disabled={!selectedArrowId}
-                    startIcon={<CloseIcon />}
-                    onClick={() => {
-                      if (selectedArrowId) {
-                        if (selectedArrowId === "legacy") {
-                          handleClearAllArrows(fullSizePhotoId);
-                        } else {
-                          handleDeletePhotoArrow(
-                            fullSizePhotoId,
-                            selectedArrowId,
-                          );
-                        }
-                        setSelectedArrowId(null);
-                      }
-                    }}
-                    sx={{
-                      bgcolor: "rgba(244, 67, 54, 0.9)",
-                      color: "white",
-                      "&:hover": { bgcolor: "rgba(244, 67, 54, 1)" },
-                    }}
-                  >
-                    Delete selected
-                  </Button>
-                  <Typography
-                    component="span"
-                    sx={{
-                      color: "rgba(255,255,255,0.9)",
-                      fontSize: "0.85rem",
-                      alignSelf: "center",
-                      ml: 1,
-                    }}
-                  >
-                    Arrow color:
-                  </Typography>
-                  {ARROW_COLORS.map(({ name, hex }) => (
-                    <Box
-                      key={hex}
-                      onClick={() => {
-                        setSelectedArrowColor(hex);
-                        if (
-                          selectedArrowId &&
-                          selectedArrowId !== "legacy"
-                        ) {
-                          handleUpdatePhotoArrow(
-                            fullSizePhotoId,
-                            selectedArrowId,
-                            { color: hex },
-                          );
-                        }
-                      }}
-                      sx={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: "50%",
-                        bgcolor: hex,
-                        border:
-                          selectedArrowColor === hex
-                            ? "3px solid #2196f3"
-                            : "2px solid black",
-                        cursor: "pointer",
-                        flexShrink: 0,
-                        "&:hover": {
-                          borderColor:
-                            selectedArrowColor === hex
-                              ? "#2196f3"
-                              : "rgba(255,255,255,0.8)",
-                          transform: "scale(1.1)",
-                        },
-                        transition: "border-color 0.15s, transform 0.15s",
-                      }}
-                      title={name}
-                    />
-                  ))}
-                </Box>
-                {(fullSizeArrowMode || movingArrowId) && (
-                  <Typography
-                    variant="body2"
-                    sx={{ color: "rgba(0, 0, 0, 0.9)", mb: 1 }}
-                  >
-                    {movingArrowId
-                      ? "Click on the photo to move the selected arrow"
-                      : "Click on the photo to place a new arrow"}
-                  </Typography>
-                )}
-                <Box
-                  sx={{
-                    position: "relative",
-                    display: "inline-flex",
-                    justifyContent: "center",
-                    alignItems: "center",
+                    setSelectedArrowId(null);
                   }}
-                >
-                  <img
+                  selectedColor={selectedArrowColor}
+                  onColorChange={(hex) => {
+                    setSelectedArrowColor(hex);
+                    if (selectedArrowId && selectedArrowId !== "legacy") {
+                      handleUpdatePhotoArrow(fullSizePhotoId, selectedArrowId, {
+                        color: hex,
+                      });
+                    }
+                  }}
+                />
+                <Box sx={{ position: "relative" }}>
+                  <PhotoArrowEditor
                     src={fullSizePhoto.data}
                     alt="Full size"
-                    style={{
-                      maxWidth: "100%",
-                      maxHeight: "75vh",
-                      objectFit: "contain",
-                      cursor:
-                        fullSizeArrowMode || movingArrowId
-                          ? "crosshair"
-                          : "default",
+                    arrows={getPhotoArrows(fullSizePhoto)}
+                    drawMode={fullSizeArrowMode}
+                    selectedArrowId={selectedArrowId}
+                    selectedColor={selectedArrowColor}
+                    onSelectArrow={(id) => {
+                      setSelectedArrowId(id);
+                      if (id && id !== "legacy") {
+                        const arr = getPhotoArrows(fullSizePhoto).find(
+                          (a) => a._id === id,
+                        );
+                        if (arr?.color) setSelectedArrowColor(arr.color);
+                      }
                     }}
-                    onClick={handleFullSizePhotoClickForArrow}
+                    onDrawComplete={(arrow) => {
+                      handleAddPhotoArrow(fullSizePhotoId, arrow);
+                    }}
+                    onMoveComplete={(arrowId, updates) => {
+                      handleUpdatePhotoArrow(fullSizePhotoId, arrowId, updates, {
+                        silent: true,
+                      });
+                    }}
                   />
-                  {getPhotoArrows(fullSizePhoto).map((arr, arrIdx) => {
-                    const arrowColor =
-                      arr.color || DEFAULT_ARROW_COLOR;
-                    const isSelected = selectedArrowId === arr._id;
-                    const rot =
-                      arr.rotation ?? DEFAULT_ARROW_ROTATION;
-                    const tipOff = getArrowTipOffset(rot);
-                    return (
-                      <Box
-                        key={arr._id || `fs-arrow-${arrIdx}`}
-                        sx={{
-                          position: "absolute",
-                          left: `${(arr.x ?? 0.5) * 100}%`,
-                          top: `${(arr.y ?? 0.5) * 100}%`,
-                          transform: `translate(${-tipOff.x * 100}%, ${-tipOff.y * 100}%)`,
-                          pointerEvents: "auto",
-                          cursor: "pointer",
-                          outline: isSelected
-                            ? "3px solid white"
-                            : "none",
-                          outlineOffset: 2,
-                          borderRadius: 1,
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedArrowId(arr._id || "legacy");
-                          setSelectedArrowColor(
-                            arr.color || DEFAULT_ARROW_COLOR,
-                          );
-                        }}
-                      >
-                        <Box sx={{ transform: `rotate(${rot}deg)` }}>
-                          <svg
-                            width="56"
-                            height="56"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            xmlns="http://www.w3.org/2000/svg"
-                            style={{ pointerEvents: "none" }}
-                          >
-                            <line
-                              x1="12"
-                              y1="22"
-                              x2="12"
-                              y2="10"
-                              stroke="rgba(0,0,0,0.5)"
-                              strokeWidth="2.5"
-                              strokeLinecap="round"
-                            />
-                            <line
-                              x1="12"
-                              y1="22"
-                              x2="12"
-                              y2="10"
-                              stroke={arrowColor}
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                            />
-                            <path
-                              d="M12 2 L8 10 L16 10 Z"
-                              fill="rgba(0,0,0,0.4)"
-                              stroke="rgba(0,0,0,0.6)"
-                              strokeWidth="1"
-                              strokeLinejoin="round"
-                            />
-                            <path
-                              d="M12 2 L8 10 L16 10 Z"
-                              fill={arrowColor}
-                              stroke={arrowColor}
-                              strokeWidth="0.5"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        </Box>
-                      </Box>
-                    );
-                  })}
                   <IconButton
                     size="small"
                     sx={{
@@ -6923,201 +6539,6 @@ const AssessmentItems = () => {
               }}
             >
               Site Works Completed
-            </Button>
-          </DialogActions>
-        </Dialog>
-
-        {/* Site Plan Upload Dialog */}
-        <Dialog
-          open={sitePlanDialogOpen}
-          onClose={() => setSitePlanDialogOpen(false)}
-          maxWidth="sm"
-          fullWidth
-          PaperProps={{
-            sx: {
-              borderRadius: 3,
-              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
-            },
-          }}
-        >
-          <DialogTitle
-            sx={{
-              pb: 2,
-              px: 3,
-              pt: 3,
-              border: "none",
-              display: "flex",
-              alignItems: "center",
-              gap: 2,
-            }}
-          >
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 40,
-                height: 40,
-                borderRadius: "50%",
-                bgcolor: "primary.main",
-                color: "white",
-              }}
-            >
-              <UploadIcon sx={{ fontSize: 20 }} />
-            </Box>
-            <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
-              Upload Site Plan
-            </Typography>
-          </DialogTitle>
-          <DialogContent sx={{ px: 3, pt: 3, pb: 1, border: "none" }}>
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Upload a site plan file (PDF, JPG, or PNG). This will be
-                included in the assessment report.
-              </Typography>
-
-              <Box sx={{ mb: 2 }}>
-                <input
-                  accept=".pdf,.jpg,.jpeg,.png"
-                  style={{ display: "none" }}
-                  id="site-plan-file-upload"
-                  type="file"
-                  onChange={handleSitePlanFileUpload}
-                />
-                <label htmlFor="site-plan-file-upload">
-                  <Button
-                    variant="outlined"
-                    component="span"
-                    startIcon={<UploadIcon />}
-                    fullWidth
-                  >
-                    {sitePlanFile ? sitePlanFile.name : "Choose Site Plan File"}
-                  </Button>
-                </label>
-              </Box>
-
-              {sitePlanFile && (
-                <Alert severity="info" sx={{ mb: 2 }}>
-                  Selected file: {sitePlanFile.name} (
-                  {(sitePlanFile.size / 1024 / 1024).toFixed(2)} MB)
-                </Alert>
-              )}
-            </Box>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2, border: "none" }}>
-            <Button
-              onClick={() => setSitePlanDialogOpen(false)}
-              variant="outlined"
-              sx={{
-                minWidth: 100,
-                borderRadius: 2,
-                textTransform: "none",
-                fontWeight: 500,
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleUploadSitePlan}
-              variant="contained"
-              disabled={!sitePlanFile || uploadingSitePlan}
-              startIcon={
-                uploadingSitePlan ? (
-                  <CircularProgress size={16} />
-                ) : (
-                  <UploadIcon />
-                )
-              }
-              sx={{
-                minWidth: 120,
-                borderRadius: 2,
-                textTransform: "none",
-                fontWeight: 500,
-              }}
-            >
-              {uploadingSitePlan ? "Uploading..." : "Upload Site Plan"}
-            </Button>
-          </DialogActions>
-        </Dialog>
-
-        {/* Site Plan Drawing Modal */}
-        <Dialog
-          open={sitePlanDrawingDialogOpen}
-          onClose={handleSitePlanDrawingClose}
-          maxWidth="lg"
-          fullWidth
-          PaperProps={{
-            sx: {
-              height: "90vh",
-              maxHeight: "90vh",
-            },
-          }}
-        >
-          <DialogTitle>
-            <Box
-              display="flex"
-              justifyContent="space-between"
-              alignItems="center"
-            >
-              <Typography variant="h6">Site Plan Drawing</Typography>
-              <IconButton onClick={handleSitePlanDrawingClose}>
-                <CloseIcon />
-              </IconButton>
-            </Box>
-          </DialogTitle>
-          <DialogContent sx={{ p: 2, height: "100%" }}>
-            <SitePlanDrawing
-              ref={sitePlanDrawingRef}
-              onSave={handleSitePlanSave}
-              onCancel={() => setSitePlanDrawingDialogOpen(false)}
-              existingSitePlan={assessment?.sitePlanFile}
-              existingLegend={assessment?.sitePlanLegend}
-              existingLegendTitle={assessment?.sitePlanLegendTitle}
-              existingFigureTitle={assessment?.sitePlanFigureTitle}
-            />
-          </DialogContent>
-        </Dialog>
-
-        {/* Site plan key descriptions reminder */}
-        <Dialog
-          open={sitePlanKeyReminderOpen}
-          onClose={() => {
-            setSitePlanKeyReminderOpen(false);
-            setPendingSitePlanData(null);
-          }}
-          maxWidth="sm"
-          fullWidth
-          PaperProps={{
-            sx: {
-              borderRadius: 2,
-              boxShadow: "0 12px 40px rgba(0, 0, 0, 0.12)",
-            },
-          }}
-        >
-          <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-            <DescriptionIcon color="primary" />
-            <span>Add key descriptions</span>
-          </DialogTitle>
-          <DialogContent sx={{ px: 3, pt: 0, pb: 1 }}>
-            <Typography variant="body1" color="text.secondary">
-              Some key items don&apos;t have descriptions. Add descriptions so
-              the site plan key is clear, or save without adding them.
-            </Typography>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 3, pt: 2, gap: 2 }}>
-            <Button
-              onClick={handleSitePlanKeyReminderSaveAnyway}
-              variant="outlined"
-              color="inherit"
-            >
-              Save anyway
-            </Button>
-            <Button
-              onClick={handleSitePlanKeyReminderAddDescriptions}
-              variant="contained"
-              startIcon={<DescriptionIcon />}
-            >
-              Add descriptions
             </Button>
           </DialogActions>
         </Dialog>

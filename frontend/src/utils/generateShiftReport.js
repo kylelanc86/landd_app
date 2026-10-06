@@ -270,8 +270,12 @@ pdfMake.fonts = {
       width: '50%'
     });
   } else {
+    const shiftRemovalist =
+      typeof shift?.asbestosRemovalist === 'string'
+        ? shift.asbestosRemovalist.trim()
+        : '';
     reportDetailsColumns.push({
-      text: [{ text: 'Asbestos Removalist: ', bold: true }, { text: job?.asbestosRemovalist || 'N/A' }],
+      text: [{ text: 'Asbestos Removalist: ', bold: true }, { text: shiftRemovalist || job?.asbestosRemovalist || 'N/A' }],
       style: 'tableContent',
       margin: [0, 0, 0, 2],
       width: '50%'

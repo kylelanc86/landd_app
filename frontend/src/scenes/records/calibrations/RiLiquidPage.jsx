@@ -16,6 +16,7 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogContentText,
   DialogActions,
   TextField,
   FormControl,
@@ -45,6 +46,23 @@ import CalibrationPageHeader, {
   CALIBRATION_PAGE_PADDING,
 } from "./CalibrationPageHeader";
 
+const REQUIRED_RI_INDEXES = [1.55, 1.67, 1.7];
+
+const formatRiIndex = (value) => {
+  const numeric = Number(value);
+  if (Number.isNaN(numeric)) return String(value);
+  return numeric.toFixed(2);
+};
+
+const getMissingRiIndexes = (bottles = []) => {
+  const present = new Set(
+    bottles.map((bottle) => formatRiIndex(bottle.refractiveIndex)),
+  );
+  return REQUIRED_RI_INDEXES.filter(
+    (ri) => !present.has(formatRiIndex(ri)),
+  ).map(formatRiIndex);
+};
+
 const RiLiquidPage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
@@ -70,6 +88,10 @@ const RiLiquidPage = () => {
     batchNumber: "",
     dateOpened: formatDateForInput(new Date()),
   });
+  const [emptyDialogOpen, setEmptyDialogOpen] = useState(false);
+  const [bottleToMarkEmpty, setBottleToMarkEmpty] = useState(null);
+  const [emptySubmitting, setEmptySubmitting] = useState(false);
+  const [emptyDialogError, setEmptyDialogError] = useState(null);
 
   const [formData, setFormData] = useState({
     bottleId: "",
@@ -136,11 +158,14 @@ const RiLiquidPage = () => {
       );
     } catch (error) {
       console.error("Error fetching data:", error);
+      setActiveBottles([]);
       setCalibrations([]);
     } finally {
       setLoading(false);
     }
   };
+
+  const missingRiIndexes = getMissingRiIndexes(activeBottles);
 
   const fetchTechnicians = async () => {
     try {
@@ -460,25 +485,38 @@ const RiLiquidPage = () => {
 
   const lookupViewMode = Boolean(editingCalibration && !isEditMode);
 
-  const handleMarkAsEmpty = async (bottleId) => {
-    if (
-      !window.confirm(
-        `Are you sure you want to mark bottle "${bottleId}" as empty? This will remove it from the active bottles table.`,
-      )
-    ) {
-      return;
-    }
+  const handleOpenMarkAsEmptyDialog = (bottleId) => {
+    setBottleToMarkEmpty(bottleId);
+    setEmptyDialogError(null);
+    setEmptyDialogOpen(true);
+  };
+
+  const handleCloseMarkAsEmptyDialog = () => {
+    if (emptySubmitting) return;
+    setEmptyDialogOpen(false);
+    setBottleToMarkEmpty(null);
+    setEmptyDialogError(null);
+  };
+
+  const handleConfirmMarkAsEmpty = async () => {
+    if (!bottleToMarkEmpty) return;
 
     try {
-      await riLiquidCalibrationService.markBottleAsEmpty(bottleId);
+      setEmptySubmitting(true);
+      setEmptyDialogError(null);
+      await riLiquidCalibrationService.markBottleAsEmpty(bottleToMarkEmpty);
+      setEmptyDialogOpen(false);
+      setBottleToMarkEmpty(null);
       fetchData();
     } catch (error) {
       console.error("Error marking bottle as empty:", error);
-      alert(
+      setEmptyDialogError(
         error.response?.data?.message ||
           error.message ||
           "Failed to mark bottle as empty",
       );
+    } finally {
+      setEmptySubmitting(false);
     }
   };
 
@@ -520,6 +558,17 @@ const RiLiquidPage = () => {
       <CalibrationPageHeader
         title="RI Liquid Calibrations"
         calibrationTab={CALIBRATION_TABS.INTERNAL}
+        note={
+          !loading && missingRiIndexes.length > 0 ? (
+            <Alert severity="warning" sx={{ py: 0.5, flex: "1 1 280px" }}>
+              Missing open bottle
+              {missingRiIndexes.length === 1 ? "" : "s"} for refractive index
+              {missingRiIndexes.length === 1 ? "" : "es"}{" "}
+              {missingRiIndexes.join(", ")}. Each of 1.55, 1.67, and 1.70 needs
+              at least one open bottle.
+            </Alert>
+          ) : null
+        }
         action={
           <Box display="flex" gap={2} flexWrap="wrap">
             <Button
@@ -645,7 +694,7 @@ const RiLiquidPage = () => {
                         )}
                         <IconButton
                           onClick={() =>
-                            handleMarkAsEmpty(calibration.bottleId)
+                            handleOpenMarkAsEmptyDialog(calibration.bottleId)
                           }
                           size="small"
                           title="Mark Bottle as Empty"
@@ -1054,6 +1103,49 @@ const RiLiquidPage = () => {
             )}
           </DialogActions>
         </Box>
+      </Dialog>
+
+      <Dialog
+        open={emptyDialogOpen}
+        onClose={handleCloseMarkAsEmptyDialog}
+        aria-labelledby="mark-empty-dialog-title"
+        aria-describedby="mark-empty-dialog-description"
+      >
+        <DialogTitle id="mark-empty-dialog-title">
+          Mark Bottle as Empty
+        </DialogTitle>
+        <DialogContent>
+          {emptyDialogError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {emptyDialogError}
+            </Alert>
+          )}
+          <DialogContentText id="mark-empty-dialog-description">
+            Are you sure you want to mark bottle &quot;{bottleToMarkEmpty}&quot;
+            as empty? This will remove it from the active bottles table.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={handleCloseMarkAsEmptyDialog}
+            disabled={emptySubmitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmMarkAsEmpty}
+            color="warning"
+            variant="contained"
+            autoFocus
+            disabled={emptySubmitting}
+          >
+            {emptySubmitting ? (
+              <CircularProgress size={24} color="inherit" />
+            ) : (
+              "Mark as Empty"
+            )}
+          </Button>
+        </DialogActions>
       </Dialog>
     </Box>
   );

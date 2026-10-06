@@ -44,7 +44,6 @@ import {
 } from "@mui/material";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import CheckIcon from "@mui/icons-material/Check";
@@ -58,7 +57,6 @@ import MapIcon from "@mui/icons-material/Map";
 import MicIcon from "@mui/icons-material/Mic";
 import StopIcon from "@mui/icons-material/Stop";
 import asbestosAssessmentService from "../../../services/asbestosAssessmentService";
-import LeadAssessmentPlanEditorDialog from "../../../components/LeadAssessmentPlanEditorDialog";
 import { useSnackbar } from "../../../context/SnackbarContext";
 import { useAuth } from "../../../context/AuthContext";
 import { generateLeadChainOfCustodyPDF } from "../../../utils/generateLeadChainOfCustodyPDF";
@@ -67,11 +65,17 @@ import {
   needsCompression,
   saveFileToDevice,
 } from "../../../utils/imageCompression";
+import { rotateDataUrl90Cw } from "../../../utils/rotateImageDataUrl";
 import {
-  rotateArrowDegrees90Cw,
-  rotateDataUrl90Cw,
-  rotateNormalizedPoint90Cw,
-} from "../../../utils/rotateImageDataUrl";
+  DEFAULT_ARROW_COLOR,
+  DEFAULT_ARROW_ROTATION,
+  rotateArrowGeometry90Cw,
+} from "../../../utils/photoArrows";
+import PhotoArrowEditor, {
+  PhotoArrowOverlays,
+} from "../../../components/PhotoArrowEditor";
+import PhotoArrowToolbar from "../../../components/PhotoArrowToolbar";
+import { countSitePlans } from "../../../utils/sitePlanAppendices";
 import LeadAssessmentLeadSamplesTable from "./LeadAssessmentLeadSamplesTable";
 import {
   TABLE_FONT_SIZE,
@@ -82,9 +86,6 @@ import {
   getSoilStatus,
   getDustExceedanceStatus,
 } from "./leadAssessmentItemsTableUtils";
-
-const DEFAULT_PHOTO_ARROW_ROTATION = -45;
-const DEFAULT_PHOTO_ARROW_COLOR = "#f44336";
 
 function getLeadAssessmentPhotoArrows(photo) {
   if (!photo) return [];
@@ -112,23 +113,6 @@ function mergePhotoBlobFields(photos, blobList) {
     return { ...p, data: b.data, fullResolutionData: b.fullResolutionData };
   });
 }
-
-/** Arrow SVG viewBox 24×24; tip at (12,2). Returns tip position 0–1 for rotation (degrees). */
-function getLeadPhotoArrowTipOffset(rotationDeg) {
-  const r = ((rotationDeg ?? 0) * Math.PI) / 180;
-  const tipX = (12 + 10 * Math.sin(r)) / 24;
-  const tipY = (12 - 10 * Math.cos(r)) / 24;
-  return { x: tipX, y: tipY };
-}
-
-const LEAD_PHOTO_ARROW_COLORS = [
-  { name: "Yellow", hex: "#ffeb3b" },
-  { name: "Red", hex: "#f44336" },
-  { name: "White", hex: "#ffffff" },
-  { name: "Black", hex: "#212121" },
-  { name: "Orange", hex: "#ff9800" },
-  { name: "Green", hex: "#4caf50" },
-];
 
 const SAMPLE_TYPES = [
   { key: "paint", label: "Paint samples" },
@@ -310,9 +294,6 @@ const LeadAssessmentItems = () => {
   const [scopeModalOpen, setScopeModalOpen] = useState(false);
   const [leadScopeDraft, setLeadScopeDraft] = useState(null);
   const [savingLeadScope, setSavingLeadScope] = useState(false);
-  const [leadSitePlansDialogOpen, setLeadSitePlansDialogOpen] = useState(false);
-  const [leadAssessmentPlansDialogOpen, setLeadAssessmentPlansDialogOpen] =
-    useState(false);
 
   const theme = useTheme();
   const isPortrait = useMediaQuery("(orientation: portrait)");
@@ -344,9 +325,8 @@ const LeadAssessmentItems = () => {
   const [rotatingPhotoId, setRotatingPhotoId] = useState(null);
   const [fullSizeArrowMode, setFullSizeArrowMode] = useState(false);
   const [selectedArrowId, setSelectedArrowId] = useState(null);
-  const [movingArrowId, setMovingArrowId] = useState(null);
   const [selectedArrowColor, setSelectedArrowColor] = useState(
-    DEFAULT_PHOTO_ARROW_COLOR,
+    DEFAULT_ARROW_COLOR,
   );
   const [leadDiscussionDrafts, setLeadDiscussionDrafts] = useState({
     paint: "",
@@ -426,26 +406,6 @@ const LeadAssessmentItems = () => {
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [id, refetchAssessmentQuiet]);
-
-  const hydrateLeadPlanAppendicesForEditor = useCallback(async () => {
-    if (!id) return;
-    try {
-      const data = await asbestosAssessmentService.getById(id, {
-        omitPhotoData: true,
-        omitFibreReport: true,
-        omitItems: true,
-      });
-      const job = data?.data ?? data;
-      setAssessment((prev) =>
-        prev ? { ...prev, ...job, items: prev.items } : job,
-      );
-    } catch (e) {
-      showSnackbar(
-        e.response?.data?.message || e.message || "Failed to load plan images",
-        "error",
-      );
-    }
-  }, [id, showSnackbar]);
 
   useEffect(() => {
     if (!photoGalleryDialogOpen || !id || !selectedItemForPhotos) return;
@@ -1033,37 +993,17 @@ const LeadAssessmentItems = () => {
   const leadAssessmentPhotosLocked =
     String(assessment?.status || "").toLowerCase() === "complete";
 
-  const leadSitePlanAppendixCount = useMemo(() => {
-    if (typeof assessment?.leadSitePlanAppendixFileCount === "number") {
-      return assessment.leadSitePlanAppendixFileCount;
-    }
-    const arr = assessment?.leadSitePlanAppendices;
-    if (!Array.isArray(arr)) return 0;
-    return arr.filter((p) => p && p.sitePlanFile).length;
-  }, [
-    assessment?.leadSitePlanAppendixFileCount,
-    assessment?.leadSitePlanAppendices,
-  ]);
+  const leadSitePlanAppendixCount = countSitePlans(assessment, {
+    appendicesField: "leadSitePlanAppendices",
+    countField: "leadSitePlanAppendixFileCount",
+    defaultFigureTitle: "Lead Assessment Site Plan",
+  });
 
-  const leadAssessmentPlanAppendixCount = useMemo(() => {
-    if (typeof assessment?.leadAssessmentPlanAppendixFileCount === "number") {
-      return assessment.leadAssessmentPlanAppendixFileCount;
-    }
-    const arr = assessment?.leadAssessmentPlanAppendices;
-    if (!Array.isArray(arr)) return 0;
-    return arr.filter((p) => p && p.sitePlanFile).length;
-  }, [
-    assessment?.leadAssessmentPlanAppendixFileCount,
-    assessment?.leadAssessmentPlanAppendices,
-  ]);
-
-  const handleLeadPlansSaved = useCallback(
-    ({ field, plans } = {}) => {
-      if (!field || !Array.isArray(plans)) return;
-      setAssessment((prev) => (prev ? { ...prev, [field]: plans } : prev));
-    },
-    [],
-  );
+  const leadAssessmentPlanAppendixCount = countSitePlans(assessment, {
+    appendicesField: "leadAssessmentPlanAppendices",
+    countField: "leadAssessmentPlanAppendixFileCount",
+    defaultFigureTitle: "Assessment Area Plan",
+  });
 
   useEffect(() => {
     if (cameraDialogOpen && stream && videoRef) {
@@ -1390,7 +1330,6 @@ const LeadAssessmentItems = () => {
     setEditingDescriptionPhotoId(null);
     setFullSizeArrowMode(false);
     setSelectedArrowId(null);
-    setMovingArrowId(null);
     await refetchAssessmentQuiet();
   };
 
@@ -1484,7 +1423,6 @@ const LeadAssessmentItems = () => {
     );
     setFullSizeArrowMode(false);
     setSelectedArrowId(null);
-    setMovingArrowId(null);
     setFullSizePhotoDialogOpen(true);
   };
 
@@ -1562,13 +1500,16 @@ const LeadAssessmentItems = () => {
         {
           x: arrow.x ?? 0.5,
           y: arrow.y ?? 0.5,
-          rotation: arrow.rotation ?? DEFAULT_PHOTO_ARROW_ROTATION,
-          color: arrow.color ?? DEFAULT_PHOTO_ARROW_COLOR,
+          x1: arrow.x1,
+          y1: arrow.y1,
+          x2: arrow.x2 ?? arrow.x,
+          y2: arrow.y2 ?? arrow.y,
+          rotation: arrow.rotation ?? DEFAULT_ARROW_ROTATION,
+          color: arrow.color ?? DEFAULT_ARROW_COLOR,
         },
       );
       if (response?.item) setSelectedItemForPhotos(response.item);
       setFullSizeArrowMode(false);
-      setMovingArrowId(null);
       showSnackbar("Arrow added", "success");
     } catch (err) {
       console.error("Error adding arrow:", err);
@@ -1576,7 +1517,12 @@ const LeadAssessmentItems = () => {
     }
   };
 
-  const handleUpdateLeadPhotoArrow = async (photoId, arrowId, updates) => {
+  const handleUpdateLeadPhotoArrow = async (
+    photoId,
+    arrowId,
+    updates,
+    options = {},
+  ) => {
     if (!leadItemPhotoArrowsAvailable || !id || !selectedItemForPhotos?._id)
       return;
     try {
@@ -1588,9 +1534,7 @@ const LeadAssessmentItems = () => {
         updates,
       );
       if (response?.item) setSelectedItemForPhotos(response.item);
-      setMovingArrowId(null);
-      setFullSizeArrowMode(false);
-      if (updates.x != null || updates.y != null) {
+      if (!options.silent) {
         showSnackbar("Arrow updated", "success");
       }
     } catch (err) {
@@ -1612,7 +1556,6 @@ const LeadAssessmentItems = () => {
       if (response?.item) setSelectedItemForPhotos(response.item);
       if (selectedArrowId === arrowId) setSelectedArrowId(null);
       setFullSizeArrowMode(false);
-      setMovingArrowId(null);
       showSnackbar("Arrow removed", "success");
     } catch (err) {
       console.error("Error deleting arrow:", err);
@@ -1633,41 +1576,10 @@ const LeadAssessmentItems = () => {
       if (response?.item) setSelectedItemForPhotos(response.item);
       setSelectedArrowId(null);
       setFullSizeArrowMode(false);
-      setMovingArrowId(null);
       showSnackbar("Arrows cleared", "success");
     } catch (err) {
       console.error("Error clearing arrows:", err);
       showSnackbar("Failed to clear arrows", "error");
-    }
-  };
-
-  const handleFullSizeLeadPhotoClickForArrow = (e) => {
-    if (
-      !fullSizePhotoId ||
-      !fullSizeLeadPhoto ||
-      !leadItemPhotoArrowsAvailable
-    )
-      return;
-    const img = e.currentTarget;
-    const rect = img.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-    const clampedX = Math.max(0, Math.min(1, x));
-    const clampedY = Math.max(0, Math.min(1, y));
-    if (movingArrowId) {
-      handleUpdateLeadPhotoArrow(fullSizePhotoId, movingArrowId, {
-        x: clampedX,
-        y: clampedY,
-      });
-      return;
-    }
-    if (fullSizeArrowMode) {
-      handleAddLeadPhotoArrow(fullSizePhotoId, {
-        x: clampedX,
-        y: clampedY,
-        rotation: DEFAULT_PHOTO_ARROW_ROTATION,
-        color: selectedArrowColor,
-      });
     }
   };
 
@@ -1687,21 +1599,16 @@ const LeadAssessmentItems = () => {
     try {
       const newData = await rotateDataUrl90Cw(photo.data, 0.92);
       const arrowList = getLeadAssessmentPhotoArrows(photo);
-      const newArrows = arrowList.map((arr) => {
-        const { x, y } = rotateNormalizedPoint90Cw(
-          arr.x ?? 0.5,
-          arr.y ?? 0.5,
-        );
-        return {
-          x: Math.max(0, Math.min(1, x)),
-          y: Math.max(0, Math.min(1, y)),
-          rotation: rotateArrowDegrees90Cw(
-            arr.rotation ?? DEFAULT_PHOTO_ARROW_ROTATION,
-          ),
-          color: arr.color || DEFAULT_PHOTO_ARROW_COLOR,
-          ...(arr._id ? { _id: arr._id } : {}),
-        };
-      });
+      const newArrows = arrowList
+        .map((arr) => {
+          const rotated = rotateArrowGeometry90Cw(arr);
+          if (!rotated) return null;
+          return {
+            ...rotated,
+            ...(arr._id ? { _id: arr._id } : {}),
+          };
+        })
+        .filter(Boolean);
       await asbestosAssessmentService.updatePhotoContent(
         id,
         selectedItemForPhotos._id,
@@ -1870,10 +1777,7 @@ const LeadAssessmentItems = () => {
             variant="outlined"
             color="secondary"
             startIcon={<MapIcon />}
-            onClick={async () => {
-              await hydrateLeadPlanAppendicesForEditor();
-              setLeadSitePlansDialogOpen(true);
-            }}
+            onClick={() => navigate(`/surveys/lead/${id}/site-plans`)}
             disabled={leadAssessmentPhotosLocked}
             sx={{ textTransform: "none" }}
             title="Site plan figures for the report appendix (multiple tabs). Pin tool marks sample locations."
@@ -1885,10 +1789,7 @@ const LeadAssessmentItems = () => {
             variant="outlined"
             color="secondary"
             startIcon={<MapIcon />}
-            onClick={async () => {
-              await hydrateLeadPlanAppendicesForEditor();
-              setLeadAssessmentPlansDialogOpen(true);
-            }}
+            onClick={() => navigate(`/surveys/lead/${id}/assessment-area-plans`)}
             disabled={leadAssessmentPhotosLocked}
             sx={{ textTransform: "none" }}
             title="Plans illustrating assessment areas — draw or add images only (no map layer)."
@@ -2226,31 +2127,6 @@ const LeadAssessmentItems = () => {
           </Button>
         </DialogActions>
       </Dialog>
-
-      <LeadAssessmentPlanEditorDialog
-        open={leadSitePlansDialogOpen}
-        onClose={() => setLeadSitePlansDialogOpen(false)}
-        kind="site"
-        assessmentId={id}
-        assessment={assessment}
-        items={items}
-        leadContentDrafts={leadContentDrafts}
-        readOnly={leadAssessmentPhotosLocked}
-        showSnackbar={showSnackbar}
-        onSaved={handleLeadPlansSaved}
-      />
-      <LeadAssessmentPlanEditorDialog
-        open={leadAssessmentPlansDialogOpen}
-        onClose={() => setLeadAssessmentPlansDialogOpen(false)}
-        kind="assessment"
-        assessmentId={id}
-        assessment={assessment}
-        items={items}
-        leadContentDrafts={leadContentDrafts}
-        readOnly={leadAssessmentPhotosLocked}
-        showSnackbar={showSnackbar}
-        onSaved={handleLeadPlansSaved}
-      />
 
       <Dialog open={samplingCompleteDialogOpen} onClose={() => setSamplingCompleteDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Complete Sampling</DialogTitle>
@@ -2794,82 +2670,21 @@ const LeadAssessmentItems = () => {
                                 </Box>
                               )}
                               {!selectedReferredPhotoRow &&
-                                isMongoPhotoId(photo._id) &&
-                                getLeadAssessmentPhotoArrows(photo).map(
-                                  (arr, arrIdx) => {
-                                    const arrowColor =
-                                      arr.color || DEFAULT_PHOTO_ARROW_COLOR;
-                                    const rot =
-                                      arr.rotation ??
-                                      DEFAULT_PHOTO_ARROW_ROTATION;
-                                    const tipOff =
-                                      getLeadPhotoArrowTipOffset(rot);
-                                    return (
-                                      <Box
-                                        key={
-                                          arr._id || `thumb-arrow-${arrIdx}`
-                                        }
-                                        sx={{
-                                          position: "absolute",
-                                          left: `${(arr.x ?? 0.5) * 100}%`,
-                                          top: `${(arr.y ?? 0.5) * 100}%`,
-                                          transform: `translate(${-tipOff.x * 100}%, ${-tipOff.y * 100}%)`,
-                                          zIndex: 2,
-                                          pointerEvents: "none",
-                                          display: "flex",
-                                          flexDirection: "column",
-                                          alignItems: "center",
-                                        }}
-                                      >
-                                        <Box
-                                          sx={{
-                                            transform: `rotate(${rot}deg)`,
-                                          }}
-                                        >
-                                          <svg
-                                            width="40"
-                                            height="40"
-                                            viewBox="0 0 24 24"
-                                            fill="none"
-                                            xmlns="http://www.w3.org/2000/svg"
-                                          >
-                                            <line
-                                              x1="12"
-                                              y1="22"
-                                              x2="12"
-                                              y2="10"
-                                              stroke="rgba(0,0,0,0.5)"
-                                              strokeWidth="2.5"
-                                              strokeLinecap="round"
-                                            />
-                                            <line
-                                              x1="12"
-                                              y1="22"
-                                              x2="12"
-                                              y2="10"
-                                              stroke={arrowColor}
-                                              strokeWidth="2"
-                                              strokeLinecap="round"
-                                            />
-                                            <path
-                                              d="M12 2 L8 10 L16 10 Z"
-                                              fill="rgba(0,0,0,0.4)"
-                                              stroke="rgba(0,0,0,0.6)"
-                                              strokeWidth="1"
-                                              strokeLinejoin="round"
-                                            />
-                                            <path
-                                              d="M12 2 L8 10 L16 10 Z"
-                                              fill={arrowColor}
-                                              stroke={arrowColor}
-                                              strokeWidth="0.5"
-                                              strokeLinejoin="round"
-                                            />
-                                          </svg>
-                                        </Box>
-                                      </Box>
-                                    );
-                                  },
+                                isMongoPhotoId(photo._id) && (
+                                  <PhotoArrowOverlays
+                                    arrows={getLeadAssessmentPhotoArrows(photo)}
+                                    showDelete
+                                    onDeleteArrow={(arr) => {
+                                      if (arr._id) {
+                                        handleDeleteLeadPhotoArrow(
+                                          photo._id,
+                                          arr._id,
+                                        );
+                                      } else {
+                                        handleClearAllLeadArrows(photo._id);
+                                      }
+                                    }}
+                                  />
                                 )}
                               {isLeadPhotoMarkedForDeletion(photoKey) && (
                                 <Box
@@ -3203,11 +3018,9 @@ const LeadAssessmentItems = () => {
           setFullSizePhotoUrl(null);
           setFullSizeArrowMode(false);
           setSelectedArrowId(null);
-          setMovingArrowId(null);
         }}
         maxWidth="lg"
         fullWidth
-        PaperProps={{ sx: { bgcolor: "rgba(0, 0, 0, 0.9)" } }}
       >
         <DialogContent sx={{ p: 0, position: "relative" }}>
           <IconButton
@@ -3217,16 +3030,15 @@ const LeadAssessmentItems = () => {
               setFullSizePhotoUrl(null);
               setFullSizeArrowMode(false);
               setSelectedArrowId(null);
-              setMovingArrowId(null);
             }}
             sx={{
               position: "absolute",
               top: 10,
               right: 10,
-              color: "white",
-              bgcolor: "rgba(0, 0, 0, 0.5)",
+              color: "text.primary",
+              bgcolor: "grey.200",
               zIndex: 10,
-              "&:hover": { bgcolor: "rgba(0, 0, 0, 0.7)" },
+              "&:hover": { bgcolor: "grey.300" },
             }}
           >
             <CloseIcon />
@@ -3243,245 +3055,79 @@ const LeadAssessmentItems = () => {
               }}
             >
               {leadItemPhotoArrowsAvailable && (
-                <Box sx={{ display: "flex", gap: 1, mb: 2, flexWrap: "wrap" }}>
-                    <Button
-                      variant="contained"
-                      size="small"
-                      startIcon={<ArrowUpwardIcon />}
-                      onClick={() => {
-                        setFullSizeArrowMode((prev) => !prev);
-                        setMovingArrowId(null);
-                      }}
-                      sx={{
-                        bgcolor: fullSizeArrowMode
-                          ? "primary.main"
-                          : "rgba(0, 0, 0, 0.65)",
-                        color: "white",
-                        border: "1px solid rgba(255,255,255,0.4)",
-                        "&:hover": {
-                          bgcolor: fullSizeArrowMode
-                            ? "primary.dark"
-                            : "rgba(0, 0, 0, 0.85)",
-                          borderColor: "rgba(255,255,255,0.6)",
-                        },
-                      }}
-                    >
-                      Add arrow
-                    </Button>
-                    <Button
-                      variant="contained"
-                      size="small"
-                      disabled={
-                        !selectedArrowId || selectedArrowId === "legacy"
-                      }
-                      startIcon={<ArrowUpwardIcon />}
-                      onClick={() => {
-                        setMovingArrowId(selectedArrowId);
-                        setFullSizeArrowMode(false);
-                      }}
-                      sx={{
-                        bgcolor: movingArrowId
-                          ? "primary.main"
-                          : "rgba(0, 0, 0, 0.5)",
-                        color: "white",
-                        "&:hover":
-                          selectedArrowId && selectedArrowId !== "legacy"
-                            ? { bgcolor: "primary.dark" }
-                            : {},
-                      }}
-                    >
-                      Move selected
-                    </Button>
-                    <Button
-                      variant="contained"
-                      size="small"
-                      disabled={!selectedArrowId}
-                      startIcon={<CloseIcon />}
-                      onClick={() => {
-                        if (selectedArrowId) {
-                          if (selectedArrowId === "legacy") {
-                            handleClearAllLeadArrows(fullSizePhotoId);
-                          } else {
-                            handleDeleteLeadPhotoArrow(
-                              fullSizePhotoId,
-                              selectedArrowId,
-                            );
-                          }
-                          setSelectedArrowId(null);
-                        }
-                      }}
-                      sx={{
-                        bgcolor: "rgba(244, 67, 54, 0.9)",
-                        color: "white",
-                        "&:hover": { bgcolor: "rgba(244, 67, 54, 1)" },
-                      }}
-                    >
-                      Delete selected
-                    </Button>
-                    <Typography
-                      component="span"
-                      sx={{
-                        color: "rgba(255,255,255,0.9)",
-                        fontSize: "0.85rem",
-                        alignSelf: "center",
-                        ml: 1,
-                      }}
-                    >
-                      Arrow color:
-                    </Typography>
-                    {LEAD_PHOTO_ARROW_COLORS.map(({ name, hex }) => (
-                      <Box
-                        key={hex}
-                        onClick={() => {
-                          setSelectedArrowColor(hex);
-                          if (
-                            selectedArrowId &&
-                            selectedArrowId !== "legacy"
-                          ) {
-                            handleUpdateLeadPhotoArrow(
-                              fullSizePhotoId,
-                              selectedArrowId,
-                              { color: hex },
-                            );
-                          }
-                        }}
-                        sx={{
-                          width: 28,
-                          height: 28,
-                          borderRadius: "50%",
-                          bgcolor: hex,
-                          border:
-                            selectedArrowColor === hex
-                              ? "3px solid #2196f3"
-                              : "2px solid black",
-                          cursor: "pointer",
-                          flexShrink: 0,
-                          "&:hover": {
-                            borderColor:
-                              selectedArrowColor === hex
-                                ? "#2196f3"
-                                : "rgba(255,255,255,0.8)",
-                            transform: "scale(1.1)",
-                          },
-                          transition: "border-color 0.15s, transform 0.15s",
-                        }}
-                        title={name}
-                      />
-                    ))}
-                </Box>
-              )}
-              {(fullSizeArrowMode || movingArrowId) &&
-                leadItemPhotoArrowsAvailable && (
-                  <Typography
-                    variant="body2"
-                    sx={{ color: "rgba(255, 255, 255, 0.9)", mb: 1 }}
-                  >
-                    {movingArrowId
-                      ? "Click on the photo to move the selected arrow"
-                      : "Click on the photo to place a new arrow"}
-                  </Typography>
-                )}
-              <Box
-                sx={{
-                  position: "relative",
-                  display: "inline-flex",
-                  justifyContent: "center",
-                  alignItems: "center",
-                }}
-              >
-                <img
-                  src={fullSizePhotoUrl || fullSizeLeadPhoto.data}
-                  alt="Full size"
-                  style={{
-                    maxWidth: "100%",
-                    maxHeight: "75vh",
-                    objectFit: "contain",
-                    cursor:
-                      leadItemPhotoArrowsAvailable &&
-                      (fullSizeArrowMode || movingArrowId)
-                        ? "crosshair"
-                        : "default",
+                <PhotoArrowToolbar
+                  drawMode={fullSizeArrowMode}
+                  onDrawModeChange={(next) => {
+                    setFullSizeArrowMode(next);
+                    if (next) setSelectedArrowId(null);
                   }}
-                  onClick={handleFullSizeLeadPhotoClickForArrow}
-                />
-                {leadItemPhotoArrowsAvailable &&
-                  getLeadAssessmentPhotoArrows(fullSizeLeadPhoto).map(
-                    (arr, arrIdx) => {
-                      const arrowColor =
-                        arr.color || DEFAULT_PHOTO_ARROW_COLOR;
-                      const isSelected = selectedArrowId === arr._id;
-                      const rot =
-                        arr.rotation ?? DEFAULT_PHOTO_ARROW_ROTATION;
-                      const tipOff = getLeadPhotoArrowTipOffset(rot);
-                      return (
-                        <Box
-                          key={arr._id || `fs-arrow-${arrIdx}`}
-                          sx={{
-                            position: "absolute",
-                            left: `${(arr.x ?? 0.5) * 100}%`,
-                            top: `${(arr.y ?? 0.5) * 100}%`,
-                            transform: `translate(${-tipOff.x * 100}%, ${-tipOff.y * 100}%)`,
-                            pointerEvents: "auto",
-                            cursor: "pointer",
-                            outline: isSelected ? "3px solid white" : "none",
-                            outlineOffset: 2,
-                            borderRadius: 1,
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedArrowId(arr._id || "legacy");
-                            setSelectedArrowColor(
-                              arr.color || DEFAULT_PHOTO_ARROW_COLOR,
-                            );
-                          }}
-                        >
-                          <Box sx={{ transform: `rotate(${rot}deg)` }}>
-                            <svg
-                              width="56"
-                              height="56"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              xmlns="http://www.w3.org/2000/svg"
-                              style={{ pointerEvents: "none" }}
-                            >
-                              <line
-                                x1="12"
-                                y1="22"
-                                x2="12"
-                                y2="10"
-                                stroke="rgba(0,0,0,0.5)"
-                                strokeWidth="2.5"
-                                strokeLinecap="round"
-                              />
-                              <line
-                                x1="12"
-                                y1="22"
-                                x2="12"
-                                y2="10"
-                                stroke={arrowColor}
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                              />
-                              <path
-                                d="M12 2 L8 10 L16 10 Z"
-                                fill="rgba(0,0,0,0.4)"
-                                stroke="rgba(0,0,0,0.6)"
-                                strokeWidth="1"
-                                strokeLinejoin="round"
-                              />
-                              <path
-                                d="M12 2 L8 10 L16 10 Z"
-                                fill={arrowColor}
-                                stroke={arrowColor}
-                                strokeWidth="0.5"
-                                strokeLinejoin="round"
-                              />
-                            </svg>
-                          </Box>
-                        </Box>
+                  selectedArrowId={selectedArrowId}
+                  onDeleteSelected={() => {
+                    if (!selectedArrowId) return;
+                    if (selectedArrowId === "legacy") {
+                      handleClearAllLeadArrows(fullSizePhotoId);
+                    } else {
+                      handleDeleteLeadPhotoArrow(
+                        fullSizePhotoId,
+                        selectedArrowId,
                       );
-                    },
-                  )}
+                    }
+                    setSelectedArrowId(null);
+                  }}
+                  selectedColor={selectedArrowColor}
+                  onColorChange={(hex) => {
+                    setSelectedArrowColor(hex);
+                    if (selectedArrowId && selectedArrowId !== "legacy") {
+                      handleUpdateLeadPhotoArrow(
+                        fullSizePhotoId,
+                        selectedArrowId,
+                        { color: hex },
+                      );
+                    }
+                  }}
+                />
+              )}
+              <Box sx={{ position: "relative" }}>
+                {leadItemPhotoArrowsAvailable ? (
+                  <PhotoArrowEditor
+                    src={fullSizePhotoUrl || fullSizeLeadPhoto.data}
+                    alt="Full size"
+                    arrows={getLeadAssessmentPhotoArrows(fullSizeLeadPhoto)}
+                    drawMode={fullSizeArrowMode}
+                    selectedArrowId={selectedArrowId}
+                    selectedColor={selectedArrowColor}
+                    onSelectArrow={(arrowId) => {
+                      setSelectedArrowId(arrowId);
+                      if (arrowId && arrowId !== "legacy") {
+                        const arr = getLeadAssessmentPhotoArrows(
+                          fullSizeLeadPhoto,
+                        ).find((a) => a._id === arrowId);
+                        if (arr?.color) setSelectedArrowColor(arr.color);
+                      }
+                    }}
+                    onDrawComplete={(arrow) => {
+                      handleAddLeadPhotoArrow(fullSizePhotoId, arrow);
+                    }}
+                    onMoveComplete={(arrowId, updates) => {
+                      handleUpdateLeadPhotoArrow(
+                        fullSizePhotoId,
+                        arrowId,
+                        updates,
+                        { silent: true },
+                      );
+                    }}
+                  />
+                ) : (
+                  <img
+                    src={fullSizePhotoUrl || fullSizeLeadPhoto.data}
+                    alt="Full size"
+                    style={{
+                      maxWidth: "100%",
+                      maxHeight: "75vh",
+                      objectFit: "contain",
+                    }}
+                  />
+                )}
                 <IconButton
                   size="small"
                   sx={{
