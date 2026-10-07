@@ -7,6 +7,39 @@ const Equipment = require('../models/Equipment');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 
+const assertActivePneumaticTester = async (pneumaticTesterId) => {
+  const id = pneumaticTesterId && typeof pneumaticTesterId === 'object'
+    ? pneumaticTesterId._id || pneumaticTesterId
+    : pneumaticTesterId;
+  const idString = id != null ? String(id).trim() : '';
+  if (!idString) {
+    const error = new Error('Please select a pneumatic tester');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!mongoose.Types.ObjectId.isValid(idString)) {
+    const error = new Error('Selected pneumatic tester was not found');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const tester = await Equipment.findOne({
+    _id: idString,
+    equipmentType: 'Pneumatic tester',
+    status: 'active',
+  });
+  if (!tester) {
+    const error = new Error('Please select an active pneumatic tester');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return tester._id;
+};
+
+const calibrationHasTestResults = (testResults) =>
+  Array.isArray(testResults) && testResults.length > 0;
+
 // Get all calibrations for a specific pump
 router.get('/pump/:pumpId', auth, checkPermission(['calibrations.view']), async (req, res) => {
   try {
@@ -45,6 +78,7 @@ router.get('/pump/:pumpId', auth, checkPermission(['calibrations.view']), async 
       .limit(parseInt(limit))
       .populate('calibratedBy', 'firstName lastName')
       .populate('flowmeterId', 'equipmentReference brandModel')
+      .populate('pneumaticTesterId', 'equipmentReference brandModel')
       .lean(); // Use lean() to allow manual population
 
     // Manually populate pumpId with Equipment data since schema references AirPump but stores Equipment IDs
@@ -74,6 +108,7 @@ router.get('/pump/:pumpId', auth, checkPermission(['calibrations.view']), async 
         testsPassed: cal.testsPassed,
         totalTests: cal.totalTests,
         flowmeterId: cal.flowmeterId,
+        pneumaticTesterId: cal.pneumaticTesterId,
         createdAt: cal.createdAt,
         updatedAt: cal.updatedAt
       })),
@@ -143,6 +178,7 @@ router.post('/pumps/bulk', auth, checkPermission(['calibrations.view']), async (
       .limit(parseInt(limit))
       .populate('calibratedBy', 'firstName lastName')
       .populate('flowmeterId', 'equipmentReference brandModel')
+      .populate('pneumaticTesterId', 'equipmentReference brandModel')
       .lean(); // Use lean() for better performance and to allow manual population
 
     console.log(`Bulk fetch: Found ${calibrations.length} total calibrations`);
@@ -196,6 +232,7 @@ router.post('/pumps/bulk', auth, checkPermission(['calibrations.view']), async (
         testsPassed: cal.testsPassed,
         totalTests: cal.totalTests,
         flowmeterId: cal.flowmeterId,
+        pneumaticTesterId: cal.pneumaticTesterId,
         createdAt: cal.createdAt,
         updatedAt: cal.updatedAt
       });
@@ -215,7 +252,8 @@ router.get('/:id', auth, checkPermission(['calibrations.view']), async (req, res
     const calibration = await AirPumpCalibration.findById(req.params.id)
       .populate('calibratedBy', 'firstName lastName')
       .populate('pumpId', 'pumpReference pumpDetails')
-      .populate('flowmeterId', 'equipmentReference brandModel');
+      .populate('flowmeterId', 'equipmentReference brandModel')
+      .populate('pneumaticTesterId', 'equipmentReference brandModel');
 
     if (!calibration) {
       return res.status(404).json({ message: 'Calibration record not found' });
@@ -234,6 +272,7 @@ router.get('/:id', auth, checkPermission(['calibrations.view']), async (req, res
       testsPassed: calibration.testsPassed,
       totalTests: calibration.totalTests,
       flowmeterId: calibration.flowmeterId,
+      pneumaticTesterId: calibration.pneumaticTesterId,
       createdAt: calibration.createdAt,
       updatedAt: calibration.updatedAt
     };
@@ -254,6 +293,14 @@ router.post('/', auth, checkPermission(['calibrations.create']), async (req, res
       ...req.body,
       calibratedBy: req.user.id
     };
+
+    if (calibrationHasTestResults(calibrationData.testResults)) {
+      calibrationData.pneumaticTesterId = await assertActivePneumaticTester(
+        calibrationData.pneumaticTesterId
+      );
+    } else {
+      delete calibrationData.pneumaticTesterId;
+    }
 
     console.log('Calibration data after adding user:', JSON.stringify(calibrationData, null, 2));
 
@@ -311,12 +358,13 @@ router.post('/', auth, checkPermission(['calibrations.create']), async (req, res
 
     const populatedCalibration = await AirPumpCalibration.findById(savedCalibration._id)
       .populate('calibratedBy', 'firstName lastName')
-      .populate('pumpId', 'pumpReference pumpDetails equipmentReference brandModel');
+      .populate('pumpId', 'pumpReference pumpDetails equipmentReference brandModel')
+      .populate('pneumaticTesterId', 'equipmentReference brandModel');
 
     res.status(201).json(populatedCalibration);
   } catch (error) {
     console.error('Error creating calibration:', error);
-    res.status(400).json({ message: error.message });
+    res.status(error.statusCode || 400).json({ message: error.message });
   }
 });
 
@@ -326,6 +374,16 @@ router.put('/:id', auth, checkPermission(['calibrations.edit']), async (req, res
     const calibration = await AirPumpCalibration.findById(req.params.id);
     if (!calibration) {
       return res.status(404).json({ message: 'Calibration record not found' });
+    }
+
+    const nextTestResults = req.body.testResults !== undefined
+      ? req.body.testResults
+      : calibration.testResults;
+    if (calibrationHasTestResults(nextTestResults)) {
+      const testerId = req.body.pneumaticTesterId !== undefined
+        ? req.body.pneumaticTesterId
+        : calibration.pneumaticTesterId;
+      req.body.pneumaticTesterId = await assertActivePneumaticTester(testerId);
     }
 
     // Update fields
@@ -377,12 +435,13 @@ router.put('/:id', auth, checkPermission(['calibrations.edit']), async (req, res
     const populatedCalibration = await AirPumpCalibration.findById(updatedCalibration._id)
       .populate('calibratedBy', 'firstName lastName')
       .populate('pumpId', 'pumpReference pumpDetails')
-      .populate('flowmeterId', 'equipmentReference brandModel');
+      .populate('flowmeterId', 'equipmentReference brandModel')
+      .populate('pneumaticTesterId', 'equipmentReference brandModel');
 
     res.json(populatedCalibration);
   } catch (error) {
     console.error('Error updating calibration:', error);
-    res.status(400).json({ message: error.message });
+    res.status(error.statusCode || 400).json({ message: error.message });
   }
 });
 

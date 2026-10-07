@@ -578,6 +578,25 @@ const AsbestosAssessment = () => {
     job.noSamplesCollected === true ||
     job.originalData?.noSamplesCollected === true;
 
+  /** Lab results on an L&D supplied job are part of the assessment report. */
+  const fibreIdReportAuthorised = (job) => {
+    const data = job?.originalData || job;
+    const approved = data?.reportApprovedBy;
+    return approved != null && String(approved).trim() !== "";
+  };
+
+  const assessmentDependsOnLdJob = (job) => {
+    const data = job?.originalData || job;
+    if (hasNoSamplesCollected(job)) return false;
+    return (
+      data?.samplesReceivedDate != null ||
+      (data?.labSamplesStatus != null && data.labSamplesStatus !== "")
+    );
+  };
+
+  const ldJobReadyForAssessmentSignOff = (job) =>
+    !assessmentDependsOnLdJob(job) || fibreIdReportAuthorised(job);
+
   /** True when report is authorised (reportAuthorisedBy set) – report is read-only. Uses authorisation (final sign-off), not "ready for review" (reportApprovedBy). Closed jobs are removed from the list. */
   const isJobReportLocked = (job) => {
     const data = job?.originalData || job;
@@ -1081,10 +1100,10 @@ const AsbestosAssessment = () => {
           : currentUser?.name || currentUser?.email || "Unknown";
       const assessment = job.originalData || job;
       await asbestosAssessmentService.updateAsbestosAssessment(job.id, {
-        ...assessment,
+        projectId: assessment.projectId?._id || assessment.projectId,
+        assessmentDate: assessment.assessmentDate || job.surveyDate,
         reportApprovedBy: approver,
-        reportIssueDate: new Date().toISOString(),
-        status: "report-ready-for-review",
+        reportIssueDate: assessment.reportIssueDate || new Date().toISOString(),
       });
       clearJobsCache();
       await fetchJobs({ force: true, silent: true });
@@ -1561,12 +1580,13 @@ const AsbestosAssessment = () => {
                             alignItems: "center",
                           }}
                         >
-                          {/* Complete: only when ASSESSMENT report is authorised (reportAuthorisedBy). Restricted to admins or users with Can Set Job Complete. */}
+                          {/* Close only after the assessment report is authorised, and after the L&D supplied job when samples went to the lab. */}
                           {!!(
                             job.originalData?.reportAuthorisedBy ||
                             job.reportAuthorisedBy
                           ) &&
-                            canCompleteAssessment && (
+                            canCompleteAssessment &&
+                            ldJobReadyForAssessmentSignOff(job) && (
                               <Button
                                 variant="outlined"
                                 size="small"
@@ -1586,6 +1606,23 @@ const AsbestosAssessment = () => {
                               >
                                 Close Job
                               </Button>
+                            )}
+                          {!!(
+                            job.originalData?.reportAuthorisedBy ||
+                            job.reportAuthorisedBy
+                          ) &&
+                            canCompleteAssessment &&
+                            !ldJobReadyForAssessmentSignOff(job) && (
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  color: theme.palette.warning.main,
+                                  fontStyle: "italic",
+                                  fontWeight: "medium",
+                                }}
+                              >
+                                L&D supplied job not authorised
+                              </Typography>
                             )}
                           {(job.status === "report-ready-for-review" ||
                             job.status === "complete") && (
@@ -1635,18 +1672,24 @@ const AsbestosAssessment = () => {
                               hasPermission(currentUser, "asbestos.edit") &&
                               !canAuthorise;
 
+                            const reportReadyStatus =
+                              job.status === "report-ready-for-review" ||
+                              job.status === "complete";
+                            const ldReady = ldJobReadyForAssessmentSignOff(job);
                             const showAuthorise =
                               !reportAuthorised &&
                               hasRetainedPdf &&
                               canAuthorise &&
-                              (job.status === "report-ready-for-review" ||
-                                job.status === "complete");
+                              reportReadyStatus &&
+                              ldReady;
                             const showSend =
                               !reportAuthorised &&
                               hasRetainedPdf &&
                               canSendForApproval &&
-                              (job.status === "report-ready-for-review" ||
-                                job.status === "complete");
+                              reportReadyStatus &&
+                              ldReady;
+                            const showAwaitingLd =
+                              !reportAuthorised && reportReadyStatus && !ldReady;
                             const alreadySentForAuthorisation = !!(
                               job.originalData?.authorisationRequestedBy ||
                               job.authorisationRequestedBy
@@ -1654,6 +1697,18 @@ const AsbestosAssessment = () => {
 
                             return (
                               <>
+                                {showAwaitingLd && (
+                                  <Typography
+                                    variant="caption"
+                                    sx={{
+                                      color: theme.palette.warning.main,
+                                      fontStyle: "italic",
+                                      fontWeight: "medium",
+                                    }}
+                                  >
+                                    L&D supplied job not authorised
+                                  </Typography>
+                                )}
                                 {showAuthorise && (
                                   <Button
                                     variant="contained"

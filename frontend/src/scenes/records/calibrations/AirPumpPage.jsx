@@ -64,6 +64,8 @@ const AirPumpPage = () => {
   const [pumpsLoading, setPumpsLoading] = useState(false);
   const [flowmeters, setFlowmeters] = useState([]);
   const [flowmetersLoading, setFlowmetersLoading] = useState(false);
+  const [pneumaticTesters, setPneumaticTesters] = useState([]);
+  const [pneumaticTestersLoading, setPneumaticTestersLoading] = useState(false);
   const { activeTechnicians, loading: userListsLoading } = useUserLists();
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -85,6 +87,8 @@ const AirPumpPage = () => {
     technicianName: "",
     flowmeterId: "",
     flowmeterReference: "",
+    pneumaticTesterId: "",
+    pneumaticTesterReference: "",
     notes: "",
   });
 
@@ -432,10 +436,37 @@ const AirPumpPage = () => {
     }
   }, []);
 
+  const fetchPneumaticTesters = useCallback(async () => {
+    try {
+      setPneumaticTestersLoading(true);
+      const response = await equipmentService.getAll({
+        equipmentType: "Pneumatic tester",
+        status: "active",
+        limit: 1000,
+      });
+      const testers = (response.equipment || [])
+        .filter(
+          (item) =>
+            item.equipmentType === "Pneumatic tester" &&
+            item.status === "active",
+        )
+        .sort((a, b) =>
+          a.equipmentReference.localeCompare(b.equipmentReference),
+        );
+      setPneumaticTesters(testers);
+    } catch (err) {
+      console.error("Error fetching pneumatic testers:", err);
+      setPneumaticTesters([]);
+    } finally {
+      setPneumaticTestersLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchPumps();
     fetchFlowmeters();
-  }, [fetchPumps, fetchFlowmeters]);
+    fetchPneumaticTesters();
+  }, [fetchPumps, fetchFlowmeters, fetchPneumaticTesters]);
 
   // Listen for equipment data updates
   useEffect(() => {
@@ -460,6 +491,7 @@ const AirPumpPage = () => {
       staticFormData.date !== formatDateForInput(new Date()) ||
       staticFormData.technicianId ||
       staticFormData.flowmeterId ||
+      staticFormData.pneumaticTesterId ||
       staticFormData.notes;
 
     const hasCalibrations =
@@ -489,6 +521,8 @@ const AirPumpPage = () => {
       technicianName: "",
       flowmeterId: "",
       flowmeterReference: "",
+      pneumaticTesterId: "",
+      pneumaticTesterReference: "",
       notes: "",
     });
     setCalibrations([]);
@@ -505,6 +539,8 @@ const AirPumpPage = () => {
       technicianName: "",
       flowmeterId: "",
       flowmeterReference: "",
+      pneumaticTesterId: "",
+      pneumaticTesterReference: "",
       notes: "",
     });
     setCalibrations([]);
@@ -533,6 +569,20 @@ const AirPumpPage = () => {
       technicianId: technicianId,
       technicianName: selectedTechnician
         ? `${selectedTechnician.firstName} ${selectedTechnician.lastName}`
+        : "",
+    }));
+    setHasUnsavedChanges(true);
+  };
+
+  const handlePneumaticTesterChange = (pneumaticTesterEquipmentId) => {
+    const selectedTester = pneumaticTesters.find(
+      (tester) => String(tester._id) === String(pneumaticTesterEquipmentId),
+    );
+    setStaticFormData((prev) => ({
+      ...prev,
+      pneumaticTesterId: pneumaticTesterEquipmentId,
+      pneumaticTesterReference: selectedTester
+        ? selectedTester.equipmentReference
         : "",
     }));
     setHasUnsavedChanges(true);
@@ -694,6 +744,11 @@ const AirPumpPage = () => {
         return;
       }
 
+      if (!staticFormData.pneumaticTesterId) {
+        setError("Please select a pneumatic tester");
+        return;
+      }
+
       if (calibrations.length === 0) {
         setError("Please add at least one calibration");
         return;
@@ -751,6 +806,7 @@ const AirPumpPage = () => {
         overallResult: overallResult,
         notes: staticFormData.notes || "",
         flowmeterId: staticFormData.flowmeterId || null,
+        pneumaticTesterId: staticFormData.pneumaticTesterId,
       };
 
       console.log("Sending calibration data:", backendData);
@@ -1242,6 +1298,26 @@ const AirPumpPage = () => {
                     loading={flowmetersLoading}
                     emptyOptionsText="No calibrated flowmeters available"
                   />
+                  <LookupField
+                    label="Pneumatic Tester"
+                    required
+                    value={staticFormData.pneumaticTesterId}
+                    displayLabel={
+                      staticFormData.pneumaticTesterReference ||
+                      buildEquipmentDisplayLabel(
+                        pneumaticTesters.find(
+                          (tester) =>
+                            String(tester._id) ===
+                            String(staticFormData.pneumaticTesterId),
+                        ),
+                      )
+                    }
+                    options={equipmentOptionsFromList(pneumaticTesters)}
+                    onChange={(e) => handlePneumaticTesterChange(e.target.value)}
+                    disabled={pneumaticTestersLoading}
+                    loading={pneumaticTestersLoading}
+                    emptyOptionsText="No active pneumatic testers found"
+                  />
                 </Box>
               </Box>
 
@@ -1514,6 +1590,7 @@ const AirPumpPage = () => {
                 !staticFormData.pumpEquipmentId ||
                 !staticFormData.date ||
                 !staticFormData.technicianId ||
+                !staticFormData.pneumaticTesterId ||
                 calibrations.length === 0 ||
                 calibrations.some((cal) => !cal.flowRate || !cal.actualFlow)
               }

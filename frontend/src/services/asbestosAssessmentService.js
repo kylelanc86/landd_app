@@ -6,8 +6,14 @@ import {
   withRevisionAndExtension,
 } from '../utils/reportFilenames';
 
+function assessmentReportIsAuthorised(assessmentData) {
+  const approvedBy = assessmentData?.reportAuthorisedBy;
+  return approvedBy != null && String(approvedBy).trim() !== "";
+}
+
 function buildAssessmentDownloadFallback(assessmentData, isResidential = false) {
-  if (!isPlaceholderReportReference(assessmentData?.reportReference)) {
+  const authorised = assessmentReportIsAuthorised(assessmentData);
+  if (authorised && !isPlaceholderReportReference(assessmentData?.reportReference)) {
     return withRevisionAndExtension(
       assessmentData.reportReference,
       assessmentData.revision,
@@ -17,7 +23,7 @@ function buildAssessmentDownloadFallback(assessmentData, isResidential = false) 
     projectId:
       assessmentData?.projectId?.projectID || assessmentData?.jobReference,
     siteName: assessmentData?.projectId?.name || assessmentData?.siteName,
-    reportIssueDate: assessmentData?.reportAuthorisedAt,
+    reportIssueDate: authorised ? assessmentData?.reportAuthorisedAt : null,
     revision: assessmentData?.revision,
     isResidential,
   });

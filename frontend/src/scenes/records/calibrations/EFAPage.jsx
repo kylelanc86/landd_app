@@ -34,7 +34,11 @@ import { equipmentService } from "../../../services/equipmentService";
 import { efaService } from "../../../services/efaService";
 import userService from "../../../services/userService";
 import LookupField from "../../../components/LookupField";
-import { userOptionsFromList } from "../../../utils/lookupOptions";
+import {
+  buildEquipmentDisplayLabel,
+  equipmentOptionsFromList,
+  userOptionsFromList,
+} from "../../../utils/lookupOptions";
 import {
   CALIBRATION_TABS,
 } from "./calibrationsNavigationUtils";
@@ -51,6 +55,8 @@ const EFAPage = () => {
   // EFA equipment state
   const [efas, setEfas] = useState([]);
   const [efasLoading, setEfasLoading] = useState(false);
+  const [calipers, setCalipers] = useState([]);
+  const [calipersLoading, setCalipersLoading] = useState(false);
 
   // Combined data for table display
   const [tableData, setTableData] = useState([]);
@@ -76,6 +82,7 @@ const EFAPage = () => {
   useEffect(() => {
     fetchCalibrations();
     fetchEfas();
+    fetchCalipers();
     fetchLabSignatories();
   }, []);
 
@@ -129,6 +136,33 @@ const EFAPage = () => {
     }
   };
 
+  const fetchCalipers = async () => {
+    try {
+      setCalipersLoading(true);
+      const response = await equipmentService.getAll({
+        equipmentType: "Caliper",
+        limit: 1000,
+      });
+      const caliperEquipment = (response.equipment || []).filter(
+        (item) => item.equipmentType === "Caliper",
+      );
+      setCalipers(caliperEquipment);
+    } catch (err) {
+      console.error("Error fetching calipers:", err);
+      setError("Failed to load calipers");
+    } finally {
+      setCalipersLoading(false);
+    }
+  };
+
+  const caliperDisplayLabel = (reference) => {
+    if (!reference) return "";
+    const caliper = calipers.find(
+      (item) => item.equipmentReference === reference,
+    );
+    return buildEquipmentDisplayLabel(caliper, reference);
+  };
+
   const fetchLabSignatories = async () => {
     try {
       setLabSignatoriesLoading(true);
@@ -174,6 +208,7 @@ const EFAPage = () => {
   const [formData, setFormData] = useState({
     date: formatDateForInput(new Date()),
     filterHolderModel: "",
+    caliperReference: "",
     filter1Diameter1: "",
     filter1Diameter2: "",
     filter2Diameter1: "",
@@ -193,6 +228,7 @@ const EFAPage = () => {
     setFormData({
       date: todayDate,
       filterHolderModel: "",
+      caliperReference: "",
       filter1Diameter1: "",
       filter1Diameter2: "",
       filter2Diameter1: "",
@@ -225,6 +261,7 @@ const EFAPage = () => {
       setFormData({
         date: formatDateForInput(calibration.date),
         filterHolderModel: calibration.filterHolderModel || "",
+        caliperReference: calibration.caliperReference || "",
         filter1Diameter1: calibration.filter1Diameter1 || "",
         filter1Diameter2: calibration.filter1Diameter2 || "",
         filter2Diameter1: calibration.filter2Diameter1 || "",
@@ -266,14 +303,23 @@ const EFAPage = () => {
       if (
         !formData.date ||
         !formData.filterHolderModel ||
+        !formData.caliperReference ||
         !formData.technicianId
       ) {
         console.log("Validation failed:", {
           date: formData.date,
           filterHolderModel: formData.filterHolderModel,
+          caliperReference: formData.caliperReference,
           technicianId: formData.technicianId,
         });
-        setError("Please fill in all required fields");
+        setError(
+          formData.date &&
+            formData.filterHolderModel &&
+            formData.technicianId &&
+            !formData.caliperReference
+            ? "Please select a caliper"
+            : "Please fill in all required fields",
+        );
         setLoading(false); // Make sure to reset loading state
         return;
       }
@@ -307,6 +353,7 @@ const EFAPage = () => {
       // Map form data to backend expected format
       const backendData = {
         filterHolderModel: formData.filterHolderModel,
+        caliperReference: formData.caliperReference,
         date: new Date(formData.date), // Ensure date is a Date object
         filter1Diameter1: parseFloat(formData.filter1Diameter1) || null,
         filter1Diameter2: parseFloat(formData.filter1Diameter2) || null,
@@ -556,7 +603,12 @@ const EFAPage = () => {
             <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
               <TableCell>Calibration Date</TableCell>
               <TableCell>Filter Holder Model</TableCell>
-              <TableCell>Avg Diameter(mm)</TableCell>
+              <TableCell>
+                <Box component="span" sx={{ display: "inline-block" }}>
+                  Caliper
+                </Box>
+              </TableCell>
+              <TableCell>Avg Diameter (mm)</TableCell>
               <TableCell>Area (mm²)</TableCell>
               <TableCell>Status</TableCell>
               <TableCell>Technician</TableCell>
@@ -567,13 +619,13 @@ const EFAPage = () => {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={8} align="center">
+                <TableCell colSpan={9} align="center">
                   <CircularProgress />
                 </TableCell>
               </TableRow>
             ) : tableData.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} align="center">
+                <TableCell colSpan={9} align="center">
                   <Typography variant="body2" color="text.secondary">
                     No EFA calibrations found
                   </Typography>
@@ -586,6 +638,17 @@ const EFAPage = () => {
                     {item.date ? formatDate(item.date) : "-"}
                   </TableCell>
                   <TableCell>{item.filterHolderModel || "-"}</TableCell>
+                  <TableCell>
+                    <Box
+                      component="span"
+                      sx={{
+                        display: "inline-block",
+                        pr: `${(item.caliperReference || "-").length * 0.2}ch`,
+                      }}
+                    >
+                      {item.caliperReference || "-"}
+                    </Box>
+                  </TableCell>
                   <TableCell>
                     {(() => {
                       const filter1Avg =
@@ -755,6 +818,31 @@ const EFAPage = () => {
               disabled={efasLoading}
               loading={efasLoading}
               emptyOptionsText="No Filter Holders found"
+            />
+            <LookupField
+              mode="edit"
+              label="Caliper"
+              required={!lookupViewMode || !editingCalibration?.caliperReference}
+              value={formData.caliperReference}
+              displayLabel={caliperDisplayLabel(formData.caliperReference)}
+              options={equipmentOptionsFromList(
+                calipers,
+                (item) => item.equipmentReference,
+              )}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  caliperReference: e.target.value,
+                }))
+              }
+              disabled={
+                calipersLoading ||
+                (lookupViewMode && Boolean(editingCalibration?.caliperReference))
+              }
+              loading={calipersLoading}
+              allowEmpty
+              emptyOptionLabel="Select caliper"
+              emptyOptionsText="No calipers found in equipment"
             />
             <TextField
               fullWidth
@@ -1137,7 +1225,7 @@ const EFAPage = () => {
           <Button onClick={handleCloseDialog}>
             {lookupViewMode ? "Close" : "Cancel"}
           </Button>
-          {!lookupViewMode && (
+          {(!lookupViewMode || !editingCalibration?.caliperReference) && (
             <Button onClick={handleSubmit} variant="contained" disabled={loading}>
               {loading ? (
                 <CircularProgress size={20} />

@@ -98,6 +98,54 @@ function getAssessmentIssueDateValue(assessmentData) {
   return assessmentData?.reportAuthorisedAt || null;
 }
 
+function assessmentReportIsAuthorised(assessmentData) {
+  return (
+    assessmentData?.reportAuthorisedBy != null &&
+    String(assessmentData.reportAuthorisedBy).trim() !== ''
+  );
+}
+
+/** Unauthorised asbestos/residential reports use [DRAFT]. The saved issue date is kept for the next authorisation. */
+function resolveAssessmentReportFilename(assessmentData, options = {}) {
+  const {
+    projectId,
+    siteName,
+    sequenceNumber,
+    isResidential = false,
+    isLeadAssessment = false,
+    includeRevision = true,
+    includeExtension = true,
+  } = options;
+  const authorised = isLeadAssessment || assessmentReportIsAuthorised(assessmentData);
+  if (
+    !isLeadAssessment &&
+    authorised &&
+    assessmentData?.reportReference &&
+    !isPlaceholderReportReference(assessmentData.reportReference)
+  ) {
+    if (!includeExtension && !includeRevision) {
+      return toReportReference(assessmentData.reportReference);
+    }
+    return withRevisionAndExtension(
+      assessmentData.reportReference,
+      includeRevision ? assessmentData.revision : 0,
+      includeExtension,
+    );
+  }
+  const built = buildAssessmentReportFilename({
+    projectId,
+    siteName,
+    reportIssueDate: authorised ? getAssessmentIssueDateValue(assessmentData) : null,
+    sequenceNumber: authorised ? sequenceNumber : undefined,
+    revision: includeRevision ? assessmentData?.revision : 0,
+    isResidential,
+    isLeadAssessment,
+    includeRevision,
+    includeExtension,
+  });
+  return includeExtension ? built : toReportReference(built);
+}
+
 /**
  * Rebuild and persist reportReference when it was frozen as Unknown_*, [DRAFT], or empty.
  * Only persists once the assessment is authorised (has a real issue date).
@@ -4595,29 +4643,18 @@ async function runAssessmentPdfV3(assessmentData, isResidential) {
 
   const projectId = assessmentData.projectId?.projectID || 'Unknown';
   const siteName = assessmentData.projectId?.name || assessmentData.siteName || 'Unknown';
-  const reportIssueDate = getAssessmentIssueDateValue(assessmentData);
   const sequenceNumber = await calculateAssessmentSequenceNumber(
     assessmentData,
     useResidentialLayout,
     isLeadAssessment,
   );
-  const filename = assessmentData.reportReference &&
-    !isLeadAssessment &&
-    !isPlaceholderReportReference(assessmentData.reportReference)
-    ? withRevisionAndExtension(
-        assessmentData.reportReference,
-        assessmentData.revision,
-        true,
-      )
-    : buildAssessmentReportFilename({
-        projectId,
-        siteName,
-        reportIssueDate,
-        sequenceNumber,
-        revision: assessmentData.revision,
-        isResidential: useResidentialLayout,
-        isLeadAssessment,
-      });
+  const filename = resolveAssessmentReportFilename(assessmentData, {
+    projectId,
+    siteName,
+    sequenceNumber,
+    isResidential: useResidentialLayout,
+    isLeadAssessment,
+  });
 
   return { buffer: merged, filename };
 }
@@ -4676,6 +4713,41 @@ router.post('/start-asbestos-assessment-pdf', auth, async (req, res) => {
     }
     assessmentId = String(idParam);
     const requestedResidential = body.isResidential === true;
+
+    const gate = await AsbestosAssessment.findById(assessmentId)
+      .select('jobType status noSamplesCollected samplesReceivedDate labSamplesStatus reportApprovedBy')
+      .lean();
+    if (gate) {
+      const jobType = gate.jobType || 'asbestos-assessment';
+      const dependsOnLd =
+        (jobType === 'asbestos-assessment' || jobType === 'residential-asbestos') &&
+        gate.noSamplesCollected !== true &&
+        (gate.samplesReceivedDate != null || (gate.labSamplesStatus != null && gate.labSamplesStatus !== ''));
+      if (dependsOnLd) {
+        const reportFinalised = ['report-ready-for-review', 'complete'].includes(gate.status);
+        if (!reportFinalised) {
+          return res.status(400).json({
+            error: 'Finalise the assessment report before generating the PDF. The L&D supplied job must be authorised first.',
+          });
+        }
+        const fibreAuthorised =
+          gate.reportApprovedBy != null && String(gate.reportApprovedBy).trim() !== '';
+        if (!fibreAuthorised) {
+          return res.status(400).json({
+            error: 'The L&D supplied job must be authorised before this assessment report can be reviewed.',
+          });
+        }
+        const attached = await AsbestosAssessment.exists({
+          _id: gate._id,
+          fibreAnalysisReport: { $type: 'string', $gt: '' },
+        });
+        if (!attached) {
+          return res.status(400).json({
+            error: 'The L&D supplied analysis report must be attached before this assessment report can be reviewed.',
+          });
+        }
+      }
+    }
 
     jobId = `assessment-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
     const job = {
@@ -4886,20 +4958,15 @@ const generateAssessmentHTML = async (assessmentData) => {
 
     // Populate version control template with data (like clearance: REPORT_TITLE, FOOTER_TEXT, document-details-table, WATERMARK_PATH)
     const versionControlReportTitle = isResidential ? 'RESIDENTIAL ASBESTOS ASSESSMENT REPORT' : 'ASBESTOS ASSESSMENT REPORT';
-    const versionControlFilename = !isPlaceholderReportReference(assessmentData.reportReference)
-      ? toReportReference(assessmentData.reportReference)
-      : toReportReference(
-          buildAssessmentReportFilename({
-            projectId: assessmentData.projectId?.projectID,
-            siteName: assessmentData.projectId?.name || assessmentSiteAddress,
-            reportIssueDate: getAssessmentIssueDateValue(assessmentData),
-            sequenceNumber: await calculateAssessmentSequenceNumber(assessmentData, isResidential, false),
-            isResidential,
-            isLeadAssessment: false,
-            includeRevision: false,
-            includeExtension: false,
-          }),
-        );
+    const versionControlFilename = resolveAssessmentReportFilename(assessmentData, {
+      projectId: assessmentData.projectId?.projectID,
+      siteName: assessmentData.projectId?.name || assessmentSiteAddress,
+      sequenceNumber: await calculateAssessmentSequenceNumber(assessmentData, isResidential, false),
+      isResidential,
+      isLeadAssessment: false,
+      includeRevision: false,
+      includeExtension: false,
+    });
     const populatedVersionControl = versionControlTemplateWithUrl
       .replace(/\[REPORT_TITLE\]/g, versionControlReportTitle)
       .replace(/\[SITE_ADDRESS\]/g, assessmentSiteAddress)
@@ -5801,20 +5868,15 @@ const generateAssessmentCoverVersionHTMLV3 = async (assessmentData, isResidentia
     assessmentReportTitle = isResidential ? 'RESIDENTIAL ASBESTOS ASSESSMENT REPORT' : 'ASBESTOS ASSESSMENT<br />REPORT';
     assessmentFooterText = isResidential ? `Residential Asbestos Assessment Report: ${assessmentSiteAddress}` : `Asbestos Assessment Report: ${assessmentSiteAddress}`;
     versionControlReportTitle = isResidential ? 'RESIDENTIAL ASBESTOS ASSESSMENT REPORT' : (templateContent?.reportTitle || 'ASBESTOS ASSESSMENT REPORT');
-    versionControlFilename = !isPlaceholderReportReference(assessmentData.reportReference)
-      ? toReportReference(assessmentData.reportReference)
-      : toReportReference(
-          buildAssessmentReportFilename({
-            projectId: assessmentData.projectId?.projectID,
-            siteName: assessmentSiteAddress,
-            reportIssueDate: reportIssueDateValue,
-            sequenceNumber: assessmentSequenceNumber,
-            isResidential,
-            isLeadAssessment: false,
-            includeRevision: false,
-            includeExtension: false,
-          }),
-        );
+    versionControlFilename = resolveAssessmentReportFilename(assessmentData, {
+      projectId: assessmentData.projectId?.projectID,
+      siteName: assessmentSiteAddress,
+      sequenceNumber: assessmentSequenceNumber,
+      isResidential,
+      isLeadAssessment: false,
+      includeRevision: false,
+      includeExtension: false,
+    });
   }
 
   // Revision history: assessment report authorisation only (not Fibre ID approval)
@@ -7488,13 +7550,32 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
   }
 
   const registerTableHeaderHtml = '<div class="section-header assessment-register-header">Table 1: Assessment Register</div>';
-  const continuationTableBlocks = flowTableBlocks.slice(1);
+  const registerPairBreak = '<div class="page-break"></div>';
   const assessmentRegisterStartHtml = flowTableBlocks.length > 0
     ? `<div class="assessment-register-start">${registerTableHeaderHtml}${buildSampleBlockHtml(flowTableBlocks[0])}</div>`
     : `${registerTableHeaderHtml}<div class="section-body">No items</div>`;
-  const registerContinuationHtml = continuationTableBlocks.length > 0
-    ? continuationTableBlocks.map((block) => buildSampleBlockHtml(block)).join('')
-    : '';
+  // Asbestos keeps item 1 with the introduction and findings. Later items sit two to a page.
+  // Residential starts the register on a new page, so item 2 shares that page with item 1.
+  // A completed pair is followed by a page break so Discussion and Conclusions does not use the gap under two items.
+  const continuationBlocks = flowTableBlocks.slice(1);
+  const continuationParts = [];
+  const appendRegisterPairs = (blocks) => {
+    for (let i = 0; i < blocks.length; i += 2) {
+      const pair = blocks.slice(i, i + 2);
+      const pairHtml = pair.map((block) => buildSampleBlockHtml(block)).join('');
+      continuationParts.push(pair.length === 2 ? `${pairHtml}${registerPairBreak}` : pairHtml);
+    }
+  };
+  if (isResidential && continuationBlocks.length > 0) {
+    continuationParts.push(`${buildSampleBlockHtml(continuationBlocks[0])}${registerPairBreak}`);
+    appendRegisterPairs(continuationBlocks.slice(1));
+  } else {
+    appendRegisterPairs(continuationBlocks);
+  }
+  const registerContinuationHtml = continuationParts.join('');
+  const discussionFollowsItemPair = isResidential
+    ? flowTableBlocks.length >= 2 && flowTableBlocks.length % 2 === 0
+    : flowTableBlocks.length >= 3 && (flowTableBlocks.length - 1) % 2 === 0;
 
   const asbestosCountFlow = identifiedAsbestosItems.length;
   const hasSampledItemsRequiringAnalysisFlow = assessmentItems.some((i) => (i.sampleReference || '').trim() && !isVisuallyAssessed(i.asbestosContent));
@@ -7797,7 +7878,7 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
         ${assessmentRegisterStartHtml}
         ${registerContinuationHtml}
 
-        ${identifiedAsbestosItems.length > 0 ? '<div class="page-break"></div>' : ''}
+        ${!discussionFollowsItemPair && identifiedAsbestosItems.length > 0 ? '<div class="page-break"></div>' : ''}
         <div class="section-header">${escapeHtml(templateContent?.standardSections?.discussionTitle || 'DISCUSSION AND CONCLUSIONS')}</div>
         <div class="section-body discussion-wrap">
           ${asbestosCountLineHtml}

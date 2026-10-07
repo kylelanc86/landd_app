@@ -858,10 +858,18 @@ const LDsuppliedAnalysisPage = () => {
         return;
       }
 
-      // Update the assessment status and L&D supplied lab samples status
+      // Mark lab work complete without walking an authorised/complete assessment backwards.
+      const advanceAnalysisStatus = [
+        "in-progress",
+        "site-works-complete",
+        "samples-with-lab",
+      ].includes(assessment.status);
       await asbestosAssessmentService.updateAsbestosAssessment(assessmentId, {
-        ...assessment,
-        status: "sample-analysis-complete",
+        projectId: assessment.projectId?._id || assessment.projectId,
+        assessmentDate: assessment.assessmentDate,
+        ...(advanceAnalysisStatus
+          ? { status: "sample-analysis-complete" }
+          : {}),
         labSamplesStatus: "analysis-complete",
       });
 

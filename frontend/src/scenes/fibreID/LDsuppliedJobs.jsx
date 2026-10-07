@@ -385,7 +385,13 @@ const LDsuppliedJobs = () => {
   };
 
   const handleGeneratePDF = async (assessment, options = {}) => {
-    const { uploadToAssessment = false, skipOpenDownload = false } = options; // uploadToAssessment: when authorising/approving – save report to assessment. skipOpenDownload: when true, don't open PDF in new tab (e.g. on approve).
+    const {
+      uploadToAssessment = false,
+      skipOpenDownload = false,
+      reportApprovedBy: approvedByOverride = null,
+      reportIssueDate: issueDateOverride = null,
+      quiet = false,
+    } = options; // uploadToAssessment saves the authorised PDF onto the assessment.
     try {
       setGeneratingPDF((prev) => ({ ...prev, [assessment._id]: true }));
 
@@ -422,11 +428,13 @@ const LDsuppliedJobs = () => {
       });
 
       if (sampledItems.length === 0) {
-        showSnackbar(
-          "No analysed samples found. Ensure all samples are analysed before generating the PDF.",
-          "warning",
-        );
-        return;
+        if (!quiet) {
+          showSnackbar(
+            "No analysed samples found. Ensure all samples are analysed before generating the PDF.",
+            "warning",
+          );
+        }
+        return false;
       }
 
       // Transform items to match the format expected by generateFibreIDReport
@@ -502,8 +510,10 @@ const LDsuppliedJobs = () => {
         analyst: analyst,
         openInNewTab: false,
         returnPdfData: true,
-        reportApprovedBy: fullAssessment.reportApprovedBy || null,
-        reportIssueDate: fullAssessment.reportIssueDate || null,
+        reportApprovedBy:
+          approvedByOverride || fullAssessment.reportApprovedBy || null,
+        reportIssueDate:
+          issueDateOverride || fullAssessment.reportIssueDate || null,
       });
 
       // Save to assessment only when authorising, so only authorised reports attach to the asbestos assessment PDF
@@ -512,14 +522,21 @@ const LDsuppliedJobs = () => {
           pdfDataUrl && pdfDataUrl.includes(",")
             ? pdfDataUrl.split(",")[1]
             : null;
-        if (base64Data) {
-          await asbestosAssessmentService.uploadFibreAnalysisReport(
-            assessment._id,
-            {
-              reportData: base64Data,
-            },
-          );
+        if (!base64Data) {
+          if (!quiet) {
+            showSnackbar(
+              "Failed to save the Fibre ID report on the assessment.",
+              "error",
+            );
+          }
+          return false;
         }
+        await asbestosAssessmentService.uploadFibreAnalysisReport(
+          assessment._id,
+          {
+            reportData: base64Data,
+          },
+        );
       }
 
       // Open PDF in new tab unless skipOpenDownload (e.g. when approving – we still upload to assessment but don't open/download)
@@ -540,10 +557,13 @@ const LDsuppliedJobs = () => {
           window.open(pdfDataUrl, "_blank");
         }
       } else if (!pdfDataUrl) {
-        showSnackbar(
-          "PDF could not be generated (e.g. logo failed to load).",
-          "error",
-        );
+        if (!quiet) {
+          showSnackbar(
+            "PDF could not be generated (e.g. logo failed to load).",
+            "error",
+          );
+        }
+        return false;
       }
       setReportViewedAssessmentIds((prev) => new Set(prev).add(assessment._id));
       if (pdfDataUrl) {
@@ -553,9 +573,18 @@ const LDsuppliedJobs = () => {
           console.warn("Failed to persist report viewed:", e);
         }
       }
+      return true;
     } catch (error) {
       console.error("Error generating PDF:", error);
-      showSnackbar("Failed to generate report.", "error");
+      if (!quiet) {
+        showSnackbar(
+          uploadToAssessment
+            ? "The Fibre ID report was not saved on the assessment."
+            : "Failed to generate report.",
+          "error",
+        );
+      }
+      return false;
     } finally {
       setGeneratingPDF((prev) => ({ ...prev, [assessment._id]: false }));
     }
@@ -594,32 +623,52 @@ const LDsuppliedJobs = () => {
           ? `${currentUser.firstName} ${currentUser.lastName}`
           : currentUser?.name || currentUser?.email || "Unknown";
 
-      // Approve the Fibre ID report and set assessment status to report-ready-for-review.
-      // The asbestos/residential assessment report then needs separate approval (Authorise Report on Surveys page).
-      await asbestosAssessmentService.updateAsbestosAssessment(assessment._id, {
-        ...assessment,
+      // Approve the Fibre ID report and attach its PDF. Do not spread the L&D list
+      // row: it has no assessment date, and forcing status to report-ready-for-review
+      // was reopening assessments that were already authorised/complete.
+      const detailResponse =
+        await asbestosAssessmentService.getAsbestosAssessmentById(
+          assessment._id,
+          {
+            omitPhotoData: "1",
+            omitPlanFiles: "1",
+            omitFibreReport: "1",
+            omitItems: "1",
+          },
+        );
+      const fullAssessment = detailResponse.data || {};
+      const issueDate = fullAssessment.reportIssueDate || now;
+      // Save the authorised PDF onto the assessment before recording sign-off,
+      // so approval never exists without the analysis report.
+      const attached = await handleGeneratePDF(assessment, {
+        uploadToAssessment: true,
         reportApprovedBy: approver,
-        reportIssueDate: now,
-        status: "report-ready-for-review",
+        reportIssueDate: issueDate,
+      });
+      if (!attached) return;
+
+      // Lab authorisation does not finish the assessment report. The assessor
+      // finalises report content after these results are attached.
+      const markAnalysisComplete = [
+        "in-progress",
+        "site-works-complete",
+        "samples-with-lab",
+      ].includes(fullAssessment.status);
+      await asbestosAssessmentService.updateAsbestosAssessment(assessment._id, {
+        projectId: fullAssessment.projectId?._id || fullAssessment.projectId,
+        assessmentDate: fullAssessment.assessmentDate,
+        reportApprovedBy: approver,
+        reportIssueDate: issueDate,
+        labSamplesStatus: "analysis-complete",
+        ...(markAnalysisComplete ? { status: "sample-analysis-complete" } : {}),
       });
 
-      // Refresh the assessments list
-      await fetchAsbestosAssessments();
+      showSnackbar(
+        "Fibre ID report approved and attached. The assessment report can now be finalised.",
+        "success",
+      );
 
-      // Generate the approved Fibre ID report, save to assessment (so it attaches to asbestos assessment PDF), and download
-      try {
-        await handleGeneratePDF(assessment, { uploadToAssessment: true });
-        showSnackbar(
-          "Fibre ID report approved. Assessment is now ready for review.",
-          "success",
-        );
-      } catch (reportError) {
-        console.error("Error generating Fibre ID report:", reportError);
-        showSnackbar(
-          "Fibre ID report approved but failed to generate download.",
-          "warning",
-        );
-      }
+      await fetchAsbestosAssessments();
     } catch (error) {
       console.error("Error approving Fibre ID report:", error);
       showSnackbar("Failed to approve report. Please try again.", "error");
@@ -1194,8 +1243,7 @@ const LDsuppliedJobs = () => {
                                     : "PDF"}
                                 </Button>
                                 {!assessment.reportApprovedBy &&
-                                  assessment.status ===
-                                    "sample-analysis-complete" && (
+                                  labStatus === "analysis-complete" && (
                                     <Typography
                                       variant="caption"
                                       sx={{
@@ -1226,7 +1274,6 @@ const LDsuppliedJobs = () => {
                             </Box>
                             {(() => {
                               const conditions = {
-                                notAuthorised: !assessment.reportAuthorisedBy,
                                 fibreIdNotApproved: !assessment.reportApprovedBy,
                                 reportViewed:
                                   reportViewedAssessmentIds.has(assessment._id) ||
@@ -1242,18 +1289,19 @@ const LDsuppliedJobs = () => {
                                 ),
                               };
                               const canAuthorise = conditions.isLabSignatory;
-                              // Authorise/Send: after viewing, when lab complete, Fibre ID not yet approved, and assessment not yet authorised
+                              // Fibre ID sign-off is separate from assessment authorisation.
+                              // Authorising also stores the analysis PDF on the assessment.
                               const baseVisibleAuthorise =
                                 conditions.reportViewed &&
                                 conditions.labComplete &&
-                                conditions.fibreIdNotApproved &&
-                                conditions.notAuthorised;
+                                conditions.fibreIdNotApproved;
                               const visibility = {
                                 showAuthorise:
                                   baseVisibleAuthorise &&
                                   canAuthorise,
                                 showSend:
                                   baseVisibleAuthorise &&
+                                  conditions.fibreIdNotApproved &&
                                   !canAuthorise &&
                                   conditions.hasEditPermission,
                               };

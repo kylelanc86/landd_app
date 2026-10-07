@@ -6,6 +6,27 @@ const EFAArchiveService = require('../services/efaArchiveService');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 
+const assertCaliperReference = async (caliperReference) => {
+  const reference = typeof caliperReference === 'string' ? caliperReference.trim() : '';
+  if (!reference) {
+    const error = new Error('Please select a caliper');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const caliper = await Equipment.findOne({
+    equipmentReference: reference,
+    equipmentType: 'Caliper',
+  });
+  if (!caliper) {
+    const error = new Error('Selected caliper was not found');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return caliper.equipmentReference;
+};
+
 // Helper function to update EFA equipment calibration dates
 const updateEFAEquipmentCalibration = async (efaId, calibrationDate) => {
   try {
@@ -80,6 +101,7 @@ router.get('/', auth, checkPermission(['calibrations.view']), async (req, res) =
         _id: cal._id,
         date: cal.date,
         filterHolderModel: cal.filterHolderModel,
+        caliperReference: cal.caliperReference,
         filter1Diameter1: cal.filter1Diameter1,
         filter1Diameter2: cal.filter1Diameter2,
         filter2Diameter1: cal.filter2Diameter1,
@@ -147,6 +169,7 @@ router.get('/archived', auth, checkPermission(['calibrations.view']), async (req
         _id: cal._id,
         date: cal.date,
         filterHolderModel: cal.filterHolderModel,
+        caliperReference: cal.caliperReference,
         filter1Diameter1: cal.filter1Diameter1,
         filter1Diameter2: cal.filter1Diameter2,
         filter2Diameter1: cal.filter2Diameter1,
@@ -200,6 +223,7 @@ router.post('/', auth, checkPermission(['calibrations.create']), async (req, res
   try {
     const calibrationData = {
       ...req.body,
+      caliperReference: await assertCaliperReference(req.body.caliperReference),
       calibratedBy: req.user.id
     };
 
@@ -252,7 +276,7 @@ router.post('/', auth, checkPermission(['calibrations.create']), async (req, res
     if (error.errors) {
       console.error('Validation errors:', error.errors);
     }
-    res.status(400).json({ message: error.message });
+    res.status(error.statusCode || 400).json({ message: error.message });
   }
 });
 
@@ -262,6 +286,10 @@ router.put('/:id', auth, checkPermission(['calibrations.update']), async (req, r
     const calibration = await EFACalibration.findById(req.params.id);
     if (!calibration) {
       return res.status(404).json({ message: 'EFA calibration record not found' });
+    }
+
+    if (req.body.caliperReference !== undefined || !calibration.caliperReference) {
+      req.body.caliperReference = await assertCaliperReference(req.body.caliperReference);
     }
 
     // Update fields
@@ -280,7 +308,7 @@ router.put('/:id', auth, checkPermission(['calibrations.update']), async (req, r
     res.json(populatedCalibration);
   } catch (error) {
     console.error('Error updating EFA calibration:', error);
-    res.status(400).json({ message: error.message });
+    res.status(error.statusCode || 400).json({ message: error.message });
   }
 });
 

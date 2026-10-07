@@ -18,6 +18,11 @@ const efaCalibrationSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  caliperReference: {
+    type: String,
+    required: true,
+    trim: true
+  },
   filter1Diameter1: {
     type: Number,
     required: false,
@@ -80,6 +85,7 @@ const efaCalibrationSchema = new mongoose.Schema({
 // Index for efficient querying
 efaCalibrationSchema.index({ calibrationId: 1 });
 efaCalibrationSchema.index({ filterHolderModel: 1 });
+efaCalibrationSchema.index({ caliperReference: 1 });
 efaCalibrationSchema.index({ date: -1 });
 
 module.exports = mongoose.model('EFACalibration', efaCalibrationSchema);

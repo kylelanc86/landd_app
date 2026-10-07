@@ -1,3 +1,4 @@
+import { attachAuthorisedFibreAnalysisReport } from "./attachAuthorisedFibreAnalysisReport";
 import { parseContentDispositionFilename } from "./downloadFilename";
 import {
   buildAsbestosAssessmentFilename,
@@ -69,20 +70,26 @@ export const generateAssessmentPDF = async (assessmentData) => {
       console.log('Assessment PDF blob size:', pdfBlob.size, 'bytes');
 
       const isResidential = assessmentData?.jobType === 'residential-asbestos';
-      const fallbackFilename = assessmentData?.reportReference
-        ? withRevisionAndExtension(
-            assessmentData.reportReference,
-            assessmentData.revision,
-          )
-        : buildAsbestosAssessmentFilename({
-            projectId:
-              assessmentData.projectId?.projectID || assessmentData.jobReference,
-            siteName:
-              assessmentData.projectId?.name || assessmentData.siteName,
-            reportIssueDate: assessmentData.reportAuthorisedAt,
-            revision: assessmentData.revision,
-            isResidential,
-          });
+      const assessmentAuthorised =
+        assessmentData?.reportAuthorisedBy != null &&
+        String(assessmentData.reportAuthorisedBy).trim() !== '';
+      const fallbackFilename =
+        assessmentAuthorised && assessmentData?.reportReference
+          ? withRevisionAndExtension(
+              assessmentData.reportReference,
+              assessmentData.revision,
+            )
+          : buildAsbestosAssessmentFilename({
+              projectId:
+                assessmentData.projectId?.projectID || assessmentData.jobReference,
+              siteName:
+                assessmentData.projectId?.name || assessmentData.siteName,
+              reportIssueDate: assessmentAuthorised
+                ? assessmentData.reportAuthorisedAt
+                : null,
+              revision: assessmentData.revision,
+              isResidential,
+            });
       const fileName =
         parseContentDispositionFilename(
           response.headers.get('Content-Disposition'),
@@ -449,14 +456,7 @@ export async function downloadLeadClearancePDFByClearanceId(clearanceId, options
  * @param {{ isResidential?: boolean }} options
  * @returns {Promise<{ jobId: string }>}
  */
-export async function startAssessmentPDFJob(assessmentIdOrData, options = {}) {
-  const assessmentId = typeof assessmentIdOrData === 'object' && assessmentIdOrData != null
-    ? (assessmentIdOrData._id || assessmentIdOrData.id)
-    : assessmentIdOrData;
-  const payload = {
-    assessmentId: assessmentId != null ? String(assessmentId) : undefined,
-    ...(options.isResidential === true && { isResidential: true }),
-  };
+async function requestAssessmentPDFJob(payload) {
   const res = await fetch(`${API_BASE}/pdf-docraptor-v2/start-asbestos-assessment-pdf`, {
     method: 'POST',
     headers: getAuthHeaders(),
@@ -469,11 +469,30 @@ export async function startAssessmentPDFJob(assessmentIdOrData, options = {}) {
       const j = JSON.parse(errText);
       if (j.error || j.details) errMsg = j.details || j.error;
     } catch (_) {}
-    throw new Error(errMsg);
+    const error = new Error(errMsg);
+    error.fibreReportMissing = errMsg.includes("analysis report must be attached");
+    throw error;
   }
   const data = await res.json();
   if (!data.jobId) throw new Error('Server did not return a job ID');
   return { jobId: data.jobId };
+}
+
+export async function startAssessmentPDFJob(assessmentIdOrData, options = {}) {
+  const assessmentId = typeof assessmentIdOrData === 'object' && assessmentIdOrData != null
+    ? (assessmentIdOrData._id || assessmentIdOrData.id)
+    : assessmentIdOrData;
+  const payload = {
+    assessmentId: assessmentId != null ? String(assessmentId) : undefined,
+    ...(options.isResidential === true && { isResidential: true }),
+  };
+  try {
+    return await requestAssessmentPDFJob(payload);
+  } catch (error) {
+    if (!error.fibreReportMissing || !assessmentId) throw error;
+    await attachAuthorisedFibreAnalysisReport(assessmentId);
+    return requestAssessmentPDFJob(payload);
+  }
 }
 
 /**

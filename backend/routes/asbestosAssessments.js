@@ -163,6 +163,63 @@ const notDeletedAssessmentFilter = {
   $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
 };
 
+function isAssessmentReportAuthorised(job) {
+  const authorisedBy = job?.reportAuthorisedBy;
+  return authorisedBy != null && String(authorisedBy).trim() !== '';
+}
+
+function isFibreIdReportAuthorised(job) {
+  const approvedBy = job?.reportApprovedBy;
+  return approvedBy != null && String(approvedBy).trim() !== '';
+}
+
+/** Samples submitted to the lab: the assessment report depends on the authorised L&D analysis. */
+function assessmentDependsOnLdSuppliedJob(job) {
+  if (!job) return false;
+  const jobType = job.jobType || 'asbestos-assessment';
+  if (jobType !== 'asbestos-assessment' && jobType !== 'residential-asbestos') return false;
+  if (job.noSamplesCollected === true) return false;
+  return job.samplesReceivedDate != null || (job.labSamplesStatus != null && job.labSamplesStatus !== '');
+}
+
+async function fibreAnalysisReportIsAttached(assessmentId) {
+  if (!assessmentId) return false;
+  const found = await AsbestosAssessment.exists({
+    _id: assessmentId,
+    fibreAnalysisReport: { $type: 'string', $gt: '' },
+  });
+  return !!found;
+}
+
+/** Null when the assessment report may move on to finalise, PDF review, authorisation, or close. */
+async function ldSuppliedSignOffError(job) {
+  if (!assessmentDependsOnLdSuppliedJob(job)) return null;
+  if (!isFibreIdReportAuthorised(job)) {
+    return 'The L&D supplied job must be authorised before this assessment report can be finalised, reviewed, sent for authorisation, or closed.';
+  }
+  const attached = await fibreAnalysisReportIsAttached(job._id);
+  if (!attached) {
+    return 'The L&D supplied analysis report must be attached before this assessment report can be finalised, reviewed, sent for authorisation, or closed.';
+  }
+  return null;
+}
+
+/** Workflow order. Generic updates may move forward only, so lab saves cannot reopen an authorised assessment. */
+const ASSESSMENT_STATUS_RANK = {
+  'in-progress': 0,
+  'site-works-complete': 1,
+  'samples-with-lab': 2,
+  'sample-analysis-complete': 3,
+  'report-ready-for-review': 4,
+  complete: 5,
+};
+
+function assessmentStatusRank(status) {
+  return Object.prototype.hasOwnProperty.call(ASSESSMENT_STATUS_RANK, status)
+    ? ASSESSMENT_STATUS_RANK[status]
+    : -1;
+}
+
 /** Closed asbestos/residential surveys stay on Project Reports and are view-only. */
 function isClosedSurveyAssessment(job) {
   if (!job || job.archived !== true) return false;
@@ -170,8 +227,7 @@ function isClosedSurveyAssessment(job) {
   if (jobType !== 'asbestos-assessment' && jobType !== 'residential-asbestos') {
     return false;
   }
-  const authorisedBy = job.reportAuthorisedBy;
-  return authorisedBy != null && String(authorisedBy).trim() !== '';
+  return isAssessmentReportAuthorised(job);
 }
 
 const CLOSED_ASSESSMENT_WRITE_EXEMPT = new Set([
@@ -347,6 +403,9 @@ const RESIDENTIAL_TABLE_SELECT = {
   pdfFilename: 1,
   authorisationRequestedBy: 1,
   noSamplesCollected: 1,
+  samplesReceivedDate: 1,
+  labSamplesStatus: 1,
+  reportApprovedBy: 1,
   LAA: 1,
   state: 1,
   intrusiveness: 1,
@@ -415,7 +474,21 @@ async function loadLdTableSummary() {
     if (!row?.samplesReceivedDate) return false;
     return isOpenAssessmentRow(row);
   });
-  return attachProjectClientSummary(submitted);
+  const withReportIds = new Set();
+  if (submitted.length > 0) {
+    const withReport = await AsbestosAssessment.find({
+      _id: { $in: submitted.map((row) => row._id) },
+      fibreAnalysisReport: { $type: 'string', $gt: '' },
+    })
+      .select('_id')
+      .lean();
+    for (const row of withReport) withReportIds.add(String(row._id));
+  }
+  const flagged = submitted.map((row) => ({
+    ...row,
+    hasFibreAnalysisReport: withReportIds.has(String(row._id)),
+  }));
+  return attachProjectClientSummary(flagged);
 }
 
 function parseObjectIds(rawIds) {
@@ -1015,12 +1088,16 @@ router.put('/:id', async (req, res) => {
           'leadDiscussionConclusionsByType',
           'projectId',
           'createdAt',
+          'status',
           'reportAuthorisedBy',
           'reportAuthorisedAt',
           'reportReference',
           'reportApprovedBy',
           'reportIssueDate',
           'fibreIdReportReference',
+          'samplesReceivedDate',
+          'noSamplesCollected',
+          'labSamplesStatus',
         ].join(' '),
       )
       .lean();
@@ -1073,9 +1150,14 @@ router.put('/:id', async (req, res) => {
       assessmentDate,
       updatedAt: new Date()
     };
-    // Only update status when explicitly provided; otherwise preserve current value
+    // Only move status forward. Lab approval used to spread a list row and set
+    // report-ready-for-review, which reopened authorised/complete assessments.
     if (status !== undefined) {
-      updateData.status = status;
+      const currentRank = assessmentStatusRank(existingJob.status);
+      const nextRank = assessmentStatusRank(status);
+      if (nextRank >= 0 && (currentRank < 0 || nextRank >= currentRank)) {
+        updateData.status = status;
+      }
     }
     
     // Include assessmentScope if provided (not used for residential asbestos assessments)
@@ -1141,7 +1223,12 @@ router.put('/:id', async (req, res) => {
       }
     }
     if (reportAuthorisedBy !== undefined) {
-      updateData.reportAuthorisedBy = reportAuthorisedBy;
+      const incoming =
+        reportAuthorisedBy == null ? '' : String(reportAuthorisedBy).trim();
+      // Unlock and revise clear sign-off on their own routes. A lab update must not.
+      if (incoming || !isAssessmentReportAuthorised(existingJob)) {
+        updateData.reportAuthorisedBy = reportAuthorisedBy;
+      }
     }
     if (reportAuthorisedAt !== undefined) {
       // Preserve the first assessment authorisation date for filename continuity.
@@ -1156,6 +1243,18 @@ router.put('/:id', async (req, res) => {
       !existingJob.reportAuthorisedBy;
     if (isBecomingAuthorised && !existingJob.reportAuthorisedAt && !updateData.reportAuthorisedAt) {
       updateData.reportAuthorisedAt = new Date();
+    }
+
+    const movingToReportReady =
+      updateData.status === 'report-ready-for-review' &&
+      assessmentStatusRank(existingJob.status) < assessmentStatusRank('report-ready-for-review');
+    const signingOffAssessment =
+      isBecomingAuthorised ||
+      movingToReportReady ||
+      (updateData.status === 'complete' && existingJob.status !== 'complete');
+    if (signingOffAssessment) {
+      const ldError = await ldSuppliedSignOffError(existingJob);
+      if (ldError) return res.status(400).json({ message: ldError });
     }
 
     // Freeze Fibre ID report reference once (first Fibre ID approval).
@@ -1505,6 +1604,13 @@ router.patch('/:id/archive', auth, async (req, res) => {
         message: 'You do not have permission to complete asbestos assessments. Admin, manager, or Can Set Job Complete approval required.',
       });
     }
+    const existing = await AsbestosAssessment.findById(req.params.id)
+      .select('jobType noSamplesCollected samplesReceivedDate labSamplesStatus reportApprovedBy')
+      .lean();
+    if (!existing) return res.status(404).json({ message: 'Assessment job not found' });
+    const ldError = await ldSuppliedSignOffError(existing);
+    if (ldError) return res.status(400).json({ message: ldError });
+
     const job = await AsbestosAssessment.findByIdAndUpdate(
       req.params.id,
       { archived: true, updatedAt: new Date() },
@@ -1543,17 +1649,16 @@ router.post('/:id/send-for-authorisation', auth, checkPermission('asbestos.edit'
       return res.status(404).json({ message: 'Assessment not found' });
     }
 
-    if (assessment.reportAuthorisedBy) {
-      return res.status(400).json({
-        message: 'Report has already been authorised'
-      });
-    }
-
     const fibreIdApproved = !!(
       assessment.reportApprovedBy &&
       String(assessment.reportApprovedBy).trim()
     );
     const isFibreIdAuthorisationRequest = !fibreIdApproved;
+    if (!isFibreIdAuthorisationRequest && isAssessmentReportAuthorised(assessment)) {
+      return res.status(400).json({
+        message: 'Report has already been authorised'
+      });
+    }
     const labAnalysisComplete =
       assessment.labSamplesStatus === 'analysis-complete' ||
       ['sample-analysis-complete', 'report-ready-for-review', 'complete'].includes(
@@ -1575,6 +1680,9 @@ router.post('/:id/send-for-authorisation', auth, checkPermission('asbestos.edit'
         message:
           'Assessment report must be ready for review before sending for authorisation',
       });
+    } else {
+      const ldError = await ldSuppliedSignOffError(assessment);
+      if (ldError) return res.status(400).json({ message: ldError });
     }
 
     const recipientRoleLabel = isFibreIdAuthorisationRequest
@@ -1767,7 +1875,7 @@ router.post('/:id/items', async (req, res) => {
       job.markModified('items');
     }
     const resetStatuses = ['site-works-complete', 'samples-with-lab', 'sample-analysis-complete'];
-    if (resetStatuses.includes(job.status)) {
+    if (!isAssessmentReportAuthorised(job) && resetStatuses.includes(job.status)) {
       job.status = 'in-progress';
     }
     job.items.push(req.body);
@@ -1897,6 +2005,14 @@ router.patch('/:id/status', async (req, res) => {
 
     const job = await AsbestosAssessment.findById(req.params.id);
     if (!job) return res.status(404).json({ message: 'Assessment job not found' });
+
+    const movingToReportReady =
+      status === 'report-ready-for-review' &&
+      assessmentStatusRank(job.status) < assessmentStatusRank('report-ready-for-review');
+    if ((status === 'complete' && job.status !== 'complete') || movingToReportReady) {
+      const ldError = await ldSuppliedSignOffError(job);
+      if (ldError) return res.status(400).json({ message: ldError });
+    }
     
     job.status = status;
     job.updatedAt = new Date();
@@ -2738,21 +2854,28 @@ router.put('/:id/items/:itemNumber/analysis', async (req, res) => {
     // Update the item's updatedAt timestamp
     assessment.items[itemIndex].updatedAt = new Date();
     
-    // Check if all items are analysed to update assessment status and LD supplied lab status
+    // Check if all items are analysed to update assessment status and LD supplied lab status.
+    // Lab completion must not walk an authorised assessment back to in progress.
     const allItemsAnalysed = assessment.items.every(item => item.analysisData?.isAnalysed);
-    if (allItemsAnalysed && assessment.status === 'samples-with-lab') {
-      assessment.status = 'sample-analysis-complete';
-      assessment.labSamplesStatus = 'analysis-complete'; // Keep Sample Analysis column in sync with LD supplied jobs
+    if (allItemsAnalysed) {
+      assessment.labSamplesStatus = 'analysis-complete';
+      if (assessment.status === 'samples-with-lab') {
+        assessment.status = 'sample-analysis-complete';
+      }
     }
 
     // If fibre ID report was previously approved, editing analysis data invalidates that approval — require re-approval.
     // Preserve first reportIssueDate / fibreIdReportReference for stable filenames across revisions.
+    // Keep assessment-report authorisation and its status; only the fibre certificate is cleared so it can be reattached.
     if (assessment.reportApprovedBy) {
       assessment.reportApprovedBy = undefined;
       assessment.fibreAnalysisReport = undefined;
       assessment.markModified('reportApprovedBy');
       assessment.markModified('fibreAnalysisReport');
-      if (['report-ready-for-review', 'complete'].includes(assessment.status)) {
+      if (
+        !isAssessmentReportAuthorised(assessment) &&
+        ['report-ready-for-review', 'complete'].includes(assessment.status)
+      ) {
         assessment.status = 'sample-analysis-complete';
       }
     }

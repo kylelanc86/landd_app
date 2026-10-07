@@ -48,6 +48,11 @@ const airPumpCalibrationSchema = new mongoose.Schema({
     ref: 'Equipment',
     required: false
   },
+  pneumaticTesterId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Equipment',
+    required: false
+  },
   nextCalibrationDue: {
     type: Date
   }
@@ -124,6 +129,7 @@ airPumpCalibrationSchema.virtual('totalTests').get(function() {
 });
 
 // Index for efficient querying
+airPumpCalibrationSchema.index({ pneumaticTesterId: 1 });
 airPumpCalibrationSchema.index({ pumpId: 1, calibrationDate: -1 });
 airPumpCalibrationSchema.index({ calibratedBy: 1 });
 airPumpCalibrationSchema.index({ overallResult: 1 });

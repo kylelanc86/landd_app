@@ -112,6 +112,7 @@ function mergePhotoBlobFields(photos, blobList) {
 const assessmentLiteGetOpts = {
   omitPhotoData: true,
   omitPlanFiles: true,
+  omitFibreReport: true,
 };
 
 /**
@@ -519,6 +520,9 @@ const AssessmentItems = () => {
   const [analysisDueDate, setAnalysisDueDate] = useState(new Date());
   const [showCustomTurnaround, setShowCustomTurnaround] = useState(false);
 
+  // Finalise report after the L&D supplied job is authorised
+  const [showFinaliseReportDialog, setShowFinaliseReportDialog] = useState(false);
+  const [finalisingReport, setFinalisingReport] = useState(false);
   // Finalise Assessment (no samples) state
   const [showFinaliseAssessmentDialog, setShowFinaliseAssessmentDialog] =
     useState(false);
@@ -1663,9 +1667,53 @@ const AssessmentItems = () => {
       navigate(itemsPathForId(id));
     } catch (error) {
       console.error("Error finalising assessment:", error);
-      showSnackbar("Failed to finalise assessment", "error");
+      showSnackbar(
+        error.response?.data?.message || "Failed to finalise assessment",
+        "error",
+      );
     } finally {
       setFinalisingAssessment(false);
+    }
+  };
+
+  const samplesWentToLab =
+    assessment?.noSamplesCollected !== true &&
+    (assessment?.samplesReceivedDate != null ||
+      (assessment?.labSamplesStatus != null &&
+        assessment.labSamplesStatus !== ""));
+  const ldSuppliedJobAuthorised = (() => {
+    const approved = assessment?.reportApprovedBy;
+    const authorised = approved != null && String(approved).trim() !== "";
+    const attached =
+      assessment?.hasFibreAnalysisReport === true ||
+      (typeof assessment?.fibreAnalysisReport === "string" &&
+        assessment.fibreAnalysisReport.trim() !== "");
+    return authorised && attached;
+  })();
+
+  const handleConfirmFinaliseReport = async () => {
+    if (isReportLocked) return;
+    try {
+      setFinalisingReport(true);
+      await asbestosAssessmentService.update(id, {
+        projectId: assessment.projectId?._id || assessment.projectId,
+        assessmentDate: assessment.assessmentDate,
+        status: "report-ready-for-review",
+      });
+      await fetchData();
+      setShowFinaliseReportDialog(false);
+      showSnackbar(
+        "Report finalised. Review the PDF, then send it for authorisation.",
+        "success",
+      );
+    } catch (error) {
+      console.error("Error finalising report:", error);
+      showSnackbar(
+        error.response?.data?.message || "Failed to finalise report",
+        "error",
+      );
+    } finally {
+      setFinalisingReport(false);
     }
   };
 
@@ -3458,6 +3506,34 @@ const AssessmentItems = () => {
                 </Button>
               );
             })()}
+          {samplesWentToLab &&
+            ["samples-with-lab", "sample-analysis-complete"].includes(
+              assessment?.status,
+            ) &&
+            (ldSuppliedJobAuthorised ? (
+              <Button
+                variant="contained"
+                onClick={() => setShowFinaliseReportDialog(true)}
+                disabled={finalisingReport || isReportLocked}
+                sx={{
+                  backgroundColor: "#ff9800",
+                  color: "white",
+                  "&:hover": {
+                    backgroundColor: "#f57c00",
+                  },
+                }}
+              >
+                Finalise report
+              </Button>
+            ) : (
+              <Typography
+                variant="body2"
+                sx={{ color: "warning.main", fontStyle: "italic", maxWidth: 420 }}
+              >
+                The L&D supplied job must be authorised before this report can be
+                finalised.
+              </Typography>
+            ))}
         </Box>
 
         {/* Item Type Selection Modal */}
@@ -6761,6 +6837,35 @@ const AssessmentItems = () => {
           </DialogActions>
         </Dialog>
 
+        <Dialog
+          open={showFinaliseReportDialog}
+          onClose={() => !finalisingReport && setShowFinaliseReportDialog(false)}
+        >
+          <DialogTitle>Finalise report</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              The L&D supplied analysis is authorised and its results are on this
+              assessment. Finalise the report only after the discussion and other
+              report content include those results. You can then review the PDF
+              and send it for authorisation.
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button
+              onClick={() => setShowFinaliseReportDialog(false)}
+              disabled={finalisingReport}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmFinaliseReport}
+              variant="contained"
+              disabled={finalisingReport}
+            >
+              {finalisingReport ? "Finalising..." : "Finalise report"}
+            </Button>
+          </DialogActions>
+        </Dialog>
         {/* Finalise Assessment (No Samples) Confirmation Dialog */}
         <Dialog
           open={showFinaliseAssessmentDialog}

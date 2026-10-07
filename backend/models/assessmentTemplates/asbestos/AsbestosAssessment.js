@@ -243,7 +243,7 @@ const AsbestosAssessmentSchema = new mongoose.Schema({
   sitePlanFile: { type: String }, // Will store the file path or base64 data
   sitePlanSource: {
     type: String,
-    enum: ["uploaded", "drawn"],
+    enum: ["uploaded", "drawn", null],
   },
   sitePlanLegend: [
     {
