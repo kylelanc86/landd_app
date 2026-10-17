@@ -29,6 +29,9 @@ import {
 const PHONE_SITE_PLAN_QUERY =
   "(max-width: 600px), ((max-height: 500px) and (max-width: 932px))";
 
+/** Width reserved beside the phone map for Cancel / Use This Map View. */
+const PHONE_ACTION_GUTTER = 120;
+
 /** Largest rectangle of `aspect` (width / height) that fits in the frame. */
 const fitMapPreview = (frameWidth, frameHeight, aspect) => {
   const pad = 8;
@@ -171,7 +174,7 @@ const GoogleMapsDialog = ({
       if (confirmedViewRef.current) {
         center = confirmedViewRef.current.center;
         zoom = confirmedViewRef.current.zoom;
-        if (projectAddress) note = `Project address: ${projectAddress}`;
+        if (projectAddress) note = `${projectAddress}`;
       } else if (projectAddress) {
         let geocoded = null;
         if (projectViewRef.current?.address === projectAddress) {
@@ -186,7 +189,7 @@ const GoogleMapsDialog = ({
         if (geocoded) {
           center = geocoded;
           zoom = addressZoom;
-          note = `Project address: ${projectAddress}`;
+          note = `${projectAddress}`;
         } else {
           note = `The project address could not be located: ${projectAddress}`;
         }
@@ -222,10 +225,13 @@ const GoogleMapsDialog = ({
         minZoom: SITE_PLAN_MIN_ZOOM,
         maxZoom: SITE_PLAN_MAX_ZOOM,
         mapTypeId: window.google.maps.MapTypeId[mapType.toUpperCase()],
-        mapTypeControl: true,
+        mapTypeControl: !isPhone,
         streetViewControl: !isPhone,
         fullscreenControl: !isPhone,
         zoomControl: true,
+        zoomControlOptions: isPhone
+          ? { position: window.google.maps.ControlPosition.RIGHT_BOTTOM }
+          : undefined,
         gestureHandling: "greedy",
         tilt: 0, // Force 2D overhead view - no tilt
         heading: 0, // Force north-up orientation
@@ -521,6 +527,12 @@ const GoogleMapsDialog = ({
     };
   }, [addressQuery, open, hasProjectAddress, mapLoaded]);
 
+  const handlePhoneMapType = (nextType) => {
+    const map = mapInstanceRef.current;
+    if (!map || !window.google?.maps) return;
+    map.setMapTypeId(window.google.maps.MapTypeId[nextType.toUpperCase()]);
+  };
+
   const handleZoomChange = (event, value) => {
     userAdjustedRef.current = true;
     if (mapInstanceRef.current) {
@@ -574,42 +586,15 @@ const GoogleMapsDialog = ({
   const mapHeight = canvasHeight || 600;
   const mapAspect = mapWidth / mapHeight;
   const fittedMap = isPhone
-    ? fitMapPreview(frameSize.width, frameSize.height, mapAspect)
+    ? fitMapPreview(
+        Math.max(0, frameSize.width - PHONE_ACTION_GUTTER),
+        frameSize.height,
+        mapAspect,
+      )
     : { width: mapWidth, height: mapHeight };
 
   const zoomLevel = mapZoomToLevel(mapZoom);
-  const zoomControl = isPhone ? (
-    <Box
-      sx={{
-        display: "flex",
-        alignItems: "center",
-        gap: 0.75,
-        flexShrink: 0,
-        ml: "auto",
-      }}
-    >
-      <Typography variant="caption" noWrap sx={{ lineHeight: 1 }}>
-        Zoom
-      </Typography>
-      <Typography
-        variant="body2"
-        noWrap
-        sx={{ fontWeight: 600, minWidth: "1.25em", textAlign: "right", lineHeight: 1 }}
-      >
-        {zoomLevel}
-      </Typography>
-      <Slider
-        value={zoomLevel}
-        onChange={handleZoomChange}
-        min={1}
-        max={SITE_PLAN_ZOOM_LEVELS}
-        step={1}
-        size="small"
-        sx={{ width: 108, mx: 0.25, py: 0 }}
-        aria-label="Zoom"
-      />
-    </Box>
-  ) : (
+  const zoomControl = (
     <Box sx={{ width: 200, flexShrink: 0 }}>
       <Typography variant="caption" display="block" noWrap>
         Zoom: {zoomLevel}
@@ -624,6 +609,93 @@ const GoogleMapsDialog = ({
       />
     </Box>
   );
+
+  const addressSearch = !hasProjectAddress ? (
+    <>
+      <Autocomplete
+        freeSolo
+        filterOptions={(options) => options}
+        options={addressOptions}
+        getOptionLabel={(option) =>
+          typeof option === "string" ? option : option.description || ""
+        }
+        inputValue={addressQuery}
+        onInputChange={(_, value, reason) => {
+          if (reason === "reset") return;
+          if (value !== confirmedQueryRef.current) {
+            confirmedQueryRef.current = "";
+          }
+          setAddressQuery(value);
+        }}
+        onChange={(_, value) => {
+          if (value && typeof value === "object" && value.place_id) {
+            confirmPlace(value.place_id, value.description);
+            return;
+          }
+          if (typeof value === "string") {
+            confirmTypedAddress(value);
+          }
+        }}
+        loading={addressSearchLoading}
+        sx={{ flex: 1, minWidth: 0 }}
+        componentsProps={{
+          popper: { sx: { zIndex: 1600 } },
+        }}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            size="small"
+            label={isPhone ? undefined : "Search address"}
+            placeholder="Start typing an address"
+            error={Boolean(addressSearchError)}
+            helperText={addressSearchError || undefined}
+            InputProps={{
+              ...params.InputProps,
+              endAdornment: (
+                <>
+                  {addressSearchLoading ? (
+                    <CircularProgress color="inherit" size={16} />
+                  ) : null}
+                  {params.InputProps.endAdornment}
+                </>
+              ),
+            }}
+          />
+        )}
+      />
+      {!isPhone && zoomControl}
+      <Button
+        variant="contained"
+        size="small"
+        onClick={handleConfirmAddress}
+        disabled={!addressQuery.trim() || !mapLoaded}
+        sx={{ flexShrink: 0, whiteSpace: "nowrap" }}
+      >
+        Show on map
+      </Button>
+    </>
+  ) : null;
+
+  const mapBoxStyle = isPhone
+    ? fittedMap.width >= 20 && fittedMap.height >= 20
+      ? {
+          width: `${fittedMap.width}px`,
+          height: `${fittedMap.height}px`,
+          maxWidth: "100%",
+          maxHeight: "100%",
+        }
+      : {
+          width: "100%",
+          maxWidth: "100%",
+          maxHeight: "100%",
+          minHeight: 220,
+          aspectRatio: `${mapWidth} / ${mapHeight}`,
+        }
+    : {
+        width: `${mapWidth}px`,
+        height: `${mapHeight}px`,
+        minHeight: "400px",
+      };
 
   return (
     <Dialog
@@ -679,110 +751,35 @@ const GoogleMapsDialog = ({
           overflow: "hidden",
         }}
       >
-        {/* Controls */}
-        <Box
-          sx={{
-            p: isPhone ? 0.75 : 2,
-            px: isPhone ? 1 : 2,
-            backgroundColor: "#f5f5f5",
-            borderBottom: 1,
-            borderColor: "divider",
-            display: "flex",
-            flexDirection: "column",
-            gap: isPhone ? 0 : 1,
-            flexShrink: 0,
-          }}
-        >
-          {!isPhone && addressNote ? (
-            <Typography variant="body2">{addressNote}</Typography>
-          ) : null}
+        {!isPhone && (
           <Box
             sx={{
+              p: 2,
+              backgroundColor: "#f5f5f5",
+              borderBottom: 1,
+              borderColor: "divider",
               display: "flex",
+              flexDirection: "column",
               gap: 1,
-              alignItems: "center",
-              width: "100%",
-              minHeight: isPhone ? 40 : undefined,
+              flexShrink: 0,
             }}
           >
-            {isPhone && hasProjectAddress && addressNote ? (
-              <Typography
-                variant="body2"
-                noWrap
-                title={addressNote}
-                sx={{ flex: 1, minWidth: 0 }}
-              >
-                {addressNote}
-              </Typography>
+            {addressNote ? (
+              <Typography variant="body2">{addressNote}</Typography>
             ) : null}
-            {!hasProjectAddress && (
-              <>
-                <Autocomplete
-                  freeSolo
-                  filterOptions={(options) => options}
-                  options={addressOptions}
-                  getOptionLabel={(option) =>
-                    typeof option === "string" ? option : option.description || ""
-                  }
-                  inputValue={addressQuery}
-                  onInputChange={(_, value, reason) => {
-                    if (reason === "reset") return;
-                    if (value !== confirmedQueryRef.current) {
-                      confirmedQueryRef.current = "";
-                    }
-                    setAddressQuery(value);
-                  }}
-                  onChange={(_, value) => {
-                    if (value && typeof value === "object" && value.place_id) {
-                      confirmPlace(value.place_id, value.description);
-                      return;
-                    }
-                    if (typeof value === "string") {
-                      confirmTypedAddress(value);
-                    }
-                  }}
-                  loading={addressSearchLoading}
-                  sx={{ flex: 1, minWidth: 0 }}
-                  componentsProps={{
-                    popper: { sx: { zIndex: 1600 } },
-                  }}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      size="small"
-                      label="Search address"
-                      placeholder="Start typing an address"
-                      error={Boolean(addressSearchError)}
-                      helperText={addressSearchError || undefined}
-                      InputProps={{
-                        ...params.InputProps,
-                        endAdornment: (
-                          <>
-                            {addressSearchLoading ? (
-                              <CircularProgress color="inherit" size={16} />
-                            ) : null}
-                            {params.InputProps.endAdornment}
-                          </>
-                        ),
-                      }}
-                    />
-                  )}
-                />
-                {!isPhone && zoomControl}
-                <Button
-                  variant="contained"
-                  size="small"
-                  onClick={handleConfirmAddress}
-                  disabled={!addressQuery.trim() || !mapLoaded}
-                  sx={{ flexShrink: 0, whiteSpace: "nowrap" }}
-                >
-                  Show on map
-                </Button>
-              </>
-            )}
-            {(isPhone || hasProjectAddress) && zoomControl}
+            <Box
+              sx={{
+                display: "flex",
+                gap: 1,
+                alignItems: "center",
+                width: "100%",
+              }}
+            >
+              {addressSearch}
+              {hasProjectAddress && zoomControl}
+            </Box>
           </Box>
-        </Box>
+        )}
 
         {/* Map */}
         <Box
@@ -792,41 +789,132 @@ const GoogleMapsDialog = ({
             minHeight: isPhone ? 220 : 0,
             position: "relative",
             display: "flex",
+            flexDirection: "row",
             justifyContent: "center",
             alignItems: "center",
             overflow: "hidden",
             bgcolor: isPhone ? "#cfd8dc" : "transparent",
           }}
         >
-          <div
-            ref={mapRef}
-            style={
-              isPhone
-                ? fittedMap.width >= 20 && fittedMap.height >= 20
-                  ? {
-                      width: `${fittedMap.width}px`,
-                      height: `${fittedMap.height}px`,
+          <Box
+            sx={{
+              flex: isPhone ? "1 1 auto" : "0 0 auto",
+              alignSelf: "stretch",
+              minWidth: 0,
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              position: "relative",
+            }}
+          >
+          <Box
+            sx={{
+              position: "relative",
+              ...mapBoxStyle,
+              boxShadow: isPhone ? "0 0 0 2px rgba(69, 90, 100, 0.75)" : "none",
+              backgroundColor: "#ffffff",
+            }}
+          >
+            <div
+              ref={mapRef}
+              style={{ width: "100%", height: "100%" }}
+            />
+            {isPhone && (addressNote || !hasProjectAddress) && (
+              <Box
+                sx={{
+                  position: "absolute",
+                  top: 8,
+                  left: 8,
+                  right: 78,
+                  zIndex: 5,
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 0.5,
+                  pointerEvents: "auto",
+                }}
+              >
+                {hasProjectAddress ? (
+                  <Typography
+                    variant="body2"
+                    noWrap
+                    title={addressNote}
+                    sx={{
                       maxWidth: "100%",
-                      maxHeight: "100%",
-                      boxShadow: "0 0 0 2px rgba(69, 90, 100, 0.75)",
-                      backgroundColor: "#ffffff",
-                    }
-                  : {
+                      px: 1,
+                      py: 0.5,
+                      borderRadius: 1,
+                      bgcolor: "rgba(255,255,255,0.94)",
+                      boxShadow: "0 1px 4px rgba(0,0,0,0.28)",
+                    }}
+                  >
+                    {addressNote}
+                  </Typography>
+                ) : (
+                  <Box
+                    sx={{
+                      display: "flex",
+                      gap: 0.5,
+                      alignItems: "flex-start",
                       width: "100%",
-                      maxWidth: "100%",
-                      maxHeight: "100%",
-                      minHeight: 220,
-                      aspectRatio: `${mapWidth} / ${mapHeight}`,
-                      boxShadow: "0 0 0 2px rgba(69, 90, 100, 0.75)",
-                      backgroundColor: "#ffffff",
-                    }
-                : {
-                    width: `${mapWidth}px`,
-                    height: `${mapHeight}px`,
-                    minHeight: "400px",
-                  }
-            }
-          />
+                      p: 0.5,
+                      borderRadius: 1,
+                      bgcolor: "rgba(255,255,255,0.94)",
+                      boxShadow: "0 1px 4px rgba(0,0,0,0.28)",
+                    }}
+                  >
+                    {addressSearch}
+                  </Box>
+                )}
+              </Box>
+            )}
+            {isPhone && (
+              <Box
+                sx={{
+                  position: "absolute",
+                  top: 8,
+                  right: 8,
+                  zIndex: 5,
+                  display: "flex",
+                  borderRadius: 1,
+                  overflow: "hidden",
+                  bgcolor: "rgba(255,255,255,0.94)",
+                  boxShadow: "0 1px 4px rgba(0,0,0,0.28)",
+                }}
+              >
+                {[
+                  ["roadmap", "Map"],
+                  ["satellite", "Sat"],
+                ].map(([type, label]) => {
+                  const selected =
+                    type === "satellite"
+                      ? mapType === "satellite" || mapType === "hybrid"
+                      : mapType === type;
+                  return (
+                    <Button
+                      key={type}
+                      size="small"
+                      onClick={() => handlePhoneMapType(type)}
+                      sx={{
+                        minWidth: 0,
+                        px: 0.75,
+                        py: 0.25,
+                        borderRadius: 0,
+                        fontSize: "0.7rem",
+                        lineHeight: 1.4,
+                        color: selected ? "#fff" : "text.primary",
+                        bgcolor: selected ? "primary.main" : "transparent",
+                        "&:hover": {
+                          bgcolor: selected ? "primary.dark" : "rgba(0,0,0,0.06)",
+                        },
+                      }}
+                    >
+                      {label}
+                    </Button>
+                  );
+                })}
+              </Box>
+            )}
+          </Box>
 
           {!mapLoaded && (
             <Box
@@ -846,19 +934,56 @@ const GoogleMapsDialog = ({
               <Typography>Loading Google Maps...</Typography>
             </Box>
           )}
+          </Box>
+          {isPhone && (
+            <Box
+              sx={{
+                width: PHONE_ACTION_GUTTER,
+                flexShrink: 0,
+                alignSelf: "stretch",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "flex-end",
+                gap: 1,
+                px: 1,
+                pb: 1,
+                pt: 1,
+              }}
+            >
+              <Button
+                onClick={onClose}
+                variant="outlined"
+                size="small"
+                sx={{ whiteSpace: "normal", lineHeight: 1.2 }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSelectMap}
+                variant="contained"
+                size="small"
+                disabled={!mapLoaded}
+                sx={{ whiteSpace: "normal", lineHeight: 1.2, px: 1 }}
+              >
+                Use This Map View
+              </Button>
+            </Box>
+          )}
         </Box>
       </DialogContent>
 
-      <DialogActions sx={{ p: isPhone ? 1 : 2, flexShrink: 0 }}>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button
-          onClick={handleSelectMap}
-          variant="contained"
-          disabled={!mapLoaded}
-        >
-          Use This Map View
-        </Button>
-      </DialogActions>
+      {!isPhone && (
+        <DialogActions sx={{ p: 2, flexShrink: 0 }}>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button
+            onClick={handleSelectMap}
+            variant="contained"
+            disabled={!mapLoaded}
+          >
+            Use This Map View
+          </Button>
+        </DialogActions>
+      )}
     </Dialog>
   );
 };
