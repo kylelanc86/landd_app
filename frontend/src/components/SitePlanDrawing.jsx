@@ -105,7 +105,9 @@ const applyOpacitySettings = (item, transparent) => {
   if (item.type === "sample_marker") {
     return {
       ...item,
-      fillOpacity: transparent ? TRANSPARENT_DRAW_OPACITY : DEFAULT_DRAW_OPACITY,
+      fillOpacity: transparent
+        ? TRANSPARENT_DRAW_OPACITY
+        : DEFAULT_DRAW_OPACITY,
       strokeOpacity,
     };
   }
@@ -155,7 +157,12 @@ const legendArraysEqual = (a = [], b = []) => {
 };
 
 const colorsEqual = (a, b) =>
-  String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+  String(a || "")
+    .trim()
+    .toLowerCase() ===
+  String(b || "")
+    .trim()
+    .toLowerCase();
 
 /** Phones in portrait, and short landscape phone screens. */
 const PHONE_SITE_PLAN_QUERY =
@@ -186,14 +193,20 @@ const zoomMatchingExtent = (zoom, sourceWidth, targetWidth) => {
 const applySelectedMapView = (map, mapData) => {
   if (!map || !mapData?.center) return;
   const targetWidth = map.getDiv?.()?.getBoundingClientRect?.().width || 0;
-  const zoom = zoomMatchingExtent(mapData.zoom, mapData.viewportWidth, targetWidth);
+  const zoom = zoomMatchingExtent(
+    mapData.zoom,
+    mapData.viewportWidth,
+    targetWidth,
+  );
   try {
     map.setOptions({ isFractionalZoomEnabled: true });
   } catch (error) {
     // Older Maps builds only accept whole zoom levels.
   }
   if (mapData.mapType) {
-    map.setMapTypeId(window.google.maps.MapTypeId[mapData.mapType.toUpperCase()]);
+    map.setMapTypeId(
+      window.google.maps.MapTypeId[mapData.mapType.toUpperCase()],
+    );
   }
   map.setCenter(mapData.center);
   if (Number.isFinite(zoom)) map.setZoom(zoom);
@@ -215,7 +228,11 @@ const watchMapTiles = (map, timeoutMs = 5000) => {
       window.clearTimeout(timer);
       resolve();
     };
-    listener = window.google.maps.event.addListenerOnce(map, "tilesloaded", finish);
+    listener = window.google.maps.event.addListenerOnce(
+      map,
+      "tilesloaded",
+      finish,
+    );
     timer = window.setTimeout(finish, timeoutMs);
   });
   return promise;
@@ -275,7 +292,7 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
     /** @deprecated use sampleMarkerOptions when possible */
     sampleReferences = [],
   },
-  ref
+  ref,
 ) {
   const isPhone = useMediaQuery(PHONE_SITE_PLAN_QUERY, { noSsr: true });
   const canvasRef = useRef(null);
@@ -387,7 +404,7 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
         legendEntries.some((e) => !(e.description || "").trim()),
       openLegendDialog,
     }),
-    [legendEntries, openLegendDialog]
+    [legendEntries, openLegendDialog],
   );
 
   useEffect(() => {
@@ -583,7 +600,11 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
 
   // Keep the live map aligned when the phone layout changes the plan size.
   useEffect(() => {
-    if (!showGoogleMaps || !mapInstanceRef.current || !window.google?.maps?.event) {
+    if (
+      !showGoogleMaps ||
+      !mapInstanceRef.current ||
+      !window.google?.maps?.event
+    ) {
       return undefined;
     }
     const timeoutId = window.setTimeout(() => {
@@ -789,12 +810,13 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
       if (!refVal) return;
       if (usedSampleRefsOnCanvas.has(refVal)) return;
 
-      const meta =
-        resolvedSampleMarkerOptions.find((o) => o.value === refVal) || {
-          value: refVal,
-          isPositive: false,
-          statusKnown: false,
-        };
+      const meta = resolvedSampleMarkerOptions.find(
+        (o) => o.value === refVal,
+      ) || {
+        value: refVal,
+        isPositive: false,
+        statusKnown: false,
+      };
       const fillColor = !meta.statusKnown
         ? LEAD_SAMPLE_MARKER_COLORS.unknown
         : meta.isPositive
@@ -1724,8 +1746,7 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
           const left = item.x - w / 2;
           const top = item.y - h / 2;
           ctx.globalAlpha = fillOp;
-          ctx.fillStyle =
-            item.fillColor || LEAD_SAMPLE_MARKER_COLORS.unknown;
+          ctx.fillStyle = item.fillColor || LEAD_SAMPLE_MARKER_COLORS.unknown;
           roundRectPath(ctx, left, top, w, h, 4);
           ctx.fill();
           ctx.globalAlpha = strokeOp;
@@ -2502,378 +2523,411 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
 
   return (
     <>
-      <Box sx={{ height: "100%", display: "flex", flexDirection: "row", minHeight: 0 }}>
+      <Box
+        sx={{
+          height: "100%",
+          display: "flex",
+          flexDirection: "row",
+          minHeight: 0,
+        }}
+      >
         {/* Toolbar. On a phone it is scaled down so more of the menu fits beside a larger plan. */}
         <Box
           sx={
             isPhone
-              ? { width: 168, height: "100%", mr: 0.5, flexShrink: 0, overflow: "hidden" }
+              ? {
+                  width: 202,
+                  height: "100%",
+                  mr: 0.5,
+                  flexShrink: 0,
+                  overflow: "hidden",
+                }
               : { width: 280, height: "100%", mr: 2, flexShrink: 0 }
           }
         >
-        <Paper
-          sx={{
-            p: isPhone ? 1 : 2,
-            width: isPhone ? 224 : "100%",
-            height: isPhone ? "133.333%" : "100%",
-            overflowY: "auto",
-            display: "flex",
-            flexDirection: "column",
-            gap: isPhone ? 1 : 2,
-            ...(isPhone ? { zoom: 0.75 } : {}),
-          }}
-        >
-          <Box display="flex" flexDirection="column" gap={isPhone ? 1 : 2}>
-            {isPhone && (
-              <IconButton
-                onClick={onCancel}
-                aria-label="Back to site plans"
-                edge="start"
-                size="small"
-                sx={{ alignSelf: "flex-start" }}
-              >
-                <ArrowBackIcon fontSize="small" />
-              </IconButton>
-            )}
-            {/* Figure Title */}
-            <Box>
-              {!isPhone && (
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                  Figure Title
-                </Typography>
+          <Paper
+            sx={{
+              p: isPhone ? 1 : 2,
+              width: isPhone ? 269 : "100%",
+              height: isPhone ? "133.333%" : "100%",
+              overflowY: "auto",
+              display: "flex",
+              flexDirection: "column",
+              gap: isPhone ? 1 : 2,
+              ...(isPhone ? { zoom: 0.75 } : {}),
+            }}
+          >
+            <Box display="flex" flexDirection="column" gap={isPhone ? 1 : 2}>
+              {isPhone && (
+                <IconButton
+                  onClick={onCancel}
+                  aria-label="Back to site plans"
+                  edge="start"
+                  size="small"
+                  sx={{ alignSelf: "flex-start" }}
+                >
+                  <ArrowBackIcon fontSize="small" />
+                </IconButton>
               )}
-              <TextField
-                fullWidth
-                size="small"
-                value={figureTitle}
-                onChange={(e) => setFigureTitle(e.target.value)}
-                placeholder="Asbestos Removal Site Plan"
-                variant="outlined"
-              />
-            </Box>
-
-            {/* Drawing Tools */}
-            <Box>
-              {!isPhone && (
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                  Tools
-                </Typography>
-              )}
-              <Box
-                display="flex"
-                gap={1}
-                alignItems="center"
-                flexWrap="wrap"
-                sx={{ mb: 1 }}
-              >
-                {tools.map((tool) => (
-                  <Tooltip key={tool.id} title={tool.label}>
-                    <IconButton
-                      onClick={() => setCurrentTool(tool.id)}
-                      color={currentTool === tool.id ? "primary" : "default"}
-                      variant={
-                        currentTool === tool.id ? "contained" : "outlined"
-                      }
-                      size="small"
-                    >
-                      {tool.icon}
-                    </IconButton>
-                  </Tooltip>
-                ))}
-                <FormControl size="small" sx={{ minWidth: 100, ml: 1 }}>
-                  <InputLabel>Brush Size</InputLabel>
-                  <Select
-                    value={brushSize}
-                    label="Brush Size"
-                    onChange={(e) => setBrushSize(e.target.value)}
-                  >
-                    {Array.from({ length: 20 }, (_, i) => i + 1).map((size) => (
-                      <MenuItem key={size} value={size}>
-                        {size}px
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+              {/* Figure Title */}
+              <Box>
+                {!isPhone && (
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Figure Title
+                  </Typography>
+                )}
+                <TextField
+                  fullWidth
+                  size="small"
+                  value={figureTitle}
+                  onChange={(e) => setFigureTitle(e.target.value)}
+                  placeholder="Asbestos Removal Site Plan"
+                  variant="outlined"
+                />
               </Box>
-            </Box>
 
-            {/* Colors */}
-            <Box>
-              {!isPhone && (
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                  Colours
-                </Typography>
-              )}
-              <Box display="flex" flexDirection="column" gap={2}>
-                {/* Stroke Color */}
-                <Box display="flex" alignItems="center" gap={2}>
-                  <input
-                    type="color"
-                    value={color}
-                    onChange={(e) => setColor(e.target.value)}
-                    style={{
-                      width: 60,
-                      height: 40,
-                      border: "none",
-                      borderRadius: 4,
-                      cursor: "pointer",
-                    }}
-                  />
-                  <Box display="flex" alignItems="center" gap={1}>
+              {/* Drawing Tools */}
+              <Box>
+                {!isPhone && (
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Tools
+                  </Typography>
+                )}
+                <Box
+                  display="flex"
+                  gap={1}
+                  alignItems="center"
+                  flexWrap="wrap"
+                  sx={{ mb: 1 }}
+                >
+                  {tools.map((tool) => (
+                    <Tooltip key={tool.id} title={tool.label}>
+                      <IconButton
+                        onClick={() => setCurrentTool(tool.id)}
+                        color={currentTool === tool.id ? "primary" : "default"}
+                        variant={
+                          currentTool === tool.id ? "contained" : "outlined"
+                        }
+                        size="small"
+                      >
+                        {tool.icon}
+                      </IconButton>
+                    </Tooltip>
+                  ))}
+                  <FormControl size="small" sx={{ minWidth: 100, ml: 1 }}>
+                    <InputLabel>Brush Size</InputLabel>
+                    <Select
+                      value={brushSize}
+                      label="Brush Size"
+                      onChange={(e) => setBrushSize(e.target.value)}
+                    >
+                      {Array.from({ length: 20 }, (_, i) => i + 1).map(
+                        (size) => (
+                          <MenuItem key={size} value={size}>
+                            {size}px
+                          </MenuItem>
+                        ),
+                      )}
+                    </Select>
+                  </FormControl>
+                </Box>
+              </Box>
+
+              {/* Colors */}
+              <Box>
+                {!isPhone && (
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Colours
+                  </Typography>
+                )}
+                <Box display="flex" flexDirection="column" gap={2}>
+                  {/* Stroke Color */}
+                  <Box display="flex" alignItems="center" gap={2}>
                     <input
-                      type="checkbox"
-                      checked={useTransparentDrawing}
-                      onChange={(e) =>
-                        handleTransparencyToggle(e.target.checked)
-                      }
-                      style={{ width: 20, height: 20 }}
+                      type="color"
+                      value={color}
+                      onChange={(e) => setColor(e.target.value)}
+                      style={{
+                        width: 60,
+                        height: 40,
+                        border: "none",
+                        borderRadius: 4,
+                        cursor: "pointer",
+                      }}
                     />
-                    <Typography variant="caption">Transparent</Typography>
+                    <Box display="flex" alignItems="center" gap={1}>
+                      <input
+                        type="checkbox"
+                        checked={useTransparentDrawing}
+                        onChange={(e) =>
+                          handleTransparencyToggle(e.target.checked)
+                        }
+                        style={{ width: 20, height: 20 }}
+                      />
+                      <Typography variant="caption">Transparent</Typography>
+                    </Box>
                   </Box>
                 </Box>
               </Box>
-            </Box>
 
-            {/* Font Size - only show when text tool is selected */}
-            {currentTool === "text" && (
-              <Box>
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                  Font Size: {fontSize}px
-                </Typography>
-                <Slider
-                  value={fontSize}
-                  onChange={(e, value) => setFontSize(value)}
-                  min={8}
-                  max={48}
-                  size="small"
-                />
-              </Box>
-            )}
+              {/* Font Size - only show when text tool is selected */}
+              {currentTool === "text" && (
+                <Box>
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Font Size: {fontSize}px
+                  </Typography>
+                  <Slider
+                    value={fontSize}
+                    onChange={(e, value) => setFontSize(value)}
+                    min={8}
+                    max={48}
+                    size="small"
+                  />
+                </Box>
+              )}
 
-            {enableSampleMarkers && (
-              <Box>
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                  Sample location
-                </Typography>
+              {enableSampleMarkers && (
+                <Box>
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Sample location
+                  </Typography>
 
-                <FormControl size="small" fullWidth>
-                  <Select
-                    labelId="site-plan-sample-ref-label"
-                    value={selectedSampleRef || ""}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setSelectedSampleRef(v);
-                      if (v) setCurrentTool("sample_marker");
-                    }}
-                    displayEmpty
-                  >
-                    <MenuItem value="">
-                      <em>Select…</em>
-                    </MenuItem>
-                    {availableSampleMarkerOptions.map((opt) => (
-                      <MenuItem key={opt.value} value={opt.value}>
-                        {opt.value}
+                  <FormControl size="small" fullWidth>
+                    <Select
+                      labelId="site-plan-sample-ref-label"
+                      value={selectedSampleRef || ""}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setSelectedSampleRef(v);
+                        if (v) setCurrentTool("sample_marker");
+                      }}
+                      displayEmpty
+                    >
+                      <MenuItem value="">
+                        <em>Select…</em>
                       </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                {resolvedSampleMarkerOptions.length === 0 && (
-                  <Typography variant="caption" color="warning.main" display="block" sx={{ mt: 1 }}>
-                    No sampled items with references yet — add assessment items with sample references
-                    first.
+                      {availableSampleMarkerOptions.map((opt) => (
+                        <MenuItem key={opt.value} value={opt.value}>
+                          {opt.value}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  {resolvedSampleMarkerOptions.length === 0 && (
+                    <Typography
+                      variant="caption"
+                      color="warning.main"
+                      display="block"
+                      sx={{ mt: 1 }}
+                    >
+                      No sampled items with references yet — add assessment
+                      items with sample references first.
+                    </Typography>
+                  )}
+                </Box>
+              )}
+
+              {/* Canvas controls */}
+              <Box>
+                {!isPhone && (
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Canvas Controls
                   </Typography>
                 )}
-              </Box>
-            )}
-
-            {/* Canvas controls */}
-            <Box>
-              {!isPhone && (
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                  Canvas Controls
-                </Typography>
-              )}
-              <Box display="flex" alignItems="center" gap={0.5} flexWrap="nowrap">
-                <Tooltip title="Undo">
-                  <Box component="span" sx={{ display: "inline-flex" }}>
-                    <IconButton onClick={undo} size="small" disabled={historyIndex <= 0}>
-                      <UndoIcon fontSize="small" />
-                    </IconButton>
-                  </Box>
-                </Tooltip>
-                <Tooltip title="Redo">
-                  <Box component="span" sx={{ display: "inline-flex" }}>
-                    <IconButton onClick={redo} size="small" disabled={historyIndex >= history.length - 1}>
-                      <RedoIcon fontSize="small" />
-                    </IconButton>
-                  </Box>
-                </Tooltip>
-                <Tooltip title="Delete Selected">
-                  <Box component="span" sx={{ display: "inline-flex" }}>
-                    <IconButton
-                      onClick={deleteSelectedItem}
-                      size="small"
-                      disabled={!selectedItem}
-                      color="error"
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </Box>
-                </Tooltip>
-                <Tooltip title="Zoom Out">
-                  <Box component="span" sx={{ display: "inline-flex" }}>
-                    <IconButton
-                      onClick={() => setZoom(Math.max(1, zoom - 0.25))}
-                      size="small"
-                      disabled={zoom <= 1}
-                    >
-                      <ZoomOutIcon />
-                    </IconButton>
-                  </Box>
-                </Tooltip>
-                <Tooltip title="Zoom In">
-                  <Box component="span" sx={{ display: "inline-flex" }}>
-                    <IconButton
-                      onClick={() => setZoom(Math.min(3, zoom + 0.25))}
-                      size="small"
-                      disabled={zoom >= 3}
-                    >
-                      <ZoomInIcon />
-                    </IconButton>
-                  </Box>
-                </Tooltip>
-                <Tooltip title="Reset View">
-                  <IconButton
-                    onClick={() => {
-                      setZoom(1); // Reset to 100%
-                      setPanOffset({ x: 0, y: 0 });
-                    }}
-                    size="small"
-                  >
-                    <RefreshIcon />
-                  </IconButton>
-                </Tooltip>
-              </Box>
-            </Box>
-
-            <Box display="flex" flexDirection="column" gap={1}>
-              <Box display="flex" gap={1}>
-                <Button
-                  variant="outlined"
-                  component="label"
-                  startIcon={<UploadIcon />}
-                  size="small"
-                  fullWidth
+                <Box
+                  display="flex"
+                  alignItems="center"
+                  gap={0.5}
+                  flexWrap="nowrap"
                 >
-                  Add Image
-                  <input
-                    type="file"
-                    accept="image/*"
-                    hidden
-                    onChange={handleImageUpload}
-                  />
-                </Button>
-                {!hideMapSection && (
+                  <Tooltip title="Undo">
+                    <Box component="span" sx={{ display: "inline-flex" }}>
+                      <IconButton
+                        onClick={undo}
+                        size="small"
+                        disabled={historyIndex <= 0}
+                      >
+                        <UndoIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  </Tooltip>
+                  <Tooltip title="Redo">
+                    <Box component="span" sx={{ display: "inline-flex" }}>
+                      <IconButton
+                        onClick={redo}
+                        size="small"
+                        disabled={historyIndex >= history.length - 1}
+                      >
+                        <RedoIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  </Tooltip>
+                  <Tooltip title="Delete Selected">
+                    <Box component="span" sx={{ display: "inline-flex" }}>
+                      <IconButton
+                        onClick={deleteSelectedItem}
+                        size="small"
+                        disabled={!selectedItem}
+                        color="error"
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  </Tooltip>
+                  <Tooltip title="Zoom Out">
+                    <Box component="span" sx={{ display: "inline-flex" }}>
+                      <IconButton
+                        onClick={() => setZoom(Math.max(1, zoom - 0.25))}
+                        size="small"
+                        disabled={zoom <= 1}
+                      >
+                        <ZoomOutIcon />
+                      </IconButton>
+                    </Box>
+                  </Tooltip>
+                  <Tooltip title="Zoom In">
+                    <Box component="span" sx={{ display: "inline-flex" }}>
+                      <IconButton
+                        onClick={() => setZoom(Math.min(3, zoom + 0.25))}
+                        size="small"
+                        disabled={zoom >= 3}
+                      >
+                        <ZoomInIcon />
+                      </IconButton>
+                    </Box>
+                  </Tooltip>
+                  <Tooltip title="Reset View">
+                    <IconButton
+                      onClick={() => {
+                        setZoom(1); // Reset to 100%
+                        setPanOffset({ x: 0, y: 0 });
+                      }}
+                      size="small"
+                    >
+                      <RefreshIcon />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              </Box>
+
+              <Box display="flex" flexDirection="column" gap={1}>
+                <Box display="flex" gap={1}>
                   <Button
-                    variant={
-                      hasMapBackground || showGoogleMaps
-                        ? "contained"
-                        : "outlined"
-                    }
-                    onClick={() => {
-                      if (hasMapBackground) {
-                        setShowGoogleMapsDialog(true);
-                      } else if (showGoogleMaps) {
-                        setShowGoogleMaps(false);
-                      } else {
-                        setShowGoogleMapsDialog(true);
-                      }
-                    }}
+                    variant="outlined"
+                    component="label"
+                    startIcon={<UploadIcon />}
                     size="small"
                     fullWidth
                   >
-                    {hasMapBackground ? "Change Map" : "Add Map"}
+                    Add Image
+                    <input
+                      type="file"
+                      accept="image/*"
+                      hidden
+                      onChange={handleImageUpload}
+                    />
+                  </Button>
+                  {!hideMapSection && (
+                    <Button
+                      variant={
+                        hasMapBackground || showGoogleMaps
+                          ? "contained"
+                          : "outlined"
+                      }
+                      onClick={() => {
+                        if (hasMapBackground) {
+                          setShowGoogleMapsDialog(true);
+                        } else if (showGoogleMaps) {
+                          setShowGoogleMaps(false);
+                        } else {
+                          setShowGoogleMapsDialog(true);
+                        }
+                      }}
+                      size="small"
+                      fullWidth
+                    >
+                      {hasMapBackground ? "Change Map" : "Add Map"}
+                    </Button>
+                  )}
+                </Box>
+                {selectedItem?.type === "image" && (
+                  <Button
+                    variant="outlined"
+                    onClick={deleteSelectedItem}
+                    size="small"
+                    color="error"
+                    fullWidth
+                    startIcon={<DeleteIcon />}
+                  >
+                    Delete Image
+                  </Button>
+                )}
+                {!hideMapSection && hasMapBackground && (
+                  <Button
+                    variant="outlined"
+                    onClick={() => {
+                      const canvas = canvasRef.current;
+                      if (canvas) {
+                        canvas.backgroundImage = null;
+                      }
+                      setHasMapBackground(false);
+                      setShowGoogleMaps(false);
+                      setMapLoaded(false);
+                      mapInstanceRef.current = null;
+                      redrawCanvas();
+                    }}
+                    size="small"
+                    color="error"
+                    fullWidth
+                    startIcon={<DeleteIcon />}
+                  >
+                    Remove Map
                   </Button>
                 )}
               </Box>
-              {selectedItem?.type === "image" && (
-                <Button
-                  variant="outlined"
-                  onClick={deleteSelectedItem}
-                  size="small"
-                  color="error"
-                  fullWidth
-                  startIcon={<DeleteIcon />}
-                >
-                  Delete Image
-                </Button>
-              )}
-              {!hideMapSection && hasMapBackground && (
-                <Button
-                  variant="outlined"
-                  onClick={() => {
-                    const canvas = canvasRef.current;
-                    if (canvas) {
-                      canvas.backgroundImage = null;
-                    }
-                    setHasMapBackground(false);
-                    setShowGoogleMaps(false);
-                    setMapLoaded(false);
-                    mapInstanceRef.current = null;
-                    redrawCanvas();
-                  }}
-                  size="small"
-                  color="error"
-                  fullWidth
-                  startIcon={<DeleteIcon />}
-                >
-                  Remove Map
-                </Button>
-              )}
-            </Box>
 
-            {/* Action Buttons - Bottom of Toolbar */}
-            <Box
-              display="flex"
-              flexDirection="column"
-              gap={1}
-              sx={{
-                mt: "auto", // Push to bottom
-                pt: 2,
-                borderTop: 1,
-                borderColor: "divider",
-              }}
-            >
-              <Button
-                variant={legendEntries.length > 0 ? "contained" : "outlined"}
-                onClick={openLegendDialog}
-                size="small"
-                fullWidth
+              {/* Action Buttons - Bottom of Toolbar */}
+              <Box
+                display="flex"
+                flexDirection="column"
+                gap={1}
+                sx={{
+                  mt: "auto", // Push to bottom
+                  pt: 2,
+                  borderTop: 1,
+                  borderColor: "divider",
+                }}
               >
-                {legendEntries.length > 0 ? "View/Edit Key" : "View/Edit Key"}
-              </Button>
-              <Box display="flex" gap={1}>
                 <Button
-                  onClick={handleCancelClick}
-                  variant="outlined"
+                  variant={legendEntries.length > 0 ? "contained" : "outlined"}
+                  onClick={openLegendDialog}
                   size="small"
-                  sx={{ flex: 1 }}
+                  fullWidth
                 >
-                  Cancel
+                  {legendEntries.length > 0 ? "View/Edit Key" : "View/Edit Key"}
                 </Button>
-                <Button
-                  onClick={handleSave}
-                  variant="contained"
-                  startIcon={<SaveIcon />}
-                  size="small"
-                  sx={{ flex: 1 }}
-                >
-                  Save Plan
-                </Button>
+                <Box display="flex" gap={1}>
+                  <Button
+                    onClick={handleCancelClick}
+                    variant="outlined"
+                    size="small"
+                    sx={{ flex: 1 }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleSave}
+                    variant="contained"
+                    startIcon={<SaveIcon />}
+                    size="small"
+                    sx={{ flex: 1 }}
+                  >
+                    Save Plan
+                  </Button>
+                </Box>
               </Box>
             </Box>
-          </Box>
-        </Paper>
+          </Paper>
         </Box>
 
         {/* Drawing Canvas */}
@@ -2920,135 +2974,137 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
                   overflow: "hidden",
                 }}
               >
-              <canvas
-                ref={canvasRef}
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                onPointerLeave={handlePointerLeave}
-                onPointerCancel={handlePointerCancel}
-                style={{
-                  position: "relative",
-                  zIndex: 2,
-                  cursor:
-                    currentTool === "select" && selectedItem
-                      ? "pointer"
-                      : "crosshair",
-                  width: `${canvasSize.width}px`,
-                  height: `${canvasSize.height}px`,
-                  backgroundColor: "#ffffff",
-                  borderRadius: 8,
-                  border: "1px solid rgba(69, 90, 100, 0.5)",
-                  transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoom})`,
-                  transformOrigin: "top left",
-                  display: "block",
-                }}
-              />
-
-              {/* Inline Text Input Overlay */}
-              {showInlineTextInput && (
-                <Box
-                  sx={{
-                    position: "absolute",
-                    left: inlineTextPosition.x,
-                    top: inlineTextPosition.y,
-                    zIndex: 1000,
-                    backgroundColor: "white",
-                    border: "2px solid #007bff",
-                    borderRadius: 1,
-                    padding: 1,
-                    minWidth: 200,
-                    boxShadow: "0 4px 8px rgba(0,0,0,0.1)",
-                  }}
-                >
-                  <input
-                    ref={inlineTextInputRef}
-                    autoFocus
-                    type="text"
-                    value={inlineTextInput}
-                    onChange={(e) => setInlineTextInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        handleInlineTextSubmit();
-                      } else if (e.key === "Escape") {
-                        handleInlineTextCancel();
-                      }
-                    }}
-                    placeholder="Enter text..."
-                    style={{
-                      width: "100%",
-                      padding: "8px 12px",
-                      fontSize: fontSize,
-                      fontFamily: "Arial, sans-serif",
-                      border: "1px solid #ccc",
-                      borderRadius: "4px",
-                      outline: "none",
-                      boxSizing: "border-box",
-                    }}
-                  />
-                  <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
-                    <Button
-                      size="small"
-                      variant="contained"
-                      onClick={handleInlineTextSubmit}
-                      disabled={!inlineTextInput.trim()}
-                    >
-                      Add
-                    </Button>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      onClick={handleInlineTextCancel}
-                    >
-                      Cancel
-                    </Button>
-                  </Box>
-                </Box>
-              )}
-
-              {/* Kept under the blank canvas, clipped to the plan, so imagery
-                  cannot spill into the grey area while the layer is copied. */}
-              <Box
-                sx={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  pointerEvents: "none",
-                  zIndex: 0,
-                  overflow: "hidden",
-                  visibility:
-                    showGoogleMaps && !hasMapBackground ? "visible" : "hidden",
-                }}
-              >
-                <div
-                  ref={mapRef}
+                <canvas
+                  ref={canvasRef}
+                  onPointerDown={handlePointerDown}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={handlePointerUp}
+                  onPointerLeave={handlePointerLeave}
+                  onPointerCancel={handlePointerCancel}
                   style={{
-                    width: "100%",
-                    height: "100%",
+                    position: "relative",
+                    zIndex: 2,
+                    cursor:
+                      currentTool === "select" && selectedItem
+                        ? "pointer"
+                        : "crosshair",
+                    width: `${canvasSize.width}px`,
+                    height: `${canvasSize.height}px`,
+                    backgroundColor: "#ffffff",
+                    borderRadius: 8,
+                    border: "1px solid rgba(69, 90, 100, 0.5)",
+                    transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoom})`,
+                    transformOrigin: "top left",
+                    display: "block",
                   }}
                 />
-                {!mapLoaded && showGoogleMaps && !hasMapBackground && (
+
+                {/* Inline Text Input Overlay */}
+                {showInlineTextInput && (
                   <Box
                     sx={{
                       position: "absolute",
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      backgroundColor: "rgba(0, 0, 0, 0.1)",
+                      left: inlineTextPosition.x,
+                      top: inlineTextPosition.y,
+                      zIndex: 1000,
+                      backgroundColor: "white",
+                      border: "2px solid #007bff",
+                      borderRadius: 1,
+                      padding: 1,
+                      minWidth: 200,
+                      boxShadow: "0 4px 8px rgba(0,0,0,0.1)",
                     }}
                   >
-                    <Typography variant="h6" color="text.secondary">
-                      Loading Google Maps...
-                    </Typography>
+                    <input
+                      ref={inlineTextInputRef}
+                      autoFocus
+                      type="text"
+                      value={inlineTextInput}
+                      onChange={(e) => setInlineTextInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          handleInlineTextSubmit();
+                        } else if (e.key === "Escape") {
+                          handleInlineTextCancel();
+                        }
+                      }}
+                      placeholder="Enter text..."
+                      style={{
+                        width: "100%",
+                        padding: "8px 12px",
+                        fontSize: fontSize,
+                        fontFamily: "Arial, sans-serif",
+                        border: "1px solid #ccc",
+                        borderRadius: "4px",
+                        outline: "none",
+                        boxSizing: "border-box",
+                      }}
+                    />
+                    <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        onClick={handleInlineTextSubmit}
+                        disabled={!inlineTextInput.trim()}
+                      >
+                        Add
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={handleInlineTextCancel}
+                      >
+                        Cancel
+                      </Button>
+                    </Box>
                   </Box>
                 )}
-              </Box>
+
+                {/* Kept under the blank canvas, clipped to the plan, so imagery
+                  cannot spill into the grey area while the layer is copied. */}
+                <Box
+                  sx={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    pointerEvents: "none",
+                    zIndex: 0,
+                    overflow: "hidden",
+                    visibility:
+                      showGoogleMaps && !hasMapBackground
+                        ? "visible"
+                        : "hidden",
+                  }}
+                >
+                  <div
+                    ref={mapRef}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                    }}
+                  />
+                  {!mapLoaded && showGoogleMaps && !hasMapBackground && (
+                    <Box
+                      sx={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        backgroundColor: "rgba(0, 0, 0, 0.1)",
+                      }}
+                    >
+                      <Typography variant="h6" color="text.secondary">
+                        Loading Google Maps...
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
               </Box>
             </Box>
           </Box>
