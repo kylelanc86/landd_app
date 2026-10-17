@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Alert,
   Box,
@@ -8,7 +9,10 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
+  Tooltip,
   Typography,
+  useMediaQuery,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DescriptionIcon from "@mui/icons-material/Description";
@@ -19,6 +23,10 @@ import {
   getSitePlanAppendices,
   stripPlanForApi,
 } from "../utils/sitePlanAppendices";
+
+/** Phones in portrait, and short landscape phone screens. */
+const PHONE_SITE_PLAN_QUERY =
+  "(max-width: 600px), ((max-height: 500px) and (max-width: 932px))";
 
 /**
  * Full-page site plan editor (draw / edit one plan in a multi-plan list).
@@ -48,6 +56,7 @@ export default function SitePlanEditPage({
   const navigate = useNavigate();
   const { showSnackbar } = useSnackbar();
   const sitePlanDrawingRef = useRef(null);
+  const isPhoneSitePlan = useMediaQuery(PHONE_SITE_PLAN_QUERY);
 
   const isNew = planIndex === "new";
   const editIndex = isNew ? -1 : Number(planIndex);
@@ -87,6 +96,15 @@ export default function SitePlanEditPage({
   useEffect(() => {
     reload();
   }, [reload]);
+
+  useEffect(() => {
+    if (!isPhoneSitePlan) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isPhoneSitePlan]);
 
   const buildPlanFromDrawingData = (sitePlanData) => {
     const imageData =
@@ -175,18 +193,33 @@ export default function SitePlanEditPage({
     );
   }
 
-  return (
+  const editor = (
     <Box
       sx={{
         display: "flex",
         flexDirection: "column",
-        height: "calc(100vh - 64px)",
         overflow: "hidden",
+        ...(isPhoneSitePlan
+          ? {
+              position: "fixed",
+              inset: 0,
+              zIndex: 1250,
+              width: "100%",
+              height: "100dvh",
+              bgcolor: "#fafafa",
+              pt: "env(safe-area-inset-top)",
+              pb: "env(safe-area-inset-bottom)",
+              pl: "env(safe-area-inset-left)",
+              pr: "env(safe-area-inset-right)",
+            }
+          : {
+              height: "calc(100vh - 64px)",
+            }),
       }}
     >
       <Box
         sx={{
-          display: "flex",
+          display: isPhoneSitePlan && !locked ? "none" : "flex",
           alignItems: "center",
           gap: 2,
           px: 2,
@@ -196,13 +229,15 @@ export default function SitePlanEditPage({
           flexShrink: 0,
         }}
       >
-        <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate(listPath)}
-          sx={{ textTransform: "none" }}
-        >
-          Back to site plans
-        </Button>
+        <Tooltip title="Back to site plans">
+          <IconButton
+            onClick={() => navigate(listPath)}
+            aria-label="Back to site plans"
+            edge="start"
+          >
+            <ArrowBackIcon />
+          </IconButton>
+        </Tooltip>
         <Typography variant="h6" sx={{ fontWeight: 600, flex: 1 }}>
           {isNew ? "Draw site plan" : "Edit site plan"}
         </Typography>
@@ -215,7 +250,7 @@ export default function SitePlanEditPage({
         </Alert>
       )}
 
-      <Box sx={{ flex: 1, minHeight: 0, p: 2 }}>
+      <Box sx={{ flex: 1, minHeight: 0, p: isPhoneSitePlan ? 0.5 : 2 }}>
         {!locked ? (
           <SitePlanDrawing
             ref={sitePlanDrawingRef}
@@ -226,6 +261,11 @@ export default function SitePlanEditPage({
             existingLegendTitle={existingPlan?.sitePlanLegendTitle}
             existingFigureTitle={
               existingPlan?.sitePlanFigureTitle || defaultFigureTitle
+            }
+            defaultMapAddress={
+              entity?.projectId && typeof entity.projectId === "object"
+                ? entity.projectId.address || ""
+                : ""
             }
             {...sitePlanDrawingProps}
           />
@@ -270,4 +310,6 @@ export default function SitePlanEditPage({
       </Dialog>
     </Box>
   );
+
+  return isPhoneSitePlan ? createPortal(editor, document.body) : editor;
 }

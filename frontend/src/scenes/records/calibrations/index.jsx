@@ -8,11 +8,16 @@ import {
   Link,
   Tabs,
   Tab,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from "@mui/material";
 import { tokens } from "../../../theme/tokens";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ScheduleIcon from "@mui/icons-material/Schedule";
+import HistoryIcon from "@mui/icons-material/History";
 import { useAuth } from "../../../context/AuthContext";
 import { hasPermission } from "../../../config/permissions";
 import AirPumpCalibration from "./widgets/AirPumpCalibration";
@@ -40,6 +45,25 @@ import {
   storeCalibrationsTab,
 } from "./calibrationsNavigationUtils";
 
+const headerButtonSx = {
+  backgroundColor: "#357ECA",
+  color: tokens.grey[100],
+  fontSize: "14px",
+  fontWeight: "bold",
+  padding: "10px 20px",
+  "&:hover": {
+    backgroundColor: "#3D3DC2",
+  },
+};
+
+const historicalButtonSx = {
+  ...headerButtonSx,
+  backgroundColor: tokens.primary[600],
+  "&:hover": {
+    backgroundColor: tokens.primary[800],
+  },
+};
+
 const Calibrations = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -48,6 +72,7 @@ const Calibrations = () => {
   const [activeTab, setActiveTab] = useState(() =>
     resolveCalibrationsTab(searchParams.get("tab"))
   );
+  const [historicalDialogOpen, setHistoricalDialogOpen] = useState(false);
 
   useEffect(() => {
     const resolvedTab = resolveCalibrationsTab(searchParams.get("tab"));
@@ -81,6 +106,14 @@ const Calibrations = () => {
     "admin.access"
   );
 
+  const openHistoricalDialog = () => {
+    setHistoricalDialogOpen(true);
+  };
+
+  const closeHistoricalDialog = () => {
+    setHistoricalDialogOpen(false);
+  };
+
   return (
     <Box p="20px">
       <Typography variant="h4" component="h1" gutterBottom marginBottom={3}>
@@ -106,7 +139,7 @@ const Calibrations = () => {
           <Typography color="text.primary">Calibrations</Typography>
         </Breadcrumbs>
 
-        <Box display="flex" gap={2}>
+        <Box display="flex" gap={2} flexWrap="wrap" justifyContent="flex-end">
           {canAccessCalibrationFrequency && (
             <Button
               variant="contained"
@@ -114,20 +147,19 @@ const Calibrations = () => {
               onClick={() =>
                 navigate("/records/laboratory/calibrations/frequency")
               }
-              sx={{
-                backgroundColor: "#357ECA",
-                color: tokens.grey[100],
-                fontSize: "14px",
-                fontWeight: "bold",
-                padding: "10px 20px",
-                "&:hover": {
-                  backgroundColor: "#3D3DC2",
-                },
-              }}
+              sx={headerButtonSx}
             >
               Calibration Frequency
             </Button>
           )}
+          <Button
+            variant="contained"
+            startIcon={<HistoryIcon />}
+            onClick={openHistoricalDialog}
+            sx={historicalButtonSx}
+          >
+            Historical Calibrations
+          </Button>
         </Box>
       </Box>
 
@@ -229,6 +261,27 @@ const Calibrations = () => {
           </Grid>
         </Grid>
       )}
+
+      <Dialog
+        open={historicalDialogOpen}
+        onClose={closeHistoricalDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Historical Calibrations</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Records for calibrations and servicing conducted prior to 01 September
+            2025 can be accessed on the L&D Server. Please contact Jordan Smith
+            for further assistance.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeHistoricalDialog} variant="contained">
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

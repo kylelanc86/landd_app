@@ -595,9 +595,16 @@ const EditSample = () => {
     }
   }, [form.pumpNo, airPumps.length, fetchAvailableFlowrates]);
 
-  // Effect to clear filter size if it's 13mm and pump doesn't support 1.5 L/min
+  // Effect to clear filter size if it's 13mm and pump doesn't support 1.5 L/min.
+  // Wait until flowrates have loaded. An empty list means calibrations are still
+  // fetching, and treating that as "no 1.5 L/min" would overwrite a saved 13mm sample.
   useEffect(() => {
-    if (form.filterSize === "13mm" && form.pumpNo && !hasOnePointFiveFlowrate) {
+    if (
+      form.filterSize === "13mm" &&
+      form.pumpNo &&
+      !hasOnePointFiveFlowrate &&
+      availableFlowrates.length > 0
+    ) {
       setForm((prev) => ({
         ...prev,
         filterSize: "25mm", // Default to 25mm if 13mm is not supported
@@ -606,7 +613,7 @@ const EditSample = () => {
         averageFlowrate: "",
       }));
     }
-  }, [form.filterSize, form.pumpNo, hasOnePointFiveFlowrate]);
+  }, [form.filterSize, form.pumpNo, hasOnePointFiveFlowrate, availableFlowrates.length]);
 
   const handleChange = (e) => {
     const { name, value, checked } = e.target;
@@ -1491,7 +1498,7 @@ const EditSample = () => {
                     disabled={!form.pumpNo}
                   >
                     <MenuItem value="25mm">25mm</MenuItem>
-                    {hasOnePointFiveFlowrate && (
+                    {(hasOnePointFiveFlowrate || form.filterSize === "13mm") && (
                       <MenuItem value="13mm">13mm</MenuItem>
                     )}
                   </Select>

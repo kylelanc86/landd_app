@@ -1,5 +1,5 @@
 import pdfMake from "pdfmake/build/pdfmake";
-import api, { userService } from "../services/api";
+import api, { shiftService, userService } from "../services/api";
 import {
   buildLeadAirMonitoringFilename,
   toReportReference,
@@ -146,16 +146,407 @@ function getSamplerName(shift) {
   return String(s);
 }
 
+function sampleFinishesNextDay(sample) {
+  const value = sample?.nextDay;
+  return value === true || value === "on" || value === "true" || value === 1;
+}
+
+function dateParts(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return null;
+  return {
+    day: String(d.getDate()).padStart(2, "0"),
+    month: d.toLocaleString("en-AU", { month: "long" }),
+    monthIndex: d.getMonth(),
+    year: d.getFullYear(),
+  };
+}
+
+/** Two consecutive dates: "08 & 09 October 2026", or "31 October & 01 November 2026". */
+function formatTwoDayRange(startDateStr) {
+  if (!startDateStr) return "";
+  const start = new Date(startDateStr);
+  if (Number.isNaN(start.getTime())) return "";
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  const first = dateParts(start);
+  const second = dateParts(end);
+  if (!first || !second) return "";
+  if (first.year === second.year && first.monthIndex === second.monthIndex) {
+    return `${first.day} & ${second.day} ${first.month} ${first.year}`;
+  }
+  if (first.year === second.year) {
+    return `${first.day} ${first.month} & ${second.day} ${second.month} ${first.year}`;
+  }
+  return `${first.day} ${first.month} ${first.year} & ${second.day} ${second.month} ${second.year}`;
+}
+
+function markerLetter(index) {
+  return String.fromCharCode(65 + (index % 26));
+}
+
+function markerTypeLabel(type) {
+  if (type === "equipment") return "Equipment";
+  if (type === "access_point") return "Access point";
+  return "Other";
+}
+
+function buildSitePlanLocationEntries(markers, samples) {
+  return (Array.isArray(markers) ? markers : []).map((marker, index) => {
+    const letter = markerLetter(index);
+    if (marker?.type === "sampling_point") {
+      const sampleNumber = marker.sampleNumber || marker.label || "";
+      const sample = (samples || []).find(
+        (item) =>
+          (sampleNumber &&
+            (item.sampleNumber === sampleNumber ||
+              item.fullSampleID === sampleNumber)) ||
+          (marker.label &&
+            (item.sampleNumber === marker.label ||
+              item.fullSampleID === marker.label)),
+      );
+      const location =
+        sample?.location || marker.description || "Sampling location";
+      const id = sample?.fullSampleID || sampleNumber || marker.label || "N/A";
+      return { letter, text: `${location} - ${id}` };
+    }
+    const label = markerTypeLabel(marker?.type);
+    const description = marker?.description
+      ? `${label}: ${marker.description}`
+      : label;
+    return { letter, text: description };
+  });
+}
+
+function sitePlanImageRequestPath(staticMapUrl) {
+  if (!staticMapUrl || typeof staticMapUrl !== "string") return null;
+  if (staticMapUrl.startsWith("/api/")) return staticMapUrl;
+  if (staticMapUrl.includes("maps.googleapis.com/maps/api/staticmap")) {
+    return `/api/air-monitoring-shifts/proxy-static-map?url=${encodeURIComponent(staticMapUrl)}&crop=true`;
+  }
+  return staticMapUrl;
+}
+
+function isImageDataUrl(value) {
+  return typeof value === "string" && value.startsWith("data:image");
+}
+
+async function loadLeadSitePlan(shift, sitePlanData) {
+  if (sitePlanData?.sitePlan && sitePlanData?.sitePlanData) return sitePlanData;
+  if (!shift?._id) return null;
+  try {
+    const response = await shiftService.getSitePlan(shift._id);
+    const data = response?.data;
+    if (data?.sitePlan && data?.sitePlanData) return data;
+    return null;
+  } catch (error) {
+    console.error("Failed to load lead monitoring site plan:", error);
+    return null;
+  }
+}
+
+const LEAD_PDF_PERMISSIONS = {
+  printing: "highResolution",
+  modifying: false,
+  copying: false,
+  annotating: false,
+  fillingForms: false,
+  contentAccessibility: false,
+  documentAssembly: false,
+};
+
+function buildLeadReportDefinition({
+  content,
+  images,
+  reportReference,
+  revision,
+  mainPageCount,
+}) {
+  const hasLogo = Boolean(images?.companyLogo);
+  return {
+    pageSize: "A4",
+    pageMargins: [40, 105, 40, 58],
+    defaultStyle: { font: "Gothic", fontSize: 9, alignment: "justify" },
+    images: images || {},
+    header: hasLogo
+      ? function () {
+          return {
+            stack: [
+              {
+                columns: [
+                  { image: "companyLogo", width: 165 },
+                  {
+                    stack: [
+                      {
+                        text: "Lancaster & Dickenson Consulting Pty Ltd",
+                        fontSize: 9,
+                        margin: [0, 1, 0, 1],
+                        color: "black",
+                        lineHeight: 1.5,
+                      },
+                      {
+                        text: "4/6 Dacre Street, Mitchell ACT 2911",
+                        fontSize: 9,
+                        margin: [0, 1, 0, 1],
+                        color: "black",
+                        lineHeight: 1.5,
+                      },
+                      {
+                        text: "W: www.landd.com.au",
+                        fontSize: 9,
+                        margin: [0, 1, 0, 1],
+                        color: "black",
+                        lineHeight: 1.5,
+                      },
+                    ],
+                    alignment: "right",
+                  },
+                ],
+                margin: [0, 0, 0, 4],
+              },
+              {
+                canvas: [
+                  {
+                    type: "line",
+                    x1: 0,
+                    y1: 0,
+                    x2: LEAD_GREEN_RULE_WIDTH,
+                    y2: 0,
+                    lineWidth: 1.5,
+                    lineColor: "#16b12b",
+                  },
+                ],
+                margin: [0, 0, 0, 4],
+              },
+            ],
+            margin: [40, 30, 40, 0],
+          };
+        }
+      : undefined,
+    styles: {
+      header: { fontSize: 10, bold: true, margin: [0, 0, 0, 3], alignment: "justify" },
+      body: { fontSize: 9, margin: [0, 0, 0, 3], lineHeight: 1.35, alignment: "justify" },
+      tableHeader: { fontSize: 8, bold: true, fillColor: "#f0f0f0" },
+      tableContent: { fontSize: 8 },
+    },
+    content,
+    footer: (currentPage) =>
+      buildLeadMonitoringFooter({
+        reportReference,
+        revision,
+        currentPage,
+        mainPageCount,
+        isMainReportPage: mainPageCount > 0 && currentPage <= mainPageCount,
+      }),
+  };
+}
+
+function createPdfBlob(docDefinition) {
+  const pdfDoc = pdfMake.createPdf(docDefinition, undefined, undefined, {
+    permissions: LEAD_PDF_PERMISSIONS,
+  });
+  return new Promise((resolve, reject) => {
+    pdfDoc.getBlob((blob) =>
+      blob ? resolve(blob) : reject(new Error("Failed to get PDF blob")),
+    );
+  });
+}
+
+function buildSitePlanAppendixContent({
+  sitePlanImage,
+  entries,
+  mapUnavailable = false,
+  includeWatermark = false,
+}) {
+  const content = [
+    ...(includeWatermark
+      ? [
+          {
+            image: "watermarkLogo",
+            width: 300,
+            opacity: 0.15,
+            absolutePosition: { x: 160, y: 270 },
+          },
+        ]
+      : []),
+    {
+      text: "APPENDIX B",
+      style: "header",
+      fontSize: 18,
+      alignment: "center",
+      margin: [0, 300, 0, 8],
+      color: "#16b12b",
+    },
+    {
+      text: "SITE PLAN",
+      style: "body",
+      fontSize: 18,
+      alignment: "center",
+      margin: [0, 0, 0, 24],
+    },
+    {
+      text: "",
+      pageBreak: "before",
+    },
+  ];
+
+  if (sitePlanImage) {
+    content.push(
+      {
+        columns: [
+          { text: "", width: "*" },
+          {
+            width: 28,
+            stack: [
+              {
+                canvas: [
+                  {
+                    type: "line",
+                    x1: 14,
+                    y1: 12,
+                    x2: 14,
+                    y2: 0,
+                    lineWidth: 1.5,
+                    lineColor: "#333333",
+                  },
+                  {
+                    type: "line",
+                    x1: 14,
+                    y1: 0,
+                    x2: 10,
+                    y2: 4,
+                    lineWidth: 1.5,
+                    lineColor: "#333333",
+                  },
+                  {
+                    type: "line",
+                    x1: 14,
+                    y1: 0,
+                    x2: 18,
+                    y2: 4,
+                    lineWidth: 1.5,
+                    lineColor: "#333333",
+                  },
+                ],
+              },
+              { text: "N", alignment: "center", bold: true, fontSize: 9, margin: [0, 1, 0, 0] },
+            ],
+          },
+        ],
+        margin: [0, 0, 0, 2],
+      },
+      {
+        image: sitePlanImage,
+        width: 515,
+        margin: [0, 0, 0, 10],
+      },
+    );
+  } else if (mapUnavailable) {
+    content.push({
+      text: "The site plan map could not be loaded. Sampling locations recorded for this shift are listed below.",
+      style: "body",
+      margin: [0, 0, 0, 8],
+    });
+  }
+
+  if (entries.length > 0) {
+    content.push({
+      table: {
+        headerRows: 1,
+        widths: ["100%"],
+        body: [
+          [
+            {
+              text: "SAMPLING LOCATIONS",
+              style: "tableHeader",
+              fillColor: "#f0f0f0",
+            },
+          ],
+          [
+            {
+              stack: entries.map((entry) => ({
+                text: [
+                  { text: `${entry.letter}: `, bold: true, color: "#ff4444" },
+                  { text: entry.text },
+                ],
+                style: "tableContent",
+                margin: [0, 0, 0, 2],
+              })),
+            },
+          ],
+        ],
+      },
+      layout: {
+        hLineWidth: (i, node) =>
+          i === 0 || i === node.table.body.length ? 1 : 0.5,
+        vLineWidth: () => 1,
+        hLineColor: (i, node) =>
+          i === 0 || i === node.table.body.length ? "#000000" : "#cccccc",
+        vLineColor: () => "#000000",
+        paddingLeft: () => 4,
+        paddingRight: () => 4,
+        paddingTop: () => 4,
+        paddingBottom: () => 4,
+      },
+      margin: [0, 0, 0, 8],
+    });
+  }
+
+  content.push({
+    text: [
+      { text: "Note: ", bold: true },
+      {
+        text:
+          entries.length > 0
+            ? "Sample locations are approximate. Marker letters on the plan correspond to the locations listed above."
+            : "Sample locations shown on the plan are approximate.",
+      },
+    ],
+    style: "body",
+    margin: [0, 0, 0, 0],
+  });
+
+  return content;
+}
+
+async function renderSitePlanAppendix({
+  sitePlanImage,
+  entries,
+  mapUnavailable = false,
+  reportReference,
+  revision,
+  companyLogo,
+  watermarkLogo,
+}) {
+  const definition = buildLeadReportDefinition({
+    content: buildSitePlanAppendixContent({
+      sitePlanImage,
+      entries,
+      mapUnavailable,
+      includeWatermark: Boolean(watermarkLogo),
+    }),
+    images: {
+      ...(companyLogo ? { companyLogo } : {}),
+      ...(watermarkLogo ? { watermarkLogo } : {}),
+    },
+    reportReference,
+    revision,
+    mainPageCount: 0,
+  });
+  return createPdfBlob(definition);
+}
+
 /**
- * Generate Lead Monitoring Shift Report PDF (letter-style 3-pager).
- * Includes main report, Appendix A cover page (page 2), and attached analysis report when available.
+ * Generate Lead Monitoring Shift Report PDF (letter-style report).
+ * Includes the main report, Appendix A (certificate of analysis), and Appendix B (site plan) when a site plan is saved on the shift.
  * @param {Object} options
  * @param {Object} options.shift - Shift record (_id, analysisReportPath, analysisReportFiles, date, supervisor, defaultSampler)
  * @param {Object} options.job - LeadRemovalJob (leadAbatementContractor, projectName, client)
- * @param {Array} options.samples - Lead air samples (fullSampleID, location, startTime, endTime, averageFlowrate, leadContent, leadConcentration)
+ * @param {Array} options.samples - Lead air samples (fullSampleID, location, startTime, endTime, nextDay, averageFlowrate, leadContent, leadConcentration)
  * @param {Object} options.project - Project (name, address, client)
  * @param {boolean} [options.openInNewTab=true] - Open in new tab vs download
  * @param {boolean} [options.returnPdfData=false] - Return base64 data URL instead of opening
+ * @param {Object|null} [options.sitePlanData=null] - Optional { sitePlan, sitePlanData }. Loaded from the shift when omitted.
  */
 export async function generateLeadMonitoringShiftReport({
   shift,
@@ -164,6 +555,7 @@ export async function generateLeadMonitoringShiftReport({
   project = {},
   openInNewTab = true,
   returnPdfData = false,
+  sitePlanData = null,
 }) {
   const baseUrl =
     window.location.hostname === "localhost" ||
@@ -256,6 +648,82 @@ export async function generateLeadMonitoringShiftReport({
       }),
     );
   const filename = withRevisionAndExtension(reportReference, revision, true);
+
+  const hasNextDaySample = sortedSamples.some(sampleFinishesNextDay);
+  const twoDayRange = hasNextDaySample ? formatTwoDayRange(shift?.date) : "";
+  const spansTwoDays =
+    hasNextDaySample && shiftDate && shiftDate !== "N/A" && Boolean(twoDayRange);
+  const titleDate = spansTwoDays ? twoDayRange : shiftDate;
+  const visitDates = spansTwoDays ? twoDayRange : shiftDate;
+  const hasMarkedNextDayFinish = sortedSamples.some(
+    (sample) => sampleFinishesNextDay(sample) && sample.endTime,
+  );
+  const twoDayNote = hasNextDaySample
+    ? `Sampling was conducted across two days${
+        spansTwoDays ? ` (${twoDayRange})` : ""
+      }.${
+        hasMarkedNextDayFinish
+          ? " Finish times marked with an asterisk (*) were recorded on the following day."
+          : ""
+      }`
+    : "";
+
+  const loadedSitePlan = await loadLeadSitePlan(shift, sitePlanData);
+  const sitePlanMarkers = Array.isArray(loadedSitePlan?.sitePlanData?.markers)
+    ? loadedSitePlan.sitePlanData.markers
+    : [];
+  let sitePlanImage = null;
+  if (loadedSitePlan?.sitePlanData?.staticMapUrl) {
+    const imagePath = sitePlanImageRequestPath(
+      loadedSitePlan.sitePlanData.staticMapUrl,
+    );
+    if (imagePath) {
+      const loadedImage = await loadImageAsBase64(imagePath);
+      sitePlanImage = isImageDataUrl(loadedImage) ? loadedImage : null;
+    }
+  }
+  const sitePlanEntries = buildSitePlanLocationEntries(
+    sitePlanMarkers,
+    sortedSamples,
+  );
+
+  let sitePlanBlob = null;
+  const canRenderSitePlan = Boolean(sitePlanImage || sitePlanEntries.length > 0);
+  if (canRenderSitePlan) {
+    const renderPlan = (image, mapUnavailable) =>
+      renderSitePlanAppendix({
+        sitePlanImage: image,
+        entries: sitePlanEntries,
+        mapUnavailable,
+        reportReference,
+        revision: shift?.revision ?? 0,
+        companyLogo,
+        watermarkLogo,
+      });
+    try {
+      sitePlanBlob = await renderPlan(sitePlanImage, false);
+    } catch (error) {
+      console.error("Failed to render lead monitoring site plan:", error);
+      if (sitePlanImage && sitePlanEntries.length > 0) {
+        try {
+          sitePlanImage = null;
+          sitePlanBlob = await renderPlan(null, true);
+        } catch (retryError) {
+          console.error(
+            "Failed to render lead monitoring site plan locations:",
+            retryError,
+          );
+          sitePlanBlob = null;
+        }
+      } else {
+        sitePlanBlob = null;
+      }
+    }
+  }
+  const includeSitePlanAppendix = Boolean(sitePlanBlob);
+  const certificateSentence = includeSitePlanAppendix
+    ? "Table 1 below outlines the samples that formed part of the inspection. The certificate of analysis for the samples is presented in Appendix A of this report. A site plan showing approximate sample locations is presented in Appendix B."
+    : "Table 1 below outlines the samples that formed part of the inspection. The certificate of analysis for the samples is presented in Appendix A of this report.";
 
   const samplesAboveLimit = sortedSamples.filter((s) => {
     const n = parseLeadConcentrationNumeric(s.leadConcentration);
@@ -360,7 +828,7 @@ export async function generateLeadMonitoringShiftReport({
       {
         text: [
           { text: "Lead Air Monitoring Results: ", bold: true },
-          { text: `${siteName} - ${shiftDate}`, bold: false },
+          { text: `${siteName} - ${titleDate}`, bold: false },
           ...(shift?.reportApprovedBy ? [] : [{ text: " [DRAFT]", bold: true }]),
         ],
         margin: [0, 0, 0, 10],
@@ -379,7 +847,7 @@ export async function generateLeadMonitoringShiftReport({
             alignment: "justify",
           },
           {
-            text: `Lead abatement works were undertaken by ${leadRemovalContractor}. ${sampler} from L&D visited the Site on ${shiftDate}.`,
+            text: `Lead abatement works were undertaken by ${leadRemovalContractor}. ${sampler} from L&D visited the Site on ${visitDates}.`,
             alignment: "justify",
             margin: [0, 4, 0, 0],
           },
@@ -412,7 +880,7 @@ export async function generateLeadMonitoringShiftReport({
           },
 
           {
-            text: "Table 1 below outlines the samples that formed part of the inspection. The certificate of analysis for the samples is presented in Appendix A of this report.",
+            text: certificateSentence,
             alignment: "justify",
             margin: [0, 4, 0, 0],
           },
@@ -459,7 +927,9 @@ export async function generateLeadMonitoringShiftReport({
                 style: "tableContent",
               },
               {
-                text: s.endTime ? formatTime(s.endTime) : "-",
+                text: s.endTime
+                  ? `${formatTime(s.endTime)}${sampleFinishesNextDay(s) ? "*" : ""}`
+                  : "-",
                 style: "tableContent",
               },
               {
@@ -490,8 +960,20 @@ export async function generateLeadMonitoringShiftReport({
           paddingTop: () => 7,
           paddingBottom: () => 7,
         },
-        margin: [0, 0, 0, 10],
+        margin: [0, 0, 0, twoDayNote ? 4 : 10],
       },
+      ...(twoDayNote
+        ? [
+            {
+              text: [
+                { text: "Note: ", bold: true },
+                { text: twoDayNote },
+              ],
+              style: "body",
+              margin: [0, 0, 0, 10],
+            },
+          ]
+        : []),
       // Discussion & Conclusions
       {
         text: "Discussion & Conclusions",
@@ -581,102 +1063,19 @@ export async function generateLeadMonitoringShiftReport({
   // Main report is 2 pages when we inject a page break before sign-off (e.g. >2 samples), else 1
   const mainPageCount = sortedSamples.length > 2 ? 2 : 1;
 
-  const docDefinition = {
-    pageSize: "A4",
-    pageMargins: [40, 105, 40, 58],
-    defaultStyle: { font: "Gothic", fontSize: 9, alignment: "justify" },
+  const docDefinition = buildLeadReportDefinition({
+    content: [...mainContent, ...appendixContent],
     images: {
       ...(companyLogo ? { companyLogo } : {}),
       ...(samplerSignature ? { samplerSignature } : {}),
       ...(watermarkLogo ? { watermarkLogo } : {}),
     },
-    header: companyLogo
-      ? function (currentPage, pageCount) {
-          return {
-            stack: [
-              {
-                columns: [
-                  { image: "companyLogo", width: 165 },
-                  {
-                    stack: [
-                      {
-                        text: "Lancaster & Dickenson Consulting Pty Ltd",
-                        fontSize: 9,
-                        margin: [0, 1, 0, 1],
-                        color: "black",
-                        lineHeight: 1.5,
-                      },
-                      {
-                        text: "4/6 Dacre Street, Mitchell ACT 2911",
-                        fontSize: 9,
-                        margin: [0, 1, 0, 1],
-                        color: "black",
-                        lineHeight: 1.5,
-                      },
-                      {
-                        text: "W: www.landd.com.au",
-                        fontSize: 9,
-                        margin: [0, 1, 0, 1],
-                        color: "black",
-                        lineHeight: 1.5,
-                      },
-                    ],
-                    alignment: "right",
-                  },
-                ],
-                margin: [0, 0, 0, 4],
-              },
-              {
-                canvas: [
-                  {
-                    type: "line",
-                    x1: 0,
-                    y1: 0,
-                    x2: LEAD_GREEN_RULE_WIDTH,
-                    y2: 0,
-                    lineWidth: 1.5,
-                    lineColor: "#16b12b",
-                  },
-                ],
-                margin: [0, 0, 0, 4],
-              },
-            ],
-            margin: [40, 30, 40, 0],
-          };
-        }
-      : undefined,
-    styles: {
-      header: { fontSize: 10, bold: true, margin: [0, 0, 0, 3], alignment: "justify" },
-      body: { fontSize: 9, margin: [0, 0, 0, 3], lineHeight: 1.35, alignment: "justify" },
-      tableHeader: { fontSize: 8, bold: true, fillColor: "#f0f0f0" },
-      tableContent: { fontSize: 8 },
-    },
-    content: [...mainContent, ...appendixContent],
-    footer: (currentPage, pageCount) =>
-      buildLeadMonitoringFooter({
-        reportReference,
-        revision: shift?.revision ?? 0,
-        currentPage,
-        mainPageCount,
-        isMainReportPage: currentPage <= mainPageCount,
-      }),
-  };
-
-  const pdfDoc = pdfMake.createPdf(docDefinition, undefined, undefined, {
-    permissions: {
-      printing: "highResolution",
-      modifying: false,
-      copying: false,
-      annotating: false,
-      fillingForms: false,
-      contentAccessibility: false,
-      documentAssembly: false,
-    },
+    reportReference,
+    revision: shift?.revision ?? 0,
+    mainPageCount,
   });
 
-  const mainBlob = await new Promise((resolve, reject) => {
-    pdfDoc.getBlob((blob) => (blob ? resolve(blob) : reject(new Error("Failed to get PDF blob"))));
-  });
+  const mainBlob = await createPdfBlob(docDefinition);
 
   if (!shift?._id) {
     throw new Error("Shift ID is required to generate the report.");
@@ -733,6 +1132,14 @@ export async function generateLeadMonitoringShiftReport({
     mainPages.forEach((p) => mergedDoc.addPage(p));
     const analysisPages = await mergedDoc.copyPages(analysisDoc, analysisDoc.getPageIndices());
     analysisPages.forEach((p) => mergedDoc.addPage(p));
+    if (sitePlanBlob) {
+      const sitePlanDoc = await PDFDocument.load(await sitePlanBlob.arrayBuffer());
+      const sitePlanPages = await mergedDoc.copyPages(
+        sitePlanDoc,
+        sitePlanDoc.getPageIndices(),
+      );
+      sitePlanPages.forEach((p) => mergedDoc.addPage(p));
+    }
     const mergedBytes = await mergedDoc.save();
     finalBlob = new Blob([mergedBytes], { type: "application/pdf" });
   } catch (err) {

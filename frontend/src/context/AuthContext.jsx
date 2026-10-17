@@ -83,42 +83,43 @@ export const AuthProvider = ({ children }) => {
     restoreUserState();
   }, []);
 
-  const login = async (credentials) => {
-    setLoading(true);
-    try {
-      const response = await authService.login(credentials);
+  const establishSession = (data) => {
+    const { token, user } = data || {};
 
-      const { token, user } = response.data;
-
-      if (!user) {
-        throw new Error("No user data received");
-      }
-
-      if (!user._id && !user.id) {
-        throw new Error("No user ID found in user data");
-      }
-
-      // Normalize user ID format
-      const normalizedUser = {
-        ...user,
-        _id: user._id || user.id,
-        id: user._id || user.id,
-        token,
-      };
-
-      // Calculate and store user permissions
-      const userPermissions = calculateUserPermissions(normalizedUser.role);
-      localStorage.setItem("userPermissions", JSON.stringify(userPermissions));
-
-      localStorage.setItem("token", token);
-      localStorage.setItem("currentUser", JSON.stringify(normalizedUser));
-      setCurrentUser(normalizedUser);
-      return normalizedUser;
-    } catch (error) {
-      throw error;
-    } finally {
-      setLoading(false);
+    if (!user) {
+      throw new Error("No user data received");
     }
+
+    if (!user._id && !user.id) {
+      throw new Error("No user ID found in user data");
+    }
+
+    const normalizedUser = {
+      ...user,
+      _id: user._id || user.id,
+      id: user._id || user.id,
+      token,
+    };
+
+    const userPermissions = calculateUserPermissions(normalizedUser.role);
+    localStorage.setItem("userPermissions", JSON.stringify(userPermissions));
+    localStorage.setItem("token", token);
+    localStorage.setItem("currentUser", JSON.stringify(normalizedUser));
+    setCurrentUser(normalizedUser);
+    return normalizedUser;
+  };
+
+  const login = async (credentials) => {
+    const response = await authService.login(credentials);
+    if (response.data?.requiresTwoFactor) {
+      return response.data;
+    }
+    return establishSession(response.data);
+  };
+
+  const verifyLoginCode = async (payload) => {
+    const response = await authService.verifyLoginCode(payload);
+    return establishSession(response.data);
   };
 
   const logout = () => {
@@ -179,6 +180,7 @@ export const AuthProvider = ({ children }) => {
   const value = {
     currentUser,
     login,
+    verifyLoginCode,
     logout,
     restoreUserState,
     updateUser,

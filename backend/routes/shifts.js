@@ -505,6 +505,16 @@ router.patch('/:id', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports
       updates.reportApprovedBy &&
       !shiftBeforeUpdate.reportApprovedBy;
 
+    if (
+      becomingAuthorised &&
+      shift.jobModel === 'LeadRemovalJob' &&
+      req.user?.reportProofer !== true
+    ) {
+      return res.status(403).json({
+        message: 'Only report proofers can authorise lead air monitoring reports',
+      });
+    }
+
     // Update each field individually
     for (const [key, value] of Object.entries(updates)) {
       shift[key] = value;
@@ -1383,16 +1393,19 @@ router.post(
           .json({ message: 'Report has already been authorised' });
       }
 
-      // Air monitoring shift authorisation is done by lab signatories
-      const signatoryUsers = await User.find({
-        labSignatory: true,
+      // Asbestos air monitoring is authorised by lab signatories.
+      // Lead air monitoring is authorised by report proofers.
+      const isLeadJob = shift.jobModel === 'LeadRemovalJob';
+      const approverRoleLabel = isLeadJob ? 'report proofer' : 'lab signatory';
+      const approverUsers = await User.find({
+        ...(isLeadJob ? { reportProofer: true } : { labSignatory: true }),
         isActive: true,
       }).select('firstName lastName email');
 
-      if (signatoryUsers.length === 0) {
+      if (approverUsers.length === 0) {
         return res
           .status(400)
-          .json({ message: 'No lab signatory users found' });
+          .json({ message: `No ${approverRoleLabel} users found` });
       }
 
       let projectName =
@@ -1451,10 +1464,7 @@ router.post(
         typeof shift.job?.id === 'string'
           ? shift.job.id
           : shift.job?._id?.toString() || shift.job?.toString();
-      const isLeadJob = shift.jobModel === 'LeadRemovalJob';
-      const reportTypeLabel = isLeadJob
-        ? 'Lead air monitoring shift'
-        : 'Asbestos air monitoring shift';
+      const monitoringType = isLeadJob ? 'Lead' : 'Asbestos';
       const reportTypeArticle = isLeadJob ? 'A' : 'An';
       const jobUrl = jobId
         ? `${frontendUrl}/${isLeadJob ? 'lead-removal' : 'asbestos-removal'}/jobs/${jobId}/details`
@@ -1463,7 +1473,7 @@ router.post(
       // Respond immediately so the UI is not blocked; send emails in the background
       const emailPayload = {
         sendMail,
-        signatoryUsers,
+        approverUsers,
         projectID,
         projectName,
         clientName,
@@ -1471,17 +1481,19 @@ router.post(
         shiftDate,
         requesterName,
         jobUrl,
-        reportTypeLabel,
+        monitoringType,
         reportTypeArticle,
       };
       setImmediate(() => {
         Promise.all(
-          emailPayload.signatoryUsers.map(async (user) => {
+          emailPayload.approverUsers.map(async (user) => {
             await emailPayload.sendMail({
               to: user.email,
-              subject: `Report Authorisation Required - ${emailPayload.projectID}: ${emailPayload.reportTypeLabel}`,
+              subject: `${emailPayload.monitoringType} Air Monitoring - Report Authorisation Required - ${emailPayload.projectID}`,
               text: `
-${emailPayload.reportTypeArticle} ${emailPayload.reportTypeLabel.toLowerCase()} report is ready for authorisation.
+${emailPayload.reportTypeArticle} ${emailPayload.monitoringType.toLowerCase()} air monitoring shift report is ready for authorisation.
+
+Monitoring: ${emailPayload.monitoringType}
 
 Project: ${emailPayload.projectName} (${emailPayload.projectID})
 Client: ${emailPayload.clientName}
@@ -1497,11 +1509,12 @@ Review the report at: ${emailPayload.jobUrl}
                   <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0; padding: 0;">L&D Consulting App</h1>
                 </div>
                 <div style="color: #333; line-height: 1.6;">
-                  <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Report Authorisation Required</h2>
+                  <h2 style="color: rgb(25, 138, 44); margin-bottom: 8px;">Report Authorisation Required</h2>
+                  <p style="font-size: 18px; font-weight: bold; color: #111; margin: 0 0 20px;">${emailPayload.monitoringType} air monitoring</p>
                   <p>Hello ${user.firstName},</p>
-                  <p>${emailPayload.reportTypeArticle} ${emailPayload.reportTypeLabel.toLowerCase()} report is ready for your authorisation:</p>
+                  <p>${emailPayload.reportTypeArticle} ${emailPayload.monitoringType.toLowerCase()} air monitoring shift report is ready for your authorisation:</p>
                   <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
-                    <p style="margin: 5px 0;"><strong>Type:</strong> ${emailPayload.reportTypeLabel}</p>
+                    <p style="margin: 5px 0;"><strong>Monitoring:</strong> ${emailPayload.monitoringType}</p>
                     <p style="margin: 5px 0;"><strong>Project:</strong> ${emailPayload.projectName}</p>
                     <p style="margin: 5px 0;"><strong>Project ID:</strong> ${emailPayload.projectID}</p>
                     <p style="margin: 5px 0;"><strong>Client:</strong> ${emailPayload.clientName}</p>
@@ -1526,8 +1539,8 @@ Review the report at: ${emailPayload.jobUrl}
       });
 
       return res.json({
-        message: `Authorisation request emails are being sent to ${signatoryUsers.length} signatory user(s)`,
-        recipients: signatoryUsers.map((user) => ({
+        message: `Authorisation request emails are being sent to ${approverUsers.length} ${approverRoleLabel} user(s)`,
+        recipients: approverUsers.map((user) => ({
           email: user.email,
           name: `${user.firstName} ${user.lastName}`,
         })),

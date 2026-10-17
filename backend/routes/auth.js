@@ -6,6 +6,14 @@ const checkPermission = require('../middleware/checkPermission');
 const crypto = require('crypto');
 const { sendMail } = require('../services/mailer');
 const TokenBlacklist = require('../models/TokenBlacklist');
+const {
+  LOGIN_CODE_RESEND_COOLDOWN_MS,
+  MAX_LOGIN_CODE_ATTEMPTS,
+  LOGIN_CODE_SELECT,
+  secretsMatch,
+  clearLoginChallenge,
+  applyLoginChallenge,
+} = require('../services/loginChallenge');
 
 // Use global fetch if available (Node.js 18+), otherwise use node-fetch
 let fetch;
@@ -88,70 +96,199 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// Login user
+function publicAuthUser(user) {
+  return {
+    id: user._id,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    email: user.email,
+    role: user.role,
+    phone: user.phone,
+    notifications: user.notifications,
+    labSignatory: user.labSignatory || false,
+    reportProofer: user.reportProofer || false,
+    labApprovals: user.labApprovals || {
+      fibreCounting: false,
+      fibreIdentification: false,
+      calibrations: false,
+    },
+  };
+}
+
+async function sendLoginCodeEmail(user, code) {
+  await sendMail({
+    to: user.email,
+    subject: 'Your L&D Consulting login code',
+    text: `Your login code is ${code}. It expires in 10 minutes. If you did not try to log in, you can ignore this email.`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+        <h1 style="color: rgb(25, 138, 44); font-size: 24px; margin: 0 0 24px;">L&D Consulting</h1>
+        <h2 style="color: rgb(25, 138, 44); margin-bottom: 16px;">Login code</h2>
+        <p style="color: #333; line-height: 1.6;">Use this code to finish signing in. It expires in 10 minutes.</p>
+        <p style="font-size: 32px; letter-spacing: 8px; font-weight: bold; color: #111; margin: 24px 0;">${code}</p>
+        <p style="color: #666; font-size: 14px;">If you did not try to log in, you can ignore this email.</p>
+      </div>
+    `,
+  });
+}
+
+// Login user — password check, then email a 4-digit code. No session token yet.
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    console.log('Login attempt for email:', email);
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    console.log('Login attempt for email:', normalizedEmail);
 
-    // Find user
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: normalizedEmail }).select(LOGIN_CODE_SELECT);
     if (!user) {
-      console.log('User not found:', email);
+      console.log('User not found:', normalizedEmail);
       return res.status(400).json({ message: 'Invalid credentials' });
     }
-    console.log('User found:', { id: user._id, email: user.email, role: user.role });
 
-    // Check password
     const isMatch = await user.comparePassword(password);
-    console.log('Password match:', isMatch);
     if (!isMatch) {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
-    // Check if user is active
     if (!user.isActive) {
-      console.log('User is inactive:', email);
       return res.status(400).json({ message: 'Account is inactive' });
     }
 
-    // Check if user has set up their password
     if (!user.passwordSet) {
-      console.log('User has not set up password:', email);
       return res.status(400).json({ message: 'Please check your email and set up your password before logging in.' });
     }
 
-    // Generate token
+    const { code, challengeToken } = applyLoginChallenge(user);
+    await user.save();
+
     try {
-      const token = user.generateAuthToken();
-      console.log('Token generated successfully');
-      
-      res.json({
-        token,
-        user: {
-          id: user._id,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.email,
-          role: user.role,
-          phone: user.phone,
-          notifications: user.notifications,
-          labSignatory: user.labSignatory || false,
-          reportProofer: user.reportProofer || false,
-          labApprovals: user.labApprovals || {
-            fibreCounting: false,
-            fibreIdentification: false,
-            calibrations: false,
-          },
-        }
-      });
-    } catch (tokenError) {
-      console.error('Token generation error:', tokenError);
-      throw tokenError;
+      await sendLoginCodeEmail(user, code);
+    } catch (emailError) {
+      clearLoginChallenge(user);
+      await user.save();
+      console.error('Login code email failed:', emailError.message);
+      return res.status(500).json({ message: 'We could not send the login code. Please try again.' });
     }
+
+    return res.json({
+      requiresTwoFactor: true,
+      challengeToken,
+      email: user.email,
+      message: 'A 4-digit code has been sent to your email.',
+    });
   } catch (err) {
     console.error('Login error:', err);
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: 'Login failed. Please try again.' });
+  }
+});
+
+router.post('/verify-login-code', async (req, res) => {
+  try {
+    const { email, code, challengeToken } = req.body || {};
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const normalizedCode = String(code || '').trim();
+
+    if (!normalizedEmail || !challengeToken || !/^\d{4}$/.test(normalizedCode)) {
+      return res.status(400).json({ message: 'Enter the 4-digit code from your email.' });
+    }
+
+    const user = await User.findOne({ email: normalizedEmail }).select(LOGIN_CODE_SELECT);
+    const challengeValid = user && secretsMatch(user.loginChallengeHash, challengeToken, user._id);
+    const challengeExpired = !user?.loginChallengeExpires || user.loginChallengeExpires.getTime() < Date.now();
+
+    if (!user || !challengeValid || challengeExpired) {
+      if (user && challengeValid && challengeExpired) {
+        clearLoginChallenge(user);
+        await user.save();
+      }
+      return res.status(400).json({ message: 'That code is invalid or has expired. Please log in again.' });
+    }
+
+    if ((user.loginCodeAttempts || 0) >= MAX_LOGIN_CODE_ATTEMPTS) {
+      clearLoginChallenge(user);
+      await user.save();
+      return res.status(400).json({ message: 'Too many incorrect codes. Please log in again.' });
+    }
+
+    if (!user.loginCodeExpires || user.loginCodeExpires.getTime() < Date.now()) {
+      return res.status(400).json({ message: 'That code has expired. Request a new code or log in again.' });
+    }
+
+    if (!secretsMatch(user.loginCodeHash, normalizedCode, user._id)) {
+      user.loginCodeAttempts = (user.loginCodeAttempts || 0) + 1;
+      const remaining = MAX_LOGIN_CODE_ATTEMPTS - user.loginCodeAttempts;
+      if (remaining <= 0) {
+        clearLoginChallenge(user);
+        await user.save();
+        return res.status(400).json({ message: 'Too many incorrect codes. Please log in again.' });
+      }
+      await user.save();
+      return res.status(400).json({
+        message: `Incorrect code. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`,
+      });
+    }
+
+    if (!user.isActive) {
+      clearLoginChallenge(user);
+      await user.save();
+      return res.status(400).json({ message: 'Account is inactive' });
+    }
+
+    clearLoginChallenge(user);
+    await user.save();
+
+    const token = user.generateAuthToken();
+    return res.json({
+      token,
+      user: publicAuthUser(user),
+    });
+  } catch (err) {
+    console.error('Verify login code error:', err);
+    return res.status(500).json({ message: 'Could not verify the login code. Please try again.' });
+  }
+});
+
+router.post('/resend-login-code', async (req, res) => {
+  try {
+    const { email, challengeToken } = req.body || {};
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+
+    if (!normalizedEmail || !challengeToken) {
+      return res.status(400).json({ message: 'Please log in again to request a new code.' });
+    }
+
+    const user = await User.findOne({ email: normalizedEmail }).select(LOGIN_CODE_SELECT);
+    if (!user || !user.isActive || !secretsMatch(user.loginChallengeHash, challengeToken, user._id)) {
+      return res.status(400).json({ message: 'Please log in again to request a new code.' });
+    }
+
+    if (!user.loginChallengeExpires || user.loginChallengeExpires.getTime() < Date.now() + 60 * 1000) {
+      clearLoginChallenge(user);
+      await user.save();
+      return res.status(400).json({ message: 'That login attempt has expired. Please log in again.' });
+    }
+
+    if (user.loginCodeSentAt && Date.now() - new Date(user.loginCodeSentAt).getTime() < LOGIN_CODE_RESEND_COOLDOWN_MS) {
+      return res.status(429).json({ message: 'Please wait a moment before requesting another code.' });
+    }
+
+    const { code } = applyLoginChallenge(user, {
+      rotateChallenge: false,
+      existingChallengeExpires: user.loginChallengeExpires,
+    });
+    await user.save();
+
+    try {
+      await sendLoginCodeEmail(user, code);
+    } catch (emailError) {
+      console.error('Resend login code email failed:', emailError.message);
+      return res.status(500).json({ message: 'We could not send the login code. Please try again.' });
+    }
+
+    return res.json({ message: 'A new code has been sent to your email.' });
+  } catch (err) {
+    console.error('Resend login code error:', err);
+    return res.status(500).json({ message: 'We could not send the login code. Please try again.' });
   }
 });
 

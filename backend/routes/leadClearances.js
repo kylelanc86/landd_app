@@ -215,7 +215,7 @@ router.get("/:id", auth, checkPermission(permView), async (req, res) => {
     const clearance = await LeadClearance.findById(req.params.id)
       .populate({
         path: "projectId",
-        select: "projectID name client",
+        select: "projectID name client address",
         populate: { path: "client", select: "name" },
       })
       .populate("createdBy", "firstName lastName")
@@ -702,6 +702,9 @@ router.post("/:id/authorise", auth, checkPermission(permEdit), async (req, res) 
       );
     }
     clearance.updatedBy = req.user.id;
+    // Drop the pre-authorisation PDF so the regenerated report (with the approver
+    // on the version-control page) is the copy that gets stored and downloaded.
+    clearClearancePdfFields(clearance);
     const updated = await clearance.save();
     const populatedForEmail = await LeadClearance.findById(updated._id)
       .populate({

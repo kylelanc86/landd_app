@@ -1445,7 +1445,7 @@ const LeadRemovalJobDetails = () => {
         response.data?.message ||
           `Authorisation request emails sent successfully to ${
             response.data?.recipients?.length || 0
-          } signatory user(s)`,
+          } report proofer user(s)`,
         "success",
       );
       // Update local state so button turns grey and shows "Re-send for Authorisation" without refresh
@@ -2753,8 +2753,8 @@ const LeadRemovalJobDetails = () => {
                                       currentUser,
                                       "jobs.edit",
                                     ),
-                                    isLabSignatory: Boolean(
-                                      currentUser?.labSignatory,
+                                    isReportProofer: Boolean(
+                                      currentUser?.reportProofer,
                                     ),
                                   };
                                   const permissionCheckDuration = Math.round(
@@ -2767,11 +2767,11 @@ const LeadRemovalJobDetails = () => {
                                   const visibility = {
                                     showAuthorise:
                                       baseVisible &&
-                                      conditions.isLabSignatory &&
+                                      conditions.isReportProofer &&
                                       conditions.hasEditPermission,
                                     showSend:
                                       baseVisible &&
-                                      !conditions.isLabSignatory &&
+                                      !conditions.isReportProofer &&
                                       conditions.hasEditPermission,
                                   };
 

@@ -1000,13 +1000,25 @@ router.get('/:id', async (req, res) => {
       omitItems ||
       itemsMaterialTypesRaw.length > 0;
 
-    // Heal duplicate sample refs before responding (persists when flags were wrong)
+    // Heal duplicate sample refs before responding (persists when flags were wrong).
+    // When photo binaries were excluded from this query, persist the heal on a
+    // full document. Saving this instance would write items back without image data.
     if (!omitItems && job.items && job.items.length > 0) {
       const { changed } = healReferredFlags(job.items);
-      // Viewing a closed report must not write healed flags back to the database.
       if (changed && !isClosedSurveyAssessment(job)) {
-        job.markModified('items');
-        await job.save();
+        if (photoBlobExclusions) {
+          const fullJob = await AsbestosAssessment.findById(job._id);
+          if (fullJob && !isClosedSurveyAssessment(fullJob)) {
+            const healed = healReferredFlags(fullJob.items || []);
+            if (healed.changed) {
+              fullJob.markModified('items');
+              await fullJob.save();
+            }
+          }
+        } else {
+          job.markModified('items');
+          await job.save();
+        }
       }
     }
 

@@ -566,7 +566,8 @@ const Dashboard = () => {
         title: "Active Projects",
         icon: <PlayArrowIcon />,
         bgcolor: "#ebba34",
-        onClick: () => navigate("/projects"),
+        onClick: () =>
+          navigateToProjects(navigate, { status: "all_active" }),
       },
       {
         id: "calibrations",

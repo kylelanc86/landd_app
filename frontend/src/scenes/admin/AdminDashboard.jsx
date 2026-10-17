@@ -16,6 +16,7 @@ import {
   ArrowForward as ArrowForwardIcon,
   Storage as StorageIcon,
   Archive as ArchiveIcon,
+  HealthAndSafetyOutlined as HealthAndSafetyIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import PermissionGate from "../../components/PermissionGate";
@@ -77,6 +78,15 @@ const AdminDashboard = () => {
       path: "/admin/archived-data",
       requiredPermission: "admin.view",
       color: "#795548",
+    },
+    {
+      id: "swms",
+      title: "SWMS",
+      description: "Create SWMS categories and the items grouped in each category",
+      icon: <HealthAndSafetyIcon />,
+      path: "/admin/swms",
+      requiredPermission: "admin.view",
+      color: "#1976d2",
     },
   ];
 

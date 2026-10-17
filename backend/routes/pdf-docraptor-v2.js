@@ -3613,11 +3613,16 @@ async function persistLeadClearancePdfFromJob(job) {
   if (job.reportType !== 'lead-clearance' || job.status !== 'completed' || !job.downloadUrl || !job.clearanceId) {
     return;
   }
-  const existing = await LeadClearance.findById(job.clearanceId).select('mergedPdfPath').lean();
-  if (
-    await clearanceHasPdfBuffer(LeadClearance, job.clearanceId) ||
-    mergedPdfFileExists(existing?.mergedPdfPath)
-  ) {
+  if (job.persisted) return;
+
+  const current = await LeadClearance.findById(job.clearanceId)
+    .select('reportApprovedBy')
+    .lean();
+  const currentApprover = String(current?.reportApprovedBy || '').trim();
+  const payloadApprover = String(job.mergePayload?.reportApprovedBy || '').trim();
+  // A PDF started before authorisation must not replace the approved report.
+  if (currentApprover && payloadApprover !== currentApprover) {
+    job.persisted = true;
     return;
   }
 
@@ -3634,6 +3639,7 @@ async function persistLeadClearancePdfFromJob(job) {
     jobId: job.statusId,
     relativeDir: 'lead-clearances',
   });
+  job.persisted = true;
 }
 
 function storedPdfBytes(value) {

@@ -10,32 +10,32 @@ const getEmailConfig = () => ({
   fromName: process.env.EMAIL_FROM_NAME || process.env.SMTP_FROM_NAME || 'L&D APP ADMIN'
 });
 
-// Validate email configuration
+let transporter = null;
+
 const validateEmailConfig = () => {
   const emailConfig = getEmailConfig();
   const required = ['host', 'port', 'user', 'pass', 'from'];
   const missing = required.filter((key) => !emailConfig[key]);
-  
+
   if (missing.length > 0) {
     throw new Error(`Missing required email configuration: ${missing.join(', ')}`);
   }
-  
-  // Debug: Log email configuration (mask password)
-  console.log('Email configuration loaded:');
-  console.log('  HOST:', emailConfig.host);
-  console.log('  PORT:', emailConfig.port);
-  console.log('  SECURE:', emailConfig.secure);
-  console.log('  USER:', emailConfig.user);
-  console.log('  FROM:', `${emailConfig.fromName} <${emailConfig.from}>`);
-  console.log('  PASS:', emailConfig.pass ? `${emailConfig.pass.substring(0, 4)}...${emailConfig.pass.substring(emailConfig.pass.length - 4)}` : 'NOT SET');
+
+  return emailConfig;
 };
 
-// Create transporter
-const createTransporter = () => {
-  validateEmailConfig();
-  const emailConfig = getEmailConfig();
-  
-  const config = {
+const getTransporter = () => {
+  if (transporter) {
+    return transporter;
+  }
+
+  const emailConfig = validateEmailConfig();
+  const debug = process.env.EMAIL_DEBUG === 'true';
+
+  transporter = nodemailer.createTransport({
+    pool: true,
+    maxConnections: 2,
+    maxMessages: 100,
     host: emailConfig.host,
     port: parseInt(emailConfig.port, 10),
     secure: emailConfig.secure === 'true',
@@ -43,36 +43,33 @@ const createTransporter = () => {
       user: emailConfig.user,
       pass: emailConfig.pass,
     },
-    // Add additional debugging
-    debug: true,
-    logger: true
-  };
-  
-  console.log('Creating transporter with config:', {
-    ...config,
-    auth: { ...config.auth, pass: '***' }
+    debug,
+    logger: debug,
   });
-  
-  return nodemailer.createTransport(config);
+
+  return transporter;
 };
+
+async function warmMailer() {
+  try {
+    await getTransporter().verify();
+    console.log('SMTP connection ready');
+  } catch (error) {
+    transporter = null;
+    console.error('SMTP warmup failed:', error.message);
+  }
+}
 
 async function sendMail({ to, subject, text, html }) {
   if (!to || !subject || (!text && !html)) {
     throw new Error('Missing required email fields: to, subject, and either text or html');
   }
 
-  console.log('Attempting to send email to:', to);
-  
-  const transporter = createTransporter();
-  const emailConfig = getEmailConfig();
-  
+  const emailConfig = validateEmailConfig();
+  console.log('Sending email to:', to);
+
   try {
-    // Test connection first
-    console.log('Testing SMTP connection...');
-    await transporter.verify();
-    console.log('SMTP connection verified successfully');
-    
-    const info = await transporter.sendMail({
+    const info = await getTransporter().sendMail({
       from: `${emailConfig.fromName} <${emailConfig.from}>`,
       to,
       subject,
@@ -82,11 +79,12 @@ async function sendMail({ to, subject, text, html }) {
     console.log('Email sent successfully:', info.messageId);
     return info;
   } catch (error) {
-    console.error('Error sending email:', error);
-    console.error('Error code:', error.code);
-    console.error('Error response:', error.response);
+    if (['ECONNECTION', 'ETIMEDOUT', 'EAUTH', 'ESOCKET', 'ECONNECTIONRESET'].includes(error.code)) {
+      transporter = null;
+    }
+    console.error('Error sending email:', error.message);
     throw error;
   }
 }
 
-module.exports = { sendMail }; 
+module.exports = { sendMail, warmMailer };

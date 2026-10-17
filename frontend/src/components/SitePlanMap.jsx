@@ -810,7 +810,7 @@ const SitePlanMap = ({
           startIcon={<SaveIcon />}
           sx={{ backgroundColor: colors.primary[500] }}
         >
-          Save Site Plan
+          Save Plan
         </Button>
       </DialogActions>
     </Dialog>

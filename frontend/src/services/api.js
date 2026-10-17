@@ -54,19 +54,19 @@ api.interceptors.response.use(
     return response;
   },
   async (error) => {
-    // Handle token expiration
-    if (error.response?.status === 401 && error.response?.data?.newToken) {
-      const newToken = error.response.data.newToken;
-      localStorage.setItem("token", newToken);
-      
-      // Retry the original request with new token
-      error.config.headers.Authorization = `Bearer ${newToken}`;
-      return api(error.config);
-    }
-
-    // Handle other 401 errors (not token expiration)
     if (error.response?.status === 401) {
       const errorCode = error.response?.data?.code;
+
+      if (errorCode === 'SESSION_EXPIRED') {
+        localStorage.removeItem("token");
+        localStorage.removeItem("currentUser");
+        localStorage.removeItem("userRole");
+        localStorage.removeItem("userPermissions");
+        if (window.location.pathname !== "/login") {
+          window.location.href = "/login?message=session_expired";
+        }
+        return Promise.reject(error);
+      }
       
       // Handle token blacklisted specifically
       if (errorCode === 'TOKEN_BLACKLISTED') {
@@ -157,6 +157,12 @@ api.interceptors.response.use(
 export const authService = {
   login: (credentials) => {
     return api.post('/auth/login', credentials);
+  },
+  verifyLoginCode: ({ email, code, challengeToken }) => {
+    return api.post('/auth/verify-login-code', { email, code, challengeToken });
+  },
+  resendLoginCode: ({ email, challengeToken }) => {
+    return api.post('/auth/resend-login-code', { email, challengeToken });
   },
   register: (userData) => api.post('/auth/register', userData),
   getCurrentUser: () => {

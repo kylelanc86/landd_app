@@ -42,6 +42,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import DescriptionIcon from "@mui/icons-material/Description";
+import HealthAndSafetyIcon from "@mui/icons-material/HealthAndSafety";
 import { projectService, clientService, userService } from "../../services/api";
 import ProjectAuditService from "../../services/projectAuditService";
 import { useAuth } from "../../context/AuthContext";
@@ -1670,20 +1671,39 @@ const ProjectInformation = () => {
         {isEditMode && (
           <Box display="flex" alignItems="center" gap={2}>
             {id && id !== "new" && id !== "add-new" && (
-              <Button
-                variant="contained"
-                color="primary"
-                startIcon={<DescriptionIcon />}
-                onClick={() =>
-                  safeNavigate(`/reports/project/${id}`, {
-                    from: "project-info",
-                    projectId: id,
-                    projectsPagination: location.state?.projectsPagination,
-                  })
-                }
-              >
-                Project Reports
-              </Button>
+              <>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  startIcon={<DescriptionIcon />}
+                  onClick={() =>
+                    safeNavigate(`/reports/project/${id}`, {
+                      from: "project-info",
+                      projectId: id,
+                      projectsPagination: location.state?.projectsPagination,
+                    })
+                  }
+                >
+                  Project Reports
+                </Button>
+                <Button
+                  variant="contained"
+                  startIcon={<HealthAndSafetyIcon />}
+                  onClick={() =>
+                    safeNavigate(`/projects/${id}/swms`, {
+                      from: "project-info",
+                      projectId: id,
+                      projectsPagination: location.state?.projectsPagination,
+                    })
+                  }
+                  sx={{
+                    backgroundColor: "#1976d2",
+                    "&:hover": { backgroundColor: "#1565c0" },
+                  }}
+                >
+                  SWMS
+                </Button>
+              </>
             )}
             <Button
               variant="outlined"

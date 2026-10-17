@@ -180,7 +180,7 @@ router.get("/:id", auth, checkPermission("asbestos.view"), async (req, res) => {
     const clearance = await AsbestosClearance.findById(req.params.id)
       .populate({
         path: "projectId",
-        select: "projectID name client",
+        select: "projectID name client address",
         populate: {
           path: "client",
           select: "name"

@@ -248,6 +248,32 @@ const userSchema = new mongoose.Schema({
     type: [mongoose.Schema.Types.ObjectId],
     ref: 'Project',
     default: []
+  },
+  // Short-lived email login code. Hidden from normal queries.
+  loginCodeHash: {
+    type: String,
+    select: false
+  },
+  loginCodeExpires: {
+    type: Date,
+    select: false
+  },
+  loginCodeAttempts: {
+    type: Number,
+    default: 0,
+    select: false
+  },
+  loginChallengeHash: {
+    type: String,
+    select: false
+  },
+  loginChallengeExpires: {
+    type: Date,
+    select: false
+  },
+  loginCodeSentAt: {
+    type: Date,
+    select: false
   }
 }, {
   timestamps: true
@@ -276,7 +302,7 @@ userSchema.methods.generateAuthToken = function() {
         permissions: this.permissions
       },
       process.env.JWT_SECRET || 'your-secret-key',
-      { expiresIn: process.env.JWT_EXPIRE || '7d' }
+      { expiresIn: '72h' }
     );
   } catch (error) {
     console.error('Token generation error:', error);

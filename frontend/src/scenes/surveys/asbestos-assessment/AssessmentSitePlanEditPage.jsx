@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Box,
   Button,
@@ -9,6 +10,9 @@ import {
   DialogTitle,
   Typography,
   Alert,
+  IconButton,
+  Tooltip,
+  useMediaQuery,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DescriptionIcon from "@mui/icons-material/Description";
@@ -24,12 +28,17 @@ import {
   stripPlanForApi,
 } from "../../../utils/asbestosSitePlanAppendices";
 
+/** Phones in portrait, and short landscape phone screens. */
+const PHONE_SITE_PLAN_QUERY =
+  "(max-width: 600px), ((max-height: 500px) and (max-width: 932px))";
+
 export default function AssessmentSitePlanEditPage() {
   const { id, planIndex } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
   const { showSnackbar } = useSnackbar();
   const sitePlanDrawingRef = useRef(null);
+  const isPhoneSitePlan = useMediaQuery(PHONE_SITE_PLAN_QUERY);
 
   const isNew = planIndex === "new";
   const editIndex = isNew ? -1 : Number(planIndex);
@@ -78,6 +87,15 @@ export default function AssessmentSitePlanEditPage() {
   useEffect(() => {
     loadAssessment();
   }, [loadAssessment]);
+
+  useEffect(() => {
+    if (!isPhoneSitePlan) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isPhoneSitePlan]);
 
   const buildPlanFromDrawingData = (sitePlanData) => {
     const imageData =
@@ -172,18 +190,33 @@ export default function AssessmentSitePlanEditPage() {
     );
   }
 
-  return (
+  const editor = (
     <Box
       sx={{
         display: "flex",
         flexDirection: "column",
-        height: "calc(100vh - 64px)",
         overflow: "hidden",
+        ...(isPhoneSitePlan
+          ? {
+              position: "fixed",
+              inset: 0,
+              zIndex: 1250,
+              width: "100%",
+              height: "100dvh",
+              bgcolor: "#fafafa",
+              pt: "env(safe-area-inset-top)",
+              pb: "env(safe-area-inset-bottom)",
+              pl: "env(safe-area-inset-left)",
+              pr: "env(safe-area-inset-right)",
+            }
+          : {
+              height: "calc(100vh - 64px)",
+            }),
       }}
     >
       <Box
         sx={{
-          display: "flex",
+          display: isPhoneSitePlan && !isReportLocked ? "none" : "flex",
           alignItems: "center",
           gap: 2,
           px: 2,
@@ -193,13 +226,15 @@ export default function AssessmentSitePlanEditPage() {
           flexShrink: 0,
         }}
       >
-        <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate(listPath, { state: location.state })}
-          sx={{ textTransform: "none" }}
-        >
-          Back to site plans
-        </Button>
+        <Tooltip title="Back to site plans">
+          <IconButton
+            onClick={() => navigate(listPath, { state: location.state })}
+            aria-label="Back to site plans"
+            edge="start"
+          >
+            <ArrowBackIcon />
+          </IconButton>
+        </Tooltip>
         <Typography variant="h6" sx={{ fontWeight: 600, flex: 1 }}>
           {isReportLocked ? "View site plan" : isNew ? "Draw site plan" : "Edit site plan"}
         </Typography>
@@ -212,7 +247,14 @@ export default function AssessmentSitePlanEditPage() {
         </Alert>
       )}
 
-      <Box sx={{ flex: 1, minHeight: 0, p: 2, overflow: "auto" }}>
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          p: isPhoneSitePlan ? 0.5 : 2,
+          overflow: isPhoneSitePlan && !isReportLocked ? "hidden" : "auto",
+        }}
+      >
         {!isReportLocked ? (
           <SitePlanDrawing
             ref={sitePlanDrawingRef}
@@ -300,4 +342,6 @@ export default function AssessmentSitePlanEditPage() {
       </Dialog>
     </Box>
   );
+
+  return isPhoneSitePlan ? createPortal(editor, document.body) : editor;
 }

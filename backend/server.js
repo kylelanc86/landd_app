@@ -54,6 +54,7 @@ const sampleItemsRoutes = require('./routes/sampleItems');
 const clientSuppliedJobsRoutes = require('./routes/clientSuppliedJobs');
 const mycometerJobsRoutes = require('./routes/mycometerJobs');
 const invoiceItemsRoutes = require('./routes/invoiceItems');
+const swmsCategoryRoutes = require('./routes/swmsCategories');
 const iaqRecordsRoutes = require('./routes/iaqRecords');
 const blanksRoutes = require('./routes/blanks');
 const iaqSamplesRoutes = require('./routes/iaqSamples');
@@ -370,6 +371,9 @@ connectDB()
     
     app.use('/api/invoice-items', requireAuth, checkTokenBlacklist, invoiceItemsRoutes);
     app.use('/invoice-items', requireAuth, checkTokenBlacklist, invoiceItemsRoutes);
+
+    app.use('/api/swms-categories', requireAuth, checkTokenBlacklist, swmsCategoryRoutes);
+    app.use('/swms-categories', requireAuth, checkTokenBlacklist, swmsCategoryRoutes);
     
     app.use('/api/custom-data-fields', requireAuth, checkTokenBlacklist, require('./routes/customDataFields'));
     app.use('/custom-data-fields', requireAuth, checkTokenBlacklist, require('./routes/customDataFields'));
@@ -455,6 +459,9 @@ connectDB()
       } catch (error) {
         console.error('Failed to start notification digest scheduler:', error);
       }
+
+      const { warmMailer } = require('./services/mailer');
+      warmMailer();
     });
   })
   .catch(err => {

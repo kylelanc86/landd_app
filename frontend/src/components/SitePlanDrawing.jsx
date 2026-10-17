@@ -24,6 +24,7 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
+  useMediaQuery,
 } from "@mui/material";
 import {
   Edit as EditIcon,
@@ -43,8 +44,14 @@ import {
   Add as AddIcon,
   CallMade as ArrowIcon,
   Place as PlaceIcon,
+  ArrowBack as ArrowBackIcon,
 } from "@mui/icons-material";
 import loadGoogleMapsApi from "../utils/loadGoogleMapsApi";
+import {
+  applySitePlanMapZoomRange,
+  SITE_PLAN_MAX_ZOOM,
+  SITE_PLAN_MIN_ZOOM,
+} from "../utils/sitePlanMapZoom";
 import { LEAD_SAMPLE_MARKER_COLORS } from "../utils/leadSampleMarkerMeta";
 import GoogleMapsDialog from "./GoogleMapsDialog";
 
@@ -150,6 +157,10 @@ const legendArraysEqual = (a = [], b = []) => {
 const colorsEqual = (a, b) =>
   String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
 
+/** Phones in portrait, and short landscape phone screens. */
+const PHONE_SITE_PLAN_QUERY =
+  "(max-width: 600px), ((max-height: 500px) and (max-width: 932px))";
+
 const SitePlanDrawing = forwardRef(function SitePlanDrawing(
   {
     onSave,
@@ -162,6 +173,8 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
     defaultLegendDescription = "",
     /** Hide Google Map layer controls (e.g. lead assessment area plans). */
     hideMapSection = false,
+    /** Project address used to centre the Google map layer when it opens. */
+    defaultMapAddress = "",
     /** Add tool to place sample reference markers on the canvas (lead assessment site plans). */
     enableSampleMarkers = false,
     /**
@@ -174,6 +187,7 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
   },
   ref
 ) {
+  const isPhone = useMediaQuery(PHONE_SITE_PLAN_QUERY);
   const canvasRef = useRef(null);
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -577,8 +591,11 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
         gestureHandling: "greedy", // Allow map interaction in canvas
         tilt: 0,
         heading: 0,
+        minZoom: SITE_PLAN_MIN_ZOOM,
+        maxZoom: SITE_PLAN_MAX_ZOOM,
       });
 
+      applySitePlanMapZoomRange(map);
       mapInstanceRef.current = map;
 
       // Prevent 3D view by resetting tilt and heading whenever they change
@@ -1722,7 +1739,7 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
     updateCanvasSize();
     window.addEventListener("resize", updateCanvasSize);
     return () => window.removeEventListener("resize", updateCanvasSize);
-  }, []);
+  }, [isPhone]);
 
   // Initialize canvas with calculated size
   useEffect(() => {
@@ -2162,6 +2179,7 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
       );
 
       // Use center and zoom directly to match the exact view from dialog
+      applySitePlanMapZoomRange(mapInstanceRef.current);
       mapInstanceRef.current.setCenter(mapData.center);
       mapInstanceRef.current.setZoom(mapData.zoom);
       // Ensure 2D view is maintained
@@ -2313,6 +2331,8 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
         gestureHandling: "none",
         tilt: 0,
         heading: 0,
+        minZoom: SITE_PLAN_MIN_ZOOM,
+        maxZoom: SITE_PLAN_MAX_ZOOM,
       };
 
       // Use center and zoom directly to match the exact view from dialog
@@ -2328,6 +2348,8 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
       }
 
       const map = new window.google.maps.Map(mapRef.current, mapOptions);
+      applySitePlanMapZoomRange(map);
+      map.setZoom(mapData.zoom);
 
       // Prevent 3D view by resetting tilt and heading whenever they change
       map.addListener("tilt_changed", () => {
@@ -2400,26 +2422,46 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
 
   return (
     <>
-      <Box sx={{ height: "100%", display: "flex", flexDirection: "row" }}>
-        {/* Toolbar */}
+      <Box sx={{ height: "100%", display: "flex", flexDirection: "row", minHeight: 0 }}>
+        {/* Toolbar. On a phone it is scaled down so more of the menu fits beside a larger plan. */}
+        <Box
+          sx={
+            isPhone
+              ? { width: 168, height: "100%", mr: 0.5, flexShrink: 0, overflow: "hidden" }
+              : { width: 280, height: "100%", mr: 2, flexShrink: 0 }
+          }
+        >
         <Paper
           sx={{
-            p: 2,
-            mr: 2,
-            width: 280,
-            height: "100%",
+            p: isPhone ? 1 : 2,
+            width: isPhone ? 224 : "100%",
+            height: isPhone ? "133.333%" : "100%",
             overflowY: "auto",
             display: "flex",
             flexDirection: "column",
-            gap: 2,
+            gap: isPhone ? 1 : 2,
+            ...(isPhone ? { zoom: 0.75 } : {}),
           }}
         >
-          <Box display="flex" flexDirection="column" gap={2}>
+          <Box display="flex" flexDirection="column" gap={isPhone ? 1 : 2}>
+            {isPhone && (
+              <IconButton
+                onClick={onCancel}
+                aria-label="Back to site plans"
+                edge="start"
+                size="small"
+                sx={{ alignSelf: "flex-start" }}
+              >
+                <ArrowBackIcon fontSize="small" />
+              </IconButton>
+            )}
             {/* Figure Title */}
             <Box>
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Figure Title
-              </Typography>
+              {!isPhone && (
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  Figure Title
+                </Typography>
+              )}
               <TextField
                 fullWidth
                 size="small"
@@ -2432,9 +2474,11 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
 
             {/* Drawing Tools */}
             <Box>
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Tools
-              </Typography>
+              {!isPhone && (
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  Tools
+                </Typography>
+              )}
               <Box
                 display="flex"
                 gap={1}
@@ -2475,9 +2519,11 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
 
             {/* Colors */}
             <Box>
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Colors
-              </Typography>
+              {!isPhone && (
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  Colors
+                </Typography>
+              )}
               <Box display="flex" flexDirection="column" gap={2}>
                 {/* Stroke Color */}
                 <Box display="flex" alignItems="center" gap={2}>
@@ -2562,9 +2608,11 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
 
             {/* Canvas controls */}
             <Box>
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Canvas Controls
-              </Typography>
+              {!isPhone && (
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  Canvas Controls
+                </Typography>
+              )}
               <Box display="flex" alignItems="center" gap={0.5} flexWrap="nowrap">
                 <Tooltip title="Undo">
                   <Box component="span" sx={{ display: "inline-flex" }}>
@@ -2739,17 +2787,19 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
                   size="small"
                   sx={{ flex: 1 }}
                 >
-                  Save Site Plan
+                  Save Plan
                 </Button>
               </Box>
             </Box>
           </Box>
         </Paper>
+        </Box>
 
         {/* Drawing Canvas */}
         <Box
           sx={{
             flex: 1,
+            minWidth: 0,
             display: "flex",
             flexDirection: "column",
             overflow: "hidden",
@@ -3096,6 +3146,7 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
           onSelectMap={handleMapSelection}
           canvasWidth={canvasSize.width}
           canvasHeight={canvasSize.height}
+          defaultAddress={defaultMapAddress}
         />
       )}
     </>

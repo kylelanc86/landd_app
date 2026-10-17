@@ -24,6 +24,7 @@ import Login from "./scenes/login";
 import ResetPassword from "./scenes/login/ResetPassword";
 import SetupPassword from "./scenes/auth/SetupPassword";
 import ProjectInformation from "./scenes/projects/ProjectInformation";
+import ProjectSwms from "./scenes/projects/ProjectSwms";
 import Timesheets from "./scenes/timesheets";
 import TimesheetReview from "./scenes/timesheets/review";
 import MonthlyTimesheet from "./scenes/timesheets/monthly";
@@ -138,6 +139,8 @@ const TemplateTestPage = lazy(() => import("./scenes/admin/TemplateTestPage"));
 const InvoiceItems = lazy(() => import("./scenes/admin/InvoiceItems"));
 const CustomDataFields = lazy(() => import("./scenes/admin/CustomDataFields"));
 const ArchivedData = lazy(() => import("./scenes/admin/ArchivedData"));
+const SwmsCategories = lazy(() => import("./scenes/admin/SwmsCategories"));
+const SwmsCategoryForm = lazy(() => import("./scenes/admin/SwmsCategoryForm"));
 
 // New lazy loaded components for missing pages
 const LeadAssessment = lazy(
@@ -489,6 +492,16 @@ function App() {
                                       requiredPermissions={["projects.create"]}
                                     >
                                       <ProjectInformation />
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/projects/:id/swms"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["projects.view"]}
+                                    >
+                                      <ProjectSwms />
                                     </PermissionRoute>
                                   }
                                 />
@@ -1889,6 +1902,42 @@ function App() {
                                     >
                                       <Suspense fallback={<LoadingSpinner />}>
                                         <ArchivedData />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/admin/swms/new"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["admin.view"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <SwmsCategoryForm />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/admin/swms/:categoryId"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["admin.view"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <SwmsCategoryForm />
+                                      </Suspense>
+                                    </PermissionRoute>
+                                  }
+                                />
+                                <Route
+                                  path="/admin/swms"
+                                  element={
+                                    <PermissionRoute
+                                      requiredPermissions={["admin.view"]}
+                                    >
+                                      <Suspense fallback={<LoadingSpinner />}>
+                                        <SwmsCategories />
                                       </Suspense>
                                     </PermissionRoute>
                                   }

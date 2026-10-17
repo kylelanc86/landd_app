@@ -19,7 +19,9 @@ const AssessmentItemSchema = new mongoose.Schema({
   photographs: [{
     data: {
       type: String, // Base64 image data
-      required: true,
+      // Not required: a list load excludes this field, and a later save must
+      // still succeed if the payload was never stored or was previously dropped.
+      required: false,
     },
     fullResolutionData: {
       type: String, // Original full-resolution base64 image data (download-only)
@@ -86,7 +88,7 @@ const AssessmentItemSchema = new mongoose.Schema({
     roomUseRating: { type: Number },
     conditionRating: { type: Number },
     photographs: [{
-      data: { type: String, required: true },
+      data: { type: String, required: false },
       includeInReport: { type: Boolean, default: true },
       uploadedAt: { type: Date, default: Date.now },
       description: { type: String, required: false },

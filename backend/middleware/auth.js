@@ -22,23 +22,10 @@ const auth = async (req, res, next) => {
       next();
     } catch (verifyError) {
       if (verifyError.name === 'TokenExpiredError') {
-        // Token is expired, try to refresh
-        const decoded = jwt.decode(token);
-        if (decoded && decoded.id) {
-          const user = await User.findById(decoded.id);
-          if (user) {
-            const newToken = user.generateAuthToken();
-            // Return 401 with new token to force client to retry with new token
-            return res.status(401).json({ 
-              message: 'Token expired, please retry with new token',
-              newToken: newToken
-            });
-          } else {
-            return res.status(401).json({ message: 'User not found for token refresh' });
-          }
-        } else {
-          return res.status(401).json({ message: 'Invalid token payload for refresh' });
-        }
+        return res.status(401).json({
+          message: 'Your session has expired. Please log in again.',
+          code: 'SESSION_EXPIRED'
+        });
       }
       return res.status(401).json({ message: 'Token verification failed, authorization denied' });
     }
