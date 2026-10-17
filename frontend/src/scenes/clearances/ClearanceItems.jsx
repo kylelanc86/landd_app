@@ -103,6 +103,8 @@ const ClearanceItems = ({ pageMode = "items" }) => {
   const navigate = useNavigate();
   const { clearanceId } = useParams();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const phoneLandscape =
+    "@media (orientation: landscape) and (max-height: 500px) and (max-width: 932px)";
 
   const [items, setItems] = useState([]);
   const [clearance, setClearance] = useState(null);
@@ -2427,6 +2429,9 @@ const ClearanceItems = ({ pageMode = "items" }) => {
         sx={{
           position: "relative",
           m: { xs: 1.5, sm: "20px" },
+          ...(isAttachmentsPage && {
+            [phoneLandscape]: { m: 0 },
+          }),
         }}
       >
         {/* Breadcrumbs */}
@@ -2434,6 +2439,9 @@ const ClearanceItems = ({ pageMode = "items" }) => {
           sx={{
             marginBottom: { xs: 2, sm: 3 },
             "& .MuiBreadcrumbs-ol": { flexWrap: "wrap", rowGap: 0.5 },
+            ...(isAttachmentsPage && {
+              [phoneLandscape]: { marginBottom: 0.5 },
+            }),
           }}
         >
           <Link
@@ -2477,6 +2485,9 @@ const ClearanceItems = ({ pageMode = "items" }) => {
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
+            ...(isAttachmentsPage && {
+              [phoneLandscape]: { mb: 0.5 },
+            }),
             gap: 1,
           }}
         >
@@ -2503,6 +2514,9 @@ const ClearanceItems = ({ pageMode = "items" }) => {
               ? "#fff"
               : theme.palette.secondary[200],
           mb: 1,
+          ...(isAttachmentsPage && {
+            [phoneLandscape]: { mb: 0.5, fontSize: "0.85rem" },
+          }),
         }}>
             {clearance.projectId?.name || "Unknown Project"}:{" "}
             {clearance.clearanceDate
@@ -2670,7 +2684,21 @@ const ClearanceItems = ({ pageMode = "items" }) => {
         )}
 
         {isAttachmentsPage && (
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 2,
+              mt: 1,
+              [phoneLandscape]: {
+                flexDirection: "row",
+                alignItems: "stretch",
+                gap: 1.5,
+                mt: 0.5,
+                "& > .MuiPaper-root": { flex: "1 1 0", minWidth: 0, p: 1.25 },
+              },
+            }}
+          >
             <Paper variant="outlined" sx={{ p: 2 }}>
               <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
                 Air Monitoring Report

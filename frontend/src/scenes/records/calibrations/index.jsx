@@ -272,7 +272,7 @@ const Calibrations = () => {
         <DialogContent>
           <Typography>
             Records for calibrations and servicing conducted prior to 01 September
-            2025 can be accessed on the L&D Server. Please contact Jordan Smith
+            2026 can be accessed on the L&D Server. Please contact Jordan Smith
             for further assistance.
           </Typography>
         </DialogContent>

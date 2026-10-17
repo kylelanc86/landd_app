@@ -56,7 +56,7 @@ export default function SitePlanEditPage({
   const navigate = useNavigate();
   const { showSnackbar } = useSnackbar();
   const sitePlanDrawingRef = useRef(null);
-  const isPhoneSitePlan = useMediaQuery(PHONE_SITE_PLAN_QUERY);
+  const isPhoneSitePlan = useMediaQuery(PHONE_SITE_PLAN_QUERY, { noSsr: true });
 
   const isNew = planIndex === "new";
   const editIndex = isNew ? -1 : Number(planIndex);

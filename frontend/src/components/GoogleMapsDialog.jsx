@@ -84,19 +84,28 @@ const GoogleMapsDialog = ({
   canvasHeight,
   defaultAddress = "",
 }) => {
-  const isPhone = useMediaQuery(PHONE_SITE_PLAN_QUERY);
+  const isPhone = useMediaQuery(PHONE_SITE_PLAN_QUERY, { noSsr: true });
+  const addressZoom = isPhone ? ADDRESS_ZOOM - 1 : ADDRESS_ZOOM;
   const mapRef = useRef(null);
-  const mapFrameRef = useRef(null);
+  const [mapFrameEl, setMapFrameEl] = useState(null);
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
   const mapInstanceRef = useRef(null);
+  const initializeMapRef = useRef(null);
+  const resizeMapLayoutRef = useRef(() => {});
   const initTokenRef = useRef(0);
+  const projectViewRef = useRef(null);
+  const confirmedViewRef = useRef(null);
+  const intendedViewRef = useRef(null);
+  const userAdjustedRef = useRef(false);
+  const applyingViewRef = useRef(false);
+  const gesturesReadyRef = useRef(false);
   const autocompleteServiceRef = useRef(null);
   const placesServiceRef = useRef(null);
   const confirmedQueryRef = useRef("");
   const [mapLoaded, setMapLoaded] = useState(false);
   const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER);
   const [mapZoom, setMapZoom] = useState(
-    String(defaultAddress || "").trim() ? ADDRESS_ZOOM : DEFAULT_ZOOM,
+    String(defaultAddress || "").trim() ? addressZoom : DEFAULT_ZOOM,
   );
   const [mapType, setMapType] = useState("satellite");
   const [addressNote, setAddressNote] = useState("");
@@ -105,46 +114,6 @@ const GoogleMapsDialog = ({
   const [addressSearchLoading, setAddressSearchLoading] = useState(false);
   const [addressSearchError, setAddressSearchError] = useState("");
   const hasProjectAddress = Boolean(String(defaultAddress || "").trim());
-
-  useEffect(() => {
-    if (!open || !isPhone) return undefined;
-    const el = mapFrameRef.current;
-    if (!el) return undefined;
-    const update = () => {
-      const rect = el.getBoundingClientRect();
-      const width = Math.floor(rect.width);
-      const height = Math.floor(rect.height);
-      setFrameSize((prev) =>
-        prev.width === width && prev.height === height ? prev : { width, height },
-      );
-    };
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [open, isPhone]);
-
-  useEffect(() => {
-    if (!open || mapLoaded) return undefined;
-    if (isPhone && (frameSize.width < 20 || frameSize.height < 20)) return undefined;
-    const token = ++initTokenRef.current;
-    // Use setTimeout to ensure the Dialog is fully rendered and the map container element exists
-    const timeoutId = setTimeout(() => {
-      initializeMap(token);
-    }, 100);
-
-    return () => clearTimeout(timeoutId);
-  }, [open, mapLoaded, isPhone, frameSize.width, frameSize.height]);
-
-  useEffect(() => {
-    if (!open || !mapLoaded) return undefined;
-    const timeoutId = setTimeout(() => {
-      if (mapInstanceRef.current && window.google?.maps?.event) {
-        window.google.maps.event.trigger(mapInstanceRef.current, "resize");
-      }
-    }, 250);
-    return () => clearTimeout(timeoutId);
-  }, [open, mapLoaded, isPhone, frameSize.width, frameSize.height]);
 
   useEffect(() => {
     if (!open) {
@@ -168,55 +137,84 @@ const GoogleMapsDialog = ({
       // Ensure the map container element exists and is a valid DOM element
       if (!mapRef.current || !(mapRef.current instanceof Element)) {
         console.error("Map container element is not available");
-        return;
+        return false;
       }
 
       const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
       if (!apiKey) {
         console.error("Google Maps API key not found");
-        return;
+        return false;
       }
 
       await loadGoogleMapsApi(apiKey);
-      if (token !== initTokenRef.current) return;
+      if (token !== initTokenRef.current) return false;
 
       // Double-check the element still exists after async operations
       if (!mapRef.current || !(mapRef.current instanceof Element)) {
         console.error(
           "Map container element is not available after loading API"
         );
-        return;
+        return false;
+      }
+
+      const containerRect = mapRef.current.getBoundingClientRect();
+      if (containerRect.width < 20 || containerRect.height < 20) {
+        return false;
       }
 
       const projectAddress = String(defaultAddress || "").trim();
       let center = DEFAULT_CENTER;
       let zoom = DEFAULT_ZOOM;
-      if (projectAddress) {
-        const geocoded = await geocodeAddress(projectAddress);
-        if (token !== initTokenRef.current) return;
+      let note = "";
+      // Reopening the picker must not fall back to Canberra. Use the view that
+      // was last placed on the plan, otherwise the project address.
+      if (confirmedViewRef.current) {
+        center = confirmedViewRef.current.center;
+        zoom = confirmedViewRef.current.zoom;
+        if (projectAddress) note = `Project address: ${projectAddress}`;
+      } else if (projectAddress) {
+        let geocoded = null;
+        if (projectViewRef.current?.address === projectAddress) {
+          geocoded = projectViewRef.current.center;
+        } else {
+          geocoded = await geocodeAddress(projectAddress);
+          if (token !== initTokenRef.current) return false;
+          if (geocoded) {
+            projectViewRef.current = { address: projectAddress, center: geocoded };
+          }
+        }
         if (geocoded) {
           center = geocoded;
-          zoom = ADDRESS_ZOOM;
-          setAddressNote(`Project address: ${projectAddress}`);
+          zoom = addressZoom;
+          note = `Project address: ${projectAddress}`;
         } else {
-          setAddressNote(
-            `The project address could not be located: ${projectAddress}`,
-          );
+          note = `The project address could not be located: ${projectAddress}`;
         }
-      } else {
-        setAddressNote("");
       }
+      userAdjustedRef.current = false;
+      gesturesReadyRef.current = false;
+      intendedViewRef.current = { center, zoom };
+      setAddressNote(note);
 
       if (
         token !== initTokenRef.current ||
         !mapRef.current ||
         !(mapRef.current instanceof Element)
       ) {
-        return;
+        return false;
       }
 
       setMapCenter(center);
       setMapZoom(zoom);
+
+      const readyRect = mapRef.current.getBoundingClientRect();
+      if (
+        token !== initTokenRef.current ||
+        readyRect.width < 20 ||
+        readyRect.height < 20
+      ) {
+        return false;
+      }
 
       const map = new window.google.maps.Map(mapRef.current, {
         center,
@@ -225,8 +223,8 @@ const GoogleMapsDialog = ({
         maxZoom: SITE_PLAN_MAX_ZOOM,
         mapTypeId: window.google.maps.MapTypeId[mapType.toUpperCase()],
         mapTypeControl: true,
-        streetViewControl: true,
-        fullscreenControl: true,
+        streetViewControl: !isPhone,
+        fullscreenControl: !isPhone,
         zoomControl: true,
         gestureHandling: "greedy",
         tilt: 0, // Force 2D overhead view - no tilt
@@ -257,11 +255,10 @@ const GoogleMapsDialog = ({
         }
       });
 
-      // Trigger resize event to ensure map renders correctly in the Dialog
+      // Resize after the dialog layout settles, then put the intended camera back.
+      // A bare resize lets Maps fall back to Canberra until the user gestures.
       setTimeout(() => {
-        if (mapInstanceRef.current) {
-          window.google.maps.event.trigger(mapInstanceRef.current, "resize");
-        }
+        resizeMapLayoutRef.current();
       }, 100);
 
       // Add map type change listener
@@ -270,8 +267,17 @@ const GoogleMapsDialog = ({
         setMapType(mapTypeId.toLowerCase());
       });
 
+      const noteUserAdjustment = () => {
+        if (gesturesReadyRef.current && !applyingViewRef.current) {
+          userAdjustedRef.current = true;
+        }
+      };
+
+      map.addListener("dragstart", noteUserAdjustment);
+
       // Add zoom change listener - also reset tilt/heading on zoom to prevent 3D
       map.addListener("zoom_changed", () => {
+        noteUserAdjustment();
         const nextZoom = map.getZoom();
         if (nextZoom < SITE_PLAN_MIN_ZOOM || nextZoom > SITE_PLAN_MAX_ZOOM) {
           map.setZoom(
@@ -279,8 +285,11 @@ const GoogleMapsDialog = ({
           );
           return;
         }
-        setMapZoom(nextZoom);
-        // Reset tilt and heading when zooming to prevent automatic 3D switching
+        // Only re-render when the number beside the slider changes. Updating
+        // on every pinch step reloads tiles while the view is still moving.
+        setMapZoom((prev) =>
+          mapZoomToLevel(prev) === mapZoomToLevel(nextZoom) ? prev : nextZoom,
+        );
         if (map.getTilt() !== 0) {
           map.setTilt(0);
         }
@@ -289,34 +298,120 @@ const GoogleMapsDialog = ({
         }
       });
 
-      // Add center change listener
       map.addListener("center_changed", () => {
-        const center = map.getCenter();
-        setMapCenter({
-          lat: center.lat(),
-          lng: center.lng(),
-        });
+        noteUserAdjustment();
       });
 
-      if (token !== initTokenRef.current) return;
+      if (token !== initTokenRef.current) return false;
       mapInstanceRef.current = map;
       setMapLoaded(true);
+      window.google.maps.event.addListenerOnce(map, "idle", () => {
+        applyIntendedView(map);
+        gesturesReadyRef.current = true;
+      });
+      window.setTimeout(() => resizeMapLayoutRef.current(), 50);
+      return true;
     } catch (error) {
       console.error("Error initializing Google Maps:", error);
+      return false;
     }
   };
+
+  const applyIntendedView = (map) => {
+    const view = intendedViewRef.current;
+    if (!map || !view || userAdjustedRef.current) return;
+    applyingViewRef.current = true;
+    map.setCenter(view.center);
+    map.setZoom(view.zoom);
+    map.setTilt(0);
+    map.setHeading(0);
+    window.setTimeout(() => {
+      applyingViewRef.current = false;
+    }, 300);
+  };
+
+  initializeMapRef.current = initializeMap;
+  resizeMapLayoutRef.current = () => {
+    const map = mapInstanceRef.current;
+    if (!map || !window.google?.maps?.event) return;
+    window.google.maps.event.trigger(map, "resize");
+    // Setting the camera again after a resize throws away tiles that are
+    // already loading. Once the user has moved the map, leave that view alone.
+    if (!userAdjustedRef.current && intendedViewRef.current) {
+      applyIntendedView(map);
+    }
+  };
+
+  useEffect(() => {
+    if (!open || !isPhone || !mapFrameEl) return undefined;
+    const update = () => {
+      const rect = mapFrameEl.getBoundingClientRect();
+      const width = Math.floor(rect.width);
+      const height = Math.floor(rect.height);
+      setFrameSize((prev) =>
+        prev.width === width && prev.height === height ? prev : { width, height },
+      );
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(mapFrameEl);
+    return () => observer.disconnect();
+  }, [open, isPhone, mapFrameEl]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    let cancelled = false;
+    let timer = 0;
+    let attempts = 0;
+    let running = false;
+
+    const tryInit = async () => {
+      if (cancelled || mapInstanceRef.current || running) return;
+      const el = mapRef.current;
+      const rect = el?.getBoundingClientRect();
+      if (!el || !rect || rect.width < 20 || rect.height < 20) {
+        attempts += 1;
+        if (!cancelled && attempts < 50) {
+          timer = window.setTimeout(tryInit, 60);
+        }
+        return;
+      }
+      running = true;
+      const token = ++initTokenRef.current;
+      const ok = await initializeMapRef.current(token);
+      running = false;
+      if (!ok && !cancelled && !mapInstanceRef.current && attempts < 50) {
+        attempts += 1;
+        timer = window.setTimeout(tryInit, 150);
+      }
+    };
+
+    userAdjustedRef.current = false;
+    timer = window.setTimeout(tryInit, 30);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      initTokenRef.current += 1;
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !mapLoaded) return undefined;
+    const timeoutId = window.setTimeout(() => resizeMapLayoutRef.current(), 200);
+    return () => window.clearTimeout(timeoutId);
+  }, [open, mapLoaded, frameSize.width, frameSize.height]);
 
   const moveMapToAddress = (center, label) => {
     confirmedQueryRef.current = label;
     setAddressOptions([]);
     setMapCenter(center);
-    setMapZoom(ADDRESS_ZOOM);
+    setMapZoom(addressZoom);
     setAddressNote(label);
     setAddressSearchError("");
     const map = mapInstanceRef.current;
     if (!map) return;
     map.setCenter(center);
-    map.setZoom(ADDRESS_ZOOM);
+    map.setZoom(addressZoom);
     map.setTilt(0);
     map.setHeading(0);
   };
@@ -427,27 +522,43 @@ const GoogleMapsDialog = ({
   }, [addressQuery, open, hasProjectAddress, mapLoaded]);
 
   const handleZoomChange = (event, value) => {
+    userAdjustedRef.current = true;
     if (mapInstanceRef.current) {
+      applyingViewRef.current = true;
       mapInstanceRef.current.setZoom(levelToMapZoom(value));
+      window.setTimeout(() => {
+        applyingViewRef.current = false;
+      }, 300);
     }
   };
 
   const handleSelectMap = () => {
     if (mapInstanceRef.current) {
-      // Get current values directly from the map instance to ensure accuracy
-      const currentCenter = mapInstanceRef.current.getCenter();
-      const currentZoom = mapInstanceRef.current.getZoom();
-      const currentMapType = mapInstanceRef.current.getMapTypeId();
-      const bounds = mapInstanceRef.current.getBounds()?.toJSON();
+      const map = mapInstanceRef.current;
+      const currentCenter = map.getCenter();
+      if (!currentCenter) return;
+      const currentZoom = map.getZoom();
+      const currentMapType = map.getMapTypeId();
+      const bounds = map.getBounds()?.toJSON();
+      const viewport = map.getDiv()?.getBoundingClientRect();
+      const center = {
+        lat: currentCenter.lat(),
+        lng: currentCenter.lng(),
+      };
+      const zoom = currentZoom;
 
       const mapData = {
-        center: {
-          lat: currentCenter.lat(),
-          lng: currentCenter.lng(),
-        },
-        zoom: currentZoom,
+        center,
+        zoom,
         mapType: currentMapType.toLowerCase(),
-        bounds: bounds,
+        bounds,
+        viewportWidth: viewport?.width || 0,
+        viewportHeight: viewport?.height || 0,
+      };
+      confirmedViewRef.current = {
+        center,
+        zoom,
+        mapType: mapData.mapType,
       };
 
       console.log("Selected map data:", mapData);
@@ -466,13 +577,45 @@ const GoogleMapsDialog = ({
     ? fitMapPreview(frameSize.width, frameSize.height, mapAspect)
     : { width: mapWidth, height: mapHeight };
 
-  const zoomControl = (
-    <Box sx={{ width: isPhone ? 128 : 200, flexShrink: 0 }}>
-      <Typography variant="caption" display="block" noWrap>
-        Zoom: {mapZoomToLevel(mapZoom)}
+  const zoomLevel = mapZoomToLevel(mapZoom);
+  const zoomControl = isPhone ? (
+    <Box
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        gap: 0.75,
+        flexShrink: 0,
+        ml: "auto",
+      }}
+    >
+      <Typography variant="caption" noWrap sx={{ lineHeight: 1 }}>
+        Zoom
+      </Typography>
+      <Typography
+        variant="body2"
+        noWrap
+        sx={{ fontWeight: 600, minWidth: "1.25em", textAlign: "right", lineHeight: 1 }}
+      >
+        {zoomLevel}
       </Typography>
       <Slider
-        value={mapZoomToLevel(mapZoom)}
+        value={zoomLevel}
+        onChange={handleZoomChange}
+        min={1}
+        max={SITE_PLAN_ZOOM_LEVELS}
+        step={1}
+        size="small"
+        sx={{ width: 108, mx: 0.25, py: 0 }}
+        aria-label="Zoom"
+      />
+    </Box>
+  ) : (
+    <Box sx={{ width: 200, flexShrink: 0 }}>
+      <Typography variant="caption" display="block" noWrap>
+        Zoom: {zoomLevel}
+      </Typography>
+      <Slider
+        value={zoomLevel}
         onChange={handleZoomChange}
         min={1}
         max={SITE_PLAN_ZOOM_LEVELS}
@@ -488,12 +631,13 @@ const GoogleMapsDialog = ({
       onClose={onClose}
       maxWidth={false}
       fullScreen={isPhone}
+      TransitionProps={{ onEntered: () => resizeMapLayoutRef.current() }}
       PaperProps={{
         sx: isPhone
           ? {
               width: "100%",
-              height: "100dvh",
-              maxHeight: "100dvh",
+              height: "100%",
+              maxHeight: "100%",
               m: 0,
               display: "flex",
               flexDirection: "column",
@@ -538,17 +682,18 @@ const GoogleMapsDialog = ({
         {/* Controls */}
         <Box
           sx={{
-            p: isPhone ? 1 : 2,
+            p: isPhone ? 0.75 : 2,
+            px: isPhone ? 1 : 2,
             backgroundColor: "#f5f5f5",
             borderBottom: 1,
             borderColor: "divider",
             display: "flex",
             flexDirection: "column",
-            gap: 1,
+            gap: isPhone ? 0 : 1,
             flexShrink: 0,
           }}
         >
-          {addressNote ? (
+          {!isPhone && addressNote ? (
             <Typography variant="body2">{addressNote}</Typography>
           ) : null}
           <Box
@@ -557,8 +702,19 @@ const GoogleMapsDialog = ({
               gap: 1,
               alignItems: "center",
               width: "100%",
+              minHeight: isPhone ? 40 : undefined,
             }}
           >
+            {isPhone && hasProjectAddress && addressNote ? (
+              <Typography
+                variant="body2"
+                noWrap
+                title={addressNote}
+                sx={{ flex: 1, minWidth: 0 }}
+              >
+                {addressNote}
+              </Typography>
+            ) : null}
             {!hasProjectAddress && (
               <>
                 <Autocomplete
@@ -612,7 +768,7 @@ const GoogleMapsDialog = ({
                     />
                   )}
                 />
-                {zoomControl}
+                {!isPhone && zoomControl}
                 <Button
                   variant="contained"
                   size="small"
@@ -624,16 +780,16 @@ const GoogleMapsDialog = ({
                 </Button>
               </>
             )}
-            {hasProjectAddress && zoomControl}
+            {(isPhone || hasProjectAddress) && zoomControl}
           </Box>
         </Box>
 
         {/* Map */}
         <Box
-          ref={mapFrameRef}
+          ref={setMapFrameEl}
           sx={{
-            flex: 1,
-            minHeight: 0,
+            flex: "1 1 auto",
+            minHeight: isPhone ? 220 : 0,
             position: "relative",
             display: "flex",
             justifyContent: "center",
@@ -646,14 +802,24 @@ const GoogleMapsDialog = ({
             ref={mapRef}
             style={
               isPhone
-                ? {
-                    width: `${fittedMap.width}px`,
-                    height: `${fittedMap.height}px`,
-                    maxWidth: "100%",
-                    maxHeight: "100%",
-                    boxShadow: "0 0 0 2px rgba(69, 90, 100, 0.75)",
-                    backgroundColor: "#ffffff",
-                  }
+                ? fittedMap.width >= 20 && fittedMap.height >= 20
+                  ? {
+                      width: `${fittedMap.width}px`,
+                      height: `${fittedMap.height}px`,
+                      maxWidth: "100%",
+                      maxHeight: "100%",
+                      boxShadow: "0 0 0 2px rgba(69, 90, 100, 0.75)",
+                      backgroundColor: "#ffffff",
+                    }
+                  : {
+                      width: "100%",
+                      maxWidth: "100%",
+                      maxHeight: "100%",
+                      minHeight: 220,
+                      aspectRatio: `${mapWidth} / ${mapHeight}`,
+                      boxShadow: "0 0 0 2px rgba(69, 90, 100, 0.75)",
+                      backgroundColor: "#ffffff",
+                    }
                 : {
                     width: `${mapWidth}px`,
                     height: `${mapHeight}px`,

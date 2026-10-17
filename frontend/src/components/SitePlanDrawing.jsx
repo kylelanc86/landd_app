@@ -161,6 +161,96 @@ const colorsEqual = (a, b) =>
 const PHONE_SITE_PLAN_QUERY =
   "(max-width: 600px), ((max-height: 500px) and (max-width: 932px))";
 
+/** The captured plan image should be the map only, without Maps controls. */
+const SITE_PLAN_CAPTURE_MAP_OPTIONS = {
+  disableDefaultUI: true,
+  mapTypeControl: false,
+  zoomControl: false,
+  streetViewControl: false,
+  fullscreenControl: false,
+  rotateControl: false,
+  scaleControl: false,
+  clickableIcons: false,
+  keyboardShortcuts: false,
+};
+
+/** Same ground area as the preview when the capture map is a different pixel size. */
+const zoomMatchingExtent = (zoom, sourceWidth, targetWidth) => {
+  const source = Number(sourceWidth);
+  const target = Number(targetWidth);
+  const level = Number(zoom);
+  if (!source || !target || !Number.isFinite(level)) return level;
+  return level + Math.log(target / source) / Math.log(2);
+};
+
+const applySelectedMapView = (map, mapData) => {
+  if (!map || !mapData?.center) return;
+  const targetWidth = map.getDiv?.()?.getBoundingClientRect?.().width || 0;
+  const zoom = zoomMatchingExtent(mapData.zoom, mapData.viewportWidth, targetWidth);
+  try {
+    map.setOptions({ isFractionalZoomEnabled: true });
+  } catch (error) {
+    // Older Maps builds only accept whole zoom levels.
+  }
+  if (mapData.mapType) {
+    map.setMapTypeId(window.google.maps.MapTypeId[mapData.mapType.toUpperCase()]);
+  }
+  map.setCenter(mapData.center);
+  if (Number.isFinite(zoom)) map.setZoom(zoom);
+  map.setTilt(0);
+  map.setHeading(0);
+};
+
+/** Listen before the camera moves so a pan or zoom-out is not captured mid-load. */
+const watchMapTiles = (map, timeoutMs = 5000) => {
+  if (!map || !window.google?.maps?.event) return Promise.resolve();
+  let settled = false;
+  let listener = null;
+  let timer = 0;
+  const promise = new Promise((resolve) => {
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      if (listener) window.google.maps.event.removeListener(listener);
+      window.clearTimeout(timer);
+      resolve();
+    };
+    listener = window.google.maps.event.addListenerOnce(map, "tilesloaded", finish);
+    timer = window.setTimeout(finish, timeoutMs);
+  });
+  return promise;
+};
+
+const hideMapChromeForCapture = (container) => {
+  if (!container) return;
+  container
+    .querySelectorAll(
+      ".gm-style-mtc, .gm-bundled-control, .gm-fullscreen-control, .gm-svpc, .gm-style-cc",
+    )
+    .forEach((el) => {
+      el.style.setProperty("display", "none", "important");
+    });
+  container.querySelectorAll("button").forEach((button) => {
+    const label = (
+      button.getAttribute("aria-label") ||
+      button.getAttribute("title") ||
+      ""
+    ).toLowerCase();
+    if (
+      !label.includes("zoom") &&
+      !label.includes("satellite") &&
+      !label.includes("imagery") &&
+      !label.includes("street map")
+    ) {
+      return;
+    }
+    const wrap = button.closest(
+      ".gm-style-mtc, .gm-bundled-control, .gmnoprint",
+    );
+    (wrap || button).style.setProperty("display", "none", "important");
+  });
+};
+
 const SitePlanDrawing = forwardRef(function SitePlanDrawing(
   {
     onSave,
@@ -187,7 +277,7 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
   },
   ref
 ) {
-  const isPhone = useMediaQuery(PHONE_SITE_PLAN_QUERY);
+  const isPhone = useMediaQuery(PHONE_SITE_PLAN_QUERY, { noSsr: true });
   const canvasRef = useRef(null);
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -491,30 +581,20 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
     });
   }, [defaultLegendDescription, drawnItems, enableSampleMarkers]);
 
-  // Initialize Google Maps when showGoogleMaps changes
+  // Keep the live map aligned when the phone layout changes the plan size.
   useEffect(() => {
-    if (showGoogleMaps && !mapLoaded) {
-      // Add a delay to ensure the container is visible in the DOM
-      const timeoutId = setTimeout(() => {
-        initializeGoogleMaps();
-      }, 100);
-
-      return () => clearTimeout(timeoutId);
+    if (!showGoogleMaps || !mapInstanceRef.current || !window.google?.maps?.event) {
+      return undefined;
     }
-  }, [showGoogleMaps, mapLoaded]);
-
-  // Ensure map container is properly sized when it becomes visible
-  useEffect(() => {
-    if (showGoogleMaps && mapInstanceRef.current) {
-      // Small delay to ensure the container is rendered
-      setTimeout(() => {
-        if (mapInstanceRef.current) {
-          console.log("Triggering resize for visible map");
-          window.google.maps.event.trigger(mapInstanceRef.current, "resize");
-        }
-      }, 200);
-    }
-  }, [showGoogleMaps]);
+    const timeoutId = window.setTimeout(() => {
+      const map = mapInstanceRef.current;
+      if (!map || !window.google?.maps?.event) return;
+      const center = map.getCenter();
+      window.google.maps.event.trigger(map, "resize");
+      if (center) map.setCenter(center);
+    }, 80);
+    return () => window.clearTimeout(timeoutId);
+  }, [showGoogleMaps, canvasSize.width, canvasSize.height]);
 
   const initializeGoogleMaps = async () => {
     try {
@@ -584,11 +664,8 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
         center: { lat: -35.2809, lng: 149.13 }, // Canberra default
         zoom: 15,
         mapTypeId: window.google.maps.MapTypeId.SATELLITE,
-        mapTypeControl: true, // Enable map type control in canvas
-        streetViewControl: false,
-        fullscreenControl: false,
-        zoomControl: true, // Enable zoom control in canvas
-        gestureHandling: "greedy", // Allow map interaction in canvas
+        ...SITE_PLAN_CAPTURE_MAP_OPTIONS,
+        gestureHandling: "none",
         tilt: 0,
         heading: 0,
         minZoom: SITE_PLAN_MIN_ZOOM,
@@ -1722,6 +1799,9 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
 
       const availableWidth = containerRect.width;
       const availableHeight = containerRect.height;
+      // A phone layout can report 0 before the fixed editor has been laid out.
+      // Keep the previous size instead of collapsing the map layer.
+      if (availableWidth < 40 || availableHeight < 40) return;
 
       // Fit canvas to container while maintaining A4 landscape aspect ratio
       let width, height;
@@ -1733,12 +1813,27 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
         height = availableWidth / A4_LANDSCAPE_ASPECT_RATIO;
       }
 
-      setCanvasSize({ width: Math.floor(width), height: Math.floor(height) });
+      const nextWidth = Math.floor(width);
+      const nextHeight = Math.floor(height);
+      if (nextWidth < 40 || nextHeight < 40) return;
+
+      setCanvasSize((prev) =>
+        prev.width === nextWidth && prev.height === nextHeight
+          ? prev
+          : { width: nextWidth, height: nextHeight },
+      );
     };
 
     updateCanvasSize();
+    const observer = new ResizeObserver(updateCanvasSize);
+    if (canvasContainerRef.current) {
+      observer.observe(canvasContainerRef.current);
+    }
     window.addEventListener("resize", updateCanvasSize);
-    return () => window.removeEventListener("resize", updateCanvasSize);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateCanvasSize);
+    };
   }, [isPhone]);
 
   // Initialize canvas with calculated size
@@ -2180,25 +2275,12 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
 
       // Use center and zoom directly to match the exact view from dialog
       applySitePlanMapZoomRange(mapInstanceRef.current);
-      mapInstanceRef.current.setCenter(mapData.center);
-      mapInstanceRef.current.setZoom(mapData.zoom);
-      // Ensure 2D view is maintained
-      mapInstanceRef.current.setTilt(0);
-      mapInstanceRef.current.setHeading(0);
+      mapInstanceRef.current.setOptions(SITE_PLAN_CAPTURE_MAP_OPTIONS);
+      window.google.maps.event.trigger(mapInstanceRef.current, "resize");
+      const tilesReady = watchMapTiles(mapInstanceRef.current);
+      applySelectedMapView(mapInstanceRef.current, mapData);
       console.log("Applied center:", mapData.center, "zoom:", mapData.zoom);
-
-      // Wait for map to process the changes
-      await new Promise((resolve) => setTimeout(resolve, 400));
-
-      // Force multiple resizes to ensure proper rendering
-      window.google.maps.event.trigger(mapInstanceRef.current, "resize");
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      window.google.maps.event.trigger(mapInstanceRef.current, "resize");
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      window.google.maps.event.trigger(mapInstanceRef.current, "resize");
-
-      // Wait for map to settle
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await tilesReady;
 
       // Automatically capture the map as background
       await captureMapAsBackground();
@@ -2226,6 +2308,11 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
         await new Promise((resolve) => setTimeout(resolve, 300));
       }
 
+      if (mapInstanceRef.current?.setOptions) {
+        mapInstanceRef.current.setOptions(SITE_PLAN_CAPTURE_MAP_OPTIONS);
+      }
+      hideMapChromeForCapture(mapRef.current);
+
       // Dynamically import html2canvas
       const html2canvas = (await import("html2canvas")).default;
 
@@ -2237,26 +2324,29 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
         logging: false,
       });
 
-      // Apply 5% bottom crop to match the visual clipPath
-      const croppedMapHeight = Math.floor(mapCanvas.height * 0.95);
-
-      // Create a temporary canvas to hold the cropped map
+      // Create a temporary canvas to hold the map at the site plan size
       const tempCanvas = document.createElement("canvas");
       tempCanvas.width = canvas.width;
       tempCanvas.height = canvas.height;
       const tempCtx = tempCanvas.getContext("2d");
 
-      // Draw the cropped map to fill the canvas exactly
+      // Drop the grey credit bar (keyboard shortcuts, imagery copyright).
+      const bottomCrop = Math.min(
+        Math.floor(mapCanvas.height * 0.12),
+        Math.max(28, Math.round(mapCanvas.height * 0.04)),
+      );
+      const sourceHeight = Math.max(1, mapCanvas.height - bottomCrop);
+
       tempCtx.drawImage(
         mapCanvas,
-        0, // Source X
-        0, // Source Y
-        mapCanvas.width, // Source width
-        croppedMapHeight, // Source height (cropped)
-        0, // Destination X
-        0, // Destination Y
-        canvas.width, // Destination width
-        canvas.height, // Destination height
+        0,
+        0,
+        mapCanvas.width,
+        sourceHeight,
+        0,
+        0,
+        canvas.width,
+        canvas.height,
       );
 
       // Convert to image and set as canvas background
@@ -2324,10 +2414,7 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
       // Use bounds if available for more accurate positioning
       const mapOptions = {
         mapTypeId: window.google.maps.MapTypeId[mapData.mapType.toUpperCase()],
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: false,
-        zoomControl: false,
+        ...SITE_PLAN_CAPTURE_MAP_OPTIONS,
         gestureHandling: "none",
         tilt: 0,
         heading: 0,
@@ -2349,7 +2436,6 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
 
       const map = new window.google.maps.Map(mapRef.current, mapOptions);
       applySitePlanMapZoomRange(map);
-      map.setZoom(mapData.zoom);
 
       // Prevent 3D view by resetting tilt and heading whenever they change
       map.addListener("tilt_changed", () => {
@@ -2381,17 +2467,11 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
         console.log("Final map zoom:", map.getZoom());
         console.log("Final map type:", map.getMapTypeId());
 
-        // Force multiple resizes to ensure proper rendering
-        setTimeout(() => {
-          window.google.maps.event.trigger(map, "resize");
-          setTimeout(() => {
-            window.google.maps.event.trigger(map, "resize");
-            // After map is fully rendered, capture it as background
-            setTimeout(async () => {
-              await captureMapAsBackground();
-            }, 300);
-          }, 200);
-        }, 200);
+        window.google.maps.event.trigger(map, "resize");
+        const tilesReady = watchMapTiles(map);
+        applySelectedMapView(map, mapData);
+        await tilesReady;
+        await captureMapAsBackground();
       });
 
       mapInstanceRef.current = map;
@@ -2521,7 +2601,7 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
             <Box>
               {!isPhone && (
                 <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                  Colors
+                  Colours
                 </Typography>
               )}
               <Box display="flex" flexDirection="column" gap={2}>
@@ -2739,6 +2819,7 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
                     setHasMapBackground(false);
                     setShowGoogleMaps(false);
                     setMapLoaded(false);
+                    mapInstanceRef.current = null;
                     redrawCanvas();
                   }}
                   size="small"
@@ -2827,8 +2908,18 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
                 display: "flex",
                 justifyContent: "center",
                 alignItems: "center",
+                overflow: "hidden",
               }}
             >
+              <Box
+                sx={{
+                  position: "relative",
+                  width: `${canvasSize.width}px`,
+                  height: `${canvasSize.height}px`,
+                  flexShrink: 0,
+                  overflow: "hidden",
+                }}
+              >
               <canvas
                 ref={canvasRef}
                 onPointerDown={handlePointerDown}
@@ -2845,7 +2936,7 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
                       : "crosshair",
                   width: `${canvasSize.width}px`,
                   height: `${canvasSize.height}px`,
-                  backgroundColor: showGoogleMaps ? "transparent" : "#ffffff",
+                  backgroundColor: "#ffffff",
                   borderRadius: 8,
                   border: "1px solid rgba(69, 90, 100, 0.5)",
                   transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoom})`,
@@ -2915,21 +3006,20 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
                 </Box>
               )}
 
-              {/* Hidden map container - only used temporarily for capture */}
-              {/* Map is always rendered but hidden, so we can capture it when needed */}
+              {/* Kept under the blank canvas, clipped to the plan, so imagery
+                  cannot spill into the grey area while the layer is copied. */}
               <Box
                 sx={{
                   position: "absolute",
                   top: 0,
                   left: 0,
-                  width: `${canvasSize.width}px`,
-                  height: `${canvasSize.height}px`,
+                  right: 0,
+                  bottom: 0,
                   pointerEvents: "none",
-                  zIndex: -1,
+                  zIndex: 0,
                   overflow: "hidden",
                   visibility:
                     showGoogleMaps && !hasMapBackground ? "visible" : "hidden",
-                  opacity: 0,
                 }}
               >
                 <div
@@ -2958,6 +3048,7 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
                     </Typography>
                   </Box>
                 )}
+              </Box>
               </Box>
             </Box>
           </Box>
