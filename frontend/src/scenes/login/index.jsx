@@ -174,9 +174,10 @@ const Login = () => {
   return (
     <Box
       sx={{
-        height: "100vh",
+        height: "100dvh",
+        width: "100%",
         display: "flex",
-        alignItems: "center",
+        alignItems: { xs: "stretch", sm: "center" },
         justifyContent: "center",
         backgroundColor: grey[600],
         backgroundSize: "cover",
@@ -198,14 +199,23 @@ const Login = () => {
       <Paper
         elevation={8}
         sx={{
-          p: 4,
-          width: "70%",
-          maxWidth: 800,
+          pt: { xs: "max(40px, calc(env(safe-area-inset-top) + 16px))", sm: 4 },
+          pb: { xs: "max(24px, env(safe-area-inset-bottom))", sm: 4 },
+          pl: { xs: "max(24px, env(safe-area-inset-left))", sm: 4 },
+          pr: { xs: "max(24px, env(safe-area-inset-right))", sm: 4 },
+          width: { xs: "100%", sm: "70%" },
+          maxWidth: { xs: "100%", sm: 800 },
+          height: { xs: "100%", sm: "auto" },
+          maxHeight: { xs: "100%", sm: "none" },
+          borderRadius: { xs: 0, sm: 1 },
           display: "flex",
           flexDirection: "column",
+          justifyContent: "flex-start",
           gap: 2,
           position: "relative",
           zIndex: 2,
+          boxSizing: "border-box",
+          overflowY: "auto",
           backgroundColor: "rgba(0, 0, 0, 0.95)", // Slightly transparent white
           backdropFilter: "blur(10px)", // Glass effect
         }}
@@ -214,14 +224,16 @@ const Login = () => {
           sx={{
             display: "flex",
             justifyContent: "center",
-            mb: 2,
+            mb: { xs: 1, sm: 2 },
           }}
         >
-          <img
+          <Box
+            component="img"
             src="/logo.png"
             alt="Company Logo"
-            style={{
-              maxWidth: "400px",
+            sx={{
+              width: "100%",
+              maxWidth: { xs: 210, sm: 320, md: 400 },
               height: "auto",
             }}
           />

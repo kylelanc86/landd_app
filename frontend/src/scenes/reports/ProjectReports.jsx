@@ -50,8 +50,16 @@ import ProjectLogModalWrapper from "./ProjectLogModalWrapper";
 import { useProjectStatuses } from "../../context/ProjectStatusesContext";
 import { useAuth } from "../../context/AuthContext";
 import { getTodayInSydney } from "../../utils/dateUtils";
+import {
+  AIR_SAMPLING_SLUG,
+  SAMPLE_TYPE_SLUGS,
+} from "../laboratory-services/mycometerConstants";
+import { ReportRevisionDialogs } from "./ReportRevisionDialogs";
 import { saveFileToDevice } from "../../utils/imageCompression";
-import { triggerBlobDownload } from "../../utils/downloadFilename";
+import {
+  getAxiosDownloadFilename,
+  triggerBlobDownload,
+} from "../../utils/downloadFilename";
 
 const ProjectReports = () => {
   const { projectId } = useParams();
@@ -66,13 +74,13 @@ const ProjectReports = () => {
   const [availableCategories, setAvailableCategories] = useState([]);
   const [checkingReports, setCheckingReports] = useState(true);
   const categoryCheckIdRef = useRef(0);
+  const reportsLoadIdRef = useRef(0);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [uploadForm, setUploadForm] = useState({
     reportType: "",
     reportDate: getTodayInSydney(),
     description: "",
     asbestosRemovalist: "",
-    status: "completed",
     file: null,
   });
   const [uploading, setUploading] = useState(false);
@@ -106,9 +114,20 @@ const ProjectReports = () => {
     open: false,
     report: null,
   });
+  const [deleteUploadedDialog, setDeleteUploadedDialog] = useState({
+    open: false,
+    report: null,
+  });
+  const [deletingUploaded, setDeletingUploaded] = useState(false);
 
   // Revision reason state
   const [revisionReason, setRevisionReason] = useState("");
+  const [revisionError, setRevisionError] = useState(null);
+  const [revising, setRevising] = useState(false);
+  const [historyDialog, setHistoryDialog] = useState({
+    open: false,
+    report: null,
+  });
 
   // Get project statuses context
   const { activeStatuses, inactiveStatuses, statusColors } =
@@ -255,8 +274,65 @@ const ProjectReports = () => {
 
   // Load reports when category changes
   const loadReports = useCallback(async () => {
+    const loadId = ++reportsLoadIdRef.current;
     setLoading(true);
     setError(null);
+
+    let categoryRows = null;
+    let uploadedRows = null;
+    const publishLoadedReports = () => {
+      if (loadId !== reportsLoadIdRef.current) return;
+      const bothDone = categoryRows !== null && uploadedRows !== null;
+      const uploadedReady = uploadedRows !== null && uploadedRows.length > 0;
+      if (!uploadedReady && !bothDone) return;
+      const rows = [...(categoryRows || []), ...(uploadedRows || [])];
+      rows.sort((a, b) => new Date(b.date) - new Date(a.date));
+      setReports(rows);
+      setLoading(false);
+    };
+
+    const uploadedPromise = fetch(
+      `${
+        process.env.REACT_APP_API_URL || "http://localhost:5000/api"
+      }/uploaded-reports/project/${projectId}?reportType=${selectedCategory}`,
+      {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      },
+    )
+      .then(async (response) => {
+        if (!response.ok) return [];
+        const uploadedReports = await response.json();
+        if (!Array.isArray(uploadedReports)) return [];
+        return uploadedReports.map((report) => ({
+          id: report._id,
+          date: report.reportDate,
+          description: report.description || report.originalFileName,
+          additionalInfo:
+            `Uploaded by ${report.uploadedBy?.firstName || ""} ${
+              report.uploadedBy?.lastName || ""
+            }`.trim() || "Unknown",
+          type: "uploaded",
+          originalFileName: report.originalFileName,
+          data: { _id: report._id },
+          asbestosRemovalist: report.asbestosRemovalist || "N/A",
+        }));
+      })
+      .catch((error) => {
+        console.log(
+          "No uploaded reports found for category:",
+          selectedCategory,
+          error,
+        );
+        return [];
+      })
+      .then((rows) => {
+        uploadedRows = rows;
+        publishLoadedReports();
+        return rows;
+      });
+
     try {
       let reportsData = [];
 
@@ -283,6 +359,8 @@ const ProjectReports = () => {
               description: report.description || "Asbestos Assessment Report",
               additionalInfo: report.assessorName || "N/A",
               status: report.status || "Unknown",
+              revision: report.revision || 0,
+              reportAuthorisedBy: report.reportAuthorisedBy,
               type: "asbestos_assessment",
               jobType: report.jobType || "asbestos-assessment",
               data: report,
@@ -488,6 +566,26 @@ const ProjectReports = () => {
           }));
           break;
 
+        case "mycometer-sampling": {
+          const mycometerReports =
+            await reportService.getMycometerReports(projectId);
+          reportsData = (Array.isArray(mycometerReports) ? mycometerReports : []).map(
+            (report) => ({
+              id: report.id,
+              jobId: report.jobId,
+              sampleType: report.sampleType,
+              date: report.date,
+              description: report.description,
+              additionalInfo: report.additionalInfo,
+              status: report.status,
+              revision: report.revision || 0,
+              type: "mycometer",
+              data: report,
+            }),
+          );
+          break;
+        }
+
         case "fibre-count":
           const fibreCountReports =
             await reportService.getFibreCountReports(projectId);
@@ -509,54 +607,18 @@ const ProjectReports = () => {
           break;
       }
 
-      // Add uploaded reports for the selected category
-      try {
-        const uploadedReportsResponse = await fetch(
-          `${
-            process.env.REACT_APP_API_URL || "http://localhost:5000/api"
-          }/uploaded-reports/project/${projectId}?reportType=${selectedCategory}`,
-          {
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem("token")}`,
-            },
-          },
-        );
-
-        if (uploadedReportsResponse.ok) {
-          const uploadedReports = await uploadedReportsResponse.json();
-
-          // Map uploaded reports to standard report format
-          const mappedUploadedReports = uploadedReports.map((report) => ({
-            id: report._id,
-            date: report.reportDate,
-            description: report.description || report.originalFileName,
-            additionalInfo:
-              `Uploaded by ${report.uploadedBy?.firstName || ""} ${
-                report.uploadedBy?.lastName || ""
-              }`.trim() || "Unknown",
-            status: report.status,
-            type: "uploaded",
-            data: report,
-            asbestosRemovalist: report.asbestosRemovalist || "N/A",
-          }));
-
-          reportsData.push(...mappedUploadedReports);
-        }
-      } catch (error) {
-        console.log(
-          "No uploaded reports found for category:",
-          selectedCategory,
-        );
-      }
-
-      // Sort reports by date (newest first)
-      reportsData.sort((a, b) => new Date(b.date) - new Date(a.date));
-      setReports(reportsData);
+      categoryRows = reportsData;
+      publishLoadedReports();
+      await uploadedPromise;
     } catch (err) {
       console.error("Error loading reports:", err);
-      setError("Failed to load reports");
+      if (loadId === reportsLoadIdRef.current) {
+        setError("Failed to load reports");
+      }
     } finally {
-      setLoading(false);
+      if (loadId === reportsLoadIdRef.current) {
+        setLoading(false);
+      }
     }
   }, [selectedCategory, projectId]);
 
@@ -590,6 +652,21 @@ const ProjectReports = () => {
   const handleOpenReportSummary = (report) => {
     const reportId = report.id || report.data?._id || report.data?.id;
     if (!reportId) return;
+
+    if (report.type === "mycometer") {
+      const slug =
+        report.sampleType === "Air Sampling"
+          ? AIR_SAMPLING_SLUG
+          : SAMPLE_TYPE_SLUGS[report.sampleType];
+      if (!report.jobId || !slug) return;
+      navigate(`/mycometer-sampling/${report.jobId}/${slug}`, {
+        state: {
+          returnTo: `/reports/project/${projectId}`,
+          selectedCategory: "mycometer-sampling",
+        },
+      });
+      return;
+    }
 
     if (
       report.type === "asbestos_assessment" ||
@@ -994,11 +1071,13 @@ const ProjectReports = () => {
     }
   };
 
-  const handleDownloadReport = async (report) => {
+  const handleDownloadReport = async (report, options = {}) => {
+    const capture = options.capture === true;
     try {
       // Use report.id, or fallback to report.data._id or report.data.id
       const reportId = report.id || report.data?._id || report.data?.id;
-      setProcessingReport({ reportId: reportId, action: "download" });
+      if (!capture) {
+      setProcessingReport({ reportId, action: "download" });
       const reportTypeName =
         report.type === "shift"
           ? "Air Monitoring"
@@ -1016,8 +1095,13 @@ const ProjectReports = () => {
                 ? "Fibre Count"
                 : report.type === "asbestos_assessment"
                   ? "Asbestos Assessment"
-                  : "Report";
+                  : report.type === "uploaded"
+                    ? "uploaded"
+                    : report.type === "mycometer"
+                      ? report.sampleType || "Mycometer"
+                      : "Report";
       showSnackbar(`Downloading ${reportTypeName} report...`, "info");
+      }
       if (report.type === "lead_shift") {
         const { shift, job } = report.data;
         const samplesResponse = await leadAirSampleService.getByShift(shift._id);
@@ -1052,13 +1136,15 @@ const ProjectReports = () => {
             job.projectId?.name,
         };
 
-        await generateLeadMonitoringShiftReport({
+        const leadMonitoringPdf = await generateLeadMonitoringShiftReport({
           shift,
           job: fullJobData,
           samples: samplesWithAnalysis,
           project: projectForReport,
           openInNewTab: false,
+          returnPdfBundle: capture,
         });
+        if (capture) return dataUrlBundleToPdf(leadMonitoringPdf);
       } else if (report.type === "shift") {
         const { shift, job } = report.data;
         const samplesResponse = await sampleService.getByShift(shift._id);
@@ -1154,12 +1240,13 @@ const ProjectReports = () => {
           defaultSampler: shift.defaultSampler,
         };
 
-        generateShiftReport({
+        const shiftPdf = await generateShiftReport({
           shift: enhancedShift,
           job: enhancedJob,
           samples: samplesWithAnalysis,
           project: projectData,
           openInNewTab: false,
+          returnPdfBundle: capture,
           sitePlanData: enhancedShift.sitePlan
             ? {
                 sitePlan: enhancedShift.sitePlan,
@@ -1167,6 +1254,7 @@ const ProjectReports = () => {
               }
             : null,
         });
+        if (capture) return dataUrlBundleToPdf(shiftPdf);
       } else if (report.type === "enclosure_certificate") {
         const {
           generateEnclosureCertificatePDF,
@@ -1183,6 +1271,12 @@ const ProjectReports = () => {
             fullClearance?.enclosureCertificateMergedPdfPath,
         );
 
+        if (capture) {
+          const enclosurePdf = await generateEnclosureCertificatePDF(fullClearance, {
+            returnBlob: true,
+          });
+          return { blob: enclosurePdf.blob, filename: enclosurePdf.filename };
+        }
         if (hasRetainedPdf) {
           try {
             await downloadEnclosureCertificateByClearanceId(clearanceId);
@@ -1220,9 +1314,13 @@ const ProjectReports = () => {
         };
 
         // Generate and download the PDF
-        await generateHTMLTemplatePDF("asbestos-clearance", enhancedClearance, {
+        const clearancePdf = await generateHTMLTemplatePDF("asbestos-clearance", enhancedClearance, {
           openInNewTab: false,
+          returnBlob: capture,
         });
+        if (capture) {
+          return { blob: clearancePdf.blob, filename: clearancePdf.filename };
+        }
       } else if (report.type === "lead_clearance") {
         const { generateHTMLTemplatePDF } =
           await import("../../utils/templatePDFGenerator");
@@ -1240,9 +1338,13 @@ const ProjectReports = () => {
               : fullClearance.consultant,
         };
 
-        await generateHTMLTemplatePDF("lead-clearance", enhancedClearance, {
+        const leadClearancePdf = await generateHTMLTemplatePDF("lead-clearance", enhancedClearance, {
           openInNewTab: false,
+          returnBlob: capture,
         });
+        if (capture) {
+          return { blob: leadClearancePdf.blob, filename: leadClearancePdf.filename };
+        }
       } else if (report.type === "asbestos_assessment") {
         const assessmentId =
           report.id || report.data?.id || report.data?._id;
@@ -1258,6 +1360,7 @@ const ProjectReports = () => {
             fullAssessment,
             { isResidential },
           );
+        if (capture) return { blob: pdfBlob, filename };
         triggerBlobDownload(pdfBlob, filename);
         showSnackbar("Asbestos assessment report downloaded", "success");
       } else if (report.type === "fibre_id") {
@@ -1321,15 +1424,17 @@ const ProjectReports = () => {
         };
 
         // Generate and download the PDF
-        await generateFibreIDReport({
+        const fibreIdPdf = await generateFibreIDReport({
           assessment: assessmentForReport,
           sampleItems: sampleItemsForReport,
           analyst: analyst,
           openInNewTab: false,
           returnPdfData: false,
+          returnPdfBundle: capture,
           reportApprovedBy: fullJob.reportApprovedBy || null,
           reportIssueDate: fullJob.reportIssueDate || null,
         });
+        if (capture) return dataUrlBundleToPdf(fibreIdPdf);
       } else if (report.type === "fibre_count") {
         // Generate and download the fibre count report PDF
         const jobId = report.data.id || report.data._id;
@@ -1388,6 +1493,7 @@ const ProjectReports = () => {
 
         // Create a mock shift-like object for PDF generation
         const mockShift = {
+          _id: fullJob._id,
           descriptionOfWorks:
             fullJob.projectId?.name || "Client Supplied Fibre Count",
           date: fullJob.sampleReceiptDate || new Date(),
@@ -1406,36 +1512,116 @@ const ProjectReports = () => {
         };
 
         // Generate the PDF using air monitoring format
-        await generateShiftReport({
+        const fibreCountPdf = await generateShiftReport({
           shift: mockShift,
           job: jobForPDF,
           samples: transformedSamples,
           project: fullJob.projectId,
           openInNewTab: false,
+          returnPdfBundle: capture,
           isClientSupplied: true, // Flag to indicate we want fibre count format
         });
-      } else if (report.type === "uploaded") {
-        // For uploaded reports, directly download the file
-        const downloadUrl = `${
-          process.env.REACT_APP_API_URL || "http://localhost:5000/api"
-        }/uploaded-reports/download/${report.data._id}`;
+        if (capture) return dataUrlBundleToPdf(fibreCountPdf);
+      } else if (report.type === "mycometer") {
+        const sampleType = report.sampleType || report.data?.sampleType;
+        const jobId = report.jobId || report.data?.jobId;
+        if (!jobId || !sampleType) {
+          showSnackbar("Could not determine the Mycometer report to download.", "error");
+          return;
+        }
+        if (!["Surface Fungi", "Air Sampling", "Air Fungi", "Air Allergen"].includes(sampleType)) {
+          const unavailable = new Error("A PDF is not available for this Mycometer report.");
+          if (capture) throw unavailable;
+          showSnackbar("A PDF is not available for this Mycometer report.", "info");
+          return;
+        }
 
-        // Create a temporary link element to trigger download
-        const link = document.createElement("a");
-        link.href = downloadUrl;
-        link.download = report.data.originalFileName;
-        link.target = "_blank";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        const { mycometerJobsService } = await import("../../services/api");
+        const jobResponse = await mycometerJobsService.getById(jobId);
+        const jobData = jobResponse.data;
+        const samplingMeta = (jobData.samplingMeta || []).find(
+          (item) => item.sampleType === sampleType,
+        );
+        const analysisMeta = (jobData.analysisMeta || []).find(
+          (item) => item.sampleType === sampleType,
+        );
+        const typeSamples = (jobData.samples || []).filter(
+          (sample) => sample.sampleType === sampleType,
+        );
+        const reportArgs = {
+          job: jobData,
+          samples: typeSamples,
+          samplingMeta,
+          analysisMeta,
+          project: jobData.projectId,
+          openInNewTab: false,
+        };
+
+        if (
+          sampleType === "Air Sampling" ||
+          sampleType === "Air Fungi" ||
+          sampleType === "Air Allergen"
+        ) {
+          const { generateMycometerAirReport } = await import(
+            "../../utils/generateMycometerAirFaiReport"
+          );
+          const airPdf = await generateMycometerAirReport({
+            job: jobData,
+            project: jobData.projectId,
+            openInNewTab: false,
+            returnPdfBundle: capture,
+          });
+          if (capture) return dataUrlBundleToPdf(airPdf);
+        } else {
+          const { generateMycometerSurfaceFungiReport } = await import(
+            "../../utils/generateMycometerSurfaceFungiReport"
+          );
+          const surfacePdf = await generateMycometerSurfaceFungiReport({
+            ...reportArgs,
+            openInNewTab: false,
+            returnPdfBundle: capture,
+          });
+          if (capture) return dataUrlBundleToPdf(surfacePdf);
+        }
+      } else if (report.type === "uploaded") {
+        const response = await api.get(
+          `/uploaded-reports/download/${reportId}`,
+          { responseType: "blob" },
+        );
+        const filename = getAxiosDownloadFilename(
+          response,
+          report.originalFileName || report.description || "uploaded-report",
+        );
+        triggerBlobDownload(response.data, filename);
       }
     } catch (err) {
+      if (capture) throw err;
       console.error("Error downloading report:", err);
       setError("Failed to download report");
       showSnackbar("Failed to download report. Please try again.", "error");
     } finally {
-      setProcessingReport({ reportId: null, action: null });
+      if (!capture) {
+        setProcessingReport({ reportId: null, action: null });
+      }
     }
+  };
+
+  const dataUrlBundleToPdf = (bundle) => {
+    const dataUrl = bundle?.dataUrl || bundle;
+    if (typeof dataUrl !== "string" || !dataUrl.includes(",")) {
+      throw new Error("The PDF could not be generated.");
+    }
+    const [header, base64] = dataUrl.split(",");
+    const mimeMatch = header.match(/:(.*?);/);
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return {
+      blob: new Blob([bytes], { type: mimeMatch?.[1] || "application/pdf" }),
+      filename: bundle?.filename || "report.pdf",
+    };
   };
 
   const normalizeDataUrl = (value) =>
@@ -1644,34 +1830,160 @@ const ProjectReports = () => {
     }
   };
 
+  const handleDeleteUploadedReport = (report) => {
+    if (report?.type !== "uploaded") return;
+    setDeleteUploadedDialog({ open: true, report });
+  };
+
+  const cancelDeleteUploadedReport = () => {
+    if (deletingUploaded) return;
+    setDeleteUploadedDialog({ open: false, report: null });
+  };
+
+  const confirmDeleteUploadedReport = async () => {
+    const report = deleteUploadedDialog.report;
+    const reportId = report?.id || report?.data?._id;
+    if (!reportId) {
+      showSnackbar("Could not determine the uploaded report to delete.", "error");
+      setDeleteUploadedDialog({ open: false, report: null });
+      return;
+    }
+
+    setDeletingUploaded(true);
+    setProcessingReport({ reportId, action: "delete" });
+    try {
+      await api.delete(`/uploaded-reports/${reportId}`);
+      showSnackbar("Uploaded report deleted.", "success");
+      setDeleteUploadedDialog({ open: false, report: null });
+      await checkAvailableCategories();
+      await loadReports();
+    } catch (error) {
+      console.error("Error deleting uploaded report:", error);
+      showSnackbar("Failed to delete uploaded report. Please try again.", "error");
+    } finally {
+      setDeletingUploaded(false);
+      setProcessingReport({ reportId: null, action: null });
+    }
+  };
+
+  const blobToDataUrl = (blob) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error("The PDF could not be read."));
+      reader.readAsDataURL(blob);
+    });
+
+  const buildRevisionError = (error, report) => {
+    const data = error?.response?.data;
+    const offline = !error?.response && error?.request;
+    if (error?.response?.status === 413) {
+      return {
+        code: "PDF_TOO_LARGE",
+        message: "The PDF is too large to store, so the revision was not saved.",
+        detail:
+          "Contact tech support if this report needs to be revised. The generated PDF is over the size the server can accept.",
+        report,
+      };
+    }
+    if (offline) {
+      return {
+        code: "NETWORK",
+        message: "The server could not be reached, so the revision was not saved.",
+        detail: "Check your connection and try again.",
+        report,
+      };
+    }
+    if (data?.message) {
+      return {
+        code: data.code || "REVISION_FAILED",
+        message: data.message,
+        detail: data.detail,
+        report,
+      };
+    }
+    return {
+      code: "PDF_GENERATE",
+      message:
+        "The PDF could not be generated, so the revision was not saved.",
+      detail: error?.message || "The report generator did not return a PDF.",
+      report,
+    };
+  };
+
+  const closeReviseDialog = () => {
+    setReviseDialog({ open: false, report: null });
+    setRevisionReason("");
+    setRevisionError(null);
+    setRevising(false);
+  };
+
   const handleReviseReport = (report) => {
-    // Show confirmation dialog
+    if (report?.type === "uploaded") return;
+    setRevisionError(null);
+    setRevisionReason("");
     setReviseDialog({
       open: true,
       report: report,
     });
   };
 
-  const confirmReviseReport = async () => {
+  const confirmReviseReport = async ({ informal = false } = {}) => {
     const report = reviseDialog.report;
-
-    // Validate revision reason for clearance / enclosure certificate reports only
-    if (
-      (report?.type === "clearance" ||
-        report?.type === "enclosure_certificate" ||
-        report?.type === "lead_clearance") &&
-      !revisionReason.trim()
-    ) {
-      showSnackbar(
-        report?.type === "enclosure_certificate"
-          ? "Please provide a reason for revising this enclosure certificate."
-          : "Please provide a reason for revising this clearance report.",
-        "error",
-      );
+    if (!report) return;
+    if (!informal && !revisionReason.trim()) {
+      setRevisionError({
+        code: "REASON_REQUIRED",
+        message: "Enter a reason for this revision.",
+        report,
+      });
       return;
     }
 
+    setRevising(true);
+    setRevisionError(null);
     try {
+      const payload = { informal: informal === true };
+      if (report.type === "mycometer") {
+        payload.reportKey =
+          (report.sampleType || report.data?.sampleType) === "Surface Fungi"
+            ? "Surface Fungi"
+            : "Air Sampling";
+      }
+      if (!payload.informal) {
+        let captured;
+        try {
+          captured = await handleDownloadReport(report, { capture: true });
+        } catch (genErr) {
+          setRevisionError(buildRevisionError(genErr, report));
+          return;
+        }
+        if (!captured?.blob || captured.blob.size < 5) {
+          setRevisionError({
+            code: "PDF_GENERATE",
+            message:
+              "The PDF could not be generated, so the revision was not saved.",
+            detail: "The generator did not return a PDF file.",
+            report,
+          });
+          return;
+        }
+        if (captured.blob.size > 30 * 1024 * 1024) {
+          setRevisionError({
+            code: "PDF_TOO_LARGE",
+            message:
+              "The PDF is too large to store, so the revision was not saved.",
+            detail:
+              "Contact tech support if this report needs to be revised. The generated PDF is over 30 MB.",
+            report,
+          });
+          return;
+        }
+        payload.reason = revisionReason.trim();
+        payload.filename = captured.filename || "report.pdf";
+        payload.pdfBase64 = await blobToDataUrl(captured.blob);
+      }
+
       if (report.type === "lead_shift" || report.type === "shift") {
         const { shiftService } = await import("../../services/api");
         const shiftId =
@@ -1681,7 +1993,9 @@ const ProjectReports = () => {
           return;
         }
 
-        const res = await shiftService.reviseReport(shiftId);
+        const res = await shiftService.reviseReport(shiftId, payload);
+        const warning = res.data?.notificationWarning;
+        if (warning) showSnackbar(warning, "warning");
         const isLead = report.type === "lead_shift";
         showSnackbar(
           res.data?.message ||
@@ -1700,10 +2014,8 @@ const ProjectReports = () => {
           return;
         }
 
-        const res = await leadClearanceService.reviseReport(
-          clearanceId,
-          revisionReason.trim(),
-        );
+        const res = await leadClearanceService.reviseReport(clearanceId, payload);
+        if (res?.notificationWarning) showSnackbar(res.notificationWarning, "warning");
         showSnackbar(
           res.data?.message ||
             res.message ||
@@ -1725,10 +2037,8 @@ const ProjectReports = () => {
           return;
         }
 
-        const res = await asbestosClearanceService.reviseReport(
-          clearanceId,
-          revisionReason.trim(),
-        );
+        const res = await asbestosClearanceService.reviseReport(clearanceId, payload);
+        if (res?.notificationWarning) showSnackbar(res.notificationWarning, "warning");
         const isEnclosure = report.type === "enclosure_certificate";
         showSnackbar(
           res.data?.message ||
@@ -1751,7 +2061,10 @@ const ProjectReports = () => {
           return;
         }
 
-        const res = await clientSuppliedJobsService.reviseReport(jobId);
+        const res = await clientSuppliedJobsService.reviseReport(jobId, payload);
+        if (res.data?.notificationWarning) {
+          showSnackbar(res.data.notificationWarning, "warning");
+        }
         const jobTypeLabel =
           report.type === "fibre_count" ? "Fibre Count" : "Fibre ID";
 
@@ -1773,8 +2086,11 @@ const ProjectReports = () => {
         }
         const res = await asbestosAssessmentService.reviseAsbestosAssessmentReport(
           assessmentId,
+          payload,
         );
+        if (res?.notificationWarning) showSnackbar(res.notificationWarning, "warning");
         const revisedJobType =
+          res?.job?.jobType ||
           res.data?.job?.jobType ||
           report.data?.jobType ||
           (report.data?.description?.includes("Residential")
@@ -1788,7 +2104,8 @@ const ProjectReports = () => {
           /* ignore */
         }
         showSnackbar(
-          res.data?.message ||
+          res?.message ||
+            res.data?.message ||
             (isResidential
               ? "Assessment report reset for editing. Open the job from Surveys → Residential Asbestos Assessments to revise and re-authorise."
               : "Assessment report reset for editing. Open the job from Surveys → Asbestos Assessment to revise and re-authorise."),
@@ -1796,26 +2113,49 @@ const ProjectReports = () => {
         );
         await checkAvailableCategories();
         loadReports();
+      } else if (report.type === "mycometer") {
+        const { mycometerJobsService } = await import("../../services/api");
+        const jobId = report.jobId || report.data?.jobId;
+        if (!jobId) {
+          setRevisionError({
+            code: "REPORT_ID",
+            message: "Could not determine which Mycometer report to revise.",
+            detail: "The report is still authorised and the revision number has not changed.",
+            report,
+          });
+          return;
+        }
+        const res = await mycometerJobsService.reviseReport(jobId, payload);
+        if (res.data?.notificationWarning) {
+          showSnackbar(res.data.notificationWarning, "warning");
+        }
+        showSnackbar(
+          res.data?.message ||
+            "Mycometer report reopened for editing. Re-authorise when ready.",
+          "success",
+        );
+        await checkAvailableCategories();
+        loadReports();
+      } else {
+        setRevisionError({
+          code: "UNSUPPORTED",
+          message: "This report cannot be revised from here.",
+          report,
+        });
+        return;
       }
+      closeReviseDialog();
     } catch (error) {
       console.error("Error revising report:", error);
-      showSnackbar("Failed to revise report. Please try again.", "error");
+      setRevisionError(buildRevisionError(error, report));
     } finally {
-      // Close the dialog and clear revision reason
-      setReviseDialog({
-        open: false,
-        report: null,
-      });
-      setRevisionReason("");
+      setRevising(false);
     }
   };
 
   const cancelReviseReport = () => {
-    setReviseDialog({
-      open: false,
-      report: null,
-    });
-    setRevisionReason("");
+    if (revising) return;
+    closeReviseDialog();
   };
 
   // Handle COC view
@@ -1897,7 +2237,6 @@ const ProjectReports = () => {
       formData.append("reportType", uploadForm.reportType);
       formData.append("reportDate", uploadForm.reportDate);
       formData.append("description", uploadForm.description);
-      formData.append("status", uploadForm.status);
       formData.append("projectId", projectId);
 
       // Add type-specific fields
@@ -1933,7 +2272,6 @@ const ProjectReports = () => {
         reportDate: getTodayInSydney(),
         description: "",
         asbestosRemovalist: "",
-        status: "completed",
         file: null,
       });
 
@@ -2187,8 +2525,12 @@ const ProjectReports = () => {
             onDownload={handleDownloadReport}
             onViewImages={handleOpenReportImages}
             onRevise={handleReviseReport}
+            onViewHistory={(report) =>
+              setHistoryDialog({ open: true, report })
+            }
             onViewCOC={handleViewCOC}
             onExportCSV={handleExportCSV}
+            onDelete={handleDeleteUploadedReport}
             onRowClick={handleOpenReportSummary}
             processingReport={processingReport}
           />
@@ -2318,79 +2660,51 @@ const ProjectReports = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Revise Report Confirmation Dialog */}
+      <ReportRevisionDialogs
+        reviseOpen={reviseDialog.open}
+        historyOpen={historyDialog.open}
+        report={reviseDialog.open ? reviseDialog.report : historyDialog.report}
+        isAdmin={isAdmin}
+        reason={revisionReason}
+        onReasonChange={(value) => {
+          setRevisionReason(value);
+          if (revisionError?.code === "REASON_REQUIRED") setRevisionError(null);
+        }}
+        error={revisionError}
+        revising={revising}
+        onCloseRevise={cancelReviseReport}
+        onCloseHistory={() => setHistoryDialog({ open: false, report: null })}
+        onConfirm={() => confirmReviseReport()}
+        onInformal={() => confirmReviseReport({ informal: true })}
+      />
+
       <Dialog
-        open={reviseDialog.open}
-        onClose={cancelReviseReport}
+        open={deleteUploadedDialog.open}
+        onClose={cancelDeleteUploadedReport}
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>Revise Report</DialogTitle>
+        <DialogTitle>Delete uploaded report</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            {(() => {
-              const reportType = reviseDialog.report?.type;
-              let tableText = "the asbestos removal jobs table";
-
-              if (reportType === "fibre_id" || reportType === "fibre_count") {
-                tableText = "the client supplied jobs table";
-              } else if (
-                reportType === "clearance" ||
-                reportType === "enclosure_certificate" ||
-                reportType === "lead_clearance"
-              ) {
-                tableText =
-                  reportType === "lead_clearance"
-                    ? "the lead clearances table"
-                    : reportType === "enclosure_certificate"
-                      ? "the enclosure inspections table on the asbestos removal job"
-                      : "the clearances table";
-              } else if (reportType === "shift") {
-                tableText = "the asbestos removal jobs table";
-              } else if (reportType === "lead_shift") {
-                tableText = "the lead removal jobs table";
-              } else if (reportType === "asbestos_assessment") {
-                tableText =
-                  "Surveys (Asbestos Assessment or Residential Asbestos Assessment)";
-              }
-
-              return `Proceeding will enable editing of the report in ${tableText} and will increase the report's revision count.`;
-            })()}
+            This permanently removes{" "}
+            {deleteUploadedDialog.report?.description ||
+              deleteUploadedDialog.report?.data?.originalFileName ||
+              "this uploaded file"}{" "}
+            from the project.
           </DialogContentText>
-          {["clearance", "enclosure_certificate", "lead_clearance"].includes(
-            reviseDialog.report?.type,
-          ) && (
-            <TextField
-              autoFocus
-              margin="dense"
-              label="Reason for revision"
-              fullWidth
-              variant="outlined"
-              multiline
-              rows={3}
-              value={revisionReason}
-              onChange={(e) => setRevisionReason(e.target.value)}
-              placeholder={
-                reviseDialog.report?.type === "enclosure_certificate"
-                  ? "Please provide a reason for revising this enclosure certificate..."
-                  : "Please provide a reason for revising this clearance report..."
-              }
-              sx={{ mt: 2 }}
-            />
-          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={cancelReviseReport} color="secondary">
+          <Button onClick={cancelDeleteUploadedReport} disabled={deletingUploaded}>
             Cancel
           </Button>
           <Button
-            onClick={confirmReviseReport}
-            color="warning"
+            onClick={confirmDeleteUploadedReport}
+            color="error"
             variant="contained"
+            disabled={deletingUploaded}
           >
-            {reviseDialog.report?.type === "enclosure_certificate"
-              ? "Revise Certificate"
-              : "Revise Report"}
+            {deletingUploaded ? "Deleting..." : "Delete"}
           </Button>
         </DialogActions>
       </Dialog>
@@ -2433,7 +2747,7 @@ const ProjectReports = () => {
               </FormControl>
             </Grid>
 
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12}>
               <TextField
                 fullWidth
                 label="Report Date"
@@ -2445,23 +2759,6 @@ const ProjectReports = () => {
                 InputLabelProps={{ shrink: true }}
                 required
               />
-            </Grid>
-
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Status</InputLabel>
-                <Select
-                  value={uploadForm.status}
-                  onChange={(e) =>
-                    setUploadForm({ ...uploadForm, status: e.target.value })
-                  }
-                  label="Status"
-                >
-                  <MenuItem value="completed">Completed</MenuItem>
-                  <MenuItem value="in_progress">In Progress</MenuItem>
-                  <MenuItem value="draft">Draft</MenuItem>
-                </Select>
-              </FormControl>
             </Grid>
 
             <Grid item xs={12}>
@@ -2529,7 +2826,6 @@ const ProjectReports = () => {
                 reportDate: new Date().toISOString().split("T")[0],
                 description: "",
                 asbestosRemovalist: "",
-                status: "completed",
                 file: null,
               });
             }}

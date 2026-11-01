@@ -41,6 +41,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import MailIcon from "@mui/icons-material/Mail";
 import DownloadingIcon from "@mui/icons-material/Downloading";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import { tokens } from "../../../theme/tokens";
 import { useTheme } from "@mui/material/styles";
 import {
@@ -72,7 +73,12 @@ const trimOriginalDataForCache = (orig) => {
   if (!orig || typeof orig !== "object") return orig;
   const projectId = orig.projectId;
   return {
-    projectId: projectId ? { _id: projectId._id || projectId } : undefined,
+    projectId: projectId
+      ? {
+          _id: projectId._id || projectId,
+          workOrder: projectId.workOrder,
+        }
+      : undefined,
     assessmentDate: orig.assessmentDate,
     state: orig.state,
     secondaryHeader: orig.secondaryHeader,
@@ -89,15 +95,17 @@ const trimOriginalDataForCache = (orig) => {
     samplesReceivedDate: orig.samplesReceivedDate,
     labSamplesStatus: orig.labSamplesStatus,
     analysisDueDate: orig.analysisDueDate,
-    items: Array.isArray(orig.items)
-      ? orig.items.map((i) => ({
-          sampleReference: i.sampleReference,
-          asbestosContent: i.asbestosContent,
-          analysisData: i.analysisData
-            ? { isAnalysed: i.analysisData.isAnalysed }
-            : undefined,
-        }))
-      : [],
+    ...(Array.isArray(orig.items)
+      ? {
+          items: orig.items.map((i) => ({
+            sampleReference: i.sampleReference,
+            asbestosContent: i.asbestosContent,
+            analysisData: i.analysisData
+              ? { isAnalysed: i.analysisData.isAnalysed }
+              : undefined,
+          })),
+        }
+      : {}),
   };
 };
 
@@ -616,12 +624,13 @@ const AsbestosAssessment = () => {
   // (samplesReceivedDate cleared), this will show "No samples submitted to lab" without status change.
   const hasSamplesSubmitted = (job) => {
     if (hasNoSamplesCollected(job)) return false;
-    const hasItems =
-      job.samplesCount > 0 || (job.originalData?.items?.length ?? 0) > 0;
-    if (!hasItems) return false;
     const data = job.originalData || job;
     const submitted =
       data.samplesReceivedDate != null || data.labSamplesStatus != null;
+    const items = data?.items ?? job.items;
+    if (!Array.isArray(items)) return submitted;
+    const hasItems = job.samplesCount > 0 || items.length > 0;
+    if (!hasItems) return false;
     return submitted;
   };
 
@@ -946,8 +955,12 @@ const AsbestosAssessment = () => {
 
   // Check if all primary sampled items (excluding referred) have been analysed
   const areAllSampledItemsAnalysed = (job) => {
-    const items = job?.originalData?.items || job?.items;
-    if (!items?.length) return false;
+    const data = job?.originalData || job;
+    const items = data?.items ?? job?.items;
+    if (!Array.isArray(items)) {
+      return data?.labSamplesStatus === "analysis-complete";
+    }
+    if (!items.length) return false;
     const isVA = (item) =>
       item.asbestosContent === "Visually Assessed as Asbestos" ||
       item.asbestosContent === "Visually Assessed as Non-Asbestos" ||
@@ -985,8 +998,37 @@ const AsbestosAssessment = () => {
       });
 
       clearJobsCache();
-      await fetchJobs({ force: true });
-      showSnackbar("Assessment report authorised successfully.", "success");
+      try {
+        await fetchJobs({ force: true });
+      } catch (refreshErr) {
+        console.error("Error refreshing assessments after authorisation:", refreshErr);
+      }
+
+      const assessmentId = job.id;
+      setAssessmentPdfGeneratingForJobId(assessmentId);
+      showSnackbar(
+        "Assessment report authorised. The PDF will download when it is ready.",
+        "success",
+      );
+      generateAssessmentPDFAsync(assessmentId, { isResidential: false })
+        .then(({ filename }) => {
+          setReportViewedAssessmentIds((prev) => new Set(prev).add(assessmentId));
+          showSnackbar(`Downloaded: ${filename}`, "success");
+        })
+        .catch((pdfErr) => {
+          console.error("Error generating authorised assessment PDF:", pdfErr);
+          showSnackbar(
+            pdfErr.message
+              ? `Report authorised, but the PDF could not be downloaded: ${pdfErr.message}`
+              : "Report authorised, but the PDF could not be downloaded.",
+            "warning",
+          );
+        })
+        .finally(() => {
+          setAssessmentPdfGeneratingForJobId((current) =>
+            String(current) === String(assessmentId) ? null : current,
+          );
+        });
     } catch (err) {
       console.error("Error authorising report:", err);
       showSnackbar(
@@ -1958,18 +2000,44 @@ const AsbestosAssessment = () => {
             </Select>
           </FormControl>
 
-          <TextField
-            fullWidth
-            label="Secondary Header (Optional)"
-            value={secondaryHeader}
-            onChange={(e) => {
-              setSecondaryHeader(e.target.value);
-              setModalError(null);
-            }}
-            placeholder="Enter secondary header text"
-            helperText="This will appear as a smaller header beneath the project site name on the cover page"
-            sx={{ mb: 2 }}
-          />
+          {(() => {
+            const workOrder = String(selectedProject?.workOrder || "").trim();
+            const showCopyWorkOrder =
+              workOrder.length > 0 && !String(secondaryHeader || "").trim();
+            return (
+              <TextField
+                fullWidth
+                label="Secondary Header (Optional)"
+                value={secondaryHeader}
+                onChange={(e) => {
+                  setSecondaryHeader(e.target.value);
+                  setModalError(null);
+                }}
+                placeholder="Enter secondary header text"
+                helperText="This will appear as a smaller header beneath the project site name on the cover page"
+                sx={{ mb: 2 }}
+                InputProps={{
+                  endAdornment: showCopyWorkOrder ? (
+                    <InputAdornment position="end">
+                      <Tooltip title="Copy work order into secondary header">
+                        <IconButton
+                          type="button"
+                          edge="end"
+                          aria-label="Copy work order into secondary header"
+                          onClick={() => {
+                            setSecondaryHeader(workOrder);
+                            setModalError(null);
+                          }}
+                        >
+                          <ContentCopyIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </InputAdornment>
+                  ) : null,
+                }}
+              />
+            );
+          })()}
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseModal}>Cancel</Button>
@@ -2090,18 +2158,48 @@ const AsbestosAssessment = () => {
             </Select>
           </FormControl>
 
-          <TextField
-            fullWidth
-            label="Secondary Header (Optional)"
-            value={editSecondaryHeader}
-            onChange={(e) => {
-              setEditSecondaryHeader(e.target.value);
-              setEditError(null);
-            }}
-            placeholder="Enter secondary header text"
-            helperText="This will appear as a smaller header beneath the project site name on the cover page"
-            sx={{ mb: 2 }}
-          />
+          {(() => {
+            const workOrder = String(
+              jobToEdit?.originalData?.projectId?.workOrder ||
+                jobToEdit?.projectId?.workOrder ||
+                "",
+            ).trim();
+            const showCopyWorkOrder =
+              workOrder.length > 0 && !String(editSecondaryHeader || "").trim();
+            return (
+              <TextField
+                fullWidth
+                label="Secondary Header (Optional)"
+                value={editSecondaryHeader}
+                onChange={(e) => {
+                  setEditSecondaryHeader(e.target.value);
+                  setEditError(null);
+                }}
+                placeholder="Enter secondary header text"
+                helperText="This will appear as a smaller header beneath the project site name on the cover page"
+                sx={{ mb: 2 }}
+                InputProps={{
+                  endAdornment: showCopyWorkOrder ? (
+                    <InputAdornment position="end">
+                      <Tooltip title="Copy work order into secondary header">
+                        <IconButton
+                          type="button"
+                          edge="end"
+                          aria-label="Copy work order into secondary header"
+                          onClick={() => {
+                            setEditSecondaryHeader(workOrder);
+                            setEditError(null);
+                          }}
+                        >
+                          <ContentCopyIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </InputAdornment>
+                  ) : null,
+                }}
+              />
+            );
+          })()}
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseEditDialog} disabled={editLoading}>

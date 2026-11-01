@@ -476,6 +476,61 @@ const getTemplateByType = async (templateType) => {
 };
 
 /**
+ * Report jurisdiction used to pick legislation.
+ * Commonwealth assessments use ACT legislation. Blank stays blank so callers can skip filtering.
+ */
+const normaliseReportJurisdiction = (value, { emptyAs } = {}) => {
+  const raw = String(value ?? '').trim().toUpperCase();
+  if (!raw) return emptyAs === undefined ? null : emptyAs;
+  if (raw === 'COMMONWEALTH') return 'ACT';
+  return raw;
+};
+
+const jurisdictionFromAssessmentState = (state) => normaliseReportJurisdiction(state);
+
+const legislationItemsForJurisdiction = (items, jurisdiction) => {
+  const list = Array.isArray(items) ? items : [];
+  const normalised = normaliseReportJurisdiction(jurisdiction);
+  if (!normalised) return list;
+  return list.filter(
+    (item) => normaliseReportJurisdiction(item?.jurisdiction, { emptyAs: 'ACT' }) === normalised,
+  );
+};
+
+/**
+ * Legislation lines for {LEGISLATION} / [LEGISLATION].
+ * Items with no jurisdiction are treated as ACT so older records still match ACT reports.
+ */
+const formatLegislationBullets = (data) => {
+  const jurisdiction = normaliseReportJurisdiction(data?.jurisdiction);
+  const filtered = legislationItemsForJurisdiction(data?.selectedLegislation, jurisdiction);
+  if (filtered.length === 0) return '[BULLET]No legislation items selected';
+  return filtered
+    .map((item) => {
+      const title = item.legislationTitle || item.text || 'Unknown Legislation';
+      return `[BULLET]${title}`;
+    })
+    .join('\n');
+};
+
+/**
+ * Prefer the job snapshot when it already has items for this jurisdiction.
+ * Otherwise use the template selection. A snapshot taken for another state
+ * (for example ACT, then the assessment is set to NSW) must not hide the legislation section.
+ */
+const selectLegislationForJurisdiction = (snapshot, resolved, jurisdiction) => {
+  const snapshotList = Array.isArray(snapshot) ? snapshot : [];
+  const resolvedList = Array.isArray(resolved) ? resolved : [];
+  const normalised = normaliseReportJurisdiction(jurisdiction);
+  if (!normalised) {
+    return snapshotList.length > 0 ? snapshotList : resolvedList;
+  }
+  const fromSnapshot = legislationItemsForJurisdiction(snapshotList, normalised);
+  if (fromSnapshot.length > 0) return fromSnapshot;
+  return legislationItemsForJurisdiction(resolvedList, normalised);
+};
+
+/**
  * Replace placeholders in template content with actual data
  * @param {string} content - Template content with placeholders
  * @param {Object} data - Data to replace placeholders with
@@ -973,50 +1028,8 @@ const replacePlaceholders = async (content, data) => {
       // Delimiters let us collapse template newlines before/after the job block (PDF + previews).
       return `%%JOB_EXCLUSIONS_START%%${trimmed}%%JOB_EXCLUSIONS_END%%`;
     })(),
-    '{LEGISLATION}': (() => {
-      if (data.selectedLegislation && Array.isArray(data.selectedLegislation) && data.selectedLegislation.length > 0) {
-        // Filter legislation based on clearance jurisdiction if available.
-        // Treat missing item.jurisdiction as ACT for backwards compatibility.
-        let filteredLegislation = data.selectedLegislation;
-        if (data.jurisdiction) {
-          filteredLegislation = data.selectedLegislation.filter((item) =>
-            (item?.jurisdiction || 'ACT') === data.jurisdiction
-          );
-        }
-
-        if (filteredLegislation.length > 0) {
-          return filteredLegislation
-            .map((item) => {
-              const title = item.legislationTitle || item.text || 'Unknown Legislation';
-              return `[BULLET]${title}`;
-            })
-            .join('\n');
-        }
-      }
-      return '[BULLET]No legislation items selected';
-    })(),
-    '[LEGISLATION]': (() => {
-      if (data.selectedLegislation && Array.isArray(data.selectedLegislation) && data.selectedLegislation.length > 0) {
-        // Filter legislation based on clearance jurisdiction if available.
-        // Treat missing item.jurisdiction as ACT for backwards compatibility.
-        let filteredLegislation = data.selectedLegislation;
-        if (data.jurisdiction) {
-          filteredLegislation = data.selectedLegislation.filter((item) =>
-            (item?.jurisdiction || 'ACT') === data.jurisdiction
-          );
-        }
-
-        if (filteredLegislation.length > 0) {
-          return filteredLegislation
-            .map((item) => {
-              const title = item.legislationTitle || item.text || 'Unknown Legislation';
-              return `[BULLET]${title}`;
-            })
-            .join('\n');
-        }
-      }
-      return '[BULLET]No legislation items selected';
-    })(),
+    '{LEGISLATION}': formatLegislationBullets(data),
+    '[LEGISLATION]': formatLegislationBullets(data),
     '{LP_APPENDICES}': lpAppendicesContent,
     '[LP_APPENDICES]': lpAppendicesContent,
     '{LD_APPENDICES}': ldAppendicesContent,
@@ -1119,13 +1132,13 @@ const getLegislationForReportTemplate = async (templateType, jurisdiction) => {
   const template = await getTemplateByType(templateType);
   const selected = template?.selectedLegislation;
   if (!selected || !Array.isArray(selected) || selected.length === 0) return [];
-  const filterJurisdiction = jurisdiction === 'Commonwealth' ? 'ACT' : (jurisdiction || 'ACT');
-  const filtered = selected.filter((item) => (item.jurisdiction || 'ACT') === filterJurisdiction);
+  const filterJurisdiction = normaliseReportJurisdiction(jurisdiction, { emptyAs: 'ACT' });
+  const filtered = legislationItemsForJurisdiction(selected, filterJurisdiction);
   return filtered.map((item) => ({
     _id: item._id,
     text: item.text,
     legislationTitle: item.legislationTitle,
-    jurisdiction: item.jurisdiction || 'ACT',
+    jurisdiction: normaliseReportJurisdiction(item.jurisdiction, { emptyAs: 'ACT' }),
   }));
 };
 
@@ -1134,4 +1147,6 @@ module.exports = {
   replacePlaceholders,
   clearUserLookupCache,
   getLegislationForReportTemplate,
+  jurisdictionFromAssessmentState,
+  selectLegislationForJurisdiction,
 }; 

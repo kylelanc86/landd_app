@@ -48,18 +48,24 @@ import { useAuth } from "../../context/AuthContext";
 import { usePermissions } from "../../hooks/usePermissions";
 import { hasPermission } from "../../config/permissions";
 import { generateMycometerSurfaceFungiReport } from "../../utils/generateMycometerSurfaceFungiReport";
-import { generateMycometerAirFungiReport } from "../../utils/generateMycometerAirFungiReport";
-import { generateMycometerAirAllergenReport } from "../../utils/generateMycometerAirAllergenReport";
+import { generateMycometerAirReport } from "../../utils/generateMycometerAirFaiReport";
 import {
   SAMPLE_TYPE_FROM_SLUG,
+  SAMPLE_TYPE_SLUGS,
   SAMPLE_TYPE_COLORS,
   CLEANING_STAGES,
   YES_NO_OPTIONS,
   AIR_FUNGI_FLOWMETER_OPTIONS,
+  AIR_SAMPLING_TYPES,
+  AIR_SAMPLING_LABEL,
+  AIR_SAMPLING_SLUG,
+  DEFAULT_AIR_FLOWMETER,
+  isAirSamplingType,
   SAMPLE_ENTRY_SUPPORTED_TYPES,
   isAirLikeSampleType,
   isAirFungiSampleType,
   PDF_SUPPORTED_SAMPLE_TYPES,
+  getSamplerDisplayWithCertFromMeta,
 } from "./mycometerConstants";
 
 const addBusinessDays = (date, businessDays) => {
@@ -94,15 +100,36 @@ const getUserDisplayName = (user) =>
 
 const getNextSampleId = () => "LD-";
 
-const emptySampleForm = (sampleType, sampleId = "LD-") => {
+const formatSampleDateYyMmDd = (value) => {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return "";
+  return `${match[1].slice(-2)}${match[2]}${match[3]}`;
+};
+
+const buildNextFaiSampleId = (projectID, sampleDate, existingSamples) => {
+  const yymmdd = formatSampleDateYyMmDd(sampleDate);
+  if (!projectID || !yymmdd) return "";
+  const prefix = `${projectID} - ${yymmdd} - FAI`;
+  const pattern = new RegExp(
+    `^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\d+)$`,
+  );
+  let max = 0;
+  (existingSamples || []).forEach((sample) => {
+    const match = String(sample.sampleId || "").trim().match(pattern);
+    if (match) max = Math.max(max, Number(match[1]));
+  });
+  return `${prefix}${String(max + 1).padStart(2, "0")}`;
+};
+
+const emptySampleForm = (sampleType, sampleId = "LD-", flowRate = "24") => {
   if (isAirLikeSampleType(sampleType)) {
     const form = {
       sampleId,
       sampleLocation: "",
-      flowRate: "24",
+      flowRate,
     };
     if (isAirFungiSampleType(sampleType)) {
-      form.qualityControl = "Yes";
+      form.qualityControl = "No";
     }
     return form;
   }
@@ -118,13 +145,37 @@ const MycometerSamples = () => {
   const { currentUser } = useAuth();
   const { isAdmin } = usePermissions();
   const { jobId, sampleTypeSlug } = useParams();
-  const sampleType = SAMPLE_TYPE_FROM_SLUG[sampleTypeSlug];
+  const isAirSampling = sampleTypeSlug === AIR_SAMPLING_SLUG;
+  const sampleType = isAirSampling
+    ? AIR_SAMPLING_LABEL
+    : SAMPLE_TYPE_FROM_SLUG[sampleTypeSlug];
+  const [includedAirTypes, setIncludedAirTypes] = useState([]);
   const typeColors =
-    SAMPLE_TYPE_COLORS[sampleType] || SAMPLE_TYPE_COLORS["Surface Fungi"];
-  const isAirLike = isAirLikeSampleType(sampleType);
-  const isAirFungi = isAirFungiSampleType(sampleType);
+    SAMPLE_TYPE_COLORS[isAirSampling ? "Air Fungi" : sampleType] ||
+    SAMPLE_TYPE_COLORS["Surface Fungi"];
+  const airLikeIncluded = includedAirTypes.filter((type) =>
+    isAirLikeSampleType(type),
+  );
+  const isAirLike = isAirSampling
+    ? airLikeIncluded.length > 0
+    : isAirLikeSampleType(sampleType);
+  const isAirFungi = isAirSampling
+    ? includedAirTypes.includes("Air Fungi")
+    : isAirFungiSampleType(sampleType);
   const isSurfaceFungi = sampleType === "Surface Fungi";
-  const supportsSampleEntry = SAMPLE_ENTRY_SUPPORTED_TYPES.includes(sampleType);
+  const supportsSampleEntry = isAirSampling
+    ? airLikeIncluded.length > 0
+    : SAMPLE_ENTRY_SUPPORTED_TYPES.includes(sampleType);
+  const entrySampleType = isAirSampling
+    ? includedAirTypes.includes("Air Fungi")
+      ? "Air Fungi"
+      : airLikeIncluded[0] || "Air Fungi"
+    : sampleType;
+  const defaultAirFlowRate =
+    includedAirTypes.includes("Air Fungi") &&
+    includedAirTypes.includes("Air Allergen")
+      ? "15"
+      : "24";
 
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -136,7 +187,7 @@ const MycometerSamples = () => {
   const [sampledByUser, setSampledByUser] = useState(null);
   const [sampleDate, setSampleDate] = useState("");
   const [samples, setSamples] = useState([]);
-  const [flowmeter, setFlowmeter] = useState("");
+  const [flowmeter, setFlowmeter] = useState(DEFAULT_AIR_FLOWMETER);
 
   const [sampleDialogOpen, setSampleDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState("create");
@@ -148,7 +199,7 @@ const MycometerSamples = () => {
   const [savingSample, setSavingSample] = useState(false);
   const [samplingComplete, setSamplingComplete] = useState(false);
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
-  const [turnaroundTime, setTurnaroundTime] = useState("3 day");
+  const [turnaroundTime, setTurnaroundTime] = useState("same day");
   const [showCustomTurnaround, setShowCustomTurnaround] = useState(false);
   const [analysisDueDate, setAnalysisDueDate] = useState("");
   const [completingSampling, setCompletingSampling] = useState(false);
@@ -167,6 +218,18 @@ const MycometerSamples = () => {
   const [reopening, setReopening] = useState(false);
 
   useEffect(() => {
+    if (
+      !isAirSampling &&
+      isAirSamplingType(sampleType) &&
+      jobId
+    ) {
+      navigate(`/mycometer-sampling/${jobId}/${AIR_SAMPLING_SLUG}`, {
+        replace: true,
+      });
+    }
+  }, [isAirSampling, sampleType, jobId, navigate]);
+
+  useEffect(() => {
     if (!sampleType) {
       setError("Unknown sample type.");
       setLoading(false);
@@ -183,8 +246,19 @@ const MycometerSamples = () => {
       const response = await mycometerJobsService.getById(jobId);
       const jobData = response.data;
 
-      if (!jobData?.scopeOfWorks?.includes(sampleType)) {
-        setError(`${sampleType} is not part of this job's scope of works.`);
+      const airTypes = isAirSampling
+        ? AIR_SAMPLING_TYPES.filter((type) =>
+            jobData?.scopeOfWorks?.includes(type),
+          )
+        : [];
+      if (isAirSampling) {
+        setIncludedAirTypes(airTypes);
+      }
+
+      if (isAirSampling ? airTypes.length === 0 : !jobData?.scopeOfWorks?.includes(sampleType)) {
+        setError(
+          `${isAirSampling ? AIR_SAMPLING_LABEL : sampleType} is not part of this job's scope of works.`,
+        );
         setJob(jobData);
         setLoading(false);
         return;
@@ -192,21 +266,42 @@ const MycometerSamples = () => {
 
       setJob(jobData);
 
+      const detailType = isAirSampling
+        ? airTypes.includes("Air Fungi")
+          ? "Air Fungi"
+          : airTypes.find((type) => isAirLikeSampleType(type)) || airTypes[0]
+        : sampleType;
+      const airLikeTypes = airTypes.filter((type) => isAirLikeSampleType(type));
+      const showQualityControl = isAirSampling
+        ? airTypes.includes("Air Fungi")
+        : isAirFungiSampleType(sampleType);
+
       const meta = (jobData.samplingMeta || []).find(
-        (item) => item.sampleType === sampleType,
+        (item) => item.sampleType === detailType,
       );
       setSampledBy(getUserId(meta?.sampledBy));
       setSampledByUser(
-        meta?.sampledByName ||
-          (meta?.sampledBy && typeof meta.sampledBy === "object"
-            ? `${meta.sampledBy.firstName || ""} ${meta.sampledBy.lastName || ""}`.trim() ||
-              meta.sampledBy.email ||
-              ""
-            : ""),
+        meta ? getSamplerDisplayWithCertFromMeta(meta, detailType) : "",
       );
       setSampleDate(meta?.sampleDate ? formatDateInput(meta.sampleDate) : "");
-      setSamplingComplete(Boolean(meta?.samplingComplete));
-      setFlowmeter(meta?.flowmeter || "");
+      setSamplingComplete(
+        isAirSampling
+          ? airLikeTypes.length > 0 &&
+              airLikeTypes.every((type) =>
+                Boolean(
+                  (jobData.samplingMeta || []).find(
+                    (item) => item.sampleType === type,
+                  )?.samplingComplete,
+                ),
+              )
+          : Boolean(meta?.samplingComplete),
+      );
+      setFlowmeter(
+        meta?.flowmeter ||
+          (isAirSampling || isAirLikeSampleType(detailType)
+            ? DEFAULT_AIR_FLOWMETER
+            : ""),
+      );
       if (meta?.turnaroundTime) {
         setTurnaroundTime(meta.turnaroundTime);
         setShowCustomTurnaround(meta.turnaroundTime === "custom");
@@ -227,7 +322,7 @@ const MycometerSamples = () => {
       setReportViewedLocally(Boolean(analysisMeta?.reportViewedAt));
 
       const existingSamples = (jobData.samples || []).filter(
-        (sample) => sample.sampleType === sampleType,
+        (sample) => sample.sampleType === detailType,
       );
 
       setSamples(
@@ -240,7 +335,7 @@ const MycometerSamples = () => {
             sample.flowRate !== undefined && sample.flowRate !== null
               ? String(sample.flowRate)
               : "",
-          ...(isAirFungiSampleType(sampleType)
+          ...(showQualityControl
             ? { qualityControl: sample.qualityControl || "No" }
             : {}),
         })),
@@ -258,7 +353,19 @@ const MycometerSamples = () => {
   const handleOpenAddSampleDialog = () => {
     setDialogMode("create");
     setEditingTempId(null);
-    setSampleForm(emptySampleForm(sampleType, getNextSampleId()));
+    setSampleForm(
+      emptySampleForm(
+        entrySampleType,
+        isAirLike
+          ? buildNextFaiSampleId(
+              job?.projectId?.projectID,
+              sampleDate,
+              samples,
+            )
+          : getNextSampleId(),
+        defaultAirFlowRate,
+      ),
+    );
     setSampleFormError("");
     setSampleDialogOpen(true);
   };
@@ -290,7 +397,7 @@ const MycometerSamples = () => {
     if (savingSample && !force) return;
     setSampleDialogOpen(false);
     setEditingTempId(null);
-    setSampleForm(emptySampleForm(sampleType));
+    setSampleForm(emptySampleForm(entrySampleType, "LD-", defaultAirFlowRate));
     setSampleFormError("");
   };
 
@@ -333,11 +440,21 @@ const MycometerSamples = () => {
       }),
     };
 
-    if (isAirLike) {
-      payload.flowmeter = nextFlowmeter || "";
+    const typesToSave = isAirSampling ? airLikeIncluded : [sampleType];
+    for (const type of typesToSave) {
+      const typePayload = {
+        ...payload,
+        samples: payload.samples.map((sample) => {
+          if (type === "Air Fungi") return sample;
+          const { qualityControl, ...sharedSample } = sample;
+          return sharedSample;
+        }),
+      };
+      if (isAirLikeSampleType(type)) {
+        typePayload.flowmeter = nextFlowmeter || DEFAULT_AIR_FLOWMETER;
+      }
+      await mycometerJobsService.updateSampleType(jobId, type, typePayload);
     }
-
-    await mycometerJobsService.updateSampleType(jobId, sampleType, payload);
 
     return true;
   };
@@ -507,10 +624,9 @@ const MycometerSamples = () => {
       return;
     }
 
-    const base = new Date(sampleDate);
-    setTurnaroundTime("3 day");
+    setTurnaroundTime("same day");
     setShowCustomTurnaround(false);
-    setAnalysisDueDate(formatDateInput(addBusinessDays(base, 3)));
+    setAnalysisDueDate(sampleDate);
     setCompleteDialogError("");
     setCompleteDialogOpen(true);
   };
@@ -537,13 +653,16 @@ const MycometerSamples = () => {
       setCompleteDialogError("");
       setError("");
 
-      await mycometerJobsService.completeSampling(jobId, sampleType, {
-        turnaroundTime: finalTurnaround,
-        analysisDueDate:
-          finalTurnaround === "custom"
-            ? analysisDueDate
-            : analysisDueDate || undefined,
-      });
+      const typesToComplete = isAirSampling ? airLikeIncluded : [sampleType];
+      for (const type of typesToComplete) {
+        await mycometerJobsService.completeSampling(jobId, type, {
+          turnaroundTime: finalTurnaround,
+          analysisDueDate:
+            finalTurnaround === "custom"
+              ? analysisDueDate
+              : analysisDueDate || undefined,
+        });
+      }
 
       setSamplingComplete(true);
       setCompleteDialogOpen(false);
@@ -566,7 +685,10 @@ const MycometerSamples = () => {
     try {
       setReopening(true);
       setError("");
-      await mycometerJobsService.reopenSampleType(jobId, sampleType);
+      const typesToReopen = isAirSampling ? airLikeIncluded : [sampleType];
+      for (const type of typesToReopen) {
+        await mycometerJobsService.reopenSampleType(jobId, type);
+      }
       setReopenDialogOpen(false);
       setSuccessMessage(
         "Report reopened. Sampling and analysis can be edited again.",
@@ -583,8 +705,11 @@ const MycometerSamples = () => {
     }
   };
 
-  const handleGeneratePDF = async ({ download = false } = {}) => {
-    if (!PDF_SUPPORTED_SAMPLE_TYPES.includes(sampleType)) {
+  const handleGeneratePDF = async ({
+    download = false,
+    reportType = sampleType,
+  } = {}) => {
+    if (!PDF_SUPPORTED_SAMPLE_TYPES.includes(reportType)) {
       setError(
         "PDF reports are currently only available for Surface Fungi, Air Fungi, and Air Allergen.",
       );
@@ -597,13 +722,13 @@ const MycometerSamples = () => {
       const response = await mycometerJobsService.getById(jobId);
       const jobData = response.data;
       const samplingMeta = (jobData.samplingMeta || []).find(
-        (item) => item.sampleType === sampleType,
+        (item) => item.sampleType === reportType,
       );
       const analysisMeta = (jobData.analysisMeta || []).find(
-        (item) => item.sampleType === sampleType,
+        (item) => item.sampleType === reportType,
       );
       const typeSamples = (jobData.samples || []).filter(
-        (sample) => sample.sampleType === sampleType,
+        (sample) => sample.sampleType === reportType,
       );
 
       const reportArgs = {
@@ -615,22 +740,41 @@ const MycometerSamples = () => {
         openInNewTab: !download,
       };
 
-      if (sampleType === "Air Fungi") {
-        await generateMycometerAirFungiReport(reportArgs);
-      } else if (sampleType === "Air Allergen") {
-        await generateMycometerAirAllergenReport(reportArgs);
+      const isAirReport =
+        reportType === "Air Fungi" || reportType === "Air Allergen";
+      if (isAirReport) {
+        await generateMycometerAirReport({
+          job: jobData,
+          project: jobData.projectId,
+          openInNewTab: !download,
+        });
       } else {
         await generateMycometerSurfaceFungiReport(reportArgs);
       }
 
+      const viewedAt = new Date().toISOString();
+      const typesToMark = isAirReport ? airLikeIncluded : [reportType];
       setReportViewedLocally(true);
-      try {
-        await mycometerJobsService.markReportViewed(jobId, sampleType, {
-          reportViewedAt: new Date().toISOString(),
+      setReportViewedAt(viewedAt);
+      setJob((prev) => {
+        if (!prev) return prev;
+        const nextMeta = [...(prev.analysisMeta || [])];
+        typesToMark.forEach((type) => {
+          const idx = nextMeta.findIndex((item) => item.sampleType === type);
+          if (idx >= 0) {
+            nextMeta[idx] = { ...nextMeta[idx], reportViewedAt: viewedAt };
+          }
         });
-        setReportViewedAt(new Date().toISOString());
-      } catch (viewErr) {
-        console.warn("Failed to persist report viewed:", viewErr);
+        return { ...prev, analysisMeta: nextMeta };
+      });
+      for (const type of typesToMark) {
+        try {
+          await mycometerJobsService.markReportViewed(jobId, type, {
+            reportViewedAt: viewedAt,
+          });
+        } catch (viewErr) {
+          console.warn("Failed to persist report viewed:", viewErr);
+        }
       }
     } catch (err) {
       console.error("Error generating Mycometer PDF:", err);
@@ -643,13 +787,32 @@ const MycometerSamples = () => {
     }
   };
 
-  const handleAuthoriseReport = async () => {
+  const handleAuthoriseReport = async (requestedType) => {
+    const reportType =
+      typeof requestedType === "string" ? requestedType : sampleType;
+    const types =
+      isAirSampling &&
+      (reportType === "Air Fungi" || reportType === "Air Allergen")
+        ? airLikeIncluded
+        : [reportType];
     try {
       setAuthorisingReport(true);
       setError("");
-      await mycometerJobsService.authorise(jobId, sampleType);
+      let notified = false;
+      for (const type of types) {
+        const meta = (job?.analysisMeta || []).find(
+          (item) => item.sampleType === type,
+        );
+        if (meta?.reportApprovedBy) continue;
+        await mycometerJobsService.authorise(jobId, type, {
+          notify: !notified,
+          reportLabel:
+            types.length > 1 ? "Mycometer Air Sampling report" : undefined,
+        });
+        notified = true;
+      }
       await fetchJob();
-      await handleGeneratePDF({ download: true });
+      await handleGeneratePDF({ download: true, reportType: types[0] });
       setSuccessMessage("Report authorised successfully.");
     } catch (err) {
       console.error("Error authorising Mycometer report:", err);
@@ -662,18 +825,52 @@ const MycometerSamples = () => {
     }
   };
 
-  const handleSendForAuthorisation = async () => {
+  const handleSendForAuthorisation = async (requestedType) => {
+    const reportType =
+      typeof requestedType === "string" ? requestedType : sampleType;
+    const types =
+      isAirSampling &&
+      (reportType === "Air Fungi" || reportType === "Air Allergen")
+        ? airLikeIncluded
+        : [reportType];
     try {
       setSendingAuthorisation(true);
       setError("");
-      const response = await mycometerJobsService.sendForAuthorisation(
-        jobId,
-        sampleType,
-      );
+      let notified = false;
+      let message = "";
+      for (const type of types) {
+        const meta = (job?.analysisMeta || []).find(
+          (item) => item.sampleType === type,
+        );
+        if (meta?.reportApprovedBy) continue;
+        const response = await mycometerJobsService.sendForAuthorisation(
+          jobId,
+          type,
+          {
+            notify: !notified,
+            reportLabel: types.length > 1 ? "Air Sampling" : undefined,
+          },
+        );
+        if (!notified) message = response.data?.message || "";
+        notified = true;
+      }
       setAuthorisationRequestedBy(currentUser?._id || true);
+      setJob((prev) => {
+        if (!prev) return prev;
+        const nextMeta = [...(prev.analysisMeta || [])];
+        types.forEach((type) => {
+          const idx = nextMeta.findIndex((item) => item.sampleType === type);
+          if (idx >= 0 && !nextMeta[idx].reportApprovedBy) {
+            nextMeta[idx] = {
+              ...nextMeta[idx],
+              authorisationRequestedBy: currentUser?._id || true,
+            };
+          }
+        });
+        return { ...prev, analysisMeta: nextMeta };
+      });
       setSuccessMessage(
-        response.data?.message ||
-          "Authorisation request emails sent successfully.",
+        message || "Authorisation request emails sent successfully.",
       );
     } catch (err) {
       console.error("Error sending Mycometer authorisation request:", err);
@@ -717,7 +914,7 @@ const MycometerSamples = () => {
             </Link>
           </Breadcrumbs>
           <Typography variant="h4" component="h1" gutterBottom>
-            {sampleType || "Mycometer Samples"}
+            Mycometer - {sampleType || "Mycometer Samples"}
           </Typography>
           <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 1 }}>
             {job?.projectId?.projectID
@@ -779,13 +976,14 @@ const MycometerSamples = () => {
                   <Select
                     labelId="air-fungi-flowmeter-label"
                     label="Flowmeter"
-                    value={flowmeter}
+                    value={flowmeter || DEFAULT_AIR_FLOWMETER}
                     onChange={handleFlowmeterChange}
                   >
-                    <MenuItem value="">
-                      <em>Select</em>
-                    </MenuItem>
-                    {AIR_FUNGI_FLOWMETER_OPTIONS.map((option) => (
+                    {(AIR_FUNGI_FLOWMETER_OPTIONS.includes(flowmeter) ||
+                    !flowmeter
+                      ? AIR_FUNGI_FLOWMETER_OPTIONS
+                      : [flowmeter, ...AIR_FUNGI_FLOWMETER_OPTIONS]
+                    ).map((option) => (
                       <MenuItem key={option} value={option}>
                         {option}
                       </MenuItem>
@@ -977,24 +1175,180 @@ const MycometerSamples = () => {
                       Reopen Report (Admin)
                     </Button>
                   )}
-                  <Button
-                    variant="contained"
-                    startIcon={
-                      analysisComplete ? <VisibilityIcon /> : <ScienceIcon />
-                    }
-                    onClick={() => navigate(analysisPath)}
-                    sx={{
-                      textTransform: "none",
-                      backgroundColor: typeColors.color,
-                      "&:hover": {
-                        backgroundColor: typeColors.borderColor,
-                      },
-                    }}
-                  >
-                    {analysisComplete ? "View Analysis" : "Analysis"}
-                  </Button>
+                  {isAirSampling ? (
+                    <>
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      startIcon={
+                        includedAirTypes.length > 0 &&
+                        includedAirTypes.every((type) =>
+                          Boolean(
+                            (job?.analysisMeta || []).find(
+                              (item) => item.sampleType === type,
+                            )?.analysisComplete,
+                          ),
+                        ) ? (
+                          <VisibilityIcon />
+                        ) : (
+                          <ScienceIcon />
+                        )
+                      }
+                      onClick={() =>
+                        navigate(
+                          `/mycometer-sampling/${jobId}/${AIR_SAMPLING_SLUG}/analysis`,
+                        )
+                      }
+                      sx={{ textTransform: "none" }}
+                    >
+                      {includedAirTypes.length > 0 &&
+                      includedAirTypes.every((type) =>
+                        Boolean(
+                          (job?.analysisMeta || []).find(
+                            (item) => item.sampleType === type,
+                          )?.analysisComplete,
+                        ),
+                      )
+                        ? "View Analysis"
+                        : "Analysis"}
+                    </Button>
+                    {includedAirTypes.filter((type) =>
+                      PDF_SUPPORTED_SAMPLE_TYPES.includes(type),
+                    ).length > 0 &&
+                      includedAirTypes
+                        .filter((type) =>
+                          PDF_SUPPORTED_SAMPLE_TYPES.includes(type),
+                        )
+                        .every((type) =>
+                          Boolean(
+                            (job?.analysisMeta || []).find(
+                              (item) => item.sampleType === type,
+                            )?.analysisComplete,
+                          ),
+                        ) && (
+                        <Button
+                          variant="outlined"
+                          color="secondary"
+                          startIcon={<PdfIcon />}
+                          onClick={() =>
+                            handleGeneratePDF({
+                              reportType: includedAirTypes.find((type) =>
+                                PDF_SUPPORTED_SAMPLE_TYPES.includes(type),
+                              ),
+                            })
+                          }
+                          disabled={generatingPDF}
+                          sx={{ textTransform: "none" }}
+                        >
+                          {generatingPDF ? "..." : "PDF"}
+                        </Button>
+                      )}
+                    {(() => {
+                      const airActionTypes = includedAirTypes.filter((type) =>
+                        PDF_SUPPORTED_SAMPLE_TYPES.includes(type),
+                      );
+                      const airMetas = airActionTypes.map((type) =>
+                        (job?.analysisMeta || []).find(
+                          (item) => item.sampleType === type,
+                        ),
+                      );
+                      if (
+                        airActionTypes.length === 0 ||
+                        !airMetas.every((meta) => meta?.analysisComplete)
+                      ) {
+                        return null;
+                      }
+                      const pending = airActionTypes.some((type, index) => {
+                        const meta = airMetas[index];
+                        return meta?.analysisComplete && !meta?.reportApprovedBy;
+                      });
+                      const viewed = airMetas.every((meta) =>
+                        Boolean(meta?.reportViewedAt),
+                      );
+                      const alreadySent = airActionTypes.every((type, index) => {
+                        const meta = airMetas[index];
+                        return (
+                          meta?.reportApprovedBy ||
+                          meta?.authorisationRequestedBy
+                        );
+                      });
+                      const canEdit = hasPermission(
+                        currentUser,
+                        "projects.edit",
+                      );
+                      const showAuthorise =
+                        pending &&
+                        viewed &&
+                        canEdit &&
+                        Boolean(currentUser?.reportProofer);
+                      const showSend =
+                        pending &&
+                        viewed &&
+                        canEdit &&
+                        !currentUser?.reportProofer;
+                      const reportType = airActionTypes[0];
+                      if (!showAuthorise && !showSend) return null;
+                      return (
+                        <>
+                          {showAuthorise && (
+                            <Button
+                              variant="contained"
+                              size="small"
+                              color="success"
+                              onClick={() => handleAuthoriseReport(reportType)}
+                              disabled={authorisingReport || generatingPDF}
+                              sx={{ textTransform: "none" }}
+                            >
+                              Authorise
+                            </Button>
+                          )}
+                          {showSend && (
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              startIcon={<MailIcon />}
+                              onClick={() =>
+                                handleSendForAuthorisation(reportType)
+                              }
+                              disabled={sendingAuthorisation}
+                              sx={{ textTransform: "none" }}
+                            >
+                              {alreadySent
+                                ? "Re-send for Authorisation"
+                                : "Send for Authorisation"}
+                            </Button>
+                          )}
+                        </>
+                      );
+                    })()}
+                    </>
+                  ) : null}
+                  {isAirSampling ? null : (
+                    <Button
+                      variant="contained"
+                      startIcon={
+                        analysisComplete ? (
+                          <VisibilityIcon />
+                        ) : (
+                          <ScienceIcon />
+                        )
+                      }
+                      onClick={() => navigate(analysisPath)}
+                      sx={{
+                        textTransform: "none",
+                        backgroundColor: typeColors.color,
+                        "&:hover": {
+                          backgroundColor: typeColors.borderColor,
+                        },
+                      }}
+                    >
+                      {analysisComplete ? "View Analysis" : "Analysis"}
+                    </Button>
+                  )}
 
-                  {analysisComplete && (isSurfaceFungi || isAirLike) && (
+                  {!isAirSampling &&
+                    analysisComplete &&
+                    (isSurfaceFungi || isAirLike) && (
                     <>
                       <Box
                         sx={{
@@ -1326,22 +1680,20 @@ const MycometerSamples = () => {
           <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", mb: 2 }}>
             <Button
               variant={
-                !showCustomTurnaround && turnaroundTime === "3 day"
+                !showCustomTurnaround && turnaroundTime === "same day"
                   ? "contained"
                   : "outlined"
               }
               onClick={() => {
                 setShowCustomTurnaround(false);
-                setTurnaroundTime("3 day");
+                setTurnaroundTime("same day");
                 if (sampleDate) {
-                  setAnalysisDueDate(
-                    formatDateInput(addBusinessDays(new Date(sampleDate), 3)),
-                  );
+                  setAnalysisDueDate(sampleDate);
                 }
               }}
               sx={{ textTransform: "none" }}
             >
-              3 Day
+              Same Day
             </Button>
             <Button
               variant={
@@ -1418,7 +1770,12 @@ const MycometerSamples = () => {
       >
         <DialogTitle>Reopen Report for Editing?</DialogTitle>
         <DialogContent>
-          <Typography sx={{ mb: 2 }}>
+            {error ? (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {error}
+              </Alert>
+            ) : null}
+            <Typography sx={{ mb: 2 }}>
             This will reopen <strong>{sampleType}</strong> so sampling and
             analysis can be edited again.
           </Typography>
@@ -1433,8 +1790,8 @@ const MycometerSamples = () => {
                 authorisation request)
               </li>
               <li>
-                If the report was previously authorised, the revision number
-                will increase
+                If this report has been authorised, use Revise on the project
+                reports page. This button cannot start a revision.
               </li>
               <li>Existing sample and analysis values will be kept</li>
             </Box>

@@ -9,6 +9,7 @@ const REPORT_CATEGORIES = {
   LEAD_REMOVAL: 'lead-removal-jobs',
   FIBRE_ID: 'fibre-id',
   FIBRE_COUNT: 'fibre-count',
+  MYCOMETER: 'mycometer-sampling',
 };
 
 const notDeleted = {
@@ -57,6 +58,18 @@ function toObjectId(projectId) {
   const id = projectId._id || projectId;
   if (!mongoose.Types.ObjectId.isValid(id)) return null;
   return new mongoose.Types.ObjectId(id);
+}
+
+function projectHasAuthorisedMycometerReport(projectObjectId) {
+  const MycometerJob = require('../models/MycometerJob');
+  return MycometerJob.exists({
+    projectId: projectObjectId,
+    analysisMeta: {
+      $elemMatch: {
+        reportApprovedBy: { $exists: true, $nin: [null, ''] },
+      },
+    },
+  }).then(Boolean);
 }
 
 function hasJobWithReportableShift(JobModel, projectObjectId, shiftMatch) {
@@ -108,6 +121,7 @@ async function computeReportCategories(projectId) {
     hasLeadMonitoring,
     fibreJobs,
     uploadedTypes,
+    hasMycometerReport,
   ] = await Promise.all([
     AsbestosAssessment.exists({
       projectId: projectObjectId,
@@ -156,6 +170,7 @@ async function computeReportCategories(projectId) {
     UploadedReport
       ? UploadedReport.distinct('reportType', { projectId: projectObjectId })
       : Promise.resolve([]),
+    projectHasAuthorisedMycometerReport(projectObjectId),
   ]);
 
   const fibreTypes = new Set((fibreJobs || []).map((row) => row._id));
@@ -170,6 +185,7 @@ async function computeReportCategories(projectId) {
   }
   if (fibreTypes.has('Fibre ID')) categories.push(REPORT_CATEGORIES.FIBRE_ID);
   if (fibreTypes.has('Fibre Count')) categories.push(REPORT_CATEGORIES.FIBRE_COUNT);
+  if (hasMycometerReport) categories.push(REPORT_CATEGORIES.MYCOMETER);
 
   (uploadedTypes || []).forEach((type) => {
     if (type && !categories.includes(type)) {
@@ -205,7 +221,17 @@ async function getReportCategories(projectId) {
   }
 
   if (project.reportCategoriesCachedAt && healed.count === 0) {
-    return Array.isArray(project.reportCategories) ? project.reportCategories : [];
+    const categories = Array.isArray(project.reportCategories)
+      ? [...project.reportCategories]
+      : [];
+    if (!categories.includes(REPORT_CATEGORIES.MYCOMETER)) {
+      const hasMycometer = await projectHasAuthorisedMycometerReport(projectObjectId);
+      if (hasMycometer) {
+        categories.push(REPORT_CATEGORIES.MYCOMETER);
+        await addReportCategories(projectObjectId, REPORT_CATEGORIES.MYCOMETER);
+      }
+    }
+    return categories;
   }
 
   const categories = await computeReportCategories(projectObjectId);

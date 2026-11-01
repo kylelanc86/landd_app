@@ -131,6 +131,21 @@ export function buildMycometerAirFungiFilename(params) {
   });
 }
 
+export function buildMycometerAirFaiFilename(params) {
+  return buildStandardProjectReportFilename({
+    ...params,
+    reportTitle: 'Mycometer Air FAI Report',
+    sequenceNumber: undefined,
+  });
+}
+
+export function buildMycometerAirScopeFilename(params) {
+  return buildStandardProjectReportFilename({
+    ...params,
+    sequenceNumber: undefined,
+  });
+}
+
 export function buildMycometerAirAllergenFilename(params) {
   return buildStandardProjectReportFilename({
     ...params,

@@ -7,6 +7,10 @@ import {
   withRevisionAndExtension,
 } from './reportFilenames';
 import { buildLabReportFooter } from './pdfFooter';
+import {
+  buildVersionControlContent,
+  loadVersionControlRows,
+} from './versionControlPage';
 
 // Helper to format date as DD/MM/YYYY in Sydney timezone (for report issue date, sample date)
 function formatDate(dateStr) {
@@ -158,7 +162,7 @@ function createPdfTextMeasurer() {
   };
 }
 
-export async function generateFibreIDReport({ assessment, sampleItems, analyst, openInNewTab, returnPdfData = false, reportApprovedBy = null, reportIssueDate = null }) {
+export async function generateFibreIDReport({ assessment, sampleItems, analyst, openInNewTab, returnPdfData = false, returnPdfBundle = false, reportApprovedBy = null, reportIssueDate = null }) {
   // Detect if this is a client-supplied job (has jobType but no assessorId)
   const isClientSupplied = assessment?.jobType === "Fibre ID" && !assessment?.assessorId;
   // Detect if this is an L&D supplied report (has assessorId, not client supplied)
@@ -216,6 +220,20 @@ pdfMake.fonts = {
       }),
     );
   const filename = withRevisionAndExtension(reportReference, revision, true);
+  const fibreIdRevisionType = assessment?.assessorId
+    ? "asbestos_assessment"
+    : "fibre_id";
+  const versionControlContent = buildVersionControlContent(
+    await loadVersionControlRows({
+      reportType: fibreIdRevisionType,
+      reportId: assessment?._id,
+      reportKey: fibreIdRevisionType,
+      revision,
+      approvedBy: reportApprovedBy || assessment?.reportApprovedBy,
+      issueDate,
+    }),
+    { pageBreak: false },
+  );
 
   // Sort sample items by lab reference (numeric order: Lab1, Lab2, ..., Lab9, Lab10, not text order)
   const sortedSampleItems = [...sampleItems].sort(compareLabReference);
@@ -871,6 +889,40 @@ pdfMake.fonts = {
           return tableDefinition;
           })()
         ]
+      },
+
+      {
+        pageBreak: 'before',
+        stack: [
+          {
+            columns: [
+              { image: companyLogo, width: 150 },
+              {
+                stack: [
+                  { text: 'Lancaster & Dickenson Consulting Pty Ltd', style: 'subheader' },
+                  { text: '4/6 Dacre Street, Mitchell ACT 2911', style: 'subheader' },
+                  { text: 'W: www.landd.com.au', style: 'subheader' },
+                ],
+                alignment: 'right',
+              },
+            ],
+            margin: [0, 0, 0, 10],
+          },
+          {
+            table: {
+              body: [['']],
+              widths: ['100%']
+            },
+            layout: {
+              hLineWidth: function(i) { return i === 0 ? 2 : 0; },
+              vLineWidth: function() { return 0; },
+              hLineColor: function(i) { return i === 0 ? '#16b12b' : 'white'; },
+              vLineColor: function() { return 'white'; }
+            },
+            margin: [0, 0, 0, 12]
+          },
+          ...versionControlContent.stack,
+        ],
       }
     ];
     })(textMeasurer),
@@ -909,10 +961,10 @@ pdfMake.fonts = {
   }
   
   // Handle returning PDF data if requested
-  if (returnPdfData) {
+  if (returnPdfData || returnPdfBundle) {
     return new Promise((resolve) => {
       pdfDoc.getDataUrl((dataUrl) => {
-        resolve(dataUrl);
+        resolve(returnPdfBundle ? { dataUrl, filename } : dataUrl);
       });
     });
   } else {

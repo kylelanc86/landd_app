@@ -14,6 +14,10 @@ import {
   NATA_LOGO_FOOTER_WIDTH,
   NATA_LOGO_FOOTER_HEIGHT,
 } from './pdfFooter';
+import {
+  buildVersionControlContent,
+  loadVersionControlRows,
+} from './versionControlPage';
 
 // Helper to format date as DD/MM/YYYY in Sydney timezone (for report authorisation, samples received, issue dates)
 function formatDate(dateStr) {
@@ -156,7 +160,7 @@ const formatReportedConcentration = (sample) => {
   return reportedConc;
 };
 
-export async function generateShiftReport({ shift, job, samples, project, openInNewTab, returnPdfData = false, sitePlanData = null, isClientSupplied = false }) {
+export async function generateShiftReport({ shift, job, samples, project, openInNewTab, returnPdfData = false, returnPdfBundle = false, sitePlanData = null, isClientSupplied = false }) {
   // Ensure job is an object
   if (typeof job !== 'object' || job === null) {
     console.warn('job is not an object, using empty object:', job);
@@ -209,6 +213,19 @@ export async function generateShiftReport({ shift, job, samples, project, openIn
       }),
     );
   const filename = withRevisionAndExtension(reportReference, revision, true);
+  const versionControlContent = buildVersionControlContent(
+    await loadVersionControlRows({
+      reportType: isClientSupplied
+        ? "fibre_count"
+        : shift?.jobModel === "LeadRemovalJob"
+          ? "lead_shift"
+          : "shift",
+      reportId: shift?._id,
+      revision,
+      approvedBy: shift?.reportApprovedBy,
+      issueDate,
+    }),
+  );
   
   // Determine base URL for fonts - use window.location.origin to avoid CORS issues
   // Use window.location.origin to load fonts from the same origin as the app
@@ -764,6 +781,8 @@ pdfMake.fonts = {
         ]
       },
 
+      versionControlContent,
+
       // Site Plan Page (if site plan data exists)
       ...(sitePlanData?.sitePlan && sitePlanData?.sitePlanData ? [
         {
@@ -982,10 +1001,10 @@ pdfMake.fonts = {
       documentAssembly: false
     }
   });
-  if (returnPdfData) {
+  if (returnPdfData || returnPdfBundle) {
     return new Promise((resolve) => {
       pdfDoc.getDataUrl((dataUrl) => {
-        resolve(dataUrl);
+        resolve(returnPdfBundle ? { dataUrl, filename } : dataUrl);
       });
     });
   } else {

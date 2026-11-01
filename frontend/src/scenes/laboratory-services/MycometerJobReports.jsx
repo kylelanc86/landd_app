@@ -23,6 +23,9 @@ import {
   DialogActions,
   TextField,
   FormControl,
+  FormControlLabel,
+  FormGroup,
+  Checkbox,
   InputLabel,
   Select,
   MenuItem,
@@ -42,8 +45,7 @@ import { usePermissions } from "../../hooks/usePermissions";
 import { hasPermission } from "../../config/permissions";
 import { formatAuthoriserDisplayName } from "../../utils/formatters";
 import { generateMycometerSurfaceFungiReport } from "../../utils/generateMycometerSurfaceFungiReport";
-import { generateMycometerAirFungiReport } from "../../utils/generateMycometerAirFungiReport";
-import { generateMycometerAirAllergenReport } from "../../utils/generateMycometerAirAllergenReport";
+import { generateMycometerAirReport } from "../../utils/generateMycometerAirFaiReport";
 import { getTodayInSydney } from "../../utils/dateUtils";
 import {
   SAMPLE_TYPE_OPTIONS,
@@ -52,7 +54,13 @@ import {
   getOrderedScopeOfWorks,
   getSampleTypeReportStatus,
   PDF_SUPPORTED_SAMPLE_TYPES,
-  getSamplerDisplayNameFromMeta,
+  getSamplerDisplayWithCertFromMeta,
+  formatMycometerUserLabel,
+  AIR_SAMPLING_TYPES,
+  AIR_SAMPLING_LABEL,
+  AIR_SAMPLING_SLUG,
+  DEFAULT_AIR_FLOWMETER,
+  isAirSamplingType,
 } from "./mycometerConstants";
 
 const getUserDisplayName = (user) => {
@@ -89,11 +97,13 @@ const MycometerJobReports = () => {
   const [generatingPDF, setGeneratingPDF] = useState({});
   const [authorisingReports, setAuthorisingReports] = useState({});
   const [sendingAuthorisation, setSendingAuthorisation] = useState({});
+  const [savingFai, setSavingFai] = useState(false);
 
   const [addReportOpen, setAddReportOpen] = useState(false);
   const [reportDialogMode, setReportDialogMode] = useState("create");
   const [reportToEdit, setReportToEdit] = useState(null);
   const [reportType, setReportType] = useState("");
+  const [airTypesSelected, setAirTypesSelected] = useState([]);
   const [sampledBy, setSampledBy] = useState("");
   const [sampleDate, setSampleDate] = useState(getTodayInSydney());
   const [savingReport, setSavingReport] = useState(false);
@@ -150,10 +160,21 @@ const MycometerJobReports = () => {
     }
   };
 
-  const reports = getOrderedScopeOfWorks(job?.scopeOfWorks);
-  const availableReportTypes = SAMPLE_TYPE_OPTIONS.filter(
-    (type) => !(job?.scopeOfWorks || []).includes(type),
+  const scopeTypes = getOrderedScopeOfWorks(job?.scopeOfWorks);
+  const airTypesOnJob = scopeTypes.filter((type) => isAirSamplingType(type));
+  const reports = scopeTypes.filter(
+    (type) => !isAirSamplingType(type) && type !== "Air FAI",
   );
+  if (airTypesOnJob.length > 0) {
+    reports.push(AIR_SAMPLING_LABEL);
+  }
+  const availableReportTypes = [
+    ...SAMPLE_TYPE_OPTIONS.filter(
+      (type) =>
+        type === "Surface Fungi" && !(job?.scopeOfWorks || []).includes(type),
+    ),
+    ...(airTypesOnJob.length === 0 ? [AIR_SAMPLING_LABEL] : []),
+  ];
 
   const getAnalysisMeta = (sampleType) =>
     (job?.analysisMeta || []).find((item) => item.sampleType === sampleType);
@@ -167,13 +188,18 @@ const MycometerJobReports = () => {
       .map((sample) => sample.sampleId)
       .filter(Boolean);
 
-  const getSamplerDisplayName = (sampleType) =>
-    getSamplerDisplayNameFromMeta(getSamplingMeta(sampleType));
+  const getSamplerDisplayName = (sampleType) => {
+    const type =
+      sampleType === AIR_SAMPLING_LABEL ? "Air Fungi" : sampleType;
+    const meta = getSamplingMeta(type);
+    return meta ? getSamplerDisplayWithCertFromMeta(meta, type) : "";
+  };
 
   const handleOpenAddReport = () => {
     setReportDialogMode("create");
     setReportToEdit(null);
     setReportType(availableReportTypes[0] || "");
+    setAirTypesSelected([]);
     const defaultSampler = users.some((user) => user._id === currentUser?._id)
       ? currentUser._id
       : "";
@@ -185,10 +211,19 @@ const MycometerJobReports = () => {
 
   const handleOpenEditReport = (sampleType, event) => {
     event?.stopPropagation();
-    const meta = getSamplingMeta(sampleType);
+    const metaType =
+      sampleType === AIR_SAMPLING_LABEL
+        ? airTypesOnJob.includes("Air Fungi")
+          ? "Air Fungi"
+          : airTypesOnJob[0]
+        : sampleType;
+    const meta = getSamplingMeta(metaType);
     setReportDialogMode("edit");
     setReportToEdit(sampleType);
     setReportType(sampleType);
+    setAirTypesSelected(
+      sampleType === AIR_SAMPLING_LABEL ? [...airTypesOnJob] : [],
+    );
     const existingSampler = getUserId(meta?.sampledBy);
     const defaultSampler = users.some((user) => user._id === currentUser?._id)
       ? currentUser._id
@@ -214,6 +249,15 @@ const MycometerJobReports = () => {
       setReportFormError("Please select a report type.");
       return;
     }
+    if (
+      (reportType === AIR_SAMPLING_LABEL || reportToEdit === AIR_SAMPLING_LABEL) &&
+      airTypesSelected.length === 0
+    ) {
+      setReportFormError(
+        "Select Air Fungi, Air Allergen, or both.",
+      );
+      return;
+    }
     if (!sampledBy) {
       setReportFormError("Please select a sampler.");
       return;
@@ -228,14 +272,54 @@ const MycometerJobReports = () => {
       setReportFormError("");
 
       if (reportDialogMode === "edit" && reportToEdit) {
-        await mycometerJobsService.updateReport(jobId, reportToEdit, {
-          sampledBy,
-          sampleDate,
-        });
+        if (reportToEdit === AIR_SAMPLING_LABEL) {
+          const removed = airTypesOnJob.filter(
+            (type) => !airTypesSelected.includes(type),
+          );
+          const added = airTypesSelected.filter(
+            (type) => !airTypesOnJob.includes(type),
+          );
+          const kept = airTypesSelected.filter((type) =>
+            airTypesOnJob.includes(type),
+          );
+          for (const type of removed) {
+            await mycometerJobsService.deleteReport(jobId, type);
+          }
+          for (const type of kept) {
+            await mycometerJobsService.updateReport(jobId, type, {
+              sampledBy,
+              sampleDate,
+            });
+          }
+          if (added.length > 0) {
+            await mycometerJobsService.addReport(jobId, {
+              sampleTypes: added,
+              sampledBy,
+              sampleDate,
+              flowmeter: DEFAULT_AIR_FLOWMETER,
+            });
+          }
+        } else {
+          await mycometerJobsService.updateReport(jobId, reportToEdit, {
+            sampledBy,
+            sampleDate,
+          });
+        }
         await fetchJob();
         setSavingReport(false);
         handleCloseAddReport({ force: true });
         setSuccessMessage(`${reportToEdit} report updated.`);
+      } else if (reportType === AIR_SAMPLING_LABEL) {
+        await mycometerJobsService.addReport(jobId, {
+          sampleTypes: airTypesSelected,
+          sampledBy,
+          sampleDate,
+          flowmeter: DEFAULT_AIR_FLOWMETER,
+        });
+        await fetchJob();
+        setSavingReport(false);
+        handleCloseAddReport({ force: true });
+        setSuccessMessage("Air Sampling report added.");
       } else {
         await mycometerJobsService.addReport(jobId, {
           sampleType: reportType,
@@ -275,7 +359,13 @@ const MycometerJobReports = () => {
     try {
       setDeletingReport(true);
       setError("");
-      await mycometerJobsService.deleteReport(jobId, reportToDelete);
+      if (reportToDelete === AIR_SAMPLING_LABEL) {
+        for (const type of airTypesOnJob) {
+          await mycometerJobsService.deleteReport(jobId, type);
+        }
+      } else {
+        await mycometerJobsService.deleteReport(jobId, reportToDelete);
+      }
       await fetchJob();
       setSuccessMessage(`${reportToDelete} report deleted.`);
       handleCloseDeleteDialog();
@@ -291,6 +381,10 @@ const MycometerJobReports = () => {
   };
 
   const handleOpenReport = (sampleType) => {
+    if (sampleType === AIR_SAMPLING_LABEL) {
+      navigate(`/mycometer-sampling/${jobId}/${AIR_SAMPLING_SLUG}`);
+      return;
+    }
     const slug = SAMPLE_TYPE_SLUGS[sampleType];
     if (!slug) return;
     navigate(`/mycometer-sampling/${jobId}/${slug}`);
@@ -328,35 +422,51 @@ const MycometerJobReports = () => {
         openInNewTab: !download,
       };
 
-      if (sampleType === "Air Fungi") {
-        await generateMycometerAirFungiReport(reportArgs);
-      } else if (sampleType === "Air Allergen") {
-        await generateMycometerAirAllergenReport(reportArgs);
+      const isAirReport =
+        sampleType === "Air Fungi" || sampleType === "Air Allergen";
+      if (isAirReport) {
+        await generateMycometerAirReport({
+          job: jobData,
+          project: jobData.projectId,
+          openInNewTab: !download,
+        });
       } else {
         await generateMycometerSurfaceFungiReport(reportArgs);
       }
 
-      setReportViewedTypes((prev) => new Set(prev).add(sampleType));
-      try {
-        await mycometerJobsService.markReportViewed(jobId, sampleType, {
-          reportViewedAt: new Date().toISOString(),
-        });
-        setJob((prev) => {
-          if (!prev) return prev;
-          const nextMeta = [...(prev.analysisMeta || [])];
-          const idx = nextMeta.findIndex(
-            (item) => item.sampleType === sampleType,
-          );
+      const viewedAt = new Date().toISOString();
+      const typesToMark = isAirReport
+        ? (jobData.scopeOfWorks || []).filter((type) =>
+            ["Air Fungi", "Air Allergen"].includes(type),
+          )
+        : [sampleType];
+      setReportViewedTypes((prev) => {
+        const next = new Set(prev);
+        typesToMark.forEach((type) => next.add(type));
+        return next;
+      });
+      setJob((prev) => {
+        if (!prev) return prev;
+        const nextMeta = [...(prev.analysisMeta || [])];
+        typesToMark.forEach((type) => {
+          const idx = nextMeta.findIndex((item) => item.sampleType === type);
           if (idx >= 0) {
             nextMeta[idx] = {
               ...nextMeta[idx],
-              reportViewedAt: new Date().toISOString(),
+              reportViewedAt: viewedAt,
             };
           }
-          return { ...prev, analysisMeta: nextMeta };
         });
-      } catch (viewErr) {
-        console.warn("Failed to persist report viewed:", viewErr);
+        return { ...prev, analysisMeta: nextMeta };
+      });
+      for (const type of typesToMark) {
+        try {
+          await mycometerJobsService.markReportViewed(jobId, type, {
+            reportViewedAt: viewedAt,
+          });
+        } catch (viewErr) {
+          console.warn("Failed to persist report viewed:", viewErr);
+        }
       }
     } catch (err) {
       console.error("Error generating Mycometer PDF:", err);
@@ -369,13 +479,52 @@ const MycometerJobReports = () => {
     }
   };
 
+  const airReportTypesFor = (sampleType) =>
+    sampleType === AIR_SAMPLING_LABEL ? airTypesOnJob : [sampleType];
+
+  const handleToggleFai = async (checked) => {
+    const previous = job?.includeFaiOnReport;
+    setJob((prev) => (prev ? { ...prev, includeFaiOnReport: checked } : prev));
+    try {
+      setSavingFai(true);
+      setError("");
+      const response = await mycometerJobsService.update(jobId, {
+        includeFaiOnReport: checked,
+      });
+      setJob(response.data);
+    } catch (err) {
+      setJob((prev) =>
+        prev ? { ...prev, includeFaiOnReport: previous } : prev,
+      );
+      setError(
+        err.response?.data?.message ||
+          "Failed to update the FAI report option.",
+      );
+    } finally {
+      setSavingFai(false);
+    }
+  };
+
   const handleAuthoriseReport = async (sampleType) => {
+    const types = airReportTypesFor(sampleType);
     try {
       setAuthorisingReports((prev) => ({ ...prev, [sampleType]: true }));
       setError("");
-      await mycometerJobsService.authorise(jobId, sampleType);
+      let notified = false;
+      for (const type of types) {
+        const meta = (job?.analysisMeta || []).find(
+          (item) => item.sampleType === type,
+        );
+        if (meta?.reportApprovedBy) continue;
+        await mycometerJobsService.authorise(jobId, type, {
+          notify: !notified,
+          reportLabel:
+            types.length > 1 ? "Mycometer Air Sampling report" : undefined,
+        });
+        notified = true;
+      }
       await fetchJob();
-      await handleGeneratePDF(sampleType, { download: true });
+      await handleGeneratePDF(types[0], { download: true });
       setSuccessMessage("Report authorised successfully.");
     } catch (err) {
       console.error("Error authorising Mycometer report:", err);
@@ -389,30 +538,44 @@ const MycometerJobReports = () => {
   };
 
   const handleSendForAuthorisation = async (sampleType) => {
+    const types = airReportTypesFor(sampleType);
     try {
       setSendingAuthorisation((prev) => ({ ...prev, [sampleType]: true }));
       setError("");
-      const response = await mycometerJobsService.sendForAuthorisation(
-        jobId,
-        sampleType,
-      );
+      let notified = false;
+      let message = "";
+      for (const type of types) {
+        const meta = (job?.analysisMeta || []).find(
+          (item) => item.sampleType === type,
+        );
+        if (meta?.reportApprovedBy) continue;
+        const response = await mycometerJobsService.sendForAuthorisation(
+          jobId,
+          type,
+          {
+            notify: !notified,
+            reportLabel: types.length > 1 ? "Air Sampling" : undefined,
+          },
+        );
+        if (!notified) message = response.data?.message || "";
+        notified = true;
+      }
       setJob((prev) => {
         if (!prev) return prev;
         const nextMeta = [...(prev.analysisMeta || [])];
-        const idx = nextMeta.findIndex(
-          (item) => item.sampleType === sampleType,
-        );
-        if (idx >= 0) {
-          nextMeta[idx] = {
-            ...nextMeta[idx],
-            authorisationRequestedBy: currentUser?._id || true,
-          };
-        }
+        types.forEach((type) => {
+          const idx = nextMeta.findIndex((item) => item.sampleType === type);
+          if (idx >= 0 && !nextMeta[idx].reportApprovedBy) {
+            nextMeta[idx] = {
+              ...nextMeta[idx],
+              authorisationRequestedBy: currentUser?._id || true,
+            };
+          }
+        });
         return { ...prev, analysisMeta: nextMeta };
       });
       setSuccessMessage(
-        response.data?.message ||
-          "Authorisation request emails sent successfully.",
+        message || "Authorisation request emails sent successfully.",
       );
     } catch (err) {
       console.error("Error sending Mycometer authorisation request:", err);
@@ -438,16 +601,8 @@ const MycometerJobReports = () => {
   return (
     <Container maxWidth="lg">
       <Box sx={{ mt: 4, mb: 4 }}>
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="h4" component="h1" gutterBottom>
-            Mycometer Reports
-          </Typography>
-          <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 1 }}>
-            {job?.projectId?.projectID
-              ? `${job.projectId.projectID} — ${job.projectId.name || "Unnamed Project"}`
-              : job?.projectId?.name || "Mycometer Job"}
-          </Typography>
-          <Breadcrumbs>
+        <Box sx={{ mb: 2 }}>
+          <Breadcrumbs sx={{ mb: 2 }}>
             <Link
               component="button"
               variant="body1"
@@ -458,6 +613,34 @@ const MycometerJobReports = () => {
               Mycometer Sampling Jobs
             </Link>
           </Breadcrumbs>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Box>
+              <Typography variant="h4" component="h1" sx={{ mb: 0.25 }}>
+                Mycometer Reports
+              </Typography>
+              <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 0 }}>
+                {job?.projectId?.projectID
+                  ? `${job.projectId.projectID} — ${job.projectId.name || "Unnamed Project"}`
+                  : job?.projectId?.name || "Mycometer Job"}
+              </Typography>
+            </Box>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleOpenAddReport}
+              disabled={!job || availableReportTypes.length === 0}
+              sx={{ textTransform: "none", minWidth: 160, flexShrink: 0 }}
+            >
+              Add Report
+            </Button>
+          </Box>
         </Box>
 
         {error && (
@@ -476,29 +659,6 @@ const MycometerJobReports = () => {
         )}
 
         <Paper sx={{ width: "100%", overflow: "hidden" }}>
-          <Box
-            sx={{
-              p: 2,
-              pb: 0,
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: 2,
-            }}
-          >
-            <Typography variant="h6" gutterBottom sx={{ mb: 0 }}>
-              Reports
-            </Typography>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={handleOpenAddReport}
-              disabled={!job || availableReportTypes.length === 0}
-              sx={{ textTransform: "none", mb: 1 }}
-            >
-              Add Report
-            </Button>
-          </Box>
           <TableContainer>
             <Table stickyHeader>
               <TableHead>
@@ -514,16 +674,13 @@ const MycometerJobReports = () => {
                     Report Type
                   </TableCell>
                   <TableCell sx={{ color: "white", fontWeight: "bold" }}>
-                    Status
+                    Sample Date
                   </TableCell>
-                  <TableCell
-                    sx={{
-                      color: "white",
-                      fontWeight: "bold",
-                      display: { xs: "none", md: "table-cell" },
-                    }}
-                  >
-                    Sample IDs
+                  <TableCell sx={{ color: "white", fontWeight: "bold" }}>
+                    FAI
+                  </TableCell>
+                  <TableCell sx={{ color: "white", fontWeight: "bold" }}>
+                    Status
                   </TableCell>
                   <TableCell
                     sx={{
@@ -549,29 +706,111 @@ const MycometerJobReports = () => {
               <TableBody>
                 {!job ? (
                   <TableRow>
-                    <TableCell colSpan={5} align="center">
+                    <TableCell colSpan={6} align="center">
                       Job not found.
                     </TableCell>
                   </TableRow>
                 ) : reports.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} align="center">
+                    <TableCell colSpan={6} align="center">
                       No reports yet. Click Add Report to create one.
                     </TableCell>
                   </TableRow>
                 ) : (
                   reports.map((sampleType) => {
-                    const status = getSampleTypeReportStatus(job, sampleType);
-                    const analysisMeta = getAnalysisMeta(sampleType);
-                    const sampleIds = getSampleIdsForType(sampleType);
+                    const isAirRow = sampleType === AIR_SAMPLING_LABEL;
+                    const detailType = isAirRow
+                      ? airTypesOnJob.includes("Air Fungi")
+                        ? "Air Fungi"
+                        : airTypesOnJob[0]
+                      : sampleType;
+                    const airSamplingComplete =
+                      isAirRow &&
+                      airTypesOnJob.length > 0 &&
+                      airTypesOnJob.every(
+                        (type) => getSamplingMeta(type)?.samplingComplete,
+                      );
+                    const airAnalysisComplete =
+                      isAirRow &&
+                      airTypesOnJob.length > 0 &&
+                      airTypesOnJob.every(
+                        (type) => getAnalysisMeta(type)?.analysisComplete,
+                      );
+                    const airHasSamples =
+                      isAirRow &&
+                      airTypesOnJob.some(
+                        (type) => getSampleIdsForType(type).length > 0,
+                      );
+                    const status = isAirRow
+                      ? !airHasSamples
+                        ? { label: "", chipColor: null }
+                        : airAnalysisComplete
+                          ? {
+                              label: "Analysis Complete",
+                              chipColor: "#2e7d32",
+                            }
+                          : airSamplingComplete
+                            ? {
+                                label: "Sampling Complete",
+                                chipColor: "#ed6c02",
+                              }
+                            : {
+                                label: "Sampling In Progress",
+                                chipColor: "#1976d2",
+                              }
+                      : getSampleTypeReportStatus(job, detailType);
+                    const analysisMeta = getAnalysisMeta(detailType);
                     const typeColors =
-                      SAMPLE_TYPE_COLORS[sampleType] ||
-                      SAMPLE_TYPE_COLORS["Surface Fungi"];
-                    const isAnalysisComplete = Boolean(
-                      analysisMeta?.analysisComplete,
-                    );
-                    const reportApprovedBy = analysisMeta?.reportApprovedBy;
-                    const samplerName = getSamplerDisplayName(sampleType);
+                      SAMPLE_TYPE_COLORS[detailType] ||
+                      SAMPLE_TYPE_COLORS["Air Fungi"];
+                    const isAnalysisComplete = isAirRow
+                      ? airAnalysisComplete
+                      : Boolean(analysisMeta?.analysisComplete);
+                    const airApprovers = isAirRow
+                      ? airTypesOnJob
+                          .map((type) => getAnalysisMeta(type)?.reportApprovedBy)
+                          .filter(Boolean)
+                      : [];
+                    const reportApprovedBy = isAirRow
+                      ? airApprovers.length === airTypesOnJob.length
+                        ? airApprovers[0]
+                        : ""
+                      : analysisMeta?.reportApprovedBy;
+                    const samplingMeta = getSamplingMeta(detailType);
+                    const actionTypes = isAirRow
+                      ? []
+                      : [sampleType];
+                    const canIncludeFai =
+                      isAirRow &&
+                      airTypesOnJob.includes("Air Fungi") &&
+                      airTypesOnJob.includes("Air Allergen");
+                    const faiChecked =
+                      typeof job?.includeFaiOnReport === "boolean"
+                        ? job.includeFaiOnReport
+                        : (job?.scopeOfWorks || []).includes("Air FAI");
+                    const airPendingTypes = isAirRow
+                      ? airTypesOnJob.filter((type) => {
+                          const meta = getAnalysisMeta(type);
+                          return (
+                            meta?.analysisComplete && !meta?.reportApprovedBy
+                          );
+                        })
+                      : [];
+                    const airReportViewed =
+                      isAirRow &&
+                      airTypesOnJob.length > 0 &&
+                      airTypesOnJob.every(
+                        (type) =>
+                          reportViewedTypes.has(type) ||
+                          Boolean(getAnalysisMeta(type)?.reportViewedAt),
+                      );
+                    const airAuthorisationSent =
+                      airPendingTypes.length > 0 &&
+                      airPendingTypes.every((type) =>
+                        Boolean(
+                          getAnalysisMeta(type)?.authorisationRequestedBy,
+                        ),
+                      );
 
                     return (
                       <TableRow
@@ -590,17 +829,39 @@ const MycometerJobReports = () => {
                           >
                             {sampleType}
                           </Typography>
-                          {getSamplingMeta(sampleType)?.sampleDate && (
+                          {isAirRow && (
                             <Typography
                               variant="caption"
                               color="text.secondary"
                               display="block"
                             >
-                              Sample date:{" "}
-                              {new Date(
-                                getSamplingMeta(sampleType).sampleDate,
-                              ).toLocaleDateString("en-AU")}
-                              {samplerName ? ` · ${samplerName}` : ""}
+                              {airTypesOnJob.join(", ")}
+                            </Typography>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {samplingMeta?.sampleDate
+                              ? new Date(
+                                  samplingMeta.sampleDate,
+                                ).toLocaleDateString("en-AU")
+                              : "—"}
+                          </Typography>
+                        </TableCell>
+                        <TableCell onClick={(event) => event.stopPropagation()}>
+                          {canIncludeFai ? (
+                            <Checkbox
+                              size="small"
+                              checked={faiChecked}
+                              disabled={savingFai || !canEditReports}
+                              onChange={(event) =>
+                                handleToggleFai(event.target.checked)
+                              }
+                              inputProps={{ "aria-label": "Include FAI in report" }}
+                            />
+                          ) : (
+                            <Typography variant="body2" color="text.secondary">
+                              —
                             </Typography>
                           )}
                         </TableCell>
@@ -651,11 +912,6 @@ const MycometerJobReports = () => {
                         </TableCell>
                         <TableCell
                           sx={{ display: { xs: "none", md: "table-cell" } }}
-                        >
-                          {sampleIds.length > 0 ? sampleIds.join(", ") : "—"}
-                        </TableCell>
-                        <TableCell
-                          sx={{ display: { xs: "none", md: "table-cell" } }}
                           onClick={(e) => e.stopPropagation()}
                         >
                           <Box
@@ -664,19 +920,137 @@ const MycometerJobReports = () => {
                             gap={1}
                             flexWrap="wrap"
                           >
-                            {isAnalysisComplete &&
+                            {isAirRow && airAnalysisComplete && (
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                disabled={airTypesOnJob.some(
+                                  (type) => generatingPDF[type],
+                                )}
+                                onClick={() =>
+                                  handleGeneratePDF(airTypesOnJob[0])
+                                }
+                                sx={{
+                                  borderColor: theme.palette.success.main,
+                                  color: theme.palette.success.main,
+                                  "&:hover": {
+                                    borderColor: theme.palette.success.dark,
+                                    backgroundColor:
+                                      theme.palette.success.light,
+                                  },
+                                }}
+                                startIcon={
+                                  airTypesOnJob.some(
+                                    (type) => generatingPDF[type],
+                                  ) ? (
+                                    <CircularProgress
+                                      size={16}
+                                      color="success"
+                                    />
+                                  ) : null
+                                }
+                              >
+                                {airTypesOnJob.some(
+                                  (type) => generatingPDF[type],
+                                )
+                                  ? "Generating…"
+                                  : reportApprovedBy
+                                    ? "Download Report"
+                                    : "View Report"}
+                              </Button>
+                            )}
+                            {isAirRow &&
+                              airAnalysisComplete &&
+                              !reportApprovedBy &&
+                              airReportViewed &&
+                              canEditReports &&
+                              (currentUser?.reportProofer ? (
+                                <Button
+                                  variant="contained"
+                                  size="small"
+                                  color="success"
+                                  onClick={() =>
+                                    handleAuthoriseReport(AIR_SAMPLING_LABEL)
+                                  }
+                                  disabled={
+                                    authorisingReports[AIR_SAMPLING_LABEL] ||
+                                    airTypesOnJob.some(
+                                      (type) => generatingPDF[type],
+                                    )
+                                  }
+                                  sx={{
+                                    backgroundColor: theme.palette.success.main,
+                                    color: theme.palette.common.white,
+                                    "&:hover": {
+                                      backgroundColor:
+                                        theme.palette.success.dark,
+                                    },
+                                  }}
+                                >
+                                  {authorisingReports[AIR_SAMPLING_LABEL]
+                                    ? "Authorising..."
+                                    : "Authorise"}
+                                </Button>
+                              ) : (
+                                <Button
+                                  variant="outlined"
+                                  size="small"
+                                  color={
+                                    airAuthorisationSent ? "inherit" : "primary"
+                                  }
+                                  startIcon={<MailIcon />}
+                                  onClick={() =>
+                                    handleSendForAuthorisation(
+                                      AIR_SAMPLING_LABEL,
+                                    )
+                                  }
+                                  disabled={Boolean(
+                                    sendingAuthorisation[AIR_SAMPLING_LABEL],
+                                  )}
+                                  sx={
+                                    airAuthorisationSent
+                                      ? {
+                                          color: "text.secondary",
+                                          borderColor: "grey.400",
+                                        }
+                                      : undefined
+                                  }
+                                >
+                                  {sendingAuthorisation[AIR_SAMPLING_LABEL]
+                                    ? "Sending..."
+                                    : airAuthorisationSent
+                                      ? "Re-send for Authorisation"
+                                      : "Send for Authorisation"}
+                                </Button>
+                              ))}
+                            {actionTypes.map((actionType) => {
+                              const actionMeta = getAnalysisMeta(actionType);
+                              const actionApproved = actionMeta?.reportApprovedBy;
+                              const actionAnalysisComplete = Boolean(
+                                actionMeta?.analysisComplete,
+                              );
+                              if (!actionAnalysisComplete) return null;
+                              if (
+                                !PDF_SUPPORTED_SAMPLE_TYPES.includes(actionType)
+                              ) {
+                                return null;
+                              }
+                              return (
+                              <Box key={actionType} sx={{ display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
+                              {actionAnalysisComplete &&
                               PDF_SUPPORTED_SAMPLE_TYPES.includes(
-                                sampleType,
+                                actionType,
                               ) && (
                                 <>
+                                  {!isAirRow && (
                                   <Button
                                     variant="outlined"
                                     size="small"
                                     disabled={Boolean(
-                                      generatingPDF[sampleType],
+                                      generatingPDF[actionType],
                                     )}
                                     onClick={() =>
-                                      handleGeneratePDF(sampleType)
+                                      handleGeneratePDF(actionType)
                                     }
                                     sx={{
                                       borderColor: theme.palette.success.main,
@@ -688,7 +1062,7 @@ const MycometerJobReports = () => {
                                       },
                                     }}
                                     startIcon={
-                                      generatingPDF[sampleType] ? (
+                                      generatingPDF[actionType] ? (
                                         <CircularProgress
                                           size={16}
                                           color="success"
@@ -696,20 +1070,21 @@ const MycometerJobReports = () => {
                                       ) : null
                                     }
                                   >
-                                    {generatingPDF[sampleType]
+                                    {generatingPDF[actionType]
                                       ? "Generating…"
-                                      : reportApprovedBy
+                                      : actionApproved
                                         ? "Download Report"
                                         : "View Report"}
                                   </Button>
+                                  )}
                                   {(() => {
                                     const conditions = {
-                                      notApproved: !reportApprovedBy,
+                                      notApproved: !actionApproved,
                                       reportViewed:
-                                        reportViewedTypes.has(sampleType) ||
-                                        !!analysisMeta?.reportViewedAt,
+                                        reportViewedTypes.has(actionType) ||
+                                        !!actionMeta?.reportViewedAt,
                                       alreadySentForAuthorisation:
-                                        !!analysisMeta?.authorisationRequestedBy,
+                                        !!actionMeta?.authorisationRequestedBy,
                                       hasEditPermission: hasPermission(
                                         currentUser,
                                         "projects.edit",
@@ -738,11 +1113,11 @@ const MycometerJobReports = () => {
                                             size="small"
                                             color="success"
                                             onClick={() =>
-                                              handleAuthoriseReport(sampleType)
+                                              handleAuthoriseReport(actionType)
                                             }
                                             disabled={
-                                              authorisingReports[sampleType] ||
-                                              generatingPDF[sampleType]
+                                              authorisingReports[actionType] ||
+                                              generatingPDF[actionType]
                                             }
                                             sx={{
                                               backgroundColor:
@@ -754,7 +1129,7 @@ const MycometerJobReports = () => {
                                               },
                                             }}
                                           >
-                                            {authorisingReports[sampleType]
+                                            {authorisingReports[actionType]
                                               ? "Authorising..."
                                               : "Authorise"}
                                           </Button>
@@ -771,11 +1146,11 @@ const MycometerJobReports = () => {
                                             startIcon={<MailIcon />}
                                             onClick={() =>
                                               handleSendForAuthorisation(
-                                                sampleType,
+                                                actionType,
                                               )
                                             }
                                             disabled={Boolean(
-                                              sendingAuthorisation[sampleType],
+                                              sendingAuthorisation[actionType],
                                             )}
                                             sx={
                                               conditions.alreadySentForAuthorisation
@@ -786,7 +1161,7 @@ const MycometerJobReports = () => {
                                                 : undefined
                                             }
                                           >
-                                            {sendingAuthorisation[sampleType]
+                                            {sendingAuthorisation[actionType]
                                               ? "Sending..."
                                               : conditions.alreadySentForAuthorisation
                                                 ? "Re-send for Authorisation"
@@ -798,6 +1173,9 @@ const MycometerJobReports = () => {
                                   })()}
                                 </>
                               )}
+                              </Box>
+                              );
+                            })}
                           </Box>
                         </TableCell>
                         <TableCell align="right" onClick={(e) => e.stopPropagation()}>
@@ -886,6 +1264,35 @@ const MycometerJobReports = () => {
                 </Select>
               </FormControl>
             )}
+            {(reportType === AIR_SAMPLING_LABEL ||
+              reportToEdit === AIR_SAMPLING_LABEL) && (
+              <FormControl component="fieldset" required>
+                <Typography variant="body2" sx={{ mb: 0.5 }}>
+                  Include
+                </Typography>
+                <FormGroup>
+                  {AIR_SAMPLING_TYPES.map((type) => (
+                    <FormControlLabel
+                      key={type}
+                      control={
+                        <Checkbox
+                          checked={airTypesSelected.includes(type)}
+                          onChange={(event) => {
+                            setAirTypesSelected((current) =>
+                              event.target.checked
+                                ? [...current, type]
+                                : current.filter((item) => item !== type),
+                            );
+                            if (reportFormError) setReportFormError("");
+                          }}
+                        />
+                      }
+                      label={type}
+                    />
+                  ))}
+                </FormGroup>
+              </FormControl>
+            )}
             <FormControl fullWidth required>
               <InputLabel id="sampler-label">Sampler</InputLabel>
               <Select
@@ -899,7 +1306,13 @@ const MycometerJobReports = () => {
               >
                 {users.map((user) => (
                   <MenuItem key={user._id} value={user._id}>
-                    {getUserDisplayName(user)}
+                    {formatMycometerUserLabel(
+                      user,
+                      reportType === "Surface Fungi" ||
+                        reportToEdit === "Surface Fungi"
+                        ? "Surface Fungi"
+                        : "Air Fungi",
+                    )}
                   </MenuItem>
                 ))}
                 {sampledBy &&

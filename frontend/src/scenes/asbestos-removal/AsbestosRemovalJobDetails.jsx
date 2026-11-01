@@ -40,6 +40,7 @@ import {
   Autocomplete,
   IconButton,
   Tooltip,
+  InputAdornment,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import MonitorIcon from "@mui/icons-material/Monitor";
@@ -53,6 +54,7 @@ import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import MailIcon from "@mui/icons-material/Mail";
 import DescriptionIcon from "@mui/icons-material/Description";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import { tokens } from "../../theme/tokens";
 import api from "../../services/api";
 import {
@@ -3988,25 +3990,55 @@ const AsbestosRemovalJobDetails = () => {
                 </Grid>
               )}
               <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  size="small"
-                  label="Secondary Header (Optional)"
-                  value={clearanceForm.secondaryHeader}
-                  onChange={(e) =>
-                    setClearanceForm({
-                      ...clearanceForm,
-                      secondaryHeader: e.target.value,
-                    })
-                  }
-                  placeholder="Enter secondary header text"
-                  helperText="This will appear as a smaller header beneath the site name on the cover page"
-                  sx={{
-                    "& .MuiFormHelperText-root": {
-                      display: { xs: "none", sm: "block" },
-                    },
-                  }}
-                />
+                {(() => {
+                  const workOrder = String(job?.projectId?.workOrder || "").trim();
+                  const showCopyWorkOrder =
+                    workOrder.length > 0 &&
+                    !String(clearanceForm.secondaryHeader || "").trim();
+                  return (
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="Secondary Header (Optional)"
+                      value={clearanceForm.secondaryHeader}
+                      onChange={(e) =>
+                        setClearanceForm({
+                          ...clearanceForm,
+                          secondaryHeader: e.target.value,
+                        })
+                      }
+                      placeholder="Enter secondary header text"
+                      helperText="This will appear as a smaller header beneath the site name on the cover page"
+                      sx={{
+                        "& .MuiFormHelperText-root": {
+                          display: { xs: "none", sm: "block" },
+                        },
+                      }}
+                      InputProps={{
+                        endAdornment: showCopyWorkOrder ? (
+                          <InputAdornment position="end">
+                            <Tooltip title="Copy work order into secondary header">
+                              <IconButton
+                                type="button"
+                                edge="end"
+                                size="small"
+                                aria-label="Copy work order into secondary header"
+                                onClick={() =>
+                                  setClearanceForm((prev) => ({
+                                    ...prev,
+                                    secondaryHeader: workOrder,
+                                  }))
+                                }
+                              >
+                                <ContentCopyIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </InputAdornment>
+                        ) : null,
+                      }}
+                    />
+                  );
+                })()}
               </Grid>
             </Grid>
           </DialogContent>

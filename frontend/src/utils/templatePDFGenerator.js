@@ -333,7 +333,8 @@ export async function downloadEnclosureCertificateByClearanceId(clearanceId, opt
  * @param {Object} clearanceData - Full asbestos clearance document
  * @returns {Promise<{ filename: string }>}
  */
-export async function generateEnclosureCertificatePDF(clearanceData) {
+export async function generateEnclosureCertificatePDF(clearanceData, options = {}) {
+  const { returnBlob = false } = options;
   const res = await fetch(`${API_BASE}/pdf-docraptor-v2/generate-enclosure-certificate`, {
     method: "POST",
     headers: getAuthHeaders(),
@@ -355,6 +356,10 @@ export async function generateEnclosureCertificatePDF(clearanceData) {
   const filename =
     parseContentDispositionFilename(contentDisposition) ||
     `enclosure_certificate_${clearanceData?._id || "certificate"}.pdf`;
+
+  if (returnBlob) {
+    return { filename, blob };
+  }
 
   const blobUrl = window.URL.createObjectURL(blob);
   try {
@@ -407,7 +412,7 @@ export async function startLeadClearancePDFJob(leadClearanceData) {
  * @returns {Promise<{ filename: string }>}
  */
 export async function downloadLeadClearancePDFByClearanceId(clearanceId, options = {}) {
-  const { openInNewTab = false } = options;
+  const { openInNewTab = false, returnBlob = false } = options;
   const url = `${API_BASE}/pdf-docraptor-v2/download-by-lead-clearance/${clearanceId}`;
   const res = await fetch(url, { headers: getAuthHeaders() });
   if (!res.ok) {
@@ -420,6 +425,9 @@ export async function downloadLeadClearancePDFByClearanceId(clearanceId, options
   if (contentDisposition) {
     const m = contentDisposition.match(/filename="(.+)"/);
     if (m) filename = m[1];
+  }
+  if (returnBlob) {
+    return { filename, blob };
   }
   const blobUrl = window.URL.createObjectURL(blob);
   try {
@@ -600,7 +608,7 @@ export async function generateAssessmentPDFAsync(assessmentId, options = {}) {
  * @returns {Promise<{ success: true, filename: string }>}
  */
 async function generateClearancePDFAsync(data, options = {}) {
-  const { openInNewTab = false, onStatus } = options;
+  const { openInNewTab = false, onStatus, returnBlob = false } = options;
   const startUrl = `${API_BASE}/pdf-docraptor-v2/generate-asbestos-clearance-v2`;
   const startRes = await fetch(startUrl, {
     method: 'POST',
@@ -657,6 +665,9 @@ async function generateClearancePDFAsync(data, options = {}) {
         const m = contentDisposition.match(/filename="(.+)"/);
         if (m) filename = m[1];
       }
+      if (returnBlob) {
+        return { success: true, filename, blob: pdfBlob };
+      }
       const blobUrl = window.URL.createObjectURL(pdfBlob);
       try {
         if (openInNewTab) {
@@ -704,13 +715,13 @@ async function generateClearancePDFAsync(data, options = {}) {
 const PDF_REQUEST_TIMEOUT_MS = 120000;
 
 export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
-  const { openInNewTab = false, onStatus } = options;
+  const { openInNewTab = false, onStatus, returnBlob = false } = options;
   try {
     const useDocRaptor = true;
 
     // Asbestos clearance uses async DocRaptor flow (start job → poll status → download)
     if (useDocRaptor && type === 'asbestos-clearance') {
-      return await generateClearancePDFAsync(data, { openInNewTab, onStatus });
+      return await generateClearancePDFAsync(data, { openInNewTab, onStatus, returnBlob });
     }
 
     // Lead clearance uses same async flow: start job → poll → download by clearance id
@@ -733,8 +744,11 @@ export const generateHTMLTemplatePDF = async (type, data, options = {}) => {
           reportStatus({ status: 'completed', message: 'PDF ready' });
           const clearanceId = data._id || data.id;
           if (!clearanceId) throw new Error('Clearance ID required to download');
-          const { filename } = await downloadLeadClearancePDFByClearanceId(clearanceId, { openInNewTab });
-          return { success: true, filename };
+          const downloaded = await downloadLeadClearancePDFByClearanceId(clearanceId, { openInNewTab, returnBlob });
+          if (returnBlob) {
+            return { success: true, filename: downloaded.filename, blob: downloaded.blob };
+          }
+          return { success: true, filename: downloaded.filename };
         } else if (statusData.status === 'failed') {
           const errMsg = statusData.error || statusData.message || 'PDF generation failed';
           reportStatus({ status: 'failed', error: errMsg });

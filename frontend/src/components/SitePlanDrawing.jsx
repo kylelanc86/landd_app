@@ -168,6 +168,12 @@ const colorsEqual = (a, b) =>
 const PHONE_SITE_PLAN_QUERY =
   "(max-width: 600px), ((max-height: 500px) and (max-width: 932px))";
 
+/**
+ * One JPEG pass when the plan is saved. High enough that roads and roofs
+ * stay close to the captured tiles, and still far smaller than PNG.
+ */
+const MAP_LAYER_JPEG_QUALITY = 0.95;
+
 /** The captured plan image should be the map only, without Maps controls. */
 const SITE_PLAN_CAPTURE_MAP_OPTIONS = {
   disableDefaultUI: true,
@@ -298,6 +304,8 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
   const canvasRef = useRef(null);
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
+  /** True when the canvas background is a JPEG map layer and should stay JPEG on save. */
+  const mapLayerJpegRef = useRef(false);
   const canvasContainerRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentTool, setCurrentTool] = useState("pen");
@@ -1550,7 +1558,17 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
       drawItem(ctx, item);
     });
 
-    const imageData = canvas.toDataURL("image/png");
+    let imageData;
+    if (mapLayerJpegRef.current) {
+      ctx.save();
+      ctx.globalCompositeOperation = "destination-over";
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+      imageData = canvas.toDataURL("image/jpeg", MAP_LAYER_JPEG_QUALITY);
+    } else {
+      imageData = canvas.toDataURL("image/png");
+    }
     renderForExportRef.current = false;
     redrawCanvas();
 
@@ -2174,6 +2192,10 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
       const canvas = canvasRef.current;
       if (!canvas) return;
 
+      mapLayerJpegRef.current = String(existingSitePlan).startsWith(
+        "data:image/jpeg",
+      );
+
       const ctx = canvas.getContext("2d", { willReadFrequently: true });
 
       // Create an image from the base64 data
@@ -2358,6 +2380,8 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
       );
       const sourceHeight = Math.max(1, mapCanvas.height - bottomCrop);
 
+      tempCtx.fillStyle = "#ffffff";
+      tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
       tempCtx.drawImage(
         mapCanvas,
         0,
@@ -2370,17 +2394,17 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
         canvas.height,
       );
 
-      // Convert to image and set as canvas background
-      const img = new Image();
-      img.onload = () => {
-        canvas.backgroundImage = img;
-        setHasMapBackground(true);
-        // Hide the map overlay since it's now part of the canvas background
-        setShowGoogleMaps(false);
-        // Redraw canvas to show the map background
-        redrawCanvas();
-      };
-      img.src = tempCanvas.toDataURL("image/png");
+      // Keep the on-screen layer as pixels. JPEG is applied once, on save.
+      const snapshot = document.createElement("canvas");
+      snapshot.width = tempCanvas.width;
+      snapshot.height = tempCanvas.height;
+      snapshot.getContext("2d").drawImage(tempCanvas, 0, 0);
+      canvas.backgroundImage = snapshot;
+      mapLayerJpegRef.current = true;
+      setHasMapBackground(true);
+      // Hide the map overlay since it's now part of the canvas background
+      setShowGoogleMaps(false);
+      redrawCanvas();
     } catch (error) {
       console.error("Error capturing map as background:", error);
     }
@@ -2870,6 +2894,7 @@ const SitePlanDrawing = forwardRef(function SitePlanDrawing(
                       if (canvas) {
                         canvas.backgroundImage = null;
                       }
+                      mapLayerJpegRef.current = false;
                       setHasMapBackground(false);
                       setShowGoogleMaps(false);
                       setMapLoaded(false);

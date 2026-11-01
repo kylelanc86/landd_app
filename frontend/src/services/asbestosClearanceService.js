@@ -256,10 +256,12 @@ const asbestosClearanceService = {
     return response.data;
   },
 
-  reviseReport: async (id, reason) => {
-    const response = await axios.post(`${API_BASE_URL}/${id}/revise-report`, {
-      reason,
-    });
+  reviseReport: async (id, reasonOrPayload) => {
+    const body =
+      reasonOrPayload && typeof reasonOrPayload === "object"
+        ? reasonOrPayload
+        : { reason: reasonOrPayload };
+    const response = await axios.post(`${API_BASE_URL}/${id}/revise-report`, body);
     return response.data;
   },
 

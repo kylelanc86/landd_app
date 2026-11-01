@@ -3,7 +3,7 @@ const router = express.Router();
 const DocRaptorService = require('../services/docraptorService');
 const fs = require('fs');
 const path = require('path');
-const { getTemplateByType, replacePlaceholders } = require('../services/templateService');
+const { getTemplateByType, replacePlaceholders, jurisdictionFromAssessmentState, selectLegislationForJurisdiction } = require('../services/templateService');
 const { PDFDocument } = require('pdf-lib');
 const auth = require('../middleware/auth');
 const AsbestosAssessment = require('../models/assessmentTemplates/asbestos/AsbestosAssessment');
@@ -365,17 +365,42 @@ function stripEnclosureLegislativeTemplateIntro(html) {
  * @param {Array} templateSelectedLegislation - Template's stored selectedLegislation array
  * @returns {Promise<Array>} Resolved list (current legislation where found, else stored snapshot)
  */
-async function resolveSelectedLegislation(templateSelectedLegislation) {
-  if (!templateSelectedLegislation || !Array.isArray(templateSelectedLegislation) || templateSelectedLegislation.length === 0) {
-    return [];
-  }
+async function loadCurrentLegislationById() {
   const currentLegislation = await CustomDataFieldGroup.getFieldsByType('legislation');
-  const idToCurrent = new Map(currentLegislation.map((item) => [String(item._id), item]));
-  return templateSelectedLegislation.map((stored) => {
+  return new Map(currentLegislation.map((item) => [String(item._id), item]));
+}
+
+function resolveLegislationList(list, idToCurrent) {
+  if (!list || !Array.isArray(list) || list.length === 0) return [];
+  return list.map((stored) => {
     const current = idToCurrent.get(String(stored._id));
     if (current) return current;
     return stored;
   });
+}
+
+async function resolveSelectedLegislation(templateSelectedLegislation) {
+  if (!templateSelectedLegislation || !Array.isArray(templateSelectedLegislation) || templateSelectedLegislation.length === 0) {
+    return [];
+  }
+  const idToCurrent = await loadCurrentLegislationById();
+  return resolveLegislationList(templateSelectedLegislation, idToCurrent);
+}
+
+/**
+ * Legislation for an assessment report.
+ * Resolves stored items to the current legislation records, then keeps the job snapshot
+ * only when it has entries for this state. Otherwise the template selection for that state is used.
+ */
+async function legislationForAssessment(assessmentData, templateSelectedLegislation) {
+  const jurisdiction = jurisdictionFromAssessmentState(assessmentData?.state);
+  const idToCurrent = await loadCurrentLegislationById();
+  const resolvedSnapshot = resolveLegislationList(assessmentData?.legislation, idToCurrent);
+  const resolvedTemplate = resolveLegislationList(templateSelectedLegislation, idToCurrent);
+  return {
+    jurisdiction,
+    selectedLegislation: selectLegislationForJurisdiction(resolvedSnapshot, resolvedTemplate, jurisdiction),
+  };
 }
 
 /** HTML for a half line break in PDF (used in discussion/conclusions and job exclusions). */
@@ -4927,11 +4952,15 @@ const generateAssessmentHTML = async (assessmentData) => {
     // Use residential template when isResidential (has Background section and "Summary of Identified ACM")
     const templateType = isResidential ? 'residentialAsbestosAssessment' : 'asbestosAssessment';
     const templateContent = await getTemplateByType(templateType);
-    const resolvedLegislation = await resolveSelectedLegislation(templateContent?.selectedLegislation);
-    // Use job's legislation snapshot (at creation time); fall back to resolved template for existing jobs without it
-    const selectedLegislation = (assessmentData.legislation && assessmentData.legislation.length > 0)
-      ? assessmentData.legislation
-      : resolvedLegislation;
+    const { jurisdiction: assessmentJurisdiction, selectedLegislation } = await legislationForAssessment(
+      assessmentData,
+      templateContent?.selectedLegislation,
+    );
+    const assessmentPlaceholderBase = {
+      ...assessmentData,
+      selectedLegislation,
+      ...(assessmentJurisdiction ? { jurisdiction: assessmentJurisdiction } : {}),
+    };
 
     // Assessment cover/version control: match clearance structure (REPORT_TITLE, FOOTER_TEXT, etc.)
     const assessmentSiteAddress = assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site';
@@ -5270,7 +5299,7 @@ const generateAssessmentHTML = async (assessmentData) => {
       ? (templateContent?.standardSections?.surveyFindingsContent || 'Survey findings content not found')
       : (templateContent?.standardSections?.surveyFindingsContentNoSamples || "No asbestos-containing materials were identified during this assessment.");
     let surveyFindingsContentPopulated = surveyFindingsSource !== 'Survey findings content not found'
-      ? await replacePlaceholders(surveyFindingsSource, { ...assessmentData, selectedLegislation })
+      ? await replacePlaceholders(surveyFindingsSource, assessmentPlaceholderBase)
       : surveyFindingsSource;
     const hasSitePlan = resolveAsbestosSitePlanAppendices(assessmentData).length > 0;
     const hasFibreIdReport = !!assessmentData.fibreAnalysisReport;
@@ -5290,7 +5319,7 @@ const generateAssessmentHTML = async (assessmentData) => {
     const backgroundContentRaw = templateContent?.standardSections?.backgroundContent;
     if (isResidential && backgroundContentRaw) {
       const bgTitle = templateContent?.standardSections?.backgroundTitle || 'BACKGROUND';
-      const bgContent = await replacePlaceholders(backgroundContentRaw, { ...assessmentData, selectedLegislation });
+      const bgContent = await replacePlaceholders(backgroundContentRaw, assessmentPlaceholderBase);
       const bgContentHtml = String(bgContent || '').replace(/\n/g, '<br />');
       backgroundSectionHtmlResolved = `<div class="section-header first-section">${bgTitle}</div><div class="paragraph">${bgContentHtml}</div>`;
     }
@@ -5303,7 +5332,7 @@ const generateAssessmentHTML = async (assessmentData) => {
       .replace(/\[PAGE_NUMBER\]/g, '1')
       .replace(/\[BACKGROUND_SECTION\]/g, backgroundSectionHtmlResolved)
       .replace(/\[INTRODUCTION_TITLE\]/g, templateContent?.standardSections?.introductionTitle || 'INTRODUCTION')
-      .replace(/\[INTRODUCTION_CONTENT\]/g, templateContent?.standardSections?.introductionContent ? await replacePlaceholders(templateContent.standardSections.introductionContent, { ...assessmentData, selectedLegislation }) : 'Introduction content not found')
+      .replace(/\[INTRODUCTION_CONTENT\]/g, templateContent?.standardSections?.introductionContent ? await replacePlaceholders(templateContent.standardSections.introductionContent, assessmentPlaceholderBase) : 'Introduction content not found')
       .replace(/\[SURVEY_FINDINGS_TITLE\]/g, templateContent?.standardSections?.surveyFindingsTitle || (isResidential ? 'SUMMARY OF IDENTIFIED ACM' : 'ASSESSMENT FINDINGS'))
       .replace(/\[SURVEY_FINDINGS_CONTENT\]/g, surveyFindingsContentPopulated)
       .replace(/\[SAMPLE_REGISTER_ITEMS\]/g, shouldMoveFirstItemToNewPage ? '' : firstSampleTable); // Conditionally include the first sample table
@@ -5397,7 +5426,7 @@ const generateAssessmentHTML = async (assessmentData) => {
       : Math.ceil(Math.max(0, (assessmentItems.length || 1) - 1) / 2);
     const discussionPageNum = 4 + sampleRegisterPageCount;
 
-    const templateData = { ...assessmentData, identifiedAsbestosItems: asbestosItemsSection, selectedLegislation };
+    const templateData = { ...assessmentPlaceholderBase, identifiedAsbestosItems: asbestosItemsSection };
     const discussionSignOffContent = templateContent?.standardSections?.signOffContent
       ? await replacePlaceholders(templateContent.standardSections.signOffContent, templateData)
       : '';
@@ -6454,17 +6483,16 @@ function buildLeadSampleRegisterTableHtml({
 const generateLeadAssessmentFlowHTMLV3 = async (assessmentData) => {
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const templateContent = await getTemplateByType('leadAssessment');
-  const resolvedLegislation = await resolveSelectedLegislation(templateContent?.selectedLegislation);
-  const selectedLegislation = (assessmentData.legislation && assessmentData.legislation.length > 0)
-    ? assessmentData.legislation
-    : resolvedLegislation;
+  const { jurisdiction: assessmentJurisdiction, selectedLegislation } = await legislationForAssessment(
+    assessmentData,
+    templateContent?.selectedLegislation,
+  );
 
   const logoPath = path.join(__dirname, '../assets/logo.png');
   const logoBase64 = fs.existsSync(logoPath) ? fs.readFileSync(logoPath).toString('base64') : '';
 
   const assessmentSiteAddress = assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site';
   const assessmentFooterText = `Lead Assessment Report: ${assessmentSiteAddress}`;
-  const assessmentJurisdiction = assessmentData.state === 'Commonwealth' ? 'ACT' : assessmentData.state;
 
   const scopeBullets = (assessmentData.assessmentScope || [])
     .map((t) => `<li>${escapeHtml(String(t))}</li>`)
@@ -7268,18 +7296,16 @@ const generateAssessmentFlowHTMLV3 = async (assessmentData, isResidential = fals
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const templateType = isResidential ? 'residentialAsbestosAssessment' : 'asbestosAssessment';
   const templateContent = await getTemplateByType(templateType);
-  const resolvedLegislation = await resolveSelectedLegislation(templateContent?.selectedLegislation);
-  // Use job's legislation snapshot (at creation time); fall back to resolved template for existing jobs without it
-  const selectedLegislation = (assessmentData.legislation && assessmentData.legislation.length > 0)
-    ? assessmentData.legislation
-    : resolvedLegislation;
+  const { jurisdiction: assessmentJurisdiction, selectedLegislation } = await legislationForAssessment(
+    assessmentData,
+    templateContent?.selectedLegislation,
+  );
 
   const logoPath = path.join(__dirname, '../assets/logo.png');
   const logoBase64 = fs.existsSync(logoPath) ? fs.readFileSync(logoPath).toString('base64') : '';
 
   const assessmentSiteAddress = assessmentData.projectId?.name || assessmentData.siteName || 'Unknown Site';
   const assessmentFooterText = isResidential ? `Residential Asbestos Assessment Report: ${assessmentSiteAddress}` : `Asbestos Assessment Report: ${assessmentSiteAddress}`;
-  const assessmentJurisdiction = assessmentData.state === 'Commonwealth' ? 'ACT' : assessmentData.state;
 
   // Helpers (reuse existing behavior)
   const assessmentItems = assessmentData.items || [];

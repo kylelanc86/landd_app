@@ -23,6 +23,14 @@ const {
   isReportableClientSuppliedJob,
   unarchiveClientSuppliedJobsStuckAfterRevise,
 } = require('../utils/clientSuppliedJobStatus');
+const {
+  readRevisionRequest,
+  archiveSupersededPdf,
+  rollbackArchive,
+  sendRevisionError,
+  notifyEmployeeRevision,
+  REPORT_LABELS,
+} = require('../services/reportRevisionService');
 
 /** AsbestosAssessment collection name in Mongo (mongoose default plural, lowercased). */
 const ASBESTOS_ASSESSMENT_COLLECTION = 'asbestosassessments';
@@ -672,6 +680,8 @@ router.put('/:id/archive', auth, checkPermission('clientSup.edit'), async (req, 
 
 // POST /api/client-supplied-jobs/:id/revise-report — from Project Reports
 router.post('/:id/revise-report', auth, checkPermission('clientSup.edit'), async (req, res) => {
+  let archive = null;
+  let saved = false;
   try {
     const job = await ClientSuppliedJob.findById(req.params.id);
     if (!job) {
@@ -687,10 +697,30 @@ router.post('/:id/revise-report', auth, checkPermission('clientSup.edit'), async
       return res.status(400).json({
         message:
           'This report cannot be revised from Project Reports. It must be authorised.',
+        unchanged: true,
       });
     }
 
-    job.revision = (typeof job.revision === 'number' ? job.revision : 0) + 1;
+    const request = readRevisionRequest(req);
+    const reportType = job.jobType === 'Fibre Count' ? 'fibre_count' : 'fibre_id';
+    const currentRevision = typeof job.revision === 'number' ? job.revision : 0;
+    if (!request.informal) {
+      archive = await archiveSupersededPdf({
+        reportType,
+        reportId: job._id,
+        reportKey: reportType,
+        projectId: job.projectId,
+        currentRevision,
+        reason: request.reason,
+        revisedBy: req.user._id || req.user.id,
+        pdfBuffer: request.pdfBuffer,
+        filename: request.filename,
+      });
+    }
+
+    if (!request.informal) {
+      job.revision = currentRevision + 1;
+    }
     job.status = 'Analysis Complete';
     job.reportApprovedBy = undefined;
     job.markModified('reportApprovedBy');
@@ -703,6 +733,7 @@ router.post('/:id/revise-report', auth, checkPermission('clientSup.edit'), async
     job.markModified('archivedAt');
     job.updatedAt = new Date();
     await job.save();
+    saved = true;
     await ClientSuppliedJob.updateOne(
       { _id: job._id },
       {
@@ -728,17 +759,25 @@ router.post('/:id/revise-report', auth, checkPermission('clientSup.edit'), async
     });
 
     const jobType = job.jobType === 'Fibre Count' ? 'Fibre Count' : 'Fibre ID';
+    const notificationWarning = request.informal
+      ? null
+      : await notifyEmployeeRevision({
+          user: req.user,
+          projectId: job.projectId,
+          reportLabel: REPORT_LABELS[reportType],
+          revisionNumber: currentRevision + 1,
+          reason: request.reason,
+        });
     res.json({
-      message:
-        `${jobType} report reopened for editing. The job is back on the Fibre ID jobs list — re-authorise when ready.`,
+      message: request.informal
+        ? `${jobType} report reopened for editing without a new revision. Re-authorise when ready.`
+        : `${jobType} report reopened for editing. The job is back on the Fibre ID jobs list — re-authorise when ready.`,
+      notificationWarning,
       job: populated,
     });
   } catch (err) {
-    console.error('Error revising client supplied report:', err);
-    res.status(500).json({
-      message: 'Failed to revise report',
-      error: err.message,
-    });
+    if (!saved) await rollbackArchive(archive);
+    return sendRevisionError(res, err);
   }
 });
 

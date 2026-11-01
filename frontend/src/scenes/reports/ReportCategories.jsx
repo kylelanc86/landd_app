@@ -12,6 +12,7 @@ import {
   Construction as AsbestosRemovalIcon,
   Dangerous as LeadRemovalIcon,
   Science as FibreIcon,
+  Biotech as MycometerIcon,
 } from "@mui/icons-material";
 const categories = [
   {
@@ -50,6 +51,13 @@ const categories = [
     icon: FibreIcon,
     description: "Access fibre count analysis reports",
     color: "#9c27b0", // purple-500
+  },
+  {
+    id: "mycometer-sampling",
+    title: "Mycometer Reports",
+    icon: MycometerIcon,
+    description: "Access authorised Mycometer sampling reports",
+    color: "#00897b",
   },
 ];
 

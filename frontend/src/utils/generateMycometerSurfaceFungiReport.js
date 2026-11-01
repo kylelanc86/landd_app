@@ -2,6 +2,10 @@ import pdfMake from "pdfmake/build/pdfmake";
 import api from "../services/api";
 import { formatDateInSydney } from "../utils/dateUtils";
 import {
+  buildVersionControlContent,
+  loadVersionControlRows,
+} from "./versionControlPage";
+import {
   buildMycometerSurfaceFungiFilename,
   toReportReference,
   withRevisionAndExtension,
@@ -33,17 +37,17 @@ function calculateMsfv(analysisValue, blankValue) {
   return Math.max(0, analysis - blank);
 }
 
+const CATEGORY_FILL = {
+  A: "#a5d6a7",
+  B: "#fff59d",
+  C: "#ffcc80",
+};
+
 function getResultCategory(msfv) {
-  if (msfv === null || !Number.isFinite(msfv)) {
-    return { text: "—", color: "black" };
-  }
-  if (msfv <= 20) {
-    return { text: "A (Normal)", color: "#2e7d32" };
-  }
-  if (msfv <= 135) {
-    return { text: "B (Elevated)", color: "#ed6c02" };
-  }
-  return { text: "C (High)", color: "#d32f2f" };
+  if (msfv === null || !Number.isFinite(msfv)) return null;
+  if (msfv <= 20) return { code: "A", label: "Normal" };
+  if (msfv <= 135) return { code: "B", label: "Elevated" };
+  return { code: "C", label: "High" };
 }
 
 async function loadImageAsBase64(imagePath) {
@@ -92,6 +96,7 @@ export async function generateMycometerSurfaceFungiReport({
   project,
   openInNewTab = true,
   returnPdfData = false,
+  returnPdfBundle = false,
 }) {
   if (typeof job !== "object" || job === null) {
     job = {};
@@ -107,18 +112,37 @@ export async function generateMycometerSurfaceFungiReport({
     ? analysisMeta?.reportIssueDate || null
     : null;
   const revision = analysisMeta?.revision || 0;
-  const reportReference =
-    toReportReference(analysisMeta?.reportReference) ||
-    toReportReference(
-      buildMycometerSurfaceFungiFilename({
-        projectId: projectID,
-        siteName,
-        reportIssueDate: analysisMeta?.reportIssueDate || null,
-        includeRevision: false,
-        includeExtension: false,
-      }),
-    );
+  const reportReference = isAuthorised
+    ? toReportReference(analysisMeta?.reportReference) ||
+      toReportReference(
+        buildMycometerSurfaceFungiFilename({
+          projectId: projectID,
+          siteName,
+          reportIssueDate: analysisMeta?.reportIssueDate || null,
+          includeRevision: false,
+          includeExtension: false,
+        }),
+      )
+    : toReportReference(
+        buildMycometerSurfaceFungiFilename({
+          projectId: projectID,
+          siteName,
+          reportIssueDate: null,
+          includeRevision: false,
+          includeExtension: false,
+        }),
+      );
   const filename = withRevisionAndExtension(reportReference, revision, true);
+  const versionControlContent = buildVersionControlContent(
+    await loadVersionControlRows({
+      reportType: "mycometer",
+      reportId: job?._id,
+      reportKey: "Surface Fungi",
+      revision,
+      approvedBy: analysisMeta?.reportApprovedBy,
+      issueDate: analysisMeta?.reportIssueDate || null,
+    }),
+  );
 
   const baseUrl =
     window.location.hostname === "localhost" ||
@@ -141,10 +165,15 @@ export async function generateMycometerSurfaceFungiReport({
     const msfv = calculateMsfv(sample.analysisValue, sample.blankValue);
     const category = getResultCategory(msfv);
     return [
-      { text: sample.sampleId || "—", style: "tableContent" },
+      {
+        text: sample.sampleId || "—",
+        style: "tableContent",
+        alignment: "left",
+      },
       {
         text: sample.sampleLocation || "—",
         style: "tableContent",
+        alignment: "left",
       },
       { text: sample.cleaningStage || "—", style: "tableContent" },
       {
@@ -169,10 +198,12 @@ export async function generateMycometerSurfaceFungiReport({
         alignment: "center",
       },
       {
-        text: category.text,
+        text: category ? `${category.code}\n${category.label}` : "—",
         style: "tableContent",
         alignment: "center",
-        bold: category.text !== "—",
+        bold: Boolean(category),
+        color: "black",
+        fillColor: category ? CATEGORY_FILL[category.code] : undefined,
       },
     ];
   });
@@ -180,6 +211,11 @@ export async function generateMycometerSurfaceFungiReport({
   const docDefinition = {
     pageSize: "A4",
     pageMargins: [40, 120, 40, 90],
+    info: {
+      title: filename,
+    },
+    // Chrome otherwise saves a blob tab under the blob id (a UUID).
+    displayTitle: true,
     defaultStyle: {
       font: "Gothic",
     },
@@ -544,49 +580,12 @@ export async function generateMycometerSurfaceFungiReport({
                   {
                     stack: [
                       {
-                        text: [
-                          { text: "Notes: ", bold: true },
-
-                        ],
+                        text: [{ text: "Notes: ", bold: true }],
                         style: "notes",
                         margin: [0, 0, 0, 6],
                       },
                       {
                         text: "MSFV = Mycometer Surface Fungi Value",
-                        style: "notes",
-                        margin: [0, 0, 0, 6],
-                      },
-                                 
-                      {
-                        text: "A - Normal (MSFV: ≤20)",
-                        style: "notes",
-                        bold: true,
-                        margin: [0, 2, 0, 2],
-                      },
-                      {
-                        text: "The level of fungi on the surface is within the normal range and corresponds to the level found on visually clean surfaces in buildings with no visual (or smell) signs of fungal growth or moisture problems. Category A is the success criteria for post remediation clearance.",
-                        style: "notes",
-                        margin: [0, 0, 0, 6],
-                      },
-                      {
-                        text: "B - Elevated (MSFV 21–135)",
-                        style: "notes",
-                        bold: true,
-                        margin: [0, 2, 0, 2],
-                      },
-                      {
-                        text: "The level of fungi on the surface is elevated and corresponds to the level found on visually dusty/dirty surfaces in buildings without mold/moisture problems. It is indicative of a reservoir of fungal particles accumulating in the dust because of insufficient cleaning. It can also be due to low density growth or old dried out fungal growth (dead) due to reduction in enzyme activity.",
-                        style: "notes",
-                        margin: [0, 0, 0, 6],
-                      },
-                      {
-                        text: "C - High (MSFV >135)",
-                        style: "notes",
-                        bold: true,
-                        margin: [0, 2, 0, 2],
-                      },
-                      {
-                        text: "The level of fungi is high above the normal background level and above the levels found in normal household dust. A category C result means that there is fungal growth on the surface.",
                         style: "notes",
                         margin: [0, 0, 0, 0],
                       },
@@ -609,83 +608,163 @@ export async function generateMycometerSurfaceFungiReport({
           },
           {
             table: {
-              headerRows: 1,
-              widths: ["11%", "30%", "14%", "8%", "10%", "10%", "17%"],
-              heights: () => 8 * 1.15 * 3,
-              body: [
-                [
-                  {
-                    text: "Sample ID",
-                    style: "tableHeader",
-                    fillColor: "#f0f0f0",
-                  },
-                  {
-                    text: "Sample Location",
-                    style: "tableHeader",
-                    fillColor: "#f0f0f0",
-                  },
-                  {
-                    text: "Cleaning Stage",
-                    style: "tableHeader",
-                    fillColor: "#f0f0f0",
-                  },
-                  {
-                    text: "Blank Value",
-                    style: "tableHeader",
-                    fillColor: "#f0f0f0",
-                    alignment: "center",
-                  },
-                  {
-                    text: "Analysis Value",
-                    style: "tableHeader",
-                    fillColor: "#f0f0f0",
-                    alignment: "center",
-                  },
-                  {
-                    text: "MSFV",
-                    style: "tableHeader",
-                    fillColor: "#f0f0f0",
-                    alignment: "center",
-                  },
-                  {
-                    text: "Result Category",
-                    style: "tableHeader",
-                    fillColor: "#f0f0f0",
-                    alignment: "center",
-                  },
-                ],
-                ...(sampleRows.length > 0
-                  ? sampleRows
-                  : [
+                  headerRows: 1,
+                  widths: ["14%", "*", "15%", "8%", "10%", "8%", "12%"],
+                  body: [
+                    [
+                      {
+                        text: "Sample ID",
+                        style: "tableHeader",
+                        fillColor: "#f0f0f0",
+                        alignment: "left",
+                      },
+                      {
+                        text: "Sample Location",
+                        style: "tableHeader",
+                        fillColor: "#f0f0f0",
+                        alignment: "left",
+                      },
+                      {
+                        text: "Cleaning Stage",
+                        style: "tableHeader",
+                        fillColor: "#f0f0f0",
+                        alignment: "center",
+                      },
+                      {
+                        text: "Blank Value",
+                        style: "tableHeader",
+                        fillColor: "#f0f0f0",
+                        alignment: "center",
+                      },
+                      {
+                        text: "Analysis Value",
+                        style: "tableHeader",
+                        fillColor: "#f0f0f0",
+                        alignment: "center",
+                      },
+                      {
+                        text: "MSFV",
+                        style: "tableHeader",
+                        fillColor: "#f0f0f0",
+                        alignment: "center",
+                      },
+                      {
+                        text: "Result",
+                        style: "tableHeader",
+                        fillColor: "#f0f0f0",
+                        alignment: "center",
+                      },
+                    ],
+                    ...(sampleRows.length > 0
+                      ? sampleRows
+                      : [
+                          [
+                            {
+                              text: "No samples",
+                              colSpan: 7,
+                              alignment: "center",
+                              style: "tableContent",
+                            },
+                            {},
+                            {},
+                            {},
+                            {},
+                            {},
+                            {},
+                          ],
+                        ]),
+                  ],
+                },
+                layout: {
+                  hLineWidth: () => 0.5,
+                  vLineWidth: () => 0.5,
+                  hLineColor: () => "gray",
+                  vLineColor: () => "gray",
+                  paddingLeft: () => 3,
+                  paddingRight: () => 3,
+                  paddingTop: () => 2,
+                  paddingBottom: () => 2,
+                },
+                margin: [0, 0, 0, 10],
+              },
+              {
+                table: {
+                  headerRows: 1,
+                  widths: ["16%", "18%", "*"],
+                  body: [
+                    [
+                      {
+                        text: "Rating",
+                        style: "tableHeader",
+                        alignment: "center",
+                        fillColor: "#f0f0f0",
+                      },
+                      {
+                        text: "MSFV",
+                        style: "tableHeader",
+                        alignment: "center",
+                        fillColor: "#f0f0f0",
+                      },
+                      {
+                        text: "Descriptor",
+                        style: "tableHeader",
+                        alignment: "center",
+                        fillColor: "#f0f0f0",
+                      },
+                    ],
+                    ...[
                       [
-                        {
-                          text: "No samples",
-                          colSpan: 7,
-                          alignment: "center",
-                          style: "tableContent",
-                        },
-                        {},
-                        {},
-                        {},
-                        {},
-                        {},
-                        {},
+                        "A",
+                        "Normal",
+                        "≤20",
+                        "The level of fungi on the surface is within the normal range and corresponds to the level found on visually clean surfaces in buildings with no visual (or smell) signs of fungal growth or moisture problems. Category A is the success criteria for post remediation clearance.",
                       ],
+                      [
+                        "B",
+                        "Elevated",
+                        "21–135",
+                        "The level of fungi on the surface is elevated and corresponds to the level found on visually dusty/dirty surfaces in buildings without mold/moisture problems. It is indicative of a reservoir of fungal particles accumulating in the dust because of insufficient cleaning. It can also be due to low density growth or old dried out fungal growth (dead) due to reduction in enzyme activity.",
+                      ],
+                      [
+                        "C",
+                        "High",
+                        ">135",
+                        "The level of fungi is high above the normal background level and above the levels found in normal household dust. A category C result means that there is fungal growth on the surface.",
+                      ],
+                    ].map(([code, label, range, descriptor]) => [
+                      {
+                        text: `${code}\n${label}`,
+                        fontSize: 8,
+                        alignment: "center",
+                        color: "black",
+                        bold: true,
+                        fillColor: CATEGORY_FILL[code],
+                      },
+                      {
+                        text: range,
+                        fontSize: 8,
+                        alignment: "center",
+                      },
+                      {
+                        text: descriptor,
+                        fontSize: 8,
+                      },
                     ]),
-              ],
-            },
-            layout: {
-              hLineWidth: () => 0.5,
-              vLineWidth: () => 0.5,
-              hLineColor: () => "gray",
-              vLineColor: () => "gray",
-              paddingLeft: () => 3,
-              paddingRight: () => 3,
-              paddingTop: () => 2,
-              paddingBottom: () => 2,
-            },
-            margin: [0, 0, 0, 10],
-          },
+                  ],
+                },
+                layout: {
+                  hLineWidth: () => 0.5,
+                  vLineWidth: () => 0.5,
+                  hLineColor: () => "gray",
+                  vLineColor: () => "gray",
+                  paddingLeft: () => 3,
+                  paddingRight: () => 3,
+                  paddingTop: () => 3,
+                  paddingBottom: () => 3,
+                },
+                margin: [0, 0, 0, 10],
+              },
+          versionControlContent,
         ],
       },
     ],
@@ -744,15 +823,15 @@ export async function generateMycometerSurfaceFungiReport({
     },
   });
 
-  if (returnPdfData) {
+  if (returnPdfData || returnPdfBundle) {
     return new Promise((resolve) => {
-      pdfDoc.getDataUrl((dataUrl) => resolve(dataUrl));
+      pdfDoc.getDataUrl((dataUrl) => {
+        resolve(returnPdfBundle ? { dataUrl, filename } : dataUrl);
+      });
     });
   }
 
-  if (openInNewTab) {
-    pdfDoc.open({}, undefined, filename);
-  } else {
-    pdfDoc.download(filename);
-  }
+  void openInNewTab;
+  // Opening a blob tab saves as a UUID. Download uses the report name, including [DRAFT].
+  pdfDoc.download(filename);
 }

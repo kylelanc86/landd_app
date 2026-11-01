@@ -19,9 +19,11 @@ import {
 import {
   Download as DownloadIcon,
   Edit as EditIcon,
+  Delete as DeleteIcon,
   Description as DescriptionIcon,
   TableChart as TableChartIcon,
   PhotoLibrary as PhotoLibraryIcon,
+  History as HistoryIcon,
 } from "@mui/icons-material";
 import { format } from "date-fns";
 
@@ -33,15 +35,21 @@ const ReportsList = ({
   onDownload,
   onPrint,
   onRevise,
+  onViewHistory,
   onViewImages,
   onViewCOC,
   onExportCSV,
+  onDelete,
   onRowClick,
   processingReport = { reportId: null, action: null },
 }) => {
   const canOpenRow = (report) => {
     if (typeof onRowClick !== "function") return false;
-    if (["shift", "clearance", "enclosure_certificate"].includes(report.type)) {
+    if (
+      ["shift", "clearance", "enclosure_certificate", "mycometer"].includes(
+        report.type,
+      )
+    ) {
       return true;
     }
     return (
@@ -52,6 +60,8 @@ const ReportsList = ({
   };
   const showReviseButton = (report) => {
     if (!onRevise) return false;
+    // Uploaded files are external documents and have no in-app revision.
+    if (report.type === "uploaded") return false;
     const s = report.status;
     const completeLike =
       s === "complete" ||
@@ -83,7 +93,15 @@ const ReportsList = ({
         (typeof approved !== "string" || String(approved).trim() !== "");
       return completeLike || hasApproval;
     }
+    if (report.type === "mycometer") {
+      return s === "Authorised" || completeLike;
+    }
     return completeLike;
+  };
+
+  const showHistoryButton = (report) => {
+    if (!onViewHistory || report.type === "uploaded") return false;
+    return Number(report.revision) > 0;
   };
 
   const getCategoryTitle = () => {
@@ -98,6 +116,8 @@ const ReportsList = ({
         return "Fibre ID Reports";
       case "fibre-count":
         return "Fibre Count Reports";
+      case "mycometer-sampling":
+        return "Mycometer Reports";
       default:
         return "Reports";
     }
@@ -108,6 +128,7 @@ const ReportsList = ({
       case "complete":
       case "completed":
       case "approved":
+      case "authorised":
       case "final":
         return "success";
       case "in progress":
@@ -192,6 +213,8 @@ const ReportsList = ({
     );
   }
 
+  const showStatusColumn = reports.some((report) => report.type !== "uploaded");
+
   return (
     <Paper sx={{ p: 3, px: { xs: 1.5, sm: 3 } }}>
       <Typography variant="h6" gutterBottom>
@@ -204,7 +227,7 @@ const ReportsList = ({
             <TableRow sx={{ "&:hover": { backgroundColor: "transparent" } }}>
               <TableCell>Date</TableCell>
               <TableCell>Description</TableCell>
-              <TableCell>Status</TableCell>
+              {showStatusColumn && <TableCell>Status</TableCell>}
               <TableCell align="center">Actions</TableCell>
             </TableRow>
           </TableHead>
@@ -277,13 +300,17 @@ const ReportsList = ({
                     </Typography>
                   )}
                 </TableCell>
-                <TableCell>
-                  <Chip
-                    label={formatStatus(report.status)}
-                    color={getStatusColor(report.status)}
-                    size="small"
-                  />
-                </TableCell>
+                {showStatusColumn && (
+                  <TableCell>
+                    {report.type === "uploaded" ? null : (
+                      <Chip
+                        label={formatStatus(report.status)}
+                        color={getStatusColor(report.status)}
+                        size="small"
+                      />
+                    )}
+                  </TableCell>
+                )}
                 <TableCell
                   align="center"
                   onClick={(e) => e.stopPropagation()}
@@ -373,7 +400,40 @@ const ReportsList = ({
                           </IconButton>
                         </Tooltip>
                       )}
+                    {report.type === "uploaded" && onDelete && (
+                      <Tooltip title="Delete uploaded report">
+                        <IconButton
+                          size="small"
+                          onClick={() => onDelete(report)}
+                          color="error"
+                          disabled={
+                            (processingReport.reportId === report.id ||
+                              processingReport.reportId === report.data?._id) &&
+                            processingReport.action === "delete"
+                          }
+                        >
+                          {(processingReport.reportId === report.id ||
+                            processingReport.reportId === report.data?._id) &&
+                          processingReport.action === "delete" ? (
+                            <CircularProgress size={20} />
+                          ) : (
+                            <DeleteIcon />
+                          )}
+                        </IconButton>
+                      </Tooltip>
+                    )}
                     {/* Revise: completed-style statuses, or asbestos assessment that is still final-authorised while ready for review */}
+                    {showHistoryButton(report) && (
+                      <Tooltip title="Revision history">
+                        <IconButton
+                          size="small"
+                          onClick={() => onViewHistory(report)}
+                          color="primary"
+                        >
+                          <HistoryIcon />
+                        </IconButton>
+                      </Tooltip>
+                    )}
                     {showReviseButton(report) && (
                         <Button
                           size="small"

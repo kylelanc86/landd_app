@@ -7,6 +7,10 @@ const {
   YES_NO_OPTIONS,
   TURNAROUND_OPTIONS,
 } = require('../models/MycometerJob');
+
+const AIR_LIKE_SAMPLE_TYPES = ['Air Fungi', 'Air Allergen'];
+const DEFAULT_AIR_FLOWMETER = 'MAIR003';
+
 const User = require('../models/User');
 const { sendMail } = require('../services/mailer');
 const {
@@ -21,6 +25,16 @@ const {
 } = require('../utils/reportFilenames');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
+const {
+  readRevisionRequest,
+  archiveSupersededPdf,
+  rollbackArchive,
+  sendRevisionError,
+  notifyEmployeeRevision,
+} = require('../services/reportRevisionService');
+const {
+  invalidateReportCategories,
+} = require('../services/projectReportCategoriesService');
 
 const populateJob = [
   {
@@ -111,6 +125,70 @@ function findAnalysisMeta(job, sampleType) {
 
 function findSamplingMeta(job, sampleType) {
   return (job.samplingMeta || []).find((meta) => meta.sampleType === sampleType);
+}
+
+function isAirLikeSampleType(sampleType) {
+  return AIR_LIKE_SAMPLE_TYPES.includes(sampleType);
+}
+
+/**
+ * Air Fungi and Air Allergen collected on the same job share sampler, date,
+ * flowmeter, and sample references. Analysis values stay on each type.
+ */
+function syncAirSamplingSiblings(job, sourceType) {
+  if (!isAirLikeSampleType(sourceType)) return;
+  const siblings = AIR_LIKE_SAMPLE_TYPES.filter(
+    (type) =>
+      type !== sourceType && (job.scopeOfWorks || []).includes(type),
+  );
+  if (siblings.length === 0) return;
+
+  const sourceMeta = findSamplingMeta(job, sourceType);
+  const sourceSamples = (job.samples || []).filter(
+    (sample) => sample.sampleType === sourceType,
+  );
+
+  siblings.forEach((sibling) => {
+    const siblingMeta = findSamplingMeta(job, sibling);
+    if (siblingMeta?.samplingComplete) return;
+
+    if (sourceMeta) {
+      upsertSamplingMeta(job, sibling, {
+        sampledBy: sourceMeta.sampledBy,
+        sampledByName: sourceMeta.sampledByName,
+        sampleDate: sourceMeta.sampleDate,
+        flowmeter: sourceMeta.flowmeter || DEFAULT_AIR_FLOWMETER,
+      });
+    }
+
+    const existingSibling = (job.samples || []).filter(
+      (sample) => sample.sampleType === sibling,
+    );
+    const synced = sourceSamples.map((sample) => {
+      const existing =
+        existingSibling.find(
+          (item) => item.sampleId && item.sampleId === sample.sampleId,
+        ) || {};
+      return {
+        _id: existing._id,
+        sampleType: sibling,
+        sampleId: sample.sampleId,
+        sampleLocation: sample.sampleLocation,
+        flowRate: sample.flowRate,
+        qualityControl:
+          sibling === 'Air Fungi'
+            ? sample.qualityControl || existing.qualityControl
+            : undefined,
+        blankValue: existing.blankValue,
+        analysisValue: existing.analysisValue,
+      };
+    });
+
+    job.samples = [
+      ...(job.samples || []).filter((sample) => sample.sampleType !== sibling),
+      ...synced,
+    ];
+  });
 }
 
 function formatUserDisplayName(user) {
@@ -393,6 +471,10 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
       job.scopeOfWorks = sanitizeScopeOfWorks(req.body.scopeOfWorks);
     }
 
+    if (typeof req.body.includeFaiOnReport === 'boolean') {
+      job.includeFaiOnReport = req.body.includeFaiOnReport;
+    }
+
     if (req.body.status !== undefined) {
       if (!['In Progress', 'Completed'].includes(req.body.status)) {
         return res.status(400).json({ message: 'Invalid status' });
@@ -404,7 +486,9 @@ router.put('/:id', auth, checkPermission(['projects.edit']), async (req, res) =>
             message: 'Cannot close a job with no reports in scope',
           });
         }
-        const allAuthorised = scope.every((sampleType) => {
+        const allAuthorised = scope
+          .filter((sampleType) => sampleType !== 'Air FAI')
+          .every((sampleType) => {
           const analysisMeta = (job.analysisMeta || []).find(
             (item) => item.sampleType === sampleType
           );
@@ -436,9 +520,12 @@ router.post(
   checkPermission(['projects.edit']),
   async (req, res) => {
     try {
-      const { sampleType, sampledBy, sampleDate } = req.body;
+      const { sampledBy, sampleDate } = req.body;
+      const requestedTypes = Array.isArray(req.body.sampleTypes) && req.body.sampleTypes.length
+        ? req.body.sampleTypes
+        : [req.body.sampleType];
 
-      if (!SAMPLE_TYPES.includes(sampleType)) {
+      if (!requestedTypes.every((type) => SAMPLE_TYPES.includes(type))) {
         return res.status(400).json({ message: 'Invalid report type' });
       }
       if (!sampledBy) {
@@ -453,24 +540,53 @@ router.post(
         return res.status(404).json({ message: 'Mycometer job not found' });
       }
 
-      if ((job.scopeOfWorks || []).includes(sampleType)) {
+      const alreadyAdded = requestedTypes.find((type) =>
+        (job.scopeOfWorks || []).includes(type),
+      );
+      if (alreadyAdded) {
         return res.status(400).json({
-          message: `${sampleType} report already exists on this job`,
+          message: `${alreadyAdded} report already exists on this job`,
         });
       }
 
-      job.scopeOfWorks = [...(job.scopeOfWorks || []), sampleType];
-      const samplerSnapshot = await resolvePersonSnapshot(sampledBy, sampleType, {
-        userId: undefined,
-        name: undefined,
-        certification: undefined,
-      });
-      upsertSamplingMeta(job, sampleType, {
-        sampledBy: samplerSnapshot.userId,
-        sampledByName: samplerSnapshot.name,
-        mycometerCertificationNumber: samplerSnapshot.certification,
-        sampleDate,
-      });
+      const donorType = AIR_LIKE_SAMPLE_TYPES.find(
+        (type) =>
+          (job.scopeOfWorks || []).includes(type) &&
+          (job.samples || []).some((sample) => sample.sampleType === type),
+      );
+
+      for (const sampleType of requestedTypes) {
+        job.scopeOfWorks = [...(job.scopeOfWorks || []), sampleType];
+        const samplerSnapshot = await resolvePersonSnapshot(sampledBy, sampleType, {
+          userId: undefined,
+          name: undefined,
+          certification: undefined,
+        });
+        upsertSamplingMeta(job, sampleType, {
+          sampledBy: samplerSnapshot.userId,
+          sampledByName: samplerSnapshot.name,
+          mycometerCertificationNumber: samplerSnapshot.certification,
+          sampleDate,
+          ...(isAirLikeSampleType(sampleType)
+            ? { flowmeter: req.body.flowmeter || DEFAULT_AIR_FLOWMETER }
+            : {}),
+        });
+
+        if (isAirLikeSampleType(sampleType) && donorType) {
+          const donorSamples = (job.samples || []).filter(
+            (sample) => sample.sampleType === donorType,
+          );
+          const copied = donorSamples.map((sample) => ({
+            sampleType,
+            sampleId: sample.sampleId,
+            sampleLocation: sample.sampleLocation,
+            flowRate: sample.flowRate,
+            qualityControl:
+              sampleType === 'Air Fungi' ? sample.qualityControl || 'No' : undefined,
+          }));
+          job.samples = [...(job.samples || []), ...copied];
+        }
+      }
 
       job.updatedBy = req.user?.id || req.user?._id;
       const updatedJob = await job.save();
@@ -579,6 +695,14 @@ router.delete(
 
       job.updatedBy = req.user?.id || req.user?._id;
       const updatedJob = await job.save();
+      try {
+        const {
+          invalidateReportCategories,
+        } = require('../services/projectReportCategoriesService');
+        await invalidateReportCategories(job.projectId);
+      } catch (categoryErr) {
+        console.error('Error invalidating report categories after Mycometer report delete:', categoryErr);
+      }
       await respondWithJob(res, updatedJob._id);
     } catch (err) {
       res.status(400).json({ message: err.message });
@@ -663,6 +787,7 @@ router.put(
       }
 
       job.updatedBy = req.user?.id || req.user?._id;
+      syncAirSamplingSiblings(job, sampleType);
 
       const updatedJob = await job.save();
       await respondWithJob(res, updatedJob._id);
@@ -759,6 +884,120 @@ router.post(
   }
 );
 
+// POST /api/mycometer-jobs/:id/revise-report — from Project Reports
+router.post(
+  '/:id/revise-report',
+  auth,
+  checkPermission(['projects.edit']),
+  async (req, res) => {
+    let archive = null;
+    let saved = false;
+    try {
+      const reportKey = req.body?.reportKey === 'Air Sampling'
+        ? 'Air Sampling'
+        : 'Surface Fungi';
+      const job = await MycometerJob.findById(req.params.id);
+      if (!job) {
+        return res.status(404).json({ message: 'Mycometer job not found' });
+      }
+
+      const types = reportKey === 'Air Sampling'
+        ? AIR_LIKE_SAMPLE_TYPES.filter((type) => (job.scopeOfWorks || []).includes(type))
+        : (job.scopeOfWorks || []).includes('Surface Fungi')
+          ? ['Surface Fungi']
+          : [];
+      if (types.length === 0) {
+        return res.status(400).json({
+          message: 'That Mycometer report is not part of this job.',
+          unchanged: true,
+        });
+      }
+
+      const metas = types
+        .map((type) => findAnalysisMeta(job, type))
+        .filter(Boolean);
+      const authorised = metas.some(
+        (meta) => meta.reportApprovedBy && String(meta.reportApprovedBy).trim()
+      );
+      if (!authorised) {
+        return res.status(400).json({
+          message: 'This report cannot be revised until it has been authorised.',
+          unchanged: true,
+        });
+      }
+
+      const request = readRevisionRequest(req);
+      const currentRevision = metas.reduce(
+        (max, meta) => Math.max(max, Number(meta.revision) || 0),
+        0
+      );
+      if (!request.informal) {
+        archive = await archiveSupersededPdf({
+          reportType: 'mycometer',
+          reportId: job._id,
+          reportKey,
+          projectId: job.projectId,
+          currentRevision,
+          reason: request.reason,
+          revisedBy: req.user._id || req.user.id,
+          pdfBuffer: request.pdfBuffer,
+          filename: request.filename,
+        });
+      }
+
+      const nextRevision = currentRevision + 1;
+      types.forEach((type) => {
+        const existing = findAnalysisMeta(job, type);
+        upsertSamplingMeta(job, type, { samplingComplete: false });
+        upsertAnalysisMeta(job, type, {
+          analysisComplete: false,
+          reportApprovedBy: '',
+          reportViewedAt: null,
+          authorisationRequestedBy: null,
+          authorisationRequestedByEmail: '',
+          revision: request.informal
+            ? (Number(existing?.revision) || 0)
+            : nextRevision,
+        });
+      });
+      // Closed jobs are hidden from Mycometer Sampling Jobs. Reopen so the
+      // revised report can be edited and authorised again.
+      job.status = 'In Progress';
+      job.updatedBy = req.user?.id || req.user?._id;
+      await job.save();
+      saved = true;
+
+      try {
+        await invalidateReportCategories(job.projectId);
+      } catch (categoryErr) {
+        console.error('Error invalidating report categories after Mycometer revise:', categoryErr);
+      }
+
+      const notificationWarning = request.informal
+        ? null
+        : await notifyEmployeeRevision({
+            user: req.user,
+            projectId: job.projectId,
+            reportLabel: reportKey === 'Air Sampling'
+              ? 'Mycometer Air Sampling report'
+              : 'Mycometer Surface Fungi report',
+            revisionNumber: nextRevision,
+            reason: request.reason,
+          });
+
+      res.json({
+        message: request.informal
+          ? `${reportKey} report reopened for editing without a new revision. Re-authorise when ready.`
+          : `${reportKey} report reopened for editing. Re-authorise when ready.`,
+        notificationWarning,
+      });
+    } catch (err) {
+      if (!saved) await rollbackArchive(archive);
+      return sendRevisionError(res, err);
+    }
+  }
+);
+
 // PATCH /api/mycometer-jobs/:id/sample-types/:sampleType/reopen
 // Admin-only: reopen sampling/analysis for editing (mirrors air monitoring shift reopen).
 router.patch(
@@ -796,11 +1035,22 @@ router.patch(
         samplingComplete: false,
       });
 
-      const wasAuthorised = Boolean(analysisMeta?.reportApprovedBy);
-      const nextRevision = wasAuthorised
-        ? (typeof analysisMeta.revision === 'number' ? analysisMeta.revision : 0) +
-          1
-        : analysisMeta?.revision || 0;
+      const wasAuthorised = Boolean(
+        analysisMeta?.reportApprovedBy &&
+          String(analysisMeta.reportApprovedBy).trim()
+      );
+      const airSiblingAuthorised =
+        isAirLikeSampleType(sampleType) &&
+        AIR_LIKE_SAMPLE_TYPES.some((type) => {
+          const meta = findAnalysisMeta(job, type);
+          return meta?.reportApprovedBy && String(meta.reportApprovedBy).trim();
+        });
+      if (wasAuthorised || airSiblingAuthorised) {
+        return res.status(400).json({
+          message:
+            'This report has been authorised. Revise it from the project reports page so the revision is recorded there.',
+        });
+      }
 
       upsertAnalysisMeta(job, sampleType, {
         analysisComplete: false,
@@ -808,7 +1058,7 @@ router.patch(
         reportViewedAt: null,
         authorisationRequestedBy: null,
         authorisationRequestedByEmail: '',
-        revision: nextRevision,
+        revision: analysisMeta?.revision || 0,
         // Preserve first reportIssueDate / reportReference for stable filenames.
       });
 
@@ -1035,6 +1285,16 @@ router.post(
       });
       job.updatedBy = req.user?.id || req.user?._id;
       const updatedJob = await job.save();
+      const shouldNotify = req.body?.notify !== false;
+
+      try {
+        const {
+          addReportCategories,
+        } = require('../services/projectReportCategoriesService');
+        await addReportCategories(job.projectId, 'mycometer-sampling');
+      } catch (categoryErr) {
+        console.error('Error adding Mycometer report category:', categoryErr);
+      }
 
       const sampleTypeSlug =
         {
@@ -1043,12 +1303,14 @@ router.post(
           'Air Allergen': 'air-allergen',
           'Air FAI': 'air-fai',
         }[sampleType] || sampleType.toLowerCase().replace(/\s+/g, '-');
+      if (shouldNotify) {
       await notifyAuthorisationRequesterOnApproval({
         authorisationRequestedBy: analysisMeta.authorisationRequestedBy,
         wasAlreadyAuthorised,
         isNowAuthorised: true,
         approverName: approver,
-        reportTypeLabel: `Mycometer ${sampleType} report`,
+        reportTypeLabel:
+          req.body?.reportLabel || `Mycometer ${sampleType} report`,
         subjectIdentifier: projectID,
         details: [
           { label: 'Project', value: `${projectName} (${projectID})` },
@@ -1058,6 +1320,7 @@ router.post(
           job._id
         }/${sampleTypeSlug}`,
       });
+      }
 
       await respondWithJob(res, updatedJob._id);
     } catch (err) {
@@ -1127,6 +1390,12 @@ router.post(
       job.updatedBy = req.user?.id || req.user?._id;
       await job.save();
 
+      if (req.body?.notify === false) {
+        return res.json({ message: 'Authorisation request recorded' });
+      }
+
+      const reportLabel = req.body?.reportLabel || sampleType;
+
       const projectName = job.projectId?.name || 'Unknown Project';
       const projectID = job.projectId?.projectID || 'N/A';
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -1136,12 +1405,12 @@ router.post(
       const emailPromises = reportProoferUsers.map(async (user) => {
         await sendMail({
           to: user.email,
-          subject: `Report Authorisation Required - ${projectID}: Mycometer ${sampleType}`,
+          subject: `Report Authorisation Required - ${projectID}: Mycometer ${reportLabel}`,
           text: `
-A Mycometer ${sampleType} report is ready for authorisation.
+A Mycometer ${reportLabel} report is ready for authorisation.
 
 Project: ${projectName} (${projectID})
-Sample Type: ${sampleType}
+Sample Type: ${reportLabel}
 Requested by: ${requesterName}
 
 Please review and authorise the report at: ${jobUrl}
@@ -1154,11 +1423,11 @@ Please review and authorise the report at: ${jobUrl}
               <div style="color: #333; line-height: 1.6;">
                 <h2 style="color: rgb(25, 138, 44); margin-bottom: 20px;">Report Authorisation Required</h2>
                 <p>Hello ${user.firstName},</p>
-                <p>A Mycometer ${sampleType} report is ready for your authorisation:</p>
+                <p>A Mycometer ${reportLabel} report is ready for your authorisation:</p>
                 <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
                   <p style="margin: 5px 0;"><strong>Project:</strong> ${projectName}</p>
                   <p style="margin: 5px 0;"><strong>Project ID:</strong> ${projectID}</p>
-                  <p style="margin: 5px 0;"><strong>Sample Type:</strong> ${sampleType}</p>
+                  <p style="margin: 5px 0;"><strong>Sample Type:</strong> ${reportLabel}</p>
                   <p style="margin: 5px 0;"><strong>Requested by:</strong> ${requesterName}</p>
                 </div>
                 <div style="text-align: center; margin: 30px 0;">
@@ -1204,7 +1473,16 @@ router.delete(
         return res.status(404).json({ message: 'Mycometer job not found' });
       }
 
+      const projectId = job.projectId;
       await job.deleteOne();
+      try {
+        const {
+          invalidateReportCategories,
+        } = require('../services/projectReportCategoriesService');
+        await invalidateReportCategories(projectId);
+      } catch (categoryErr) {
+        console.error('Error invalidating report categories after Mycometer job delete:', categoryErr);
+      }
       res.json({ message: 'Mycometer job deleted successfully' });
     } catch (err) {
       res.status(500).json({ message: err.message });

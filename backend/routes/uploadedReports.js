@@ -60,11 +60,6 @@ const uploadedReportSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
-  status: {
-    type: String,
-    enum: ['completed', 'in_progress', 'draft'],
-    default: 'completed'
-  },
   asbestosRemovalist: {
     type: String,
     default: ''
@@ -103,7 +98,6 @@ router.post('/upload', requireAuth, checkTokenBlacklist, async (req, res) => {
       reportType,
       reportDate,
       description,
-      status,
       projectId,
       asbestosRemovalist
     } = req.body;
@@ -158,7 +152,6 @@ router.post('/upload', requireAuth, checkTokenBlacklist, async (req, res) => {
       mimeType: file.mimetype,
       reportDate: new Date(reportDate),
       description: description || '',
-      status: status || 'completed',
       asbestosRemovalist: asbestosRemovalist || '',
       uploadedBy: req.user._id
     });
@@ -196,8 +189,10 @@ router.get('/project/:projectId', requireAuth, checkTokenBlacklist, async (req, 
     }
 
     const reports = await UploadedReport.find(query)
+      .select('reportDate description originalFileName asbestosRemovalist uploadedBy reportType')
       .populate('uploadedBy', 'firstName lastName')
-      .sort({ reportDate: -1 });
+      .sort({ reportDate: -1 })
+      .lean();
 
     res.json(reports);
   } catch (error) {

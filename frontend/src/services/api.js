@@ -256,6 +256,7 @@ export const projectService = {
     if (params.limit) queryParams.append('limit', params.limit);
     // Status filtering is handled on the backend
     if (params.status) queryParams.append('status', params.status);
+    if (params.excludeStatus) queryParams.append('excludeStatus', params.excludeStatus);
     if (params.sortBy) queryParams.append('sortBy', params.sortBy);
     if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
 
@@ -321,7 +322,8 @@ export const shiftService = {
   create: (data) => api.post('/air-monitoring-shifts', data),
   update: (id, data) => api.patch(`/air-monitoring-shifts/${id}`, data),
   reopen: (id) => api.patch(`/air-monitoring-shifts/${id}/reopen`),
-  reviseReport: (id) => api.post(`/air-monitoring-shifts/${id}/revise-report`),
+  reviseReport: (id, payload = {}) =>
+    api.post(`/air-monitoring-shifts/${id}/revise-report`, payload),
   restore: (id) => api.patch(`/air-monitoring-shifts/${id}/restore`),
   delete: (id) => api.delete(`/air-monitoring-shifts/${id}`),
   sendForAuthorisation: (id) =>
@@ -496,8 +498,8 @@ export const asbestosAssessmentService = {
   archiveAsbestosAssessment: (id) => api.patch(`/assessments/${id}/archive`),
   unlockAsbestosAssessment: (id) => api.patch(`/assessments/${id}/unlock`),
   /** Reopen a final-authorised assessment for editing (Project Reports → Revise). Requires asbestos.edit. */
-  reviseAsbestosAssessmentReport: (id) =>
-    api.patch(`/assessments/${id}/revise-report`),
+  reviseAsbestosAssessmentReport: (id, payload = {}) =>
+    api.patch(`/assessments/${id}/revise-report`, payload),
   sendForAuthorisation: (id) => api.post(`/assessments/${id}/send-for-authorisation`),
   recordReportViewed: (id) => api.patch(`/assessments/${id}/report-viewed`),
   deleteAsbestosAssessment: (id) => api.delete(`/assessments/${id}`),
@@ -565,11 +567,18 @@ export const clientSuppliedJobsService = {
   update: (id, data) => api.put(`/client-supplied-jobs/${id}`, data),
   delete: (id) => api.delete(`/client-supplied-jobs/${id}`),
   archive: (id) => api.put(`/client-supplied-jobs/${id}/archive`),
-  reviseReport: (id) => api.post(`/client-supplied-jobs/${id}/revise-report`),
+  reviseReport: (id, payload = {}) =>
+    api.post(`/client-supplied-jobs/${id}/revise-report`, payload),
   getByProject: (projectId) => api.get(`/client-supplied-jobs/by-project/${projectId}`),
   sendForApproval: (id) => api.post(`/client-supplied-jobs/${id}/send-for-approval`),
   authorise: (id) => api.post(`/client-supplied-jobs/${id}/authorise`),
   sendForAuthorisation: (id) => api.post(`/client-supplied-jobs/${id}/send-for-authorisation`)
+};
+
+export const reportRevisionService = {
+  list: (params) => api.get('/report-revisions', { params }),
+  downloadPdf: (id) =>
+    api.get(`/report-revisions/${id}/pdf`, { responseType: 'blob' }),
 };
 
 export const mycometerJobsService = {
@@ -601,6 +610,8 @@ export const mycometerJobsService = {
     api.patch(
       `/mycometer-jobs/${id}/sample-types/${encodeURIComponent(sampleType)}/reopen`,
     ),
+  reviseReport: (id, payload) =>
+    api.post(`/mycometer-jobs/${id}/revise-report`, payload),
   updateAnalysis: (id, sampleType, data) =>
     api.put(
       `/mycometer-jobs/${id}/sample-types/${encodeURIComponent(sampleType)}/analysis`,
@@ -611,13 +622,15 @@ export const mycometerJobsService = {
       `/mycometer-jobs/${id}/sample-types/${encodeURIComponent(sampleType)}/report-viewed`,
       data,
     ),
-  authorise: (id, sampleType) =>
+  authorise: (id, sampleType, data) =>
     api.post(
       `/mycometer-jobs/${id}/sample-types/${encodeURIComponent(sampleType)}/authorise`,
+      data || {},
     ),
-  sendForAuthorisation: (id, sampleType) =>
+  sendForAuthorisation: (id, sampleType, data) =>
     api.post(
       `/mycometer-jobs/${id}/sample-types/${encodeURIComponent(sampleType)}/send-for-authorisation`,
+      data || {},
     ),
   delete: (id) => api.delete(`/mycometer-jobs/${id}`),
 };

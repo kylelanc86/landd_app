@@ -34,6 +34,14 @@ const {
   reopenRemovalJob,
   invalidateProjectReportCategories,
 } = require('../utils/reportReviseHelpers');
+const {
+  readRevisionRequest,
+  archiveSupersededPdf,
+  rollbackArchive,
+  sendRevisionError,
+  notifyEmployeeRevision,
+  REPORT_LABELS,
+} = require('../services/reportRevisionService');
 
 async function freezeShiftReportReference(shift) {
   const issueDate = shift.reportIssueDate || new Date();
@@ -760,6 +768,8 @@ router.patch('/:id/reopen', auth, checkPermission(['admin.update']), async (req,
 
 // POST /api/air-monitoring-shifts/:id/revise-report — from Project Reports
 router.post('/:id/revise-report', auth, checkPermission(['jobs.edit', 'jobs.authorize_reports']), async (req, res) => {
+  let archive = null;
+  let saved = false;
   try {
     const shift = await Shift.findById(req.params.id);
     if (!shift) {
@@ -772,11 +782,39 @@ router.post('/:id/revise-report', auth, checkPermission(['jobs.edit', 'jobs.auth
     if (!reportable) {
       return res.status(400).json({
         message: 'This shift report cannot be revised from Project Reports until it is complete or authorised.',
+        unchanged: true,
+      });
+    }
+
+    const request = readRevisionRequest(req);
+    const isLead = shift.jobModel === 'LeadRemovalJob';
+    const reportType = isLead ? 'lead_shift' : 'shift';
+    const currentRevision = typeof shift.revision === 'number' ? shift.revision : 0;
+    let projectId = null;
+    if (shift.job) {
+      const JobModel = isLead ? LeadRemovalJob : AsbestosRemovalJob;
+      const parent = await JobModel.findById(shift.job).select('projectId').lean();
+      projectId = parent?.projectId || null;
+    }
+
+    if (!request.informal) {
+      archive = await archiveSupersededPdf({
+        reportType,
+        reportId: shift._id,
+        reportKey: reportType,
+        projectId,
+        currentRevision,
+        reason: request.reason,
+        revisedBy: req.user._id || req.user.id,
+        pdfBuffer: request.pdfBuffer,
+        filename: request.filename,
       });
     }
 
     shift.status = 'ongoing';
-    shift.revision = (typeof shift.revision === 'number' ? shift.revision : 0) + 1;
+    if (!request.informal) {
+      shift.revision = currentRevision + 1;
+    }
     shift.reportApprovedBy = undefined;
     shift.markModified('reportApprovedBy');
     shift.reportViewedAt = null;
@@ -784,12 +822,12 @@ router.post('/:id/revise-report', auth, checkPermission(['jobs.edit', 'jobs.auth
       shift.deletedAt = null;
     }
     await shift.save();
+    saved = true;
     await Shift.updateOne(
       { _id: shift._id },
       { $unset: { reportApprovedBy: 1 } },
     );
 
-    const isLead = shift.jobModel === 'LeadRemovalJob';
     if (shift.job && (shift.jobModel === 'AsbestosRemovalJob' || !shift.jobModel)) {
       await syncAirMonitoringForJob(shift.job);
     }
@@ -799,18 +837,31 @@ router.post('/:id/revise-report', auth, checkPermission(['jobs.edit', 'jobs.auth
       jobModel: isLead ? 'LeadRemovalJob' : 'AsbestosRemovalJob',
     });
 
-    const projectId = job?.projectId;
-    await invalidateProjectReportCategories(projectId);
+    await invalidateProjectReportCategories(job?.projectId || projectId);
 
     const label = isLead ? 'Lead monitoring' : 'Air monitoring';
+    const notificationWarning = request.informal
+      ? null
+      : await notifyEmployeeRevision({
+          user: req.user,
+          projectId: job?.projectId || projectId,
+          reportLabel: REPORT_LABELS[reportType],
+          revisionNumber: currentRevision + 1,
+          reason: request.reason,
+        });
     res.json({
-      message: `${label} report reopened for editing. The job is back in progress — re-authorise when ready.`,
+      message: request.informal
+        ? `${label} report reopened for editing without a new revision. Re-authorise when ready.`
+        : `${label} report reopened for editing. The job is back in progress — re-authorise when ready.`,
+      notificationWarning,
       shift,
       job,
     });
   } catch (error) {
+    if (!saved) await rollbackArchive(archive);
+    if (error.status || error.code) return sendRevisionError(res, error);
     console.error('Error revising shift report:', error);
-    res.status(500).json({ message: error.message || 'Failed to revise shift report' });
+    return sendRevisionError(res, error);
   }
 });
 

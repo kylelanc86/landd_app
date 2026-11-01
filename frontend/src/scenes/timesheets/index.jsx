@@ -48,7 +48,7 @@ import { debounce } from "lodash";
 const Timesheets = () => {
   const theme = useTheme();
   const { currentUser, loading: authLoading } = useAuth();
-  const { activeStatuses } = useProjectStatuses();
+  const { activeStatuses, inactiveStatuses } = useProjectStatuses();
   const [searchParams] = useSearchParams();
   const [selectedDate, setSelectedDate] = useState(() => {
     const dateParam = searchParams.get("date");
@@ -782,11 +782,30 @@ const Timesheets = () => {
       }
 
       try {
-        // Build status parameter from active statuses
-        const statusParam = activeStatuses.join(",");
-        const projectsResponse = await api.get(
-          `/projects?status=${statusParam}&limit=1000`,
+        // Active projects, plus "Project ready for review" even when that status is inactive
+        const knownStatuses = [...activeStatuses, ...(inactiveStatuses || [])].filter(
+          (status) => typeof status === "string" && status.trim()
         );
+        const reviewStatus = knownStatuses.find(
+          (status) => status.trim().toLowerCase() === "project ready for review"
+        );
+        const statusesForTimesheets = activeStatuses.filter(
+          (status) => typeof status === "string" && status.trim()
+        );
+        if (statusesForTimesheets.length === 0) {
+          return;
+        }
+        if (reviewStatus && !statusesForTimesheets.includes(reviewStatus)) {
+          statusesForTimesheets.push(reviewStatus);
+        } else if (!reviewStatus) {
+          statusesForTimesheets.push("Project ready for review");
+        }
+        const projectsResponse = await api.get("/projects", {
+          params: {
+            status: statusesForTimesheets.join(","),
+            limit: 1000,
+          },
+        });
         const projectsData = Array.isArray(projectsResponse.data)
           ? projectsResponse.data
           : projectsResponse.data.projects || projectsResponse.data.data || [];
@@ -799,7 +818,7 @@ const Timesheets = () => {
     };
 
     fetchProjects();
-  }, [activeStatuses]); // Run when activeStatuses change
+  }, [activeStatuses, inactiveStatuses]);
 
   // Update filtered projects when projects change
   useEffect(() => {

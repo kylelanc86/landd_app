@@ -911,6 +911,7 @@ const ClientSuppliedJobs = () => {
 
         // Create a mock shift-like object for PDF generation
         const mockShift = {
+          _id: fullJob._id,
           descriptionOfWorks:
             fullJob.projectId?.name || "Client Supplied Fibre Count",
           date: fullJob.sampleReceiptDate || new Date(),

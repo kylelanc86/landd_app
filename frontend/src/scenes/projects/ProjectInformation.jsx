@@ -21,6 +21,8 @@ import {
   CircularProgress,
   Alert,
   Stack,
+  Tooltip,
+  InputAdornment,
   Checkbox,
   RadioGroup,
   FormControlLabel,
@@ -43,6 +45,7 @@ import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import DescriptionIcon from "@mui/icons-material/Description";
 import HealthAndSafetyIcon from "@mui/icons-material/HealthAndSafety";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import { projectService, clientService, userService } from "../../services/api";
 import ProjectAuditService from "../../services/projectAuditService";
 import { useAuth } from "../../context/AuthContext";
@@ -1891,15 +1894,43 @@ const ProjectInformation = () => {
               )}
 
               <Grid item xs={12} md={6}>
-                <TextField
-                  label="Project Name"
-                  name="name"
-                  value={form.name}
-                  onChange={handleChange}
-                  required
-                  sx={{ width: "100%" }}
-                  autoComplete="new-password"
-                />
+                {(() => {
+                  const addressForName = (form.address || addressInput || "").trim();
+                  const showCopyAddress =
+                    addressForName.length > 0 && !(form.name || "").trim();
+                  return (
+                    <TextField
+                      label="Project Name"
+                      name="name"
+                      value={form.name}
+                      onChange={handleChange}
+                      required
+                      sx={{ width: "100%" }}
+                      autoComplete="new-password"
+                      InputProps={{
+                        endAdornment: showCopyAddress ? (
+                          <InputAdornment position="end">
+                            <Tooltip title="Copy address into project name">
+                              <IconButton
+                                type="button"
+                                edge="end"
+                                aria-label="Copy address into project name"
+                                onClick={() =>
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    name: addressForName,
+                                  }))
+                                }
+                              >
+                                <ContentCopyIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </InputAdornment>
+                        ) : null,
+                      }}
+                    />
+                  );
+                })()}
               </Grid>
 
               <Grid item xs={12} md={6}>

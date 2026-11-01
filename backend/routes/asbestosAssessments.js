@@ -16,6 +16,14 @@ const checkPermission = require('../middleware/checkPermission');
 const { getLegislationForReportTemplate } = require('../services/templateService');
 const { buildContentDispositionAttachment } = require('../utils/contentDisposition');
 const {
+  readRevisionRequest,
+  archiveSupersededPdf,
+  rollbackArchive,
+  sendRevisionError,
+  notifyEmployeeRevision,
+  REPORT_LABELS,
+} = require('../services/reportRevisionService');
+const {
   buildAsbestosAssessmentFilename,
   buildLDChainOfCustodyFilename,
   buildFibreIDFilename,
@@ -349,7 +357,7 @@ async function attachProjectClientSummary(jobs) {
   }
 
   const projects = projectIds.length
-    ? await Project.find({ _id: { $in: projectIds } }).select('projectID name client').lean()
+    ? await Project.find({ _id: { $in: projectIds } }).select('projectID name client workOrder').lean()
     : [];
 
   const clientIds = [];
@@ -375,6 +383,7 @@ async function attachProjectClientSummary(jobs) {
           _id: project._id,
           projectID: project.projectID,
           name: project.name,
+          workOrder: project.workOrder,
           client: client ? { _id: client._id, name: client.name } : null,
         },
       ];
@@ -491,6 +500,90 @@ async function loadLdTableSummary() {
   return attachProjectClientSummary(flagged);
 }
 
+const ASBESTOS_JOBS_TABLE_INDEX = 'asbestosAssessment_jobs_table';
+const ASBESTOS_JOBS_TABLE_SELECT = {
+  jobType: 1,
+  projectId: 1,
+  assessmentDate: 1,
+  status: 1,
+  LAA: 1,
+  state: 1,
+  secondaryHeader: 1,
+  intrusiveness: 1,
+  consultantId: 1,
+  reportApprovedBy: 1,
+  reportAuthorisedBy: 1,
+  reportIssueDate: 1,
+  reportViewedAt: 1,
+  authorisationRequestedBy: 1,
+  noSamplesCollected: 1,
+  samplesReceivedDate: 1,
+  labSamplesStatus: 1,
+  analysisDueDate: 1,
+  turnaroundTime: 1,
+  pdfReadyAt: 1,
+  pdfFilename: 1,
+  updatedAt: 1,
+  archived: 1,
+  deletedAt: 1,
+  _id: 1,
+};
+
+/**
+ * Asbestos assessment jobs table. Covered by asbestosAssessment_jobs_table so photographs,
+ * item bodies, and pdfBuffer are not read. Item rows are omitted; the table uses
+ * samplesReceivedDate and labSamplesStatus for the lab column.
+ */
+let asbestosJobsTableIndexReady = false;
+
+async function ensureAsbestosJobsTableIndex() {
+  if (asbestosJobsTableIndexReady) return;
+  await AsbestosAssessment.collection.createIndex(ASBESTOS_JOBS_TABLE_SELECT, {
+    name: ASBESTOS_JOBS_TABLE_INDEX,
+  });
+  asbestosJobsTableIndexReady = true;
+}
+
+async function loadAsbestosJobsTable(projectIdQuery) {
+  await ensureAsbestosJobsTableIndex();
+  let rows;
+  try {
+    const [standard, legacy] = await Promise.all([
+      AsbestosAssessment.find({ jobType: 'asbestos-assessment' })
+        .select(ASBESTOS_JOBS_TABLE_SELECT)
+        .hint(ASBESTOS_JOBS_TABLE_INDEX)
+        .lean(),
+      AsbestosAssessment.find({ jobType: null })
+        .select(ASBESTOS_JOBS_TABLE_SELECT)
+        .hint(ASBESTOS_JOBS_TABLE_INDEX)
+        .lean(),
+    ]);
+    rows = [...(standard || []), ...(legacy || [])];
+  } catch (err) {
+    console.error(
+      'Asbestos jobs table index hint failed, falling back to jobType query:',
+      err.message,
+    );
+    rows = await AsbestosAssessment.find({ jobType: 'asbestos-assessment' })
+      .select(ASBESTOS_JOBS_TABLE_SELECT)
+      .lean();
+  }
+
+  const projectKey =
+    projectIdQuery && mongoose.Types.ObjectId.isValid(String(projectIdQuery))
+      ? String(projectIdQuery)
+      : null;
+
+  const open = (rows || []).filter((row) => {
+    if (!isOpenAssessmentRow(row)) return false;
+    if (!projectKey) return true;
+    const raw = row.projectId && row.projectId._id ? row.projectId._id : row.projectId;
+    return raw != null && String(raw) === projectKey;
+  });
+
+  return attachProjectClientSummary(open);
+}
+
 function parseObjectIds(rawIds) {
   const list = Array.isArray(rawIds) ? rawIds : [];
   return list
@@ -551,6 +644,14 @@ router.get('/', async (req, res) => {
       req.query.samplesSubmitted === '1' || req.query.samplesSubmitted === 'true';
     if (projectIdQuery && mongoose.Types.ObjectId.isValid(String(projectIdQuery))) {
       filterClauses.push({ projectId: new mongoose.Types.ObjectId(String(projectIdQuery)) });
+    }
+    if (
+      (list === '1' || list === 'true') &&
+      jobType === 'asbestos-assessment' &&
+      !samplesSubmitted
+    ) {
+      const jobs = await loadAsbestosJobsTable(projectIdQuery);
+      return res.json(jobs);
     }
     if (summary && jobType === 'residential-asbestos' && !projectIdQuery && !samplesSubmitted) {
       const jobs = await loadResidentialTableSummary();
@@ -635,7 +736,7 @@ router.get('/', async (req, res) => {
             localField: 'projectId',
             foreignField: '_id',
             as: 'projectIdArr',
-            pipeline: [{ $project: { projectID: 1, name: 1, client: 1 } }],
+            pipeline: [{ $project: { projectID: 1, name: 1, client: 1, workOrder: 1 } }],
           },
         },
         { $unwind: { path: '$projectIdArr', preserveNullAndEmptyArrays: true } },
@@ -658,6 +759,7 @@ router.get('/', async (req, res) => {
                   _id: '$projectIdArr._id',
                   projectID: '$projectIdArr.projectID',
                   name: '$projectIdArr.name',
+                  workOrder: '$projectIdArr.workOrder',
                   client: { $arrayElemAt: ['$clientArr', 0] },
                 },
               },
@@ -1096,6 +1198,7 @@ router.put('/:id', async (req, res) => {
       .select(
         [
           'jobType',
+          'state',
           'leadAssessmentScope',
           'leadDiscussionConclusionsByType',
           'projectId',
@@ -1220,7 +1323,20 @@ router.put('/:id', async (req, res) => {
       updateData.LAA = LAA;
     }
     if (state !== undefined) {
-      updateData.state = state && ['ACT', 'NSW', 'Commonwealth'].includes(state) ? state : null;
+      const nextState = state && ['ACT', 'NSW', 'Commonwealth'].includes(state) ? state : null;
+      updateData.state = nextState;
+      const prevState = existingJob.state ?? null;
+      if (nextState !== prevState && existingJob.jobType !== 'lead-assessment') {
+        try {
+          const templateType = existingJob.jobType === 'residential-asbestos'
+            ? 'residentialAsbestosAssessment'
+            : 'asbestosAssessment';
+          const legislation = await getLegislationForReportTemplate(templateType, nextState || 'ACT');
+          updateData.legislation = Array.isArray(legislation) ? legislation : [];
+        } catch (err) {
+          console.error('Error refreshing legislation for assessment update:', err);
+        }
+      }
     }
     if (secondaryHeader !== undefined) {
       updateData.secondaryHeader = secondaryHeader || null;
@@ -2070,8 +2186,12 @@ router.patch('/:id/unlock', auth, checkPermission(['admin.update']), async (req,
 
 // PATCH /api/assessments/:id/revise-report — from Project Reports: reopen authorised assessment for editing (non-admin path)
 router.patch('/:id/revise-report', auth, checkPermission('asbestos.edit'), async (req, res) => {
+  let archive = null;
+  let saved = false;
   try {
-    const job = await AsbestosAssessment.findById(req.params.id);
+    const job = await AsbestosAssessment.findById(req.params.id)
+      .select('jobType status reportAuthorisedBy revision projectId')
+      .lean();
     if (!job) return res.status(404).json({ message: 'Assessment job not found' });
 
     if (job.jobType === 'lead-assessment') {
@@ -2086,6 +2206,23 @@ router.patch('/:id/revise-report', auth, checkPermission('asbestos.edit'), async
       return res.status(400).json({
         message:
           'This assessment cannot be revised from Project Reports. It must be authorised (final sign-off) and in report-ready-for-review or complete status.',
+        unchanged: true,
+      });
+    }
+
+    const request = readRevisionRequest(req);
+    const currentRevision = typeof job.revision === 'number' ? job.revision : 0;
+    if (!request.informal) {
+      archive = await archiveSupersededPdf({
+        reportType: 'asbestos_assessment',
+        reportId: job._id,
+        reportKey: 'asbestos_assessment',
+        projectId: job.projectId,
+        currentRevision,
+        reason: request.reason,
+        revisedBy: req.user._id || req.user.id,
+        pdfBuffer: request.pdfBuffer,
+        filename: request.filename,
       });
     }
 
@@ -2095,33 +2232,36 @@ router.patch('/:id/revise-report', auth, checkPermission('asbestos.edit'), async
       project.categories.includes('Residential Asbestos Assessment');
     const legacyOrStandardType =
       !job.jobType || job.jobType === 'asbestos-assessment';
-    if (isResidentialProject && legacyOrStandardType) {
-      job.jobType = 'residential-asbestos';
+    const nextJobType =
+      isResidentialProject && legacyOrStandardType ? 'residential-asbestos' : job.jobType;
+
+    const $set = {
+      status: 'report-ready-for-review',
+      archived: false,
+      updatedAt: new Date(),
+    };
+    if (nextJobType && nextJobType !== job.jobType) {
+      $set.jobType = nextJobType;
+    }
+    if (!request.informal) {
+      $set.revision = currentRevision + 1;
     }
 
-    job.revision = (typeof job.revision === 'number' ? job.revision : 0) + 1;
-    job.status = 'report-ready-for-review';
-    job.archived = false;
-    job.markModified('archived');
-    job.reportAuthorisedBy = undefined;
-    job.markModified('reportAuthorisedBy');
-    job.authorisationRequestedBy = undefined;
-    job.authorisationRequestedByEmail = undefined;
-    job.markModified('authorisationRequestedBy');
-    // Preserve first authorisation date for stable filename date across revisions.
-    job.updatedAt = new Date();
-    clearAssessmentPdfFields(job);
-    await job.save();
     await AsbestosAssessment.updateOne(
       { _id: job._id },
       {
+        $set,
         $unset: {
           reportAuthorisedBy: 1,
           authorisationRequestedBy: 1,
           authorisationRequestedByEmail: 1,
+          pdfBuffer: 1,
+          pdfReadyAt: 1,
+          pdfFilename: 1,
         },
       },
     );
+    saved = true;
 
     try {
       const {
@@ -2132,21 +2272,33 @@ router.patch('/:id/revise-report', auth, checkPermission('asbestos.edit'), async
       console.error('Error invalidating report categories after assessment revise:', err);
     }
 
-    const populated = await AsbestosAssessment.findById(job._id)
-      .populate({
-        path: 'projectId',
-        select: 'projectID name client',
-        populate: { path: 'client', select: 'name contact1Name contact1Email address' },
-      })
-      .populate('assessorId');
+    const notificationWarning = request.informal
+      ? null
+      : await notifyEmployeeRevision({
+          user: req.user,
+          projectId: job.projectId,
+          reportLabel: nextJobType === 'residential-asbestos'
+            ? 'Residential asbestos assessment report'
+            : REPORT_LABELS.asbestos_assessment,
+          revisionNumber: currentRevision + 1,
+          reason: request.reason,
+        });
 
     res.json({
-      message:
-        'Assessment report revised for editing. Authorisation has been cleared; open the job from Surveys to edit and re-authorise when ready.',
-      job: populated,
+      message: request.informal
+        ? 'Assessment report reopened for editing without a new revision. Authorisation has been cleared; open the job from Surveys and re-authorise when ready.'
+        : 'Assessment report revised for editing. Authorisation has been cleared; open the job from Surveys to edit and re-authorise when ready.',
+      notificationWarning,
+      job: {
+        _id: job._id,
+        jobType: nextJobType,
+        status: 'report-ready-for-review',
+        revision: request.informal ? currentRevision : currentRevision + 1,
+      },
     });
   } catch (err) {
-    res.status(500).json({ message: err.message || 'Failed to revise assessment report' });
+    if (!saved) await rollbackArchive(archive);
+    return sendRevisionError(res, err);
   }
 });
 

@@ -1016,8 +1016,37 @@ const ResidentialAsbestosAssessment = () => {
       });
 
       clearJobsCache();
-      await fetchJobs({ force: true });
-      showSnackbar("Assessment report authorised successfully.", "success");
+      try {
+        await fetchJobs({ force: true });
+      } catch (refreshErr) {
+        console.error("Error refreshing assessments after authorisation:", refreshErr);
+      }
+
+      const assessmentId = job.id;
+      setAssessmentPdfGeneratingForJobId(assessmentId);
+      showSnackbar(
+        "Assessment report authorised. The PDF will download when it is ready.",
+        "success",
+      );
+      generateAssessmentPDFAsync(assessmentId, { isResidential: true })
+        .then(({ filename }) => {
+          setReportViewedAssessmentIds((prev) => new Set(prev).add(assessmentId));
+          showSnackbar(`Downloaded: ${filename}`, "success");
+        })
+        .catch((pdfErr) => {
+          console.error("Error generating authorised assessment PDF:", pdfErr);
+          showSnackbar(
+            pdfErr.message
+              ? `Report authorised, but the PDF could not be downloaded: ${pdfErr.message}`
+              : "Report authorised, but the PDF could not be downloaded.",
+            "warning",
+          );
+        })
+        .finally(() => {
+          setAssessmentPdfGeneratingForJobId((current) =>
+            String(current) === String(assessmentId) ? null : current,
+          );
+        });
     } catch (err) {
       console.error("Error authorising report:", err);
       showSnackbar(

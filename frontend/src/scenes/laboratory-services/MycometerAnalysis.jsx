@@ -30,6 +30,8 @@ import { useNavigate } from "react-router-dom";
 import { projectService, mycometerJobsService } from "../../services/api";
 import {
   SAMPLE_TYPE_COLORS,
+  AIR_SAMPLING_LABEL,
+  isAirSamplingType,
   getOrderedScopeOfWorks,
   getJobReportProgress,
 } from "./mycometerConstants";
@@ -368,7 +370,28 @@ const MycometerAnalysis = () => {
                   jobs.map((job) => {
                     const scopeOfWorks = getOrderedScopeOfWorks(
                       job.scopeOfWorks,
+                    ).filter((type) => type !== "Air FAI");
+                    const airTypes = scopeOfWorks.filter((type) =>
+                      isAirSamplingType(type),
                     );
+                    const displayTypes = [
+                      ...scopeOfWorks
+                        .filter((type) => !isAirSamplingType(type))
+                        .map((type) => ({
+                          key: type,
+                          label: type,
+                          colorKey: type,
+                        })),
+                      ...(airTypes.length
+                        ? [
+                            {
+                              key: "air-sampling",
+                              label: `${AIR_SAMPLING_LABEL} (${airTypes.join(", ")})`,
+                              colorKey: "Air Fungi",
+                            },
+                          ]
+                        : []),
+                    ];
                     const progress = getJobReportProgress(job);
                     const isFullyComplete =
                       progress.total > 0 &&
@@ -418,12 +441,12 @@ const MycometerAnalysis = () => {
                                 No reports yet
                               </Typography>
                             ) : (
-                              scopeOfWorks.map((sampleType) => {
+                              displayTypes.map((sampleType) => {
                                 const typeColors =
-                                  SAMPLE_TYPE_COLORS[sampleType] || {};
+                                  SAMPLE_TYPE_COLORS[sampleType.colorKey] || {};
                                 return (
                                   <Box
-                                    key={sampleType}
+                                    key={sampleType.key}
                                     sx={{
                                       px: 1,
                                       py: 0.25,
@@ -437,7 +460,7 @@ const MycometerAnalysis = () => {
                                       whiteSpace: "nowrap",
                                     }}
                                   >
-                                    {sampleType}
+                                    {sampleType.label}
                                   </Box>
                                 );
                               })

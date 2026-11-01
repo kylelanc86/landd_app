@@ -12,6 +12,40 @@ const ProjectStatusesContext = createContext();
 
 const DEFAULT_STATUS_COLOR = "#1976d2";
 
+/** Status entries may be `{ text }` objects or plain labels. */
+function statusLabel(status) {
+  if (typeof status === "string") return status.trim();
+  if (status && typeof status.text === "string") return status.text.trim();
+  return "";
+}
+
+/** Normalise API or cached payloads into active/inactive label lists. */
+function listsFromStatusData(data) {
+  if (Array.isArray(data)) {
+    return {
+      active: data
+        .filter((status) => status?.isActiveStatus === true)
+        .map(statusLabel)
+        .filter(Boolean),
+      inactive: data
+        .filter((status) => status?.isActiveStatus === false)
+        .map(statusLabel)
+        .filter(Boolean),
+      all: data,
+    };
+  }
+
+  if (data && typeof data === "object") {
+    return {
+      active: (data.activeStatuses || []).map(statusLabel).filter(Boolean),
+      inactive: (data.inactiveStatuses || []).map(statusLabel).filter(Boolean),
+      all: data,
+    };
+  }
+
+  return { active: [], inactive: [], all: data };
+}
+
 /** Build statusColors map from API response (single source of truth: database). */
 function buildStatusColorsFromApiData(data) {
   if (!data) return {};
@@ -20,8 +54,8 @@ function buildStatusColorsFromApiData(data) {
   if (data.inactiveStatuses?.length) items.push(...data.inactiveStatuses);
   if (Array.isArray(data)) items.push(...data);
   return items.reduce((acc, s) => {
-    const text = s?.text;
-    if (text) acc[text] = s.statusColor || DEFAULT_STATUS_COLOR;
+    const text = statusLabel(s);
+    if (text && typeof s === "object") acc[text] = s.statusColor || DEFAULT_STATUS_COLOR;
     return acc;
   }, {});
 }
@@ -74,32 +108,28 @@ export const ProjectStatusesProvider = ({ children }) => {
           if (age < CACHE_DURATION) {
             console.log(`⚡ Using cached statuses (age: ${Math.round(age / 1000)}s)`);
             const cacheTime = performance.now() - startTime;
-            
-            // Process cached data
-            let active, inactive, all;
-            if (data && typeof data === 'object' && !Array.isArray(data)) {
-              active = data.activeStatuses?.map(status => status.text) || [];
-              inactive = data.inactiveStatuses?.map(status => status.text) || [];
-              all = data;
-            } else {
-              active = data.filter(s => s.isActiveStatus === true).map(s => s.text).sort();
-              inactive = data.filter(s => s.isActiveStatus === false).map(s => s.text).sort();
-              all = data.sort((a, b) => a.text.localeCompare(b.text));
+            const { active, inactive, all } = listsFromStatusData(data);
+
+            // An empty cache (failed fetch, or labels stored without text) must not
+            // block the projects table and timesheet project search for 5 minutes.
+            if (active.length > 0 || inactive.length > 0) {
+              const colors = buildStatusColorsFromApiData(data);
+              const colorsToUse = Object.keys(colors).length > 0 ? colors : projectStatusService.getAllHardcodedColors();
+
+              if (mountedRef.current) {
+                setActiveStatuses(active);
+                setInactiveStatuses(inactive);
+                setAllStatuses(all);
+                setStatusColors(colorsToUse);
+                setLoading(false);
+              }
+
+              console.log(`⚡ Cache load complete in ${cacheTime.toFixed(2)}ms (saved ~1000ms)`);
+              fetchingRef.current = false;
+              return;
             }
-            const colors = buildStatusColorsFromApiData(data);
-            const colorsToUse = Object.keys(colors).length > 0 ? colors : projectStatusService.getAllHardcodedColors();
-            
-            if (mountedRef.current) {
-              setActiveStatuses(active);
-              setInactiveStatuses(inactive);
-              setAllStatuses(all);
-              setStatusColors(colorsToUse);
-              setLoading(false);
-            }
-            
-            console.log(`⚡ Cache load complete in ${cacheTime.toFixed(2)}ms (saved ~1000ms)`);
-            fetchingRef.current = false;
-            return;
+
+            console.log("Cached statuses were empty, fetching fresh data");
           } else {
             console.log(`Cache expired (age: ${Math.round(age / 1000)}s), fetching fresh data`);
           }
@@ -112,40 +142,29 @@ export const ProjectStatusesProvider = ({ children }) => {
       const allStatusesData = await projectStatusService.getAllStatuses();
       const fetchTime = performance.now() - startTime;
       
-      // Cache the fetched data
-      try {
-        localStorage.setItem(CACHE_KEY, JSON.stringify({
-          data: allStatusesData,
-          timestamp: Date.now()
-        }));
-      } catch (cacheError) {
-        console.warn('Failed to cache statuses:', cacheError);
+      const { active, inactive, all } = listsFromStatusData(allStatusesData);
+
+      // Don't keep a failed or empty payload; it would hide every project list.
+      if (active.length > 0 || inactive.length > 0) {
+        try {
+          localStorage.setItem(CACHE_KEY, JSON.stringify({
+            data: allStatusesData,
+            timestamp: Date.now()
+          }));
+        } catch (cacheError) {
+          console.warn('Failed to cache statuses:', cacheError);
+        }
+      } else {
+        try {
+          localStorage.removeItem(CACHE_KEY);
+        } catch (cacheError) {
+          console.warn('Failed to clear empty status cache:', cacheError);
+        }
       }
-      
+
       // Only update state if component is still mounted
       if (!mountedRef.current) {
         return;
-      }
-
-      // Process data locally instead of making additional API calls
-      let active, inactive, all;
-      
-      if (allStatusesData && typeof allStatusesData === 'object' && !Array.isArray(allStatusesData)) {
-        // New structure: {activeStatuses: [...], inactiveStatuses: [...]}
-        active = allStatusesData.activeStatuses?.map(status => status.text) || [];
-        inactive = allStatusesData.inactiveStatuses?.map(status => status.text) || [];
-        all = allStatusesData;
-      } else {
-        // Fallback to old structure (array)
-        active = allStatusesData
-          .filter(status => status.isActiveStatus === true)
-          .map(status => status.text)
-          .sort();
-        inactive = allStatusesData
-          .filter(status => status.isActiveStatus === false)
-          .map(status => status.text)
-          .sort();
-        all = allStatusesData.sort((a, b) => a.text.localeCompare(b.text));
       }
 
       console.log("Raw status data from backend:", { active, inactive, all });
@@ -195,9 +214,11 @@ export const ProjectStatusesProvider = ({ children }) => {
     mountedRef.current = true;
     fetchStatuses();
 
-    // Cleanup function to prevent state updates after unmount
+    // Cleanup function to prevent state updates after unmount.
+    // Release the in-flight lock so a remount (React strict mode) can fetch again.
     return () => {
       mountedRef.current = false;
+      fetchingRef.current = false;
     };
   }, [fetchStatuses]);
 

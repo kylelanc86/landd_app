@@ -20,16 +20,6 @@ const notDeletedClearanceFilter = {
   $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
 };
 
-function isAsbestosOrResidentialSurveyAssessment(doc) {
-  const jt = doc.jobType || 'asbestos-assessment';
-  return jt === 'asbestos-assessment' || jt === 'residential-asbestos';
-}
-
-function hasFinalAuthorisation(doc) {
-  const v = doc.reportAuthorisedBy;
-  return v != null && String(v).trim() !== '';
-}
-
 function hasClientSuppliedReportApproval(doc) {
   const v = doc.reportApprovedBy;
   return v != null && String(v).trim() !== '';
@@ -111,28 +101,34 @@ router.get('/asbestos-assessment/:projectId', auth, checkPermission(['projects.v
   try {
     const assessments = await AsbestosAssessment.find({
       projectId: req.params.projectId,
+      jobType: { $in: ['asbestos-assessment', 'residential-asbestos', null] },
+      reportAuthorisedBy: { $exists: true, $nin: [null, ''] },
       ...notDeletedAssessmentFilter,
     })
-      .populate('projectId')
-      .populate('assessorId');
+      .select(
+        'assessmentDate createdAt description status jobType reportAuthorisedBy revision assessorId projectId',
+      )
+      .populate('projectId', 'projectID')
+      .populate('assessorId', 'firstName lastName')
+      .lean();
 
-    const reports = assessments
-      .filter((a) => isAsbestosOrResidentialSurveyAssessment(a) && hasFinalAuthorisation(a))
-      .map(assessment => ({
-        id: assessment._id,
-        date: assessment.assessmentDate || assessment.createdAt,
-        type: 'asbestos_assessment',
-        reference: assessment.projectId.projectID,
-        description:
-          assessment.jobType === 'residential-asbestos'
-            ? assessment.description || 'Residential Asbestos Assessment Report'
-            : assessment.description || 'Asbestos Assessment Report',
-        status: assessment.status,
-        jobType: assessment.jobType || 'asbestos-assessment',
-        reportAuthorisedBy: assessment.reportAuthorisedBy || null,
-        revision: assessment.revision || 0,
-        assessorName: assessment.assessorId ? `${assessment.assessorId.firstName} ${assessment.assessorId.lastName}` : 'Unknown'
-      }));
+    const reports = assessments.map((assessment) => ({
+      id: assessment._id,
+      date: assessment.assessmentDate || assessment.createdAt,
+      type: 'asbestos_assessment',
+      reference: assessment.projectId?.projectID || 'Unknown',
+      description:
+        assessment.jobType === 'residential-asbestos'
+          ? assessment.description || 'Residential Asbestos Assessment Report'
+          : assessment.description || 'Asbestos Assessment Report',
+      status: assessment.status,
+      jobType: assessment.jobType || 'asbestos-assessment',
+      reportAuthorisedBy: assessment.reportAuthorisedBy || null,
+      revision: assessment.revision || 0,
+      assessorName: assessment.assessorId
+        ? `${assessment.assessorId.firstName} ${assessment.assessorId.lastName}`
+        : 'Unknown',
+    }));
 
     res.json(reports);
   } catch (error) {
@@ -297,6 +293,75 @@ router.get('/fibre-count/:projectId', auth, checkPermission(['projects.view']), 
         mapClientSuppliedJobToReport(job, 'fibre_count', 'Fibre Count Analysis Report'),
       );
 
+    res.json(reports);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Authorised Mycometer sample-type reports for a project
+router.get('/mycometer/:projectId', auth, checkPermission(['projects.view']), async (req, res) => {
+  try {
+    const MycometerJob = require('../models/MycometerJob');
+    const jobs = await MycometerJob.find({
+      projectId: req.params.projectId,
+      analysisMeta: {
+        $elemMatch: {
+          reportApprovedBy: { $exists: true, $nin: [null, ''] },
+        },
+      },
+    })
+      .select('analysisMeta samplingMeta updatedAt')
+      .lean();
+
+    const AIR_REPORT_TYPES = ['Air Fungi', 'Air Allergen'];
+    const reports = [];
+    for (const job of jobs) {
+      const authorised = (job.analysisMeta || []).filter(
+        (meta) => meta?.reportApprovedBy && String(meta.reportApprovedBy).trim() !== '',
+      );
+      const pushReport = (sampleType, metas, description) => {
+        if (!metas.length) return;
+        const primary = metas.slice().sort((a, b) => {
+          const aTime = new Date(a.reportIssueDate || 0).getTime();
+          const bTime = new Date(b.reportIssueDate || 0).getTime();
+          return bTime - aTime;
+        })[0];
+        const sampling = (job.samplingMeta || []).find(
+          (item) => item.sampleType === primary.sampleType,
+        );
+        const revision = metas.reduce(
+          (max, meta) => Math.max(max, Number(meta.revision) || 0),
+          0,
+        );
+        reports.push({
+          id: `${job._id}-${sampleType}`,
+          jobId: job._id,
+          sampleType,
+          date: primary.reportIssueDate || sampling?.sampleDate || primary.analysisDate || job.updatedAt,
+          description,
+          status: 'Authorised',
+          revision,
+          reportApprovedBy: primary.reportApprovedBy,
+          additionalInfo: primary.reportApprovedBy
+            ? `Authorised by ${primary.reportApprovedBy}`
+            : undefined,
+        });
+      };
+
+      pushReport(
+        'Surface Fungi',
+        authorised.filter((meta) => meta.sampleType === 'Surface Fungi'),
+        'Mycometer Surface Fungi Report',
+      );
+      pushReport(
+        'Air Sampling',
+        authorised.filter((meta) => AIR_REPORT_TYPES.includes(meta.sampleType)),
+        'Mycometer Air Sampling Report',
+      );
+    }
+
+    reports.sort((a, b) => new Date(b.date) - new Date(a.date));
     res.json(reports);
   } catch (error) {
     res.status(500).json({ message: error.message });

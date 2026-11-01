@@ -30,6 +30,14 @@ const {
   reopenRemovalJob,
   invalidateProjectReportCategories,
 } = require("../utils/reportReviseHelpers");
+const {
+  readRevisionRequest,
+  archiveSupersededPdf,
+  rollbackArchive,
+  sendRevisionError,
+  notifyEmployeeRevision,
+  REPORT_LABELS,
+} = require("../services/reportRevisionService");
 const { removeClearancePdfFileIfExists } = require("../utils/clearanceStoredPdf");
 
 // Use same permission names as asbestos for role consistency
@@ -588,14 +596,9 @@ router.delete("/:id", auth, checkPermission(permDelete), async (req, res) => {
 
 // POST /api/lead-clearances/:id/revise-report — from Project Reports
 router.post("/:id/revise-report", auth, checkPermission(permEdit), async (req, res) => {
+  let archive = null;
+  let saved = false;
   try {
-    const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
-    if (!reason) {
-      return res.status(400).json({
-        message: "A revision reason is required",
-      });
-    }
-
     const clearance = await LeadClearance.findById(req.params.id);
     if (!clearance) {
       return res.status(404).json({ message: "Lead clearance not found" });
@@ -605,20 +608,36 @@ router.post("/:id/revise-report", auth, checkPermission(permEdit), async (req, r
     if (!completeLike && !hasNonEmptyApproval(clearance.reportApprovedBy)) {
       return res.status(400).json({
         message: "This report cannot be revised from Project Reports until it is complete or authorised.",
+        unchanged: true,
       });
     }
 
-    const newRevision = (typeof clearance.revision === "number" ? clearance.revision : 0) + 1;
-    clearance.revision = newRevision;
-    clearance.revisionReasons = [
-      ...(clearance.revisionReasons || []),
-      {
-        revisionNumber: newRevision,
-        reason,
-        revisedBy: req.user.id,
-        revisedAt: new Date(),
-      },
-    ];
+    const request = readRevisionRequest(req);
+    const currentRevision = typeof clearance.revision === "number" ? clearance.revision : 0;
+    if (!request.informal) {
+      archive = await archiveSupersededPdf({
+        reportType: "lead_clearance",
+        reportId: clearance._id,
+        reportKey: "lead_clearance",
+        projectId: clearance.projectId,
+        currentRevision,
+        reason: request.reason,
+        revisedBy: req.user._id || req.user.id,
+        pdfBuffer: request.pdfBuffer,
+        filename: request.filename,
+      });
+      const newRevision = currentRevision + 1;
+      clearance.revision = newRevision;
+      clearance.revisionReasons = [
+        ...(clearance.revisionReasons || []),
+        {
+          revisionNumber: newRevision,
+          reason: request.reason,
+          revisedBy: req.user.id,
+          revisedAt: new Date(),
+        },
+      ];
+    }
     clearance.status = "in progress";
     clearance.reportApprovedBy = undefined;
     clearance.authorisationRequestedBy = undefined;
@@ -628,6 +647,7 @@ router.post("/:id/revise-report", auth, checkPermission(permEdit), async (req, r
     clearance.updatedBy = req.user.id;
     clearClearancePdfFields(clearance);
     await clearance.save();
+    saved = true;
     await LeadClearance.updateOne(
       { _id: clearance._id },
       {
@@ -647,14 +667,25 @@ router.post("/:id/revise-report", auth, checkPermission(permEdit), async (req, r
     });
     await invalidateProjectReportCategories(clearance.projectId);
 
+    const notificationWarning = request.informal
+      ? null
+      : await notifyEmployeeRevision({
+          user: req.user,
+          projectId: clearance.projectId,
+          reportLabel: REPORT_LABELS.lead_clearance,
+          revisionNumber: currentRevision + 1,
+          reason: request.reason,
+        });
     res.json({
-      message:
-        "Lead clearance report reopened for editing. The removal job is back in progress — re-authorise when ready.",
+      message: request.informal
+        ? "Lead clearance report reopened for editing without a new revision. The removal job is back in progress — re-authorise when ready."
+        : "Lead clearance report reopened for editing. The removal job is back in progress — re-authorise when ready.",
+      notificationWarning,
       clearance,
     });
   } catch (error) {
-    console.error("Error revising lead clearance report:", error);
-    res.status(500).json({ message: error.message || "Failed to revise report" });
+    if (!saved) await rollbackArchive(archive);
+    return sendRevisionError(res, error);
   }
 });
 

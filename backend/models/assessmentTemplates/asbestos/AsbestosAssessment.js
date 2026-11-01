@@ -391,4 +391,37 @@ AsbestosAssessmentSchema.index(
   { name: 'asbestosAssessment_ld_table' },
 );
 
+// Covered by the asbestos assessment jobs table. Every selected field is here so MongoDB
+// does not open the assessment document (items, photographs, pdfBuffer).
+AsbestosAssessmentSchema.index(
+  {
+    jobType: 1,
+    projectId: 1,
+    assessmentDate: 1,
+    status: 1,
+    LAA: 1,
+    state: 1,
+    secondaryHeader: 1,
+    intrusiveness: 1,
+    consultantId: 1,
+    reportApprovedBy: 1,
+    reportAuthorisedBy: 1,
+    reportIssueDate: 1,
+    reportViewedAt: 1,
+    authorisationRequestedBy: 1,
+    noSamplesCollected: 1,
+    samplesReceivedDate: 1,
+    labSamplesStatus: 1,
+    analysisDueDate: 1,
+    turnaroundTime: 1,
+    pdfReadyAt: 1,
+    pdfFilename: 1,
+    updatedAt: 1,
+    archived: 1,
+    deletedAt: 1,
+    _id: 1,
+  },
+  { name: 'asbestosAssessment_jobs_table' },
+);
+
 module.exports = mongoose.model('AsbestosAssessment', AsbestosAssessmentSchema); 

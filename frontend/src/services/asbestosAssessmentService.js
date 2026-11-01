@@ -84,8 +84,8 @@ const asbestosAssessmentService = {
   },
 
   /** Reopen authorised assessment for editing from Project Reports (increments revision, clears sign-off). */
-  reviseReport: async (id) => {
-    const response = await api.patch(`/assessments/${id}/revise-report`);
+  reviseReport: async (id, payload = {}) => {
+    const response = await api.patch(`/assessments/${id}/revise-report`, payload);
     return response.data;
   },
 

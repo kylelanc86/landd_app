@@ -48,9 +48,18 @@ export const CLEANING_STAGES = ["Before Cleaning", "After Cleaning"];
 export const YES_NO_OPTIONS = ["Yes", "No"];
 
 // Temporary hardcoded options until linked to in-app equipment records.
-export const AIR_FUNGI_FLOWMETER_OPTIONS = ["MAIR001", "MAIR003"];
+export const DEFAULT_AIR_FLOWMETER = "MAIR003";
+export const AIR_FUNGI_FLOWMETER_OPTIONS = [DEFAULT_AIR_FLOWMETER];
 
-export const TURNAROUND_OPTIONS = ["3 day", "24 hours", "custom"];
+/** Sample types collected on one Air Sampling report. FAI is a comparison of these two, not a sample type. */
+export const AIR_SAMPLING_TYPES = ["Air Fungi", "Air Allergen"];
+export const AIR_SAMPLING_LABEL = "Air Sampling";
+export const AIR_SAMPLING_SLUG = "air-sampling";
+
+export const isAirSamplingType = (sampleType) =>
+  AIR_SAMPLING_TYPES.includes(sampleType);
+
+export const TURNAROUND_OPTIONS = ["same day", "3 day", "24 hours", "custom"];
 
 export const SAMPLE_ENTRY_SUPPORTED_TYPES = [
   "Surface Fungi",
@@ -105,24 +114,18 @@ export const getMycometerCertNumberForSampleType = (user, sampleType) => {
 
 /**
  * Resolve Mycometer certification for PDF / display.
- * When work is complete (freezeSnapshot), use the immutable job snapshot so
- * historical reports keep the cert from when sampling/analysis was closed.
- * While still open, prefer the live user licence, then any snapshot.
+ * Prefer the user's current Surface or Air certificate so a profile update
+ * shows immediately. Fall back to the number stored on the job, then the default.
  */
 export const resolveMycometerCertNumber = ({
   user,
   sampleType,
   snapshottedCert,
-  freezeSnapshot = false,
 } = {}) => {
   const snapshot =
     typeof snapshottedCert === "string" && snapshottedCert.trim()
       ? snapshottedCert.trim()
       : "";
-
-  if (freezeSnapshot && snapshot) {
-    return snapshot;
-  }
 
   return (
     getMycometerCertFromUserIfPresent(user, sampleType) ||
@@ -143,6 +146,15 @@ const formatPersonName = (person) => {
 
 const formatNameWithCert = (name, cert) =>
   `${name || "N/A"} (${cert || DEFAULT_MYCOMETER_CERTIFICATION})`;
+
+/** Name plus Mycometer certification, for dropdowns and on-screen labels. */
+export const formatMycometerUserLabel = (user, sampleType) => {
+  const name = formatPersonName(user) || "Unnamed user";
+  return formatNameWithCert(
+    name,
+    getMycometerCertNumberForSampleType(user, sampleType),
+  );
+};
 
 /** Prefer immutable job snapshot, then populated user object. */
 export const getSamplerDisplayNameFromMeta = (samplingMeta) => {
@@ -307,6 +319,70 @@ export const calculateAirAllergenMaav = ({ analysisValue, blankValue }) => {
 
   const value = Math.round(maav);
   return { kind: "value", value, display: String(value) };
+};
+
+/**
+ * Fungal to Allergen Index:
+ * FAI = (MAFV / MAAV) × 100%
+ * Undefined when either value is missing or MAAV is 0.
+ */
+export const calculateAirFai = (mafvResult, maavResult) => {
+  const mafv = mafvResult?.kind === "value" ? mafvResult.value : null;
+  const maav = maavResult?.kind === "value" ? maavResult.value : null;
+  if (mafv === null || maav === null || maav === 0) {
+    return { ok: false, value: null, display: "—" };
+  }
+  const fai = (mafv / maav) * 100;
+  if (!Number.isFinite(fai)) {
+    return { ok: false, value: null, display: "—" };
+  }
+  const rounded = Math.round(fai);
+  return { ok: true, value: rounded, display: `${rounded}%` };
+};
+
+/**
+ * Mycometer air FAI categories (percent):
+ * A+ Low       ≤ 5
+ * A  Normal    6–14
+ * B  Elevated  15–22
+ * C  High      23–35
+ * D  Very high > 35
+ */
+export const getAirFaiResultCategory = (faiPercent) => {
+  if (faiPercent === null || !Number.isFinite(faiPercent)) return null;
+  if (faiPercent <= 5) {
+    return {
+      code: "A+",
+      label: "Low",
+      sx: { bgcolor: "#c8e6c9", color: "#1b5e20" },
+    };
+  }
+  if (faiPercent <= 14) {
+    return {
+      code: "A",
+      label: "Normal",
+      sx: { bgcolor: "#2e7d32", color: "#fff" },
+    };
+  }
+  if (faiPercent <= 22) {
+    return {
+      code: "B",
+      label: "Elevated",
+      sx: { bgcolor: "#fbc02d", color: "#333" },
+    };
+  }
+  if (faiPercent <= 35) {
+    return {
+      code: "C",
+      label: "High",
+      sx: { bgcolor: "#ed6c02", color: "#fff" },
+    };
+  }
+  return {
+    code: "D",
+    label: "Very high",
+    sx: { bgcolor: "#d32f2f", color: "#fff" },
+  };
 };
 
 export const getSurfaceFungiResultCategory = (msfv) => {
@@ -717,13 +793,23 @@ export const getSampleTypeReportStatus = (job, sampleType) => {
 };
 
 export const getJobReportProgress = (job) => {
-  const scope = getOrderedScopeOfWorks(job?.scopeOfWorks);
-  if (scope.length === 0) return { complete: 0, total: 0 };
-  const complete = scope.filter((type) => {
+  const scope = getOrderedScopeOfWorks(job?.scopeOfWorks).filter(
+    (type) => type !== "Air FAI",
+  );
+  const airTypes = scope.filter((type) => isAirSamplingType(type));
+  const units = [
+    ...scope.filter((type) => !isAirSamplingType(type)),
+    ...(airTypes.length > 0 ? [airTypes] : []),
+  ];
+  if (units.length === 0) return { complete: 0, total: 0 };
+  const isAuthorised = (type) => {
     const analysisMeta = (job?.analysisMeta || []).find(
       (item) => item.sampleType === type,
     );
     return Boolean(analysisMeta?.reportApprovedBy);
-  }).length;
-  return { complete, total: scope.length };
+  };
+  const complete = units.filter((unit) =>
+    Array.isArray(unit) ? unit.every(isAuthorised) : isAuthorised(unit),
+  ).length;
+  return { complete, total: units.length };
 };

@@ -126,7 +126,7 @@ export async function generateMycometerAirFungiReport({
     const mafv = mafvResult.kind === "value" ? mafvResult.value : null;
     const category = getCategoryForPdf(mafv);
     return [
-      { text: sample.sampleId || "—", style: "tableContent" },
+      { text: sample.sampleId || "—", style: "tableContent", noWrap: true },
       { text: sample.sampleLocation || "—", style: "tableContent" },
       {
         text:
@@ -626,7 +626,7 @@ export async function generateMycometerAirFungiReport({
             pageBreak: "before",
             table: {
               headerRows: 1,
-              widths: ["14%", "30%", "12%", "14%", "14%", "16%"],
+              widths: ["32%", "12%", "12%", "14%", "14%", "16%"],
               heights: () => 8 * 1.15 * 3,
               body: [
                 [

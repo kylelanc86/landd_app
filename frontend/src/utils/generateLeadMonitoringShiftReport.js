@@ -555,6 +555,7 @@ export async function generateLeadMonitoringShiftReport({
   project = {},
   openInNewTab = true,
   returnPdfData = false,
+  returnPdfBundle = false,
   sitePlanData = null,
 }) {
   const baseUrl =
@@ -1153,10 +1154,11 @@ export async function generateLeadMonitoringShiftReport({
     throw new Error("Failed to generate report.");
   }
 
-  if (returnPdfData) {
+  if (returnPdfData || returnPdfBundle) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result);
+      reader.onloadend = () =>
+        resolve(returnPdfBundle ? { dataUrl: reader.result, filename } : reader.result);
       reader.onerror = reject;
       reader.readAsDataURL(finalBlob);
     });

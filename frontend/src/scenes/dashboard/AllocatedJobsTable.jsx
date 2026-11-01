@@ -14,6 +14,18 @@ import { useAuth } from "../../context/AuthContext";
 import { StatusChip } from "../../components/JobStatus";
 import { useProjectStatuses } from "../../context/ProjectStatusesContext";
 
+// Late-stage jobs stay active in the system, but are omitted from this table.
+const HIDDEN_FROM_ACTIVE_PROJECTS = [
+  "Ready for invoicing",
+  "Project ready for review",
+];
+
+const isHiddenFromActiveProjects = (status) =>
+  HIDDEN_FROM_ACTIVE_PROJECTS.some(
+    (hidden) =>
+      String(status || "").trim().toLowerCase() === hidden.toLowerCase()
+  );
+
 const AllocatedJobsTable = () => {
   const { currentUser, loading: authLoading } = useAuth();
 
@@ -40,7 +52,7 @@ const AllocatedJobsTable = () => {
   // Cache key based on user ID
   const getCacheKey = useCallback(() => {
     const userId = currentUser?._id || currentUser?.id;
-    return userId ? `allocatedJobs_${userId}` : null;
+    return userId ? `allocatedJobs_v2_${userId}` : null;
   }, [currentUser]);
 
   // Load from cache
@@ -209,6 +221,7 @@ const AllocatedJobsTable = () => {
           page: page + 1, // Backend uses 1-based pagination
           limit: pageSize,
           status: "all_active", // Filter to active projects on backend
+          excludeStatus: HIDDEN_FROM_ACTIVE_PROJECTS.join(","),
           sortBy: "projectID",
           sortOrder: "desc",
         });
@@ -370,6 +383,9 @@ const AllocatedJobsTable = () => {
     const formatStart = performance.now();
     const formatted = jobs
       .filter((job) => {
+        if (isHiddenFromActiveProjects(job.status)) {
+          return false;
+        }
         // Safety net: Filter out inactive projects
         // This ensures that even if cache serves stale data, inactive projects won't show
         if (activeStatuses.length > 0) {

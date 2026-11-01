@@ -1081,8 +1081,17 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
       limit = 50,
       sortBy = 'projectID',
       sortOrder = 'desc',
-      status
+      status,
+      excludeStatus
     } = req.query;
+
+    // Optional exact status names to omit (case-insensitive). Used by the dashboard
+    // "My Active Projects" table so late-stage jobs can stay active elsewhere.
+    const excludeStatusRegexes = String(excludeStatus || '')
+      .split(',')
+      .map((name) => name.trim())
+      .filter(Boolean)
+      .map((name) => new RegExp(`^${escapeRegex(name)}$`, 'i'));
 
     const userId = req.user.id;
 
@@ -1157,6 +1166,15 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
       }
     }
 
+    if (excludeStatusRegexes.length > 0) {
+      const existingStatusFilter =
+        query.status && typeof query.status === 'object' ? query.status : {};
+      query.status = {
+        ...existingStatusFilter,
+        $nin: excludeStatusRegexes,
+      };
+    }
+
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
     
@@ -1171,8 +1189,11 @@ router.get('/assigned/me', auth, checkPermission(['projects.view']), async (req,
       // OPTIMIZATION: When using cached IDs, use simpler find() query instead of aggregation
       // This is faster because MongoDB can use indexes more efficiently
       if (usingCachedIds) {
-        // For cached IDs, we already know the total (cache length)
-        total = cachedProjectIds.length;
+        // Cached ID count includes every active project. Recount when statuses
+        // are excluded so pagination matches the filtered list.
+        total = excludeStatusRegexes.length > 0
+          ? await Project.countDocuments(query)
+          : cachedProjectIds.length;
         
         const findStartTime = Date.now();
         projects = await Project.find(query)

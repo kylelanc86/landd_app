@@ -11,7 +11,7 @@ const CLEANING_STAGES = ['Before Cleaning', 'After Cleaning'];
 
 const YES_NO_OPTIONS = ['Yes', 'No'];
 
-const TURNAROUND_OPTIONS = ['3 day', '24 hours', 'custom'];
+const TURNAROUND_OPTIONS = ['same day', '3 day', '24 hours', 'custom'];
 
 const mycometerJobSchema = new mongoose.Schema(
   {
@@ -28,6 +28,10 @@ const mycometerJobSchema = new mongoose.Schema(
         },
       ],
       default: [],
+    },
+    // When true, the air PDF includes the FAI results and risk table.
+    includeFaiOnReport: {
+      type: Boolean,
     },
     // Shared fields per sample type (Sampled by, Sample Date, sampling complete, etc.)
     samplingMeta: [

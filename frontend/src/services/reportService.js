@@ -43,6 +43,12 @@ const reportService = {
     return response.data;
   },
 
+  // Authorised Mycometer sample-type reports
+  getMycometerReports: async (projectId) => {
+    const response = await api.get(`/reports/mycometer/${projectId}`);
+    return response.data;
+  },
+
   // Project Invoices
   getProjectInvoices: async (projectId) => {
     const response = await api.get(`/reports/invoices/${projectId}`);

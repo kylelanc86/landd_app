@@ -692,7 +692,7 @@ router.get(
         .select("_id projectId projectName asbestosRemovalist status createdAt updatedAt")
         .populate({
           path: "projectId",
-          select: "projectID name client",
+          select: "projectID name client workOrder",
           populate: {
             path: "client",
             select: "name",

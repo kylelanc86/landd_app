@@ -346,6 +346,9 @@ connectDB()
     
     app.use('/api/reports', requireAuth, checkTokenBlacklist, reportsRoutes);
     app.use('/reports', requireAuth, checkTokenBlacklist, reportsRoutes);
+
+    app.use('/api/report-revisions', requireAuth, checkTokenBlacklist, require('./routes/reportRevisions'));
+    app.use('/report-revisions', requireAuth, checkTokenBlacklist, require('./routes/reportRevisions'));
     
     app.use('/api/uploaded-reports', requireAuth, checkTokenBlacklist, require('./routes/uploadedReports'));
     app.use('/uploaded-reports', requireAuth, checkTokenBlacklist, require('./routes/uploadedReports'));

@@ -36,18 +36,24 @@ import {
   SAMPLE_TYPE_FROM_SLUG,
   SAMPLE_TYPE_COLORS,
   SAMPLE_TYPE_SLUGS,
+  AIR_SAMPLING_SLUG,
+  AIR_SAMPLING_LABEL,
+  AIR_LIKE_SAMPLE_TYPES,
+  isAirSamplingType,
   DEFAULT_STANDARD_VALUE,
   DEFAULT_MYCOMETER_CERTIFICATION,
   calculateMycometerValue,
   calculateAirSampleReactionTime,
   calculateAirSampleValue,
+  calculateAirFai,
+  getAirFaiResultCategory,
   getMycometerValueLabel,
   getResultCategoryForSampleType,
   getAirSampleResultDisplay,
   isAirLikeSampleType,
-  isAirFungiSampleType,
   getMycometerCertNumberForSampleType,
-  getSamplerDisplayNameFromMeta,
+  formatMycometerUserLabel,
+  getSamplerDisplayWithCertFromMeta,
 } from "./mycometerConstants";
 
 const formatDateInput = (value) => {
@@ -125,16 +131,93 @@ const mapSamplesForAnalysis = (samples = []) =>
         : "",
   }));
 
+const analysisPart = (sample) => ({
+  _id: sample._id,
+  blankValue:
+    sample.blankValue !== undefined && sample.blankValue !== null
+      ? String(sample.blankValue)
+      : "",
+  analysisValue:
+    sample.analysisValue !== undefined && sample.analysisValue !== null
+      ? String(sample.analysisValue)
+      : "",
+});
+
+const pairAirAnalysisSamples = (jobData, types) => {
+  const rows = new Map();
+  const order = [];
+  const add = (sample, key) => {
+    const id = sample.sampleId || String(sample._id);
+    if (!rows.has(id)) {
+      rows.set(id, {
+        sampleId: sample.sampleId,
+        sampleLocation: sample.sampleLocation || "",
+        flowRate: sample.flowRate,
+        qualityControl: sample.qualityControl || "",
+        fungi: null,
+        allergen: null,
+      });
+      order.push(id);
+    }
+    const row = rows.get(id);
+    if (!row.sampleLocation && sample.sampleLocation) {
+      row.sampleLocation = sample.sampleLocation;
+    }
+    if (
+      (row.flowRate === undefined || row.flowRate === null || row.flowRate === "") &&
+      sample.flowRate !== undefined &&
+      sample.flowRate !== null
+    ) {
+      row.flowRate = sample.flowRate;
+    }
+    if (!row.qualityControl && sample.qualityControl) {
+      row.qualityControl = sample.qualityControl;
+    }
+    row[key] = analysisPart(sample);
+  };
+
+  if (types.includes("Air Fungi")) {
+    (jobData.samples || [])
+      .filter((sample) => sample.sampleType === "Air Fungi")
+      .forEach((sample) => add(sample, "fungi"));
+  }
+  if (types.includes("Air Allergen")) {
+    (jobData.samples || [])
+      .filter((sample) => sample.sampleType === "Air Allergen")
+      .forEach((sample) => add(sample, "allergen"));
+  }
+  return order.map((id) => rows.get(id));
+};
+
+const AIR_ANALYSIS_PARTS = {
+  "Air Fungi": "fungi",
+  "Air Allergen": "allergen",
+};
+
+const FLUOROMETER_ID = "LD-FLU01";
+
+const isRoomTemperatureInRange = (value) => {
+  if (value === "" || value === null || value === undefined) return false;
+  const temperature = Number(value);
+  return Number.isFinite(temperature) && temperature >= 18 && temperature <= 30;
+};
+
 const MycometerSampleAnalysis = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const { isAdmin } = usePermissions();
   const { jobId, sampleTypeSlug } = useParams();
-  const sampleType = SAMPLE_TYPE_FROM_SLUG[sampleTypeSlug];
+  const isCombinedAir = sampleTypeSlug === AIR_SAMPLING_SLUG;
+  const sampleType = isCombinedAir
+    ? AIR_SAMPLING_LABEL
+    : SAMPLE_TYPE_FROM_SLUG[sampleTypeSlug];
+  const redirectAirAnalysis =
+    !isCombinedAir && isAirSamplingType(sampleType);
   const typeColors =
-    SAMPLE_TYPE_COLORS[sampleType] || SAMPLE_TYPE_COLORS["Surface Fungi"];
-  const isAirLike = isAirLikeSampleType(sampleType);
-  const isAirFungi = isAirFungiSampleType(sampleType);
+    SAMPLE_TYPE_COLORS[isCombinedAir ? "Air Fungi" : sampleType] ||
+    SAMPLE_TYPE_COLORS["Surface Fungi"];
+  const [airAnalysisTypes, setAirAnalysisTypes] = useState([]);
+  const isAirLike = isCombinedAir || isAirLikeSampleType(sampleType);
   const mycometerValueLabel = getMycometerValueLabel(sampleType);
 
   const [job, setJob] = useState(null);
@@ -204,16 +287,42 @@ const MycometerSampleAnalysis = () => {
     standardValue,
   );
   const timeDuration = calculateTimeDuration(roomTemperature);
+  const sharedReactionTime = useMemo(() => {
+    if (!isAirLike || samples.length === 0) return null;
+    const source = samples[0];
+    const type = isCombinedAir
+      ? airAnalysisTypes.includes("Air Fungi")
+        ? "Air Fungi"
+        : airAnalysisTypes[0]
+      : sampleType;
+    if (!type) return null;
+    return calculateAirSampleReactionTime(type, {
+      roomTemperature,
+      flowmeter,
+      qualityControl: source.qualityControl,
+      flowRate: source.flowRate,
+    });
+  }, [
+    isAirLike,
+    isCombinedAir,
+    airAnalysisTypes,
+    sampleType,
+    samples,
+    roomTemperature,
+    flowmeter,
+  ]);
   const isAnalysisReadOnly = analysisComplete;
 
   const samplesPath = `/mycometer-sampling/${jobId}/${
-    sampleTypeSlug || SAMPLE_TYPE_SLUGS["Surface Fungi"]
+    isCombinedAir || isAirSamplingType(sampleType)
+      ? AIR_SAMPLING_SLUG
+      : sampleTypeSlug || SAMPLE_TYPE_SLUGS["Surface Fungi"]
   }`;
 
   const isAllAnalysisComplete = useMemo(() => {
     if (!analyst || !analysisDate) return false;
     if (calibrationComplete !== true) return false;
-    if (!roomTemperature) return false;
+    if (!isRoomTemperatureInRange(roomTemperature)) return false;
 
     if (isAirLike) {
       if (!flowmeter) return false;
@@ -222,6 +331,33 @@ const MycometerSampleAnalysis = () => {
     }
 
     if (samples.length === 0) return false;
+
+    if (isCombinedAir) {
+      if (airAnalysisTypes.length === 0) return false;
+      return airAnalysisTypes.every((type) => {
+        const partKey = AIR_ANALYSIS_PARTS[type];
+        return samples.every((sample) => {
+          const part = sample[partKey];
+          if (!part) return false;
+          const hasValues =
+            part.blankValue !== "" &&
+            part.blankValue !== null &&
+            part.blankValue !== undefined &&
+            part.analysisValue !== "" &&
+            part.analysisValue !== null &&
+            part.analysisValue !== undefined;
+          if (!hasValues) return false;
+          const reaction = calculateAirSampleReactionTime(type, {
+            roomTemperature,
+            flowmeter,
+            qualityControl: sample.qualityControl,
+            flowRate: sample.flowRate,
+          });
+          return reaction.ok;
+        });
+      });
+    }
+
     return samples.every((sample) => {
       const hasValues =
         sample.blankValue !== "" &&
@@ -250,6 +386,8 @@ const MycometerSampleAnalysis = () => {
     roomTemperature,
     flowmeter,
     isAirLike,
+    isCombinedAir,
+    airAnalysisTypes,
     sampleType,
     timeDuration.error,
     timeDuration.value,
@@ -261,6 +399,16 @@ const MycometerSampleAnalysis = () => {
   }, []);
 
   useEffect(() => {
+    if (redirectAirAnalysis && jobId) {
+      navigate(
+        `/mycometer-sampling/${jobId}/${AIR_SAMPLING_SLUG}/analysis`,
+        { replace: true },
+      );
+    }
+  }, [redirectAirAnalysis, jobId, navigate]);
+
+  useEffect(() => {
+    if (redirectAirAnalysis) return;
     if (!sampleType) {
       setError("Unknown sample type.");
       setLoading(false);
@@ -290,17 +438,46 @@ const MycometerSampleAnalysis = () => {
       const response = await mycometerJobsService.getById(jobId);
       const jobData = response.data;
 
-      if (!jobData?.scopeOfWorks?.includes(sampleType)) {
-        setError(`${sampleType} is not part of this job's scope of works.`);
+      const includedTypes = isCombinedAir
+        ? AIR_LIKE_SAMPLE_TYPES.filter((type) =>
+            jobData?.scopeOfWorks?.includes(type),
+          )
+        : [];
+      if (isCombinedAir) {
+        setAirAnalysisTypes(includedTypes);
+      }
+
+      if (
+        isCombinedAir
+          ? includedTypes.length === 0
+          : !jobData?.scopeOfWorks?.includes(sampleType)
+      ) {
+        setError(
+          `${isCombinedAir ? AIR_SAMPLING_LABEL : sampleType} is not part of this job's scope of works.`,
+        );
         setJob(jobData);
         setLoading(false);
         return;
       }
 
+      const detailType = isCombinedAir
+        ? includedTypes.includes("Air Fungi")
+          ? "Air Fungi"
+          : includedTypes[0]
+        : sampleType;
       const samplingMeta = (jobData.samplingMeta || []).find(
-        (item) => item.sampleType === sampleType,
+        (item) => item.sampleType === detailType,
       );
-      if (!samplingMeta?.samplingComplete) {
+      const samplingReady = isCombinedAir
+        ? includedTypes.every((type) =>
+            Boolean(
+              (jobData.samplingMeta || []).find(
+                (item) => item.sampleType === type,
+              )?.samplingComplete,
+            ),
+          )
+        : Boolean(samplingMeta?.samplingComplete);
+      if (!samplingReady) {
         setError("Sampling must be completed before analysis.");
         setJob(jobData);
         setLoading(false);
@@ -311,17 +488,37 @@ const MycometerSampleAnalysis = () => {
 
       setJob(jobData);
       setSamples(
-        mapSamplesForAnalysis(
-          (jobData.samples || []).filter(
-            (sample) => sample.sampleType === sampleType,
-          ),
-        ),
+        isCombinedAir
+          ? pairAirAnalysisSamples(jobData, includedTypes)
+          : mapSamplesForAnalysis(
+              (jobData.samples || []).filter(
+                (sample) => sample.sampleType === sampleType,
+              ),
+            ),
       );
 
-      const analysisMeta = (jobData.analysisMeta || []).find(
-        (item) => item.sampleType === sampleType,
-      );
-      setAnalysisComplete(Boolean(analysisMeta?.analysisComplete));
+      const analysisMetas = isCombinedAir
+        ? includedTypes.map((type) =>
+            (jobData.analysisMeta || []).find((item) => item.sampleType === type),
+          )
+        : [];
+      const analysisMeta = isCombinedAir
+        ? analysisMetas.find((item) => item?.analyst) || analysisMetas[0]
+        : (jobData.analysisMeta || []).find(
+            (item) => item.sampleType === sampleType,
+          );
+      if (isCombinedAir) {
+        setAnalysisComplete(
+          includedTypes.every((type) =>
+            Boolean(
+              (jobData.analysisMeta || []).find((item) => item.sampleType === type)
+                ?.analysisComplete,
+            ),
+          ),
+        );
+      } else {
+        setAnalysisComplete(Boolean(analysisMeta?.analysisComplete));
+      }
       setHasUnsavedChanges(false);
       setAnalyst(getUserId(analysisMeta?.analyst));
       setAnalysisDate(
@@ -369,7 +566,9 @@ const MycometerSampleAnalysis = () => {
 
     if (!nextAnalyst || !nextAnalysisDate) return false;
 
-    await mycometerJobsService.updateAnalysis(jobId, sampleType, {
+    const nextSamples = overrides.samples || samples;
+    const markingComplete = overrides.analysisComplete === true;
+    const payloadBase = {
       analyst: nextAnalyst,
       analysisDate: nextAnalysisDate,
       mycometerCertificationNumber,
@@ -377,11 +576,46 @@ const MycometerSampleAnalysis = () => {
       measuredStandardValue: nextMeasured === "" ? null : Number(nextMeasured),
       roomTemperature:
         nextRoomTemperature === "" ? null : Number(nextRoomTemperature),
+    };
+
+    if (isCombinedAir) {
+      const typesToSave = airAnalysisTypes.filter((type) => {
+        const meta = (job?.analysisMeta || []).find(
+          (item) => item.sampleType === type,
+        );
+        return !meta?.analysisComplete;
+      });
+      for (const type of typesToSave) {
+        const partKey = AIR_ANALYSIS_PARTS[type];
+        await mycometerJobsService.updateAnalysis(jobId, type, {
+          ...payloadBase,
+          analysisComplete: markingComplete,
+          samples: nextSamples
+            .filter((sample) => sample[partKey])
+            .map((sample) => ({
+              _id: sample[partKey]._id,
+              sampleId: sample.sampleId,
+              blankValue:
+                sample[partKey].blankValue === ""
+                  ? null
+                  : sample[partKey].blankValue,
+              analysisValue:
+                sample[partKey].analysisValue === ""
+                  ? null
+                  : sample[partKey].analysisValue,
+            })),
+        });
+      }
+      return true;
+    }
+
+    await mycometerJobsService.updateAnalysis(jobId, sampleType, {
+      ...payloadBase,
       analysisComplete:
         overrides.analysisComplete !== undefined
           ? overrides.analysisComplete
           : analysisComplete,
-      samples: (overrides.samples || samples).map((sample) => ({
+      samples: nextSamples.map((sample) => ({
         _id: sample._id,
         sampleId: sample.sampleId,
         blankValue: sample.blankValue === "" ? null : sample.blankValue,
@@ -473,7 +707,7 @@ const MycometerSampleAnalysis = () => {
     });
   };
 
-  const handleSampleFieldChange = (sampleKey, field, value) => {
+  const handleSampleFieldChange = (sampleKey, field, value, partKey) => {
     if (isAnalysisReadOnly) return;
     const cleaned = value.replace(/[^0-9.]/g, "");
     setSavedNote(false);
@@ -482,17 +716,29 @@ const MycometerSampleAnalysis = () => {
       prev.map((sample) => {
         const key = sample._id || sample.sampleId;
         if (key !== sampleKey) return sample;
+        if (partKey) {
+          return {
+            ...sample,
+            [partKey]: { ...sample[partKey], [field]: cleaned },
+          };
+        }
         return { ...sample, [field]: cleaned };
       }),
     );
   };
 
-  const handleSampleFieldBlur = async (sampleKey, field, value) => {
+  const handleSampleFieldBlur = async (sampleKey, field, value, partKey) => {
     if (isAnalysisReadOnly) return;
     const cleaned = String(value || "").replace(/[^0-9.]/g, "");
     const nextSamples = samples.map((sample) => {
       const key = sample._id || sample.sampleId;
       if (key !== sampleKey) return sample;
+      if (partKey) {
+        return {
+          ...sample,
+          [partKey]: { ...sample[partKey], [field]: cleaned },
+        };
+      }
       return { ...sample, [field]: cleaned };
     });
     setSamples(nextSamples);
@@ -542,7 +788,13 @@ const MycometerSampleAnalysis = () => {
     try {
       setReopening(true);
       setError("");
-      await mycometerJobsService.reopenSampleType(jobId, sampleType);
+      if (isCombinedAir) {
+        for (const type of airAnalysisTypes) {
+          await mycometerJobsService.reopenSampleType(jobId, type);
+        }
+      } else {
+        await mycometerJobsService.reopenSampleType(jobId, sampleType);
+      }
       setReopenDialogOpen(false);
       setHasUnsavedChanges(false);
       navigate(samplesPath);
@@ -565,6 +817,10 @@ const MycometerSampleAnalysis = () => {
     navigate(samplesPath);
   };
 
+  const showFaiColumn =
+    airAnalysisTypes.includes("Air Fungi") &&
+    airAnalysisTypes.includes("Air Allergen");
+
   if (loading) {
     return (
       <Container maxWidth="lg">
@@ -576,11 +832,22 @@ const MycometerSampleAnalysis = () => {
   }
 
   return (
-    <Container maxWidth="lg">
+    <Container maxWidth={isCombinedAir ? "xl" : "lg"}>
       <Box sx={{ mt: 4, mb: 4 }}>
         <Box sx={{ mb: 3 }}>
+          <Breadcrumbs sx={{ mb: 2 }}>
+            <Link
+              component="button"
+              variant="body1"
+              onClick={() => navigate(samplesPath)}
+              sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
+            >
+              <ArrowBackIcon sx={{ mr: 1 }} />
+              {`${sampleType} Samples` || "Samples"}
+            </Link>
+          </Breadcrumbs>
           <Typography variant="h4" component="h1" gutterBottom>
-            {sampleType || "Mycometer"} Analysis
+            Mycometer - {sampleType || "Mycometer"} Analysis
           </Typography>
           <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 1 }}>
             {job?.projectId?.projectID
@@ -588,10 +855,17 @@ const MycometerSampleAnalysis = () => {
               : job?.projectId?.name || "Mycometer Job"}
           </Typography>
           {(() => {
+            const detailType = isCombinedAir
+              ? airAnalysisTypes.includes("Air Fungi")
+                ? "Air Fungi"
+                : airAnalysisTypes[0]
+              : sampleType;
             const samplingMeta = (job?.samplingMeta || []).find(
-              (item) => item.sampleType === sampleType,
+              (item) => item.sampleType === detailType,
             );
-            const samplerName = getSamplerDisplayNameFromMeta(samplingMeta);
+            const samplerName = samplingMeta
+              ? getSamplerDisplayWithCertFromMeta(samplingMeta, detailType)
+              : "";
             const dateLabel = samplingMeta?.sampleDate
               ? new Date(samplingMeta.sampleDate).toLocaleDateString("en-AU")
               : null;
@@ -604,23 +878,6 @@ const MycometerSampleAnalysis = () => {
               </Typography>
             );
           })()}
-          <Breadcrumbs>
-            <Link
-              component="button"
-              variant="body1"
-              onClick={() =>
-                navigate(
-                  `/mycometer-sampling/${jobId}/${
-                    sampleTypeSlug || SAMPLE_TYPE_SLUGS["Surface Fungi"]
-                  }`,
-                )
-              }
-              sx={{ display: "flex", alignItems: "center", cursor: "pointer" }}
-            >
-              <ArrowBackIcon sx={{ mr: 1 }} />
-              {`${sampleType} Samples` || "Samples"}
-            </Link>
-          </Breadcrumbs>
         </Box>
 
         {error && (
@@ -654,7 +911,7 @@ const MycometerSampleAnalysis = () => {
                   sx={{ ml: 1, verticalAlign: "middle" }}
                 />
               )}
-              {savedNote && !analysisComplete && (
+              {/* {savedNote && !analysisComplete && (
                 <Typography
                   component="span"
                   variant="body2"
@@ -663,7 +920,7 @@ const MycometerSampleAnalysis = () => {
                 >
                   (saved)
                 </Typography>
-              )}
+              )} */}
             </Typography>
             {saving && (
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -679,7 +936,7 @@ const MycometerSampleAnalysis = () => {
             <Box
               sx={{
                 display: "grid",
-                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr 1fr" },
                 gap: 2,
               }}
             >
@@ -694,17 +951,14 @@ const MycometerSampleAnalysis = () => {
                     handleAnalystOrDateChange("analyst", e.target.value)
                   }
                 >
-                  {analystOptions.map((user) => {
-                    const cert = getMycometerCertNumberForSampleType(
-                      user,
-                      sampleType,
-                    );
-                    return (
-                      <MenuItem key={user._id} value={user._id}>
-                        {getUserDisplayName(user)} ({cert})
-                      </MenuItem>
-                    );
-                  })}
+                  {analystOptions.map((user) => (
+                    <MenuItem key={user._id} value={user._id}>
+                      {formatMycometerUserLabel(
+                        user,
+                        isCombinedAir ? "Air Fungi" : sampleType,
+                      )}
+                    </MenuItem>
+                  ))}
                 </Select>
               </FormControl>
 
@@ -720,6 +974,13 @@ const MycometerSampleAnalysis = () => {
                 fullWidth
                 InputLabelProps={{ shrink: true }}
               />
+
+              <TextField
+                label="Fluorometer"
+                value={`${FLUOROMETER_ID} (STD VAL = ${standardValue})`}
+                fullWidth
+                InputProps={{ readOnly: true }}
+              />
             </Box>
 
             <Box
@@ -727,19 +988,12 @@ const MycometerSampleAnalysis = () => {
                 display: "grid",
                 gridTemplateColumns: {
                   xs: "1fr",
-                  sm: "1fr 1fr auto",
+                  md: isAirLike ? "1fr auto 1fr auto" : "1fr auto 1fr",
                 },
                 gap: 2,
-                alignItems: "center",
+                alignItems: "flex-start",
               }}
             >
-              <TextField
-                label="Standard value of instrument (STD VAL)"
-                value={standardValue}
-                fullWidth
-                InputProps={{ readOnly: true }}
-              />
-
               <TextField
                 label="Measured standard value"
                 value={measuredStandardValue}
@@ -760,6 +1014,7 @@ const MycometerSampleAnalysis = () => {
                   display: "flex",
                   alignItems: "center",
                   gap: 1,
+                  pt: 1,
                   color:
                     calibrationComplete === null
                       ? "text.secondary"
@@ -787,15 +1042,7 @@ const MycometerSampleAnalysis = () => {
                   </>
                 )}
               </Box>
-            </Box>
 
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
-                gap: 2,
-              }}
-            >
               <TextField
                 label="Room temperature (°C)"
                 value={roomTemperature}
@@ -803,25 +1050,51 @@ const MycometerSampleAnalysis = () => {
                 onBlur={handleRoomTemperatureBlur}
                 fullWidth
                 disabled={isAnalysisReadOnly}
+                error={
+                  roomTemperature !== "" &&
+                  !isRoomTemperatureInRange(roomTemperature)
+                }
+                helperText={
+                  roomTemperature !== "" &&
+                  !isRoomTemperatureInRange(roomTemperature)
+                    ? "Room temperature must be between 18°C and 30°C"
+                    : " "
+                }
                 inputProps={{
                   inputMode: "decimal",
                 }}
               />
 
-              {isAirLike ? (
-                <TextField
-                  label="Flowmeter (rotameter)"
-                  value={flowmeter || ""}
-                  fullWidth
-                  InputProps={{ readOnly: true }}
-                  helperText={
-                    flowmeter
-                      ? "From sampling — used for reaction time"
-                      : "Select a flowmeter on the samples page"
-                  }
-                  error={!flowmeter}
-                />
-              ) : (
+              {isAirLike && (
+                <Box sx={{ minWidth: 160, pt: 0.25 }}>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    Reaction time
+                  </Typography>
+                  <Typography
+                    sx={{
+                      fontSize: "1.25rem",
+                      fontWeight: 600,
+                      lineHeight: 1.4,
+                      color:
+                        sharedReactionTime && !sharedReactionTime.ok
+                          ? "error.main"
+                          : "text.primary",
+                    }}
+                  >
+                    {sharedReactionTime?.display || "—"}
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+
+            {!isAirLike && (
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                  gap: 2,
+                }}
+              >
                 <TextField
                   label="Time duration"
                   value={timeDuration.value}
@@ -834,11 +1107,291 @@ const MycometerSampleAnalysis = () => {
                       : " "
                   }
                 />
-              )}
-            </Box>
+              </Box>
+            )}
           </Box>
         </Paper>
 
+        {isCombinedAir && (
+          <Paper sx={{ p: 3 }}>
+            <TableContainer>
+              <Table stickyHeader size="small">
+                <TableHead>
+                  <TableRow
+                    sx={{
+                      background:
+                        "linear-gradient(to right, #045E1F, #96CC78) !important",
+                      color: "white",
+                      "&:hover": { backgroundColor: "transparent" },
+                    }}
+                  >
+                    <TableCell
+                      rowSpan={2}
+                      sx={{
+                        fontWeight: "bold",
+                        color: "inherit",
+                        width: "30ch",
+                        borderRight: "1px solid #000",
+                        borderBottom: "1px solid #000 !important",
+                      }}
+                    >
+                      Sample ID
+                    </TableCell>
+                    {airAnalysisTypes.map((type, index) => (
+                      <TableCell
+                        key={type}
+                        colSpan={4}
+                        align="center"
+                        sx={{
+                          fontWeight: "bold",
+                          color: "inherit",
+                          borderBottom: "1px solid #000 !important",
+                          ...(index > 0 && {
+                            borderLeft: "1px solid #000",
+                          }),
+                        }}
+                      >
+                        {type}
+                      </TableCell>
+                    ))}
+                    {showFaiColumn && (
+                      <TableCell
+                        rowSpan={2}
+                        align="center"
+                        sx={{
+                          fontWeight: "bold",
+                          color: "inherit",
+                          borderLeft: "1px solid #000",
+                          borderBottom: "1px solid #000 !important",
+                        }}
+                      >
+                        FAI
+                      </TableCell>
+                    )}
+                  </TableRow>
+                  <TableRow
+                    sx={{
+                      background:
+                        "linear-gradient(to right, #045E1F, #96CC78) !important",
+                      color: "white",
+                    }}
+                  >
+                    {airAnalysisTypes.map((type, index) => (
+                      <React.Fragment key={`${type}-headers`}>
+                        <TableCell
+                          sx={{
+                            fontWeight: "bold",
+                            color: "inherit",
+                            borderBottom: "1px solid #000 !important",
+                            ...(index > 0 && {
+                              borderLeft: "1px solid #000",
+                            }),
+                          }}
+                        >
+                          Blank Value
+                        </TableCell>
+                        <TableCell
+                          sx={{
+                            fontWeight: "bold",
+                            color: "inherit",
+                            borderBottom: "1px solid #000 !important",
+                          }}
+                        >
+                          Analysis Value
+                        </TableCell>
+                        <TableCell
+                          sx={{
+                            fontWeight: "bold",
+                            color: "inherit",
+                            borderBottom: "1px solid #000 !important",
+                          }}
+                        >
+                          {getMycometerValueLabel(type)}
+                        </TableCell>
+                        <TableCell
+                          sx={{
+                            fontWeight: "bold",
+                            color: "inherit",
+                            borderBottom: "1px solid #000 !important",
+                          }}
+                        >
+                          Result
+                        </TableCell>
+                      </React.Fragment>
+                    ))}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {samples.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={
+                          1 +
+                          airAnalysisTypes.length * 4 +
+                          (showFaiColumn ? 1 : 0)
+                        }
+                        align="center"
+                      >
+                        No samples available for analysis.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    samples.map((sample) => {
+                      const sampleKey = sample.sampleId;
+                      const fai = showFaiColumn
+                        ? calculateAirFai(
+                            sample.fungi
+                              ? calculateAirSampleValue("Air Fungi", {
+                                  analysisValue: sample.fungi.analysisValue,
+                                  blankValue: sample.fungi.blankValue,
+                                  qualityControl: sample.qualityControl,
+                                })
+                              : null,
+                            sample.allergen
+                              ? calculateAirSampleValue("Air Allergen", {
+                                  analysisValue: sample.allergen.analysisValue,
+                                  blankValue: sample.allergen.blankValue,
+                                })
+                              : null,
+                          )
+                        : null;
+                      const faiCategory = fai?.ok
+                        ? getAirFaiResultCategory(fai.value)
+                        : null;
+                      return (
+                        <TableRow key={sampleKey} hover>
+                          <TableCell
+                            sx={{
+                              width: "30ch",
+                              minWidth: "30ch",
+                              borderRight: "1px solid #000",
+                            }}
+                          >
+                            <Typography
+                              variant="body2"
+                              sx={{ fontWeight: 500, whiteSpace: "nowrap" }}
+                            >
+                              {sample.sampleId || "—"}
+                            </Typography>
+                          </TableCell>
+                          {airAnalysisTypes.map((type, index) => {
+                            const partKey = AIR_ANALYSIS_PARTS[type];
+                            const part = sample[partKey];
+                            const valueResult = part
+                              ? calculateAirSampleValue(type, {
+                                  analysisValue: part.analysisValue,
+                                  blankValue: part.blankValue,
+                                  qualityControl: sample.qualityControl,
+                                })
+                              : null;
+                            const category = getAirSampleResultDisplay(
+                              type,
+                              valueResult,
+                            );
+                            return (
+                              <React.Fragment key={`${sampleKey}-${type}`}>
+                                <TableCell
+                                  sx={
+                                    index > 0
+                                      ? {
+                                          borderLeft: "1px solid #000",
+                                        }
+                                      : undefined
+                                  }
+                                >
+                                  <TextField
+                                    size="small"
+                                    value={part?.blankValue || ""}
+                                    disabled={isAnalysisReadOnly || !part}
+                                    onChange={(e) =>
+                                      handleSampleFieldChange(
+                                        sampleKey,
+                                        "blankValue",
+                                        e.target.value,
+                                        partKey,
+                                      )
+                                    }
+                                    onBlur={(e) =>
+                                      handleSampleFieldBlur(
+                                        sampleKey,
+                                        "blankValue",
+                                        e.target.value,
+                                        partKey,
+                                      )
+                                    }
+                                    inputProps={{ inputMode: "decimal" }}
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <TextField
+                                    size="small"
+                                    value={part?.analysisValue || ""}
+                                    disabled={isAnalysisReadOnly || !part}
+                                    onChange={(e) =>
+                                      handleSampleFieldChange(
+                                        sampleKey,
+                                        "analysisValue",
+                                        e.target.value,
+                                        partKey,
+                                      )
+                                    }
+                                    onBlur={(e) =>
+                                      handleSampleFieldBlur(
+                                        sampleKey,
+                                        "analysisValue",
+                                        e.target.value,
+                                        partKey,
+                                      )
+                                    }
+                                    inputProps={{ inputMode: "decimal" }}
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  {valueResult?.display ?? "—"}
+                                </TableCell>
+                                <TableCell>
+                                  {category ? (
+                                    <Chip
+                                      size="small"
+                                      label={`${category.code} (${category.label})`}
+                                      sx={category.sx}
+                                    />
+                                  ) : (
+                                    "—"
+                                  )}
+                                </TableCell>
+                              </React.Fragment>
+                            );
+                          })}
+                          {showFaiColumn && (
+                            <TableCell
+                              align="center"
+                              sx={{
+                                borderLeft: "1px solid #000",
+                                fontWeight: 600,
+                              }}
+                            >
+                              {faiCategory ? (
+                                <Chip
+                                  size="small"
+                                  label={`${faiCategory.code} (${faiCategory.label})`}
+                                  sx={faiCategory.sx}
+                                />
+                              ) : (
+                                "—"
+                              )}
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Paper>
+        )}
+        {!isCombinedAir && (
         <Paper sx={{ p: 3 }}>
           <TableContainer>
             <Table stickyHeader>
@@ -851,16 +1404,11 @@ const MycometerSampleAnalysis = () => {
                     "&:hover": { backgroundColor: "transparent" },
                   }}
                 >
-                  <TableCell sx={{ fontWeight: "bold", color: "inherit" }}>
+                  <TableCell
+                    sx={{ fontWeight: "bold", color: "inherit", width: "30ch" }}
+                  >
                     Sample ID
                   </TableCell>
-                  {isAirLike && (
-                    <TableCell
-                      sx={{ fontWeight: "bold", color: "inherit", width: 150 }}
-                    >
-                      Reaction Time
-                    </TableCell>
-                  )}
                   <TableCell
                     sx={{ fontWeight: "bold", color: "inherit", width: 100 }}
                   >
@@ -886,21 +1434,13 @@ const MycometerSampleAnalysis = () => {
               <TableBody>
                 {samples.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={isAirLike ? 6 : 5} align="center">
+                    <TableCell colSpan={5} align="center">
                       No samples available for analysis.
                     </TableCell>
                   </TableRow>
                 ) : (
                   samples.map((sample) => {
                     const sampleKey = sample._id || sample.sampleId;
-                    const reactionTime = isAirLike
-                      ? calculateAirSampleReactionTime(sampleType, {
-                          roomTemperature,
-                          flowmeter,
-                          qualityControl: sample.qualityControl,
-                          flowRate: sample.flowRate,
-                        })
-                      : null;
                     const airValueResult = isAirLike
                       ? calculateAirSampleValue(sampleType, {
                           analysisValue: sample.analysisValue,
@@ -926,49 +1466,16 @@ const MycometerSampleAnalysis = () => {
                         ? "—"
                         : mycometerValue;
 
-                    const sampleDetailParts = [
-                      sample.sampleLocation,
-                      isAirFungi
-                        ? sample.qualityControl
-                          ? `QC: ${sample.qualityControl}`
-                          : null
-                        : !isAirLike && sample.cleaningStage
-                          ? sample.cleaningStage
-                          : null,
-                      isAirLike && sample.flowRate
-                        ? `${sample.flowRate} LPM`
-                        : null,
-                    ].filter(Boolean);
-
                     return (
                       <TableRow key={sampleKey} hover>
-                        <TableCell>
-                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        <TableCell sx={{ width: "30ch", minWidth: "30ch" }}>
+                          <Typography
+                            variant="body2"
+                            sx={{ fontWeight: 500, whiteSpace: "nowrap" }}
+                          >
                             {sample.sampleId || "—"}
                           </Typography>
-                          {sampleDetailParts.length > 0 && (
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                              display="block"
-                            >
-                              {sampleDetailParts.join(" · ")}
-                            </Typography>
-                          )}
                         </TableCell>
-                        {isAirLike && (
-                          <TableCell sx={{ width: 150, maxWidth: 150 }}>
-                            <Typography
-                              variant="body2"
-                              color={
-                                reactionTime?.ok ? "text.primary" : "error"
-                              }
-                              sx={{ fontWeight: reactionTime?.ok ? 500 : 400 }}
-                            >
-                              {reactionTime?.display || "—"}
-                            </Typography>
-                          </TableCell>
-                        )}
                         <TableCell sx={{ width: 100, maxWidth: 100 }}>
                           <TextField
                             size="small"
@@ -1037,6 +1544,7 @@ const MycometerSampleAnalysis = () => {
             </Table>
           </TableContainer>
         </Paper>
+        )}
 
         <Box
           sx={{ display: "flex", justifyContent: "flex-end", mt: 3, gap: 2 }}
@@ -1123,6 +1631,11 @@ const MycometerSampleAnalysis = () => {
         >
           <DialogTitle>Reopen Report for Editing?</DialogTitle>
           <DialogContent>
+            {error ? (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {error}
+              </Alert>
+            ) : null}
             <Typography sx={{ mb: 2 }}>
               This will reopen <strong>{sampleType}</strong> so sampling and
               analysis can be edited again.
@@ -1137,10 +1650,10 @@ const MycometerSampleAnalysis = () => {
                   Report authorisation will be cleared (including any pending
                   authorisation request)
                 </li>
-                <li>
-                  If the report was previously authorised, the revision number
-                  will increase
-                </li>
+              <li>
+                If this report has been authorised, use Revise on the project
+                reports page. This button cannot start a revision.
+              </li>
                 <li>Existing sample and analysis values will be kept</li>
               </Box>
             </Typography>

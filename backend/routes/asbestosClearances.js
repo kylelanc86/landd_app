@@ -35,6 +35,14 @@ const {
   reopenRemovalJob,
   invalidateProjectReportCategories,
 } = require("../utils/reportReviseHelpers");
+const {
+  readRevisionRequest,
+  archiveSupersededPdf,
+  rollbackArchive,
+  sendRevisionError,
+  notifyEmployeeRevision,
+  REPORT_LABELS,
+} = require("../services/reportRevisionService");
 
 // Exclude soft-deleted clearances from list queries
 const notDeletedClearanceFilter = {
@@ -1561,14 +1569,9 @@ router.patch("/:id/items/:itemId/photos/:photoId/arrow", auth, checkPermission("
 
 // POST /api/asbestos-clearances/:id/revise-report — from Project Reports
 router.post("/:id/revise-report", auth, checkPermission("asbestos.edit"), async (req, res) => {
+  let archive = null;
+  let saved = false;
   try {
-    const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
-    if (!reason) {
-      return res.status(400).json({
-        message: "A revision reason is required",
-      });
-    }
-
     const clearance = await AsbestosClearance.findById(req.params.id);
     if (!clearance) {
       return res.status(404).json({ message: "Asbestos clearance not found" });
@@ -1583,20 +1586,37 @@ router.post("/:id/revise-report", auth, checkPermission("asbestos.edit"), async 
     if (!completeLike && !authorised) {
       return res.status(400).json({
         message: "This report cannot be revised from Project Reports until it is complete or authorised.",
+        unchanged: true,
       });
     }
 
-    const newRevision = (typeof clearance.revision === "number" ? clearance.revision : 0) + 1;
-    clearance.revision = newRevision;
-    clearance.revisionReasons = [
-      ...(clearance.revisionReasons || []),
-      {
-        revisionNumber: newRevision,
-        reason,
-        revisedBy: req.user.id,
-        revisedAt: new Date(),
-      },
-    ];
+    const request = readRevisionRequest(req);
+    const reportType = isEnclosure ? "enclosure_certificate" : "clearance";
+    const currentRevision = typeof clearance.revision === "number" ? clearance.revision : 0;
+    if (!request.informal) {
+      archive = await archiveSupersededPdf({
+        reportType,
+        reportId: clearance._id,
+        reportKey: reportType,
+        projectId: clearance.projectId,
+        currentRevision,
+        reason: request.reason,
+        revisedBy: req.user._id || req.user.id,
+        pdfBuffer: request.pdfBuffer,
+        filename: request.filename,
+      });
+      const newRevision = currentRevision + 1;
+      clearance.revision = newRevision;
+      clearance.revisionReasons = [
+        ...(clearance.revisionReasons || []),
+        {
+          revisionNumber: newRevision,
+          reason: request.reason,
+          revisedBy: req.user.id,
+          revisedAt: new Date(),
+        },
+      ];
+    }
     clearance.status = "in progress";
     clearance.updatedBy = req.user.id;
 
@@ -1618,6 +1638,7 @@ router.post("/:id/revise-report", auth, checkPermission("asbestos.edit"), async 
     }
 
     await clearance.save();
+    saved = true;
     await AsbestosClearance.updateOne(
       { _id: clearance._id },
       isEnclosure
@@ -1647,13 +1668,25 @@ router.post("/:id/revise-report", auth, checkPermission("asbestos.edit"), async 
     await invalidateProjectReportCategories(clearance.projectId);
 
     const label = isEnclosure ? "Enclosure certificate" : "Clearance report";
+    const notificationWarning = request.informal
+      ? null
+      : await notifyEmployeeRevision({
+          user: req.user,
+          projectId: clearance.projectId,
+          reportLabel: REPORT_LABELS[reportType],
+          revisionNumber: currentRevision + 1,
+          reason: request.reason,
+        });
     res.json({
-      message: `${label} reopened for editing. The removal job is back in progress — re-authorise when ready.`,
+      message: request.informal
+        ? `${label} reopened for editing without a new revision. The removal job is back in progress — re-authorise when ready.`
+        : `${label} reopened for editing. The removal job is back in progress — re-authorise when ready.`,
+      notificationWarning,
       clearance,
     });
   } catch (err) {
-    console.error("Error revising asbestos clearance report:", err);
-    res.status(500).json({ message: err.message || "Failed to revise report" });
+    if (!saved) await rollbackArchive(archive);
+    return sendRevisionError(res, err);
   }
 });
 
